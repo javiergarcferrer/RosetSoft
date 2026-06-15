@@ -23,8 +23,10 @@
   /* Full-screen command center: the page renders OUTSIDE the app shell
      (no sidebar, no <main>), so it owns the whole pinned viewport. It is a
      fixed flex column — a compact HUD bar up top, the grid filling the rest.
-     Below xl it falls back to scrolling (a phone can't be one screen); at xl+
-     the page is LOCKED and only feed/log bodies scroll inside their panels. */
+     The page NEVER scrolls: from a half-screen window up it locks to a 2-/3-
+     rail grid (only feed/log bodies scroll); on phones it becomes a locked,
+     swipeable DECK of full-viewport boards with a bottom pager (see the mobile
+     block below). Either way only panel bodies scroll, never the page. */
   position: relative;
   z-index: 0;
   display: flex;
@@ -700,35 +702,130 @@
   color: var(--jv-faint);
 }
 
-/* ── responsive — phones get one clean column, money pulse on top ─────── */
-/* Below 620px the lock releases and the grid is a single scrolling column;
-   reorder the rails so the commercial pulse — the headline — sits first and
-   the integration diagnostics last. At ≥620px the grid is explicitly placed
-   (areas at half-screen, three tracks when wide), so `order` is moot there. */
 .jv-grid,
 .jv-col-left,
 .jv-col-center,
 .jv-col-right { min-width: 0; }
 
+/* ════════════════════════════════════════════════════════════════════════
+   MOBILE (< 620px): the command center is a NO-SCROLL, swipeable DECK.
+   The page never scrolls. The grid turns into a horizontal scroll-snap rail
+   and each rail is ONE full-viewport "board" (Comercial · Sistemas · Enlace).
+   The bottom pager is the PRIMARY control (visible, thumb-zone); horizontal
+   swipe is the enhancement — research is explicit that swipe-only nav hides
+   content. Inside a board only a feed body scrolls, never the page. The shell
+   already pins height (svh in-browser / 100vh standalone) + safe-area insets.
+   ════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 619.98px) {
+  .jarvis {
+    overflow: hidden;                       /* LOCK — the page itself can't scroll */
+    padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 0 0;
+  }
+  .jv-header { padding: 0 0.75rem 0.5rem; }
+
+  .jv-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    grid-template-columns: none;            /* drop the desktop grid track */
+    gap: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior: contain;           /* don't hijack the iOS edge back-swipe */
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+  }
+  .jv-grid::-webkit-scrollbar { display: none; }
+
+  .jv-col-left,
+  .jv-col-center,
+  .jv-col-right {
+    flex: 0 0 100%;                          /* exactly one board wide (flex, not width) */
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;               /* one swipe advances exactly one board */
+    overflow: hidden;
+    padding: 0 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  /* Visual order = pager order: Comercial → Sistemas → Enlace. */
   .jv-col-center { order: 1; }
   .jv-col-left { order: 2; }
   .jv-col-right { order: 3; }
+
+  /* Comercial + Enlace: every panel fills and scrolls its OWN body. */
+  .jv-col-center > section,
+  .jv-col-right > section { flex: 1 1 0; min-height: 0; }
+  .jv-col-center > section:first-of-type { flex: 1.35 1 0; }  /* pulse leads */
+  .jv-col-right > .jv-console-panel { flex: 1.4 1 0; }        /* console gets room */
+
+  /* Sistemas: glance panels stay intrinsic; the integration list takes the
+     slack and scrolls — so the board fits one screen with no page scroll. */
+  .jv-col-left > section { flex: 0 0 auto; }
+  .jv-col-left > section:last-child { flex: 1 1 0; min-height: 0; }
+
+  .jv-fill { flex: 1 1 0; overflow-y: auto; min-height: 0; }
+
+  /* The reactor is a glance metric — shrink it so Sistemas fits cleanly. */
+  .jv-gauge { width: 116px; height: 116px; }
+  .jv-gauge .reading b { font-size: 1.25rem; }
+  .jv-stat b, .jv-kpi b { font-size: 1.15rem; }
 }
 
-@media (max-width: 640px) {
-  /* Tighter gutters reclaim ~0.5rem each side for content on a 360px phone. */
-  .jarvis {
-    padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 0.75rem
-      calc(2.5rem + env(safe-area-inset-bottom, 0px));
+/* ── mobile pager — the primary board switcher, pinned to the thumb zone ─── */
+.jv-pager { display: none; }
+@media (max-width: 619.98px) {
+  .jv-pager {
+    display: flex;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+    padding: 0.45rem 0.75rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+    z-index: 3;
   }
-  /* The reactor gauge is a glance metric, not the headline — shrink it so it
-     doesn't eat a whole screen above the numbers that matter. */
-  .jv-gauge { width: 132px; height: 132px; }
-  .jv-gauge .reading b { font-size: 1.4rem; }
-  /* Ease big numerals down so 2-up stat/KPI grids never clip. */
-  .jv-stat b { font-size: 1.2rem; }
-  .jv-kpi b { font-size: 1.2rem; }
+  .jv-pager-tab {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 2.15rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border: 1px solid var(--jv-border);
+    border-radius: 8px;
+    background: var(--jv-panel);
+    color: var(--jv-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+  }
+  .jv-pager-tab .pdot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.5;
+    transition: opacity .18s ease, box-shadow .18s ease;
+  }
+  .jv-pager-tab.is-active {
+    color: var(--jv-fg);
+    border-color: var(--jv-accent);
+    background: rgba(82, 168, 255, 0.12);
+  }
+  .jv-pager-tab.is-active .pdot {
+    opacity: 1;
+    background: var(--jv-accent);
+    box-shadow: 0 0 8px rgba(82, 168, 255, 0.7);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .jv-grid { scroll-behavior: auto; }
+  }
 }
 
 /* Long commit lines in the deploy feed wrap instead of forcing a sideways
@@ -737,9 +834,10 @@
 
 /* ════════════════════════════════════════════════════════════════════════
    COMMAND-CENTER LAYOUT — single-viewport grid + futuristic HUD layer.
-   The grid stacks on phones (the page scrolls) and LOCKS to the viewport at
-   xl, where only feed/log bodies scroll inside their own panels. Ambient
-   motion is decorative-but-restrained and fully disabled under reduced-motion.
+   The grid is a swipeable board deck on phones and LOCKS to a 2-/3-rail grid
+   from a half-screen window up — the page never scrolls at any width; only
+   feed/log bodies scroll inside their own panels. Ambient motion is
+   decorative-but-restrained and fully disabled under reduced-motion.
    ════════════════════════════════════════════════════════════════════════ */
 
 /* The grid: one scrolling column on phones; reflows to a locked 2- or 3-rail
@@ -810,13 +908,9 @@
   }
 }
 
-/* Below the lock (phones / quarter-screen) the page scrolls again; cap the
-   three live feeds so a long log doesn't run away. */
-@media (max-width: 619.98px) {
-  .jv-timeline.jv-fill { max-height: 16rem; }
-  .jv-feed.jv-fill { max-height: 18rem; }
-  .jv-console.jv-fill { max-height: 20rem; }
-}
+/* (On mobile the three live feeds flex to fill their board panel and scroll
+   internally — see the no-scroll deck block above — so no max-height caps are
+   needed; the page itself never scrolls.) */
 
 /* ── thin, sci-fi scrollbars on the internal feeds ─────────────────────── */
 .jv-fill, .jv-int-list, .jv-palette .plist {

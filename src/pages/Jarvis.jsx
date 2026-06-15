@@ -404,6 +404,53 @@ export default function Jarvis() {
   // Connecting Instagram is done from Configuración → Instagram (the OAuth
   // consent flow); this panel just reads the snapshot once linked.
 
+  // ── mobile board deck ────────────────────────────────────────────────
+  // On phones the command center is a LOCKED, swipeable deck of three
+  // viewport-fit boards (Comercial · Sistemas · Enlace) — the page never
+  // scrolls. The bottom pager is the primary control (visible, thumb-zone);
+  // horizontal swipe is the enhancement. An IntersectionObserver keeps the
+  // active tab synced to whichever board is centered (more robust than
+  // scroll-position math), and only arms on mobile so desktop pays nothing.
+  const MOBILE_BOARDS = ['Comercial', 'Sistemas', 'Enlace'];
+  const gridRef = useRef(null);
+  const [activeBoard, setActiveBoard] = useState(0);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 619.98px)');
+    let io;
+    const setup = () => {
+      io?.disconnect();
+      io = undefined;
+      const grid = gridRef.current;
+      if (!grid || !mq.matches) return;
+      // Boards in visual (pager) order — flex `order` drives the layout.
+      const boards = Array.from(grid.children).sort(
+        (a, b) => (parseInt(getComputedStyle(a).order, 10) || 0)
+          - (parseInt(getComputedStyle(b).order, 10) || 0),
+      );
+      io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting && e.intersectionRatio >= 0.55) {
+              const i = boards.indexOf(e.target);
+              if (i >= 0) setActiveBoard(i);
+            }
+          }
+        },
+        { root: grid, threshold: [0.55] },
+      );
+      boards.forEach((b) => io.observe(b));
+    };
+    setup();
+    mq.addEventListener('change', setup);
+    return () => { mq.removeEventListener('change', setup); io?.disconnect(); };
+  }, []);
+  const goToBoard = useCallback((i) => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    grid.scrollTo({ left: i * grid.clientWidth, behavior: 'smooth' });
+    setActiveBoard(i);
+  }, []);
+
   // ── ⌘K command palette ───────────────────────────────────────────────
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -559,7 +606,7 @@ export default function Jarvis() {
         </div>
       </header>
 
-      <div className="jv-grid">
+      <div className="jv-grid" ref={gridRef}>
         {/* ── left rail: reactor + stats + integration status list ──── */}
         <div className="jv-col-left flex flex-col gap-3 min-h-0">
           <section className="jv-panel jv-reactor p-3">
@@ -1183,6 +1230,23 @@ export default function Jarvis() {
       </section>
         </div>
       </div>
+
+      {/* Mobile board switcher — the primary, thumb-zone control for the deck
+          (hidden ≥620px, where all three rails are on screen at once). */}
+      <nav className="jv-pager" aria-label="Tableros del centro de mando">
+        {MOBILE_BOARDS.map((label, i) => (
+          <button
+            key={label}
+            type="button"
+            className={`jv-pager-tab ${activeBoard === i ? 'is-active' : ''}`}
+            aria-current={activeBoard === i ? 'true' : undefined}
+            onClick={() => goToBoard(i)}
+          >
+            <span className="pdot" aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </nav>
 
       <CommandPalette
         open={paletteOpen}
