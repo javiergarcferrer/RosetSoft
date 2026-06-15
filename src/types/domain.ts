@@ -214,9 +214,13 @@ export interface Settings {
    *  meta_social_config table, never here. Written by the meta-social
    *  Edge Function's link mode. */
   metaSocialConnectedAt?: number | null;
-  /** Display mirrors of what the link discovered. */
+  /** Display mirrors of what the connection discovered. */
   metaSocialPageName?: string;
   metaSocialIgUsername?: string;
+  /** Instagram app id (client_id) — NON-secret mirror so the Settings card can
+   *  show the connection is configured and pre-fill the field. The app SECRET
+   *  stays write-only in meta_social_config, never here. */
+  metaSocialIgAppId?: string;
   /** Webhook handshake string shown in Settings to paste into the Meta portal
    *  (not a secret — it only gates webhook REGISTRATION; payloads are
    *  authenticated by the app-secret HMAC signature). */

@@ -8,15 +8,16 @@
 //
 // POST payloads are authenticated by the X-Hub-Signature-256 header — an
 // HMAC-SHA256 of the raw body with the Meta App Secret, exactly as wa-webhook
-// does. Instagram + WhatsApp live under the SAME Meta Business app here, so the
-// signing key is the same App Secret the dealer pasted for WhatsApp
-// (whatsapp_config.app_secret, service-role read). No valid signature → 401, so
+// does. With Instagram Login the IG account belongs to its OWN Instagram app
+// (meta_social_config.ig_app_secret), which may differ from the WhatsApp app
+// (whatsapp_config.app_secret). We accept a signature from EITHER so the feed
+// works whether the two share one Meta app or not. No valid signature → 401, so
 // nobody who merely knows the URL can inject forged comments/mentions into the
-// JARVIS live feed. Without the secret saved we can't authenticate Meta, so
-// inbound processing stays off until it's pasted in Configuración.
+// JARVIS live feed. Without a secret saved we can't authenticate Meta, so
+// inbound processing stays off until one is pasted in Configuración.
 //
-// Setup (Meta App Dashboard → Webhooks): callback URL = this function's URL,
-// verify token = META_WEBHOOK_VERIFY_TOKEN (defaults to 'rosetsoft-ig').
+// Setup (Meta App Dashboard → Instagram → Webhooks): callback URL = this
+// function's URL, verify token = META_WEBHOOK_VERIFY_TOKEN (default 'rosetsoft-ig').
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
@@ -64,11 +65,19 @@ Deno.serve(async (req) => {
 
   // Authenticate the payload BEFORE trusting (or persisting) any of it. Read the
   // raw bytes (not req.json()) so the HMAC is over exactly what Meta signed.
+  // Accept a signature from the Instagram app secret OR the WhatsApp app secret
+  // (they may be the same Meta app, or two — see header note).
   const raw = await req.text();
-  const { data: cfg } = await admin
-    .from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle();
-  const secret = (cfg as { app_secret?: string } | null)?.app_secret || '';
-  if (!(await validSignature(raw, req.headers.get('x-hub-signature-256'), secret))) {
+  const sig = req.headers.get('x-hub-signature-256');
+  const [{ data: igCfg }, { data: waCfg }] = await Promise.all([
+    admin.from('meta_social_config').select('ig_app_secret').eq('profile_id', TEAM).maybeSingle(),
+    admin.from('whatsapp_config').select('app_secret').eq('profile_id', TEAM).maybeSingle(),
+  ]);
+  const igSecret = (igCfg as { ig_app_secret?: string } | null)?.ig_app_secret || '';
+  const waSecret = (waCfg as { app_secret?: string } | null)?.app_secret || '';
+  const ok = (igSecret && await validSignature(raw, sig, igSecret))
+    || (waSecret && await validSignature(raw, sig, waSecret));
+  if (!ok) {
     return new Response('invalid signature', { status: 401 });
   }
 

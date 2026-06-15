@@ -1,75 +1,69 @@
-# Meta (Facebook / Instagram / WhatsApp / Threads) permission scopes
+# Meta permission scopes — WhatsApp + Instagram
 
-The permission surface granted to our Meta app's system user. **One Meta system
-user runs everything** — WhatsApp, the FB Page, the linked IG business account,
-the ad account, and the owned product catalogs all hang off the single
-long-lived token (`whatsapp_config.access_token`, reused write-only by
-`meta_social_config`). So these scopes are shared across `wa-send` / `wa-webhook`
-and `meta-social`, not split per function.
+RosetSoft's Meta surface is now **two independent integrations**:
 
-Legend: ✅ wired today · 🟡 supporting/partial · ⬜ headroom (granted, not yet used in code).
+- **WhatsApp Business** — unchanged. Sends/receives messages (CRM inbox +
+  campaigns) via `wa-send` / `wa-webhook`, on the token the dealer onboarded
+  through Embedded Signup (write-only `whatsapp_config`).
+- **Instagram** — connected DIRECTLY via **Instagram Business Login** (no
+  Facebook Page, no `pages_*`). `meta-social` runs the OAuth round-trip, keeps
+  the long-lived IG user token server-side (write-only `meta_social_config`) and
+  talks to `graph.instagram.com`.
+
+The old **Facebook Pages / Ads / Business** surface was **removed** (no Page
+publishing/insights, no ad management, no catalogs, no `pages_*` / `ads_*` /
+`business_management`). The two integrations may share one Meta app or run as
+two — the Instagram webhook (`meta-webhook`) verifies against either app secret.
+
+Legend: ✅ wired today · ⬜ headroom (could be requested later).
 
 ## WhatsApp Business — `wa-send`, `wa-webhook`, CRM inbox/campaigns
 | Scope | Status | What it backs |
 |---|---|---|
-| `whatsapp_business_messaging` | ✅ | Send/receive WhatsApp messages (the CRM inbox + campaign sends). |
+| `whatsapp_business_messaging` | ✅ | Send/receive WhatsApp messages (CRM inbox + campaign sends). |
 | `whatsapp_business_management` | ✅ | Manage the WABA: message templates, phone numbers, registration. |
 | `whatsapp_business_manage_events` | 🟡 | WhatsApp conversational/marketing analytics events. |
 | `paid_marketing_messages` | ⬜ | Paid WhatsApp marketing messages → future paid campaign tier. |
 
-## Facebook Pages — `meta-social` (publish + insights + discovery)
+## Instagram — `meta-social` (Instagram API with Instagram Login)
 | Scope | Status | What it backs |
 |---|---|---|
-| `pages_show_list` | ✅ | `me/accounts` Page discovery in `link` mode. |
-| `pages_manage_posts` | ✅ | Page feed posts + scheduled posts (`/{page}/feed`, `scheduled_posts`). |
-| `pages_read_engagement` | ✅ | Page profile + daily engagement/reach insights in the snapshot. |
-| `read_insights` | ✅ | Underpins the Page + IG insights reads. |
-| `pages_read_user_content` | 🟡 | Read user comments/posts on the Page (server can; the IG-first Marketing UI doesn't surface FB). |
-| `pages_manage_engagement` | ⬜ | Like/comment/moderate as the Page (server `replyComment` supports it; not surfaced). |
-| `pages_manage_metadata` | 🟡 | Page settings + webhook subscriptions (meta-social `subscribeWebhooks` → comments/mentions → `meta-webhook` → `ig_events`; needs App Review to fire for non-role accounts). |
-| `pages_messaging` | ⬜ | Messenger send/receive → Messenger thread in the CRM. |
-| `pages_utility_messaging` | ⬜ | Messenger utility/templated messages. |
-| `pages_manage_ads` | 🟡 | Page-level ad management (complements the Marketing API below). |
+| `instagram_business_basic` | ✅ | OAuth identity + read the account (username, name, bio, follower/follow/media counts, picture) and the media grid. Resolves the IG user id every other call uses. |
+| `instagram_business_content_publish` | ✅ | Publish from device upload — feed image, Reel, image/video Story, 2–10 carousels (`/media` → `/media_publish`), plus alt text, collaborators (≤3) and first-comment automation. Backs the Marketing composer and the scheduler (`ig-publish-worker`). |
+| `instagram_business_manage_comments` | ✅ | Read + reply + hide/unhide + delete comments (Marketing triage + Studio moderation), and the realtime comment/mention feed (`subscribeWebhooks` → `/{ig-user}/subscribed_apps` → `meta-webhook` → `ig_events`). |
+| `instagram_business_manage_insights` | ✅ | Account insights (reach, follower growth, profile-link taps, views/engagement totals, reach by follower type), per-post insights, follower demographics (gender/age/country/city), the content-publishing quota. |
+| `instagram_business_manage_messages` | ⬜ | Instagram DMs → an Instagram thread in the CRM inbox (not wired yet). |
 
-## Instagram — `meta-social`
-| Scope | Status | What it backs |
-|---|---|---|
-| `instagram_basic` | ✅ | Read the linked IG business account (username, counts). |
-| `instagram_content_publish` | ✅ | IG feed posts, Reels, video/image Stories + carousels from DEVICE upload (public `social` bucket → `/media` → `/media_publish`), plus alt text, collaborators (≤3) and first-comment automation. |
-| `instagram_manage_comments` | ✅ | Read + reply + hide/unhide + delete IG comments (Marketing triage + Studio per-post moderation). |
-| `instagram_manage_insights` | ✅ | IG reach / follower / profile-view / per-post insights, the Studio's **follower demographics** (gender/age/country/city) and **hashtag search** (discovery). |
-| `instagram_manage_contents` | ⬜ | Manage existing IG content (newer edit/management surface). |
-| `instagram_manage_messages` | ⬜ | IG DMs → Instagram thread in the CRM inbox. |
-| `instagram_shopping_tag_products` | 🟡 | Tag catalog products on a feed image (composer `catalogSearch` + `product_tags`) — code shipped; needs App Review + an approved IG Shop to go live. |
+## OAuth flow (Instagram Business Login)
+1. Admin pastes the **Instagram App ID + App Secret** in Configuración →
+   Instagram (stored write-only via `meta-social` `saveApp`).
+2. "Conectar Instagram" → `meta-social` `authorize` builds the consent URL at
+   `https://www.instagram.com/oauth/authorize` with the scopes above + a one-shot
+   CSRF `state`; the browser is redirected there.
+3. Instagram redirects to the function's GET callback
+   (`${SUPABASE_URL}/functions/v1/meta-social`, registered as the OAuth redirect
+   URI), which exchanges the `code` → short-lived → **60-day long-lived** token
+   (`api.instagram.com/oauth/access_token` then `graph.instagram.com/access_token`),
+   persists it, and bounces back to the app.
+4. Tokens auto-refresh inside the last 7 days of their window
+   (`graph.instagram.com/refresh_access_token`); they never reach the browser.
 
-## Ads & Business — `meta-social` snapshot + campaign control (Marketing API)
-| Scope | Status | What it backs |
-|---|---|---|
-| `ads_read` | ✅ | Read ad-account + per-campaign insights (spend/reach/results, 28d). |
-| `ads_management` | ✅ | Pause/resume campaigns (`setCampaignStatus`, confirm-gated). |
-| `business_management` | ✅ | `me/businesses` + owned product catalogs (counts for drift flags). |
-| `catalog_management` | 🟡 | Product catalogs — read today; write/feed is headroom. |
-| `leads_retrieval` | ⬜ | Pull lead-gen form submissions → CRM leads. |
-| `manage_app_solution` | ⬜ | Tech-provider / managed app-solution onboarding. |
+## Account requirements
+- The Instagram account must be a **professional** account (Business or
+  Creator). It does **not** need to be linked to a Facebook Page.
+- App Review is still required for advanced access to the four
+  `instagram_business_*` scopes; the review screencast shows the Instagram Login
+  consent — no `pages_show_list` (or any `pages_*`) anywhere.
 
-## Creator / branded content — headroom
-| Scope | Status | What it backs |
-|---|---|---|
-| `facebook_branded_content_ads_brand` | ⬜ | FB branded-content ads as the brand. |
-| `instagram_branded_content_brand` | ⬜ | IG branded-content collabs as the brand. |
-| `instagram_branded_content_ads_brand` | ⬜ | Promote IG branded content as the brand. |
-
-## Other surfaces — headroom
-| Scope | Status | What it backs |
-|---|---|---|
-| `publish_video` | 🟡 | IG Reels/video are live (via `instagram_content_publish`). The server can also post FB Page Reels (`/video_reels`), but the IG-first Marketing UI doesn't surface FB publishing. |
-| `threads_business_basic` | ⬜ | Threads read/post for the business account. |
+### Dropped vs the old Facebook-linked model
+Hashtag search and Shopping product tagging depended on the Facebook
+Page/Catalog model and are **not** available under Instagram Login. Everything
+else (publish, comments, insights, demographics, stories, mentions) carried over.
 
 ### Notes for future loops
-- New Meta feature → check the scope is already in this list before assuming a
-  re-consent is needed; most publishing/insights/ads paths are already granted.
-- The token is server-side and write-only (`meta_social_config` /
-  `whatsapp_config`) — never surface it client-side or log it.
-- A WhatsApp-sourced `meta_social_config` row stores empty token sentinels and
-  re-reads the live `whatsapp_config` token per call, so a WhatsApp re-connect
-  heals the social panel by itself (see `meta-social/index.ts`).
+- WhatsApp is a separate integration and was left fully intact — don't fold IG
+  changes into `wa-*` or `whatsapp_config`.
+- The IG token + the app credentials live in `meta_social_config` (write-only);
+  never surface them client-side or log them.
+- The legacy Facebook/Page/Ads columns on `meta_social_config` are retained but
+  unused (additive migration — no pasted credential is ever erased).

@@ -5,8 +5,9 @@
 // Function (tokens never reach the browser) projected by resolveSocialPulse.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
 import {
-  CalendarClock, ExternalLink, Instagram, MessageSquare, RefreshCw, Send, ShoppingBag, Zap,
+  CalendarClock, ExternalLink, Instagram, MessageSquare, RefreshCw, Send,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import MediaPicker from '../components/MediaPicker.jsx';
@@ -14,7 +15,7 @@ import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { db, newId } from '../db/database.js';
-import { resolveSocialPulse, resolveScheduleAgenda, describePost, resolveCatalogProducts } from '../core/jarvis/index.js';
+import { resolveSocialPulse, resolveScheduleAgenda, describePost } from '../core/jarvis/index.js';
 
 function Stat({ label, value, sub, tone }) {
   return (
@@ -275,7 +276,7 @@ function LivePill({ loading, hasData, error, sinceLabel, onRefresh }) {
 }
 
 export default function Marketing() {
-  const { settings, refreshSettings } = useApp();
+  const { settings } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
 
   const [raw, setRaw] = useState(null);
@@ -333,25 +334,6 @@ export default function Marketing() {
     return () => clearInterval(id);
   }, [linked]);
 
-  // Self-link from the WhatsApp system user (same path as JARVIS).
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState(null);
-  const linkNow = useCallback(async () => {
-    if (linking) return;
-    setLinking(true);
-    setLinkError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('meta-social', { body: { link: {} } });
-      if (error) throw new Error(error.message || 'sin respuesta');
-      if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
-      await refreshSettings();
-    } catch (e) {
-      setLinkError(e?.message || 'No se pudo vincular');
-    } finally {
-      setLinking(false);
-    }
-  }, [linking, refreshSettings]);
-
   const m = useMemo(() => (raw ? resolveSocialPulse(raw) : null), [raw]);
 
   // ── composer ─────────────────────────────────────────────────────────
@@ -371,11 +353,6 @@ export default function Marketing() {
   const [firstComment, setFirstComment] = useState('');
   // Schedule (our own engine — IG has no native scheduling).
   const [pubAt, setPubAt] = useState('');
-  // Product tags (single feed image only).
-  const [tags, setTags] = useState([]); // [{ id, name, image }]
-  const [tagQuery, setTagQuery] = useState('');
-  const [tagResults, setTagResults] = useState([]);
-  const [tagBusy, setTagBusy] = useState(false);
   // Scheduled queue (our scheduled_posts table).
   const [agenda, setAgenda] = useState({ upcoming: [], recent: [] });
   const loadAgenda = useCallback(async () => {
@@ -386,15 +363,6 @@ export default function Marketing() {
   }, []);
   useEffect(() => { if (linked) loadAgenda(); }, [linked, loadAgenda]);
 
-  const searchProducts = useCallback(async () => {
-    const q = tagQuery.trim();
-    setTagBusy(true);
-    try {
-      const { data } = await supabase.functions.invoke('meta-social', { body: { catalogSearch: { q } } });
-      setTagResults(data?.ok ? resolveCatalogProducts(data) : []);
-    } catch { setTagResults([]); } finally { setTagBusy(false); }
-  }, [tagQuery]);
-
   const maxMedia = pubMode === 'carousel' ? 10 : 1;
   // Drop extra media when switching from carousel to a single-item mode.
   useEffect(() => { setPubMedia((prev) => (maxMedia === 1 ? prev.slice(0, 1) : prev)); }, [maxMedia]);
@@ -404,7 +372,7 @@ export default function Marketing() {
 
   const resetComposer = () => {
     setPubText(''); setPubMedia([]); setAltText(''); setCollaborators(''); setFirstComment('');
-    setTags([]); setTagResults([]); setTagQuery(''); setPubAt('');
+    setPubAt('');
   };
 
   // The meta-social `publish` body for the current composer state.
@@ -422,8 +390,6 @@ export default function Marketing() {
       altText: altText.trim() || undefined,
       collaborators: collaborators.split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean).slice(0, 3),
       firstComment: firstComment.trim() || undefined,
-      productTags: tags.length ? tags.map((t) => ({ productId: t.id })) : undefined,
-      targets: ['instagram'],
     };
   };
 
@@ -480,7 +446,7 @@ export default function Marketing() {
     } finally {
       setPubBusy(false);
     }
-  }, [pubText, pubMedia, pubMode, altText, collaborators, firstComment, tags, pubAt, canPublish, pubBusy, pendingIg, load, loadAgenda]);
+  }, [pubText, pubMedia, pubMode, altText, collaborators, firstComment, pubAt, canPublish, pubBusy, pendingIg, load, loadAgenda]);
 
   const discardPending = useCallback(() => {
     setPendingIg(null);
@@ -574,39 +540,13 @@ export default function Marketing() {
     }
   }, [replyText, reply, replyBusy]);
 
-  // ── campaign pause/resume — two-step confirm (real money moves) ──────
-  const [campArm, setCampArm] = useState(null); // campaign id awaiting confirm
-  const [campBusy, setCampBusy] = useState(null);
-  const [campErr, setCampErr] = useState(null);
-  const toggleCampaign = useCallback(async (c) => {
-    if (!c.id || campBusy) return;
-    if (campArm !== c.id) { setCampArm(c.id); setCampErr(null); return; }
-    setCampArm(null);
-    setCampBusy(c.id);
-    setCampErr(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { setCampaignStatus: { campaignId: c.id, status: c.active ? 'PAUSED' : 'ACTIVE' } },
-      });
-      if (error) throw new Error(error.message || 'sin respuesta');
-      if (!data?.ok) throw new Error(data?.error || 'No se pudo cambiar el estado');
-      await load();
-    } catch (e) {
-      setCampErr(e?.message || 'No se pudo cambiar el estado');
-    } finally {
-      setCampBusy(null);
-    }
-  }, [campArm, campBusy, load]);
-
-  const money = (v, digits = 2) => `${Number(v).toLocaleString('en-US', { maximumFractionDigits: digits })}${m?.adCurrency ? ` ${m.adCurrency}` : ''}`;
-
   return (
     <>
       <PageHeader
         title="Marketing"
         subtitle={linked
-          ? (m?.igUsername ? `@${m.igUsername}` : m?.pageName || 'Instagram conectado')
-          : 'Sin conectar — usa el usuario del sistema de WhatsApp'}
+          ? (m?.igUsername ? `@${m.igUsername}` : 'Instagram conectado')
+          : 'Instagram sin conectar'}
         actions={linked ? (
           <LivePill
             loading={loading}
@@ -616,19 +556,17 @@ export default function Marketing() {
             onRefresh={load}
           />
         ) : (
-          <button type="button" onClick={linkNow} disabled={linking} className="btn-brand">
-            {linking ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />} Vincular
-          </button>
+          <Link to="/settings" className="btn-brand">
+            <Instagram size={14} /> Conectar Instagram
+          </Link>
         )}
       />
 
       {!linked ? (
         <div className="card card-pad text-sm text-ink-500">
-          Marketing se conecta solo con el usuario del sistema de WhatsApp — el
-          mismo que ya envía tus mensajes. Asegúrate en Meta Business de que ese
-          usuario tenga asignados la página, el Instagram y la cuenta
-          publicitaria, y pulsa Vincular.
-          {linkError && <div className="text-red-600 mt-2">{linkError}</div>}
+          Conecta tu cuenta de Instagram profesional en{' '}
+          <Link to="/settings" className="text-brand-700 hover:underline">Configuración → Instagram</Link>{' '}
+          para publicar, programar, responder comentarios y ver estadísticas desde aquí.
         </div>
       ) : loadError && !raw ? (
         <div className="card card-pad text-sm">
@@ -639,32 +577,30 @@ export default function Marketing() {
           </button>
         </div>
       ) : !m ? (
-        <div className="card card-pad text-sm text-ink-400">Leyendo Meta…</div>
+        <div className="card card-pad text-sm text-ink-400">Leyendo Instagram…</div>
       ) : (
         <div className="space-y-4">
-          {/* KPI strip — the same honest figures as the JARVIS brief */}
+          {/* KPI strip — Instagram figures, same honest math as the JARVIS brief */}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Seguidores IG"
+              value={(m.kpis.igFollowers ?? 0).toLocaleString('en-US')}
+              sub={`${m.kpis.newFollowers7 >= 0 ? '+' : ''}${m.kpis.newFollowers7.toLocaleString('en-US')} · 7d`}
+            />
             <Stat
               label="Alcance IG · 7d"
               value={m.kpis.reach7.toLocaleString('en-US')}
               sub={deltaSub(m.kpis.reachDeltaPct, 'cuentas alcanzadas')}
             />
             <Stat
-              label="Inversión ads · 7d"
-              value={m.hasAds ? money(m.kpis.spend7) : '—'}
-              sub={deltaSub(m.kpis.spendDeltaPct, m.hasAds ? `28d: ${money(m.kpis.spend28, 0)}` : 'sin cuenta de ads')}
+              label="Acciones en el perfil · 7d"
+              value={m.kpis.profileActions7.toLocaleString('en-US')}
+              sub="enlaces y botones"
             />
             <Stat
-              label={m.kpis.resultsLabel ? `Resultados · 7d` : 'Clics ads · 7d'}
-              value={(m.kpis.resultsLabel ? m.kpis.results7 : m.kpis.clicks7).toLocaleString('en-US')}
-              sub={m.kpis.resultsLabel
-                ? `${m.kpis.resultsLabel}${m.kpis.costPerResult7 != null ? ` · ${money(m.kpis.costPerResult7)} c/u` : ''}`
-                : (m.kpis.cpc7 != null ? `CPC ${money(m.kpis.cpc7)}` : 'sin clics aún')}
-            />
-            <Stat
-              label="Seguidores IG"
-              value={(m.kpis.igFollowers ?? 0).toLocaleString('en-US')}
-              sub={`${m.kpis.newFollowers7 >= 0 ? '+' : ''}${m.kpis.newFollowers7.toLocaleString('en-US')} · ${m.kpis.profileActions7.toLocaleString('en-US')} acciones en el perfil · 7d`}
+              label="Comentarios recientes"
+              value={m.recentComments.length.toLocaleString('en-US')}
+              sub="para responder"
             />
           </div>
 
@@ -699,35 +635,6 @@ export default function Marketing() {
                       <input className="input w-full" value={collaborators} onChange={(e) => setCollaborators(e.target.value)} placeholder="Colaboradores: @usuario1, @usuario2 (máx. 3)" spellCheck={false} />
                       <input className="input w-full" value={firstComment} onChange={(e) => setFirstComment(e.target.value)} placeholder="Primer comentario (p. ej. #hashtags)" />
                       <input className="input w-full" value={altText} onChange={(e) => setAltText(e.target.value)} placeholder="Texto alternativo (accesibilidad, solo imagen)" maxLength={1000} />
-                      {/* product tags — single feed image */}
-                      {pubMode === 'feed' && (
-                        <div className="space-y-1.5 border-t border-ink-100 pt-2">
-                          <div className="flex gap-2">
-                            <input className="input flex-1" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') searchProducts(); }} placeholder="Etiquetar productos del catálogo…" />
-                            <button type="button" className="btn-ghost min-h-[44px]" onClick={searchProducts} disabled={tagBusy}>{tagBusy ? <RefreshCw size={14} className="animate-spin" /> : 'Buscar'}</button>
-                          </div>
-                          {tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {tags.map((t) => (
-                                <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-xs text-brand-800">
-                                  {t.name}
-                                  <button type="button" onClick={() => setTags((p) => p.filter((x) => x.id !== t.id))} aria-label="Quitar">×</button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {tagResults.length > 0 && (
-                            <div className="max-h-32 overflow-auto rounded border border-ink-100">
-                              {tagResults.filter((r) => !tags.some((t) => t.id === r.id)).slice(0, 8).map((r) => (
-                                <button key={r.id} type="button" className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-ink-50" onClick={() => { setTags((p) => [...p, r].slice(0, 5)); setTagResults((p) => p.filter((x) => x.id !== r.id)); }}>
-                                  {r.image && <img src={r.image} alt="" className="h-7 w-7 rounded object-cover" />}
-                                  <span className="min-w-0 truncate">{r.name}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -812,65 +719,6 @@ export default function Marketing() {
                 </div>
               )}
 
-              {/* campaigns */}
-              {m.campaigns.length > 0 && (
-                <div className="card">
-                  <div className="card-header"><span className="font-medium">Campañas · 28 días</span></div>
-                  <div className="divide-y divide-ink-100">
-                    {m.campaigns.map((c) => (
-                      <div key={c.id || c.name} className="px-5 py-2.5 flex items-center gap-3 text-sm">
-                        <span
-                          className={`flex-none w-2 h-2 rounded-full ${c.active ? 'bg-emerald-500' : 'bg-ink-300'}`}
-                          title={c.status || ''}
-                        />
-                        <span className="min-w-0 truncate text-ink-800">{c.name}</span>
-                        <span className="ml-auto tabular-nums text-ink-800">{money(c.spend)}</span>
-                        <span className="tabular-nums text-ink-400 text-xs w-28 text-right">
-                          {c.results != null && m.kpis.resultsLabel
-                            ? `${c.results} ${m.kpis.resultsLabel}`
-                            : c.ctrPct != null ? `CTR ${c.ctrPct.toFixed(2)}%` : `${c.clicks} clics`}
-                        </span>
-                        {c.id && (
-                          <button
-                            type="button"
-                            className={`flex-none text-xs px-2 py-1 rounded border transition-colors ${
-                              campArm === c.id
-                                ? 'border-red-300 bg-red-50 text-red-700 font-medium'
-                                : 'border-ink-200 text-ink-500 hover:bg-ink-50'
-                            }`}
-                            onClick={() => toggleCampaign(c)}
-                            disabled={campBusy === c.id}
-                          >
-                            {campBusy === c.id
-                              ? '…'
-                              : campArm === c.id
-                                ? (c.active ? '¿Confirmar pausa?' : '¿Confirmar activar?')
-                                : (c.active ? 'Pausar' : 'Activar')}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {campErr && <div className="px-5 py-2 text-sm text-red-600">{campErr}</div>}
-                  </div>
-                </div>
-              )}
-
-              {/* catalogs */}
-              {m.catalogs.length > 0 && (
-                <div className="card">
-                  <div className="card-header">
-                    <span className="flex items-center gap-2 font-medium"><ShoppingBag size={15} /> Catálogos Meta</span>
-                  </div>
-                  <div className="divide-y divide-ink-100">
-                    {m.catalogs.map((cat) => (
-                      <div key={`${cat.business}-${cat.name}`} className="px-5 py-2.5 flex items-baseline gap-3 text-sm">
-                        <span className="min-w-0 truncate text-ink-800">{cat.name}</span>
-                        <span className="ml-auto tabular-nums text-ink-500">{cat.products.toLocaleString('en-US')} productos</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="space-y-4 min-w-0">
@@ -890,25 +738,6 @@ export default function Marketing() {
                 replyErr={replyErr}
                 sendReply={sendReply}
               />
-
-              {/* scheduled */}
-              <div className="card">
-                <div className="card-header">
-                  <span className="flex items-center gap-2 font-medium"><CalendarClock size={15} /> Programado</span>
-                </div>
-                <div className="divide-y divide-ink-100">
-                  {m.scheduled.length === 0 && (
-                    <div className="px-5 py-3 text-sm text-ink-400">Nada programado.</div>
-                  )}
-                  {m.scheduled.map((p, i) => (
-                    <div key={`${p.at}-${i}`} className="px-5 py-2.5 flex items-center gap-3 text-sm">
-                      <PostThumb src={p.mediaUrl} onClick={() => peekScheduled(p)} className="w-9 h-9" />
-                      <span className="min-w-0 truncate text-ink-800">{p.text}</span>
-                      <span className="ml-auto flex-none text-xs text-ink-400">{p.inLabel}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
               {/* recent posts */}
               {m.posts.length > 0 && (
@@ -938,7 +767,7 @@ export default function Marketing() {
 
           {Object.keys(m.errors).length > 0 && (
             <div className="text-xs text-amber-700">
-              Secciones de Meta sin respuesta: {Object.keys(m.errors).join(', ')} — el resto es dato real.
+              Secciones de Instagram sin respuesta: {Object.keys(m.errors).join(', ')} — el resto es dato real.
             </div>
           )}
         </div>

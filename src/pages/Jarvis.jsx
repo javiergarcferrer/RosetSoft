@@ -401,40 +401,8 @@ export default function Jarvis() {
     if (socialLinked) loadSocial();
   }, [socialLinked, loadSocial]);
 
-  // No token to paste — the link ALWAYS reuses the WhatsApp system user's
-  // token (already in write-only whatsapp_config). It runs by itself the
-  // first time the page sees WhatsApp connected but Social not yet linked.
-  const [metaLinking, setMetaLinking] = useState(false);
-  const [metaLinkError, setMetaLinkError] = useState(null);
-  const metaBusy = useRef(false);
-  const linkMeta = useCallback(async () => {
-    if (metaBusy.current) return;
-    metaBusy.current = true;
-    setMetaLinking(true);
-    setMetaLinkError(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { link: {} },
-      });
-      if (error) throw new Error(error.message || 'sin respuesta');
-      if (!data?.ok) throw new Error(data?.error || 'No se pudo vincular');
-      await refreshSettings();
-    } catch (e) {
-      setMetaLinkError(userMessageFor(e));
-    } finally {
-      metaBusy.current = false;
-      setMetaLinking(false);
-    }
-  }, [refreshSettings]);
-
-  const whatsappLinked = !!settings?.whatsappConnectedAt;
-  const metaAutoTried = useRef(false);
-  useEffect(() => {
-    if (!socialLinked && whatsappLinked && !metaAutoTried.current) {
-      metaAutoTried.current = true;
-      linkMeta();
-    }
-  }, [socialLinked, whatsappLinked, linkMeta]);
+  // Connecting Instagram is done from Configuración → Instagram (the OAuth
+  // consent flow); this panel just reads the snapshot once linked.
 
   // ── ⌘K command palette ───────────────────────────────────────────────
   const navigate = useNavigate();
@@ -893,29 +861,12 @@ export default function Jarvis() {
 
           {!socialLinked ? (
             <div className="p-4">
-              {metaLinking ? (
-                <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
-                      <Skeleton w="55%" h="0.6rem" />
-                      <Skeleton w="70%" h="1.3rem" />
-                    </div>
-                  ))}
-                </div>
-              ) : metaLinkError ? (
-                <>
-                  <div className="text-xs" style={{ color: 'var(--jv-danger)' }}>{metaLinkError}</div>
-                  <button type="button" className="jv-btn mt-3" onClick={linkMeta}>
-                    <RefreshCw size={12} /> Reintentar
-                  </button>
-                </>
-              ) : (
-                <p className="text-xs" style={{ color: 'var(--jv-muted)' }}>
-                  {whatsappLinked
-                    ? 'Vinculando con el usuario del sistema de WhatsApp…'
-                    : 'Se conecta solo: en cuanto WhatsApp esté vinculado, este panel usa su mismo usuario del sistema para leer la página, el Instagram y los anuncios.'}
-                </p>
-              )}
+              <p className="text-xs" style={{ color: 'var(--jv-muted)' }}>
+                Conecta tu cuenta de Instagram en Configuración para ver aquí seguidores, alcance y publicaciones.
+              </p>
+              <button type="button" className="jv-btn mt-3" onClick={() => navigate('/settings')}>
+                <Share2 size={12} /> Conectar Instagram
+              </button>
             </div>
           ) : socialError ? (
             <div className="p-4">

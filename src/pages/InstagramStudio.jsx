@@ -6,8 +6,9 @@
 // listening. Tokens never reach the browser — every read/action goes through
 // the meta-social Edge Function, projected by the core/jarvis VMs.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Instagram, RefreshCw, Send, Search, Heart, MessageCircle, Eye, EyeOff,
+  Instagram, RefreshCw, Send, Heart, MessageCircle, Eye, EyeOff,
   Trash2, X, Clock, Film, AtSign, Sparkles, ExternalLink,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
@@ -16,7 +17,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { db } from '../db/database.js';
 import {
-  resolveIgStudio, resolveMediaInsights, resolveMediaComments, resolveHashtagMedia,
+  resolveIgStudio, resolveMediaInsights, resolveMediaComments,
 } from '../core/jarvis/index.js';
 import { Donut, BulletBar, Sparkline, Legend } from '../components/charts/MiniCharts.jsx';
 
@@ -312,22 +313,6 @@ export default function InstagramStudio() {
     }
   }, [loadEvents]);
 
-  // ── hashtag listening ────────────────────────────────────────────────
-  const [hq, setHq] = useState('');
-  const [hState, setHState] = useState({ loading: false, result: null, error: null });
-  const searchHashtag = useCallback(async () => {
-    const q = hq.trim().replace(/^#/, '');
-    if (!q || hState.loading) return;
-    setHState({ loading: true, result: null, error: null });
-    try {
-      const { data, error } = await supabase.functions.invoke('meta-social', { body: { hashtagSearch: { q } } });
-      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Sin resultados');
-      setHState({ loading: false, result: resolveHashtagMedia(data), error: null });
-    } catch (e) {
-      setHState({ loading: false, result: null, error: e?.message || 'Sin resultados' });
-    }
-  }, [hq, hState.loading]);
-
   const audienceMax = useMemo(() => {
     if (!m) return 1;
     return Math.max(1, ...m.audience.age.map((a) => a.value), ...m.audience.topCountries.map((c) => c.value), ...m.audience.topCities.map((c) => c.value));
@@ -338,8 +323,9 @@ export default function InstagramStudio() {
       <>
         <PageHeader title="Instagram Studio" subtitle="Sin conectar" />
         <div className="card card-pad text-sm text-ink-500">
-          Conéctate primero desde <span className="font-medium">Marketing</span> (usa el usuario del sistema de
-          WhatsApp). El Studio comparte esa conexión.
+          Conecta tu cuenta de Instagram en{' '}
+          <Link to="/settings" className="font-medium text-brand-700 hover:underline">Configuración → Instagram</Link>.
+          El Studio comparte esa conexión.
         </div>
       </>
     );
@@ -639,32 +625,6 @@ export default function InstagramStudio() {
                   ))}
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* hashtag listening */}
-          <div className="card">
-            <div className="card-header"><span className="flex items-center gap-2 font-medium"><Search size={15} /> Escucha de hashtags</span></div>
-            <div className="card-pad">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400">#</span>
-                  <input className="input w-full pl-6" value={hq} onChange={(e) => setHq(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') searchHashtag(); }} placeholder="lignerosetdr" spellCheck={false} />
-                </div>
-                <button type="button" className="btn-brand" onClick={searchHashtag} disabled={!hq.trim() || hState.loading}>
-                  {hState.loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />} Buscar
-                </button>
-              </div>
-              {hState.error && <div className="mt-2 text-sm text-amber-700">{hState.error}</div>}
-              {hState.result && (
-                <div className="mt-3">
-                  <div className="text-sm text-ink-500 mb-2">Top de <span className="font-medium text-ink-800">#{hState.result.name}</span></div>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                    {hState.result.media.map((item) => <MediaTile key={item.id} item={item} onClick={() => (item.permalink ? window.open(item.permalink, '_blank') : null)} />)}
-                  </div>
-                </div>
-              )}
-              <p className="mt-2 text-xs text-ink-400">Meta permite consultar hasta 30 hashtags distintos cada 7 días.</p>
             </div>
           </div>
 

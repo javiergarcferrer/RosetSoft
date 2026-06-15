@@ -1,31 +1,35 @@
-// meta-social — Instagram + Facebook + Ads into JARVIS.
+// meta-social — Instagram (Instagram API with Instagram Login) into JARVIS.
 //
-// Called by a signed-in team member from the JARVIS dashboard. It keeps the
-// Meta token server-side (write-only meta_social_config table, service-role
-// reads — same pattern as wa-send / shopify-sync) and talks to the Graph +
-// Marketing APIs so the dashboard can show the social side of the business:
-// follower counts, reach, ad spend/results and the publishing schedule.
+// Instagram-ONLY. The team connects its Instagram professional account
+// DIRECTLY via Instagram Business Login — no Facebook Page, no pages_*
+// permissions. The long-lived IG user token + the Instagram app credentials
+// stay server-side (write-only meta_social_config, service-role reads) and we
+// talk to graph.instagram.com so the dashboard can show the IG side of the
+// business (profile, reach, posts, comments) and publish.
 //
-// Body shapes (one per request):
-//   { link: { token } }  → validate the pasted long-lived token, DISCOVER the
-//                          Page (+ page token), its IG business account and
-//                          the ad account, persist everything, stamp settings.
-//   { test: true }       → verify the stored credentials still answer.
-//   { publish: {...} }   → post to the FB Page (text/link/photo now or
-//                          scheduled 10min–30d, or a Reel) and/or IG (image,
-//                          Reel, Story or carousel; no scheduling) — one result
-//                          per target, partial success allowed. A still-
-//                          processing IG video comes back { pending, creationId }.
-//   { finishPublish }    → publish a pending IG video container once it's done.
-//   { snapshot: true }   → one consolidated read: profile counts, IG daily
-//                          reach (28d), recent IG posts, daily ad results
-//                          (28d) + per-campaign rollup, scheduled posts.
-//                          Sections fail INDEPENDENTLY — a partial snapshot
-//                          with per-section errors beats an all-or-nothing
-//                          500 (the dashboard shows what's real and flags
-//                          what didn't answer).
+// OAuth (Instagram Business Login):
+//   GET  ?code&state            ← Instagram's redirect after consent. Public
+//                                  (no JWT); exchanges code → long-lived token,
+//                                  persists it, then 302s back to the app.
+//
+// POST body shapes (one per request; authenticated unless noted):
+//   { saveApp:{appId,appSecret} } (admin) → store the Instagram app creds.
+//   { authorize:{returnTo} }      (admin) → build the consent URL + CSRF state.
+//   { test:true }                 → verify the stored token still answers.
+//   { publish:{...} }             → IG image/Reel/Story/carousel (now). A still-
+//                                   processing video returns { pending, creationId }.
+//   { finishPublish:{creationId} }→ publish a pending IG video container.
+//   { snapshot:true }             → profile counts, reach (28d), recent posts.
+//   { igStudio:true }             → consolidated Studio read (profile,
+//                                   demographics, media, stories, mentions).
+//   { mediaInsights } { mediaComments } { replyComment }
+//   { setCommentVisibility } { deleteComment }
+//   { subscribeWebhooks:true }    (admin) → IG comment/mention webhook fields.
+//
+// The token is resolved live and auto-refreshed (IG long-lived tokens last 60
+// days); it never reaches the browser.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,16 +40,25 @@ const json = (b: unknown, s = 200): Response =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 const GRAPH_VERSION = 'v23.0';
-const GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
+const IG = 'https://graph.instagram.com';
+const IG_API = `${IG}/${GRAPH_VERSION}`;
+const IG_AUTHORIZE = 'https://www.instagram.com/oauth/authorize';
+const IG_TOKEN = 'https://api.instagram.com/oauth/access_token';
 const TEAM = 'team';
 
-type LinkBody = { token?: string; pageId?: string; adAccountId?: string };
+// The scopes we request at consent — Instagram Login, business surface.
+const SCOPES = [
+  'instagram_business_basic',
+  'instagram_business_content_publish',
+  'instagram_business_manage_comments',
+  'instagram_business_manage_insights',
+].join(',');
+
 type CarouselItem = { imageUrl?: string; videoUrl?: string };
 type PublishBody = {
   message?: string;
-  link?: string;
   imageUrl?: string;
-  /** A video URL → IG Reel (or video Story) and/or a Facebook Page Reel. */
+  /** A video URL → IG Reel (or video Story). */
   videoUrl?: string;
   /** Optional IG Reel cover image (else Meta picks a frame). */
   coverUrl?: string;
@@ -53,59 +66,41 @@ type PublishBody = {
   shareToFeed?: boolean;
   /** 2–10 media → an IG carousel (each item an image or a video URL). */
   carousel?: CarouselItem[];
-  /** Accessibility caption for a single feed image / story image (≤1000 chars). */
+  /** Accessibility caption for a single feed image (≤1000 chars). */
   altText?: string;
   /** Up to 3 IG usernames invited as collaborators (feed image / reel / carousel). */
   collaborators?: string[];
   /** Auto-post this as the first comment after publishing (e.g. hashtags). */
   firstComment?: string;
-  /** Tag Shopping catalog products on a single feed image: [{ productId, x, y }]. */
-  productTags?: Array<{ productId?: string; x?: number; y?: number }>;
-  /** JS-ms timestamp; FB feed/photo only (10 min – 30 days out). Absent = now. */
-  scheduleAt?: number;
-  /** Publish the IG side as a 24h Story (image or video, no caption) instead of a feed post. */
+  /** Publish the IG side as a 24h Story (image or video, no caption). */
   igStory?: boolean;
-  targets?: Array<'facebook' | 'instagram'>;
 };
 type Body = {
-  link?: LinkBody;
+  saveApp?: { appId?: string; appSecret?: string };
+  authorize?: { returnTo?: string };
   test?: boolean;
   snapshot?: boolean;
   publish?: PublishBody;
-  /** Resume publishing a still-processing IG video container (Reel/Story). */
   finishPublish?: { creationId?: string };
-  /** Reply to a comment from the triage list (IG replies edge vs FB comments edge). */
-  replyComment?: { commentId?: string; message?: string; platform?: 'instagram' | 'facebook' };
-  /** Pause/resume an ad campaign (Marketing page, behind an explicit confirm). */
-  setCampaignStatus?: { campaignId?: string; status?: string };
-  /** Instagram Studio: one consolidated read (profile, demographics, media, stories, mentions). */
+  replyComment?: { commentId?: string; message?: string };
   igStudio?: boolean;
-  /** Per-post insight drill-down (on click). */
   mediaInsights?: { mediaId?: string; productType?: string };
-  /** Comments on a single post (the per-post moderation thread). */
   mediaComments?: { mediaId?: string };
-  /** Hide/unhide an IG comment. */
   setCommentVisibility?: { commentId?: string; hide?: boolean };
-  /** Delete an IG comment. */
   deleteComment?: { commentId?: string };
-  /** Hashtag listening — discover top media for a tag. */
-  hashtagSearch?: { q?: string };
-  /** Search the linked Shopping catalog for products to tag. */
-  catalogSearch?: { q?: string };
-  /** Subscribe the Page/IG account to comment + mention webhooks (admin). */
   subscribeWebhooks?: boolean;
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
 function friendly(msg: string): string {
-  return /session has expired|expirad[oa]|access token.*(invalid|expired)|error validating access token/i.test(msg)
-    ? 'El token de Meta expiró — reconecta WhatsApp en Configuración (mismo usuario del sistema) y este panel se cura solo con el token nuevo.'
+  return /session has expired|expirad[oa]|access token.*(invalid|expired)|error validating access token|oauthexception/i.test(msg)
+    ? 'La conexión con Instagram expiró — vuelve a conectar Instagram en Configuración y este panel se cura solo.'
     : msg;
 }
 
-/** GET a Graph endpoint; throws the API's own error message on failure. */
-async function graph(path: string, token: string, params: Record<string, string> = {}) {
-  const url = new URL(`${GRAPH}/${path}`);
+/** GET an Instagram Graph endpoint; throws the API's own error on failure. */
+async function igGet(path: string, token: string, params: Record<string, string> = {}) {
+  const url = new URL(`${IG_API}/${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set('access_token', token);
   const res = await fetch(url);
@@ -116,9 +111,9 @@ async function graph(path: string, token: string, params: Record<string, string>
   return data;
 }
 
-/** POST a Graph endpoint (form-encoded); throws the API's error message. */
-async function graphPost(path: string, token: string, params: Record<string, string>) {
-  const res = await fetch(`${GRAPH}/${path}`, {
+/** POST an Instagram Graph endpoint (form-encoded); throws the API's error. */
+async function igPost(path: string, token: string, params: Record<string, string>) {
+  const res = await fetch(`${IG_API}/${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ ...params, access_token: token }),
@@ -138,13 +133,12 @@ type PublishResult = { ok: boolean; id?: string; error?: string; pending?: boole
  * Poll an IG media container to FINISHED. Image containers are ready on the
  * first check; VIDEO/REELS/CAROUSEL-with-video are processed async, so we wait
  * (bounded — ~36s, comfortably under the function budget). If it's still
- * IN_PROGRESS we return that and hand the creation id back: the View finishes
- * the publish a few seconds later via `finishPublish`, rather than us blocking
- * a request for minutes.
+ * IN_PROGRESS we return that and hand the creation id back so the caller can
+ * finish a few seconds later via `finishPublish`.
  */
 async function igWaitReady(creationId: string, token: string, tries = 9, delayMs = 4000): Promise<string> {
   for (let i = 0; i < tries; i++) {
-    const r = await graph(creationId, token, { fields: 'status_code' });
+    const r = await igGet(creationId, token, { fields: 'status_code' });
     const s = String(r?.status_code || '');
     if (s === 'FINISHED' || s === '') return 'FINISHED';
     if (s === 'ERROR' || s === 'EXPIRED') return s;
@@ -175,7 +169,7 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
       const params = it.videoUrl
         ? { media_type: 'VIDEO', video_url: String(it.videoUrl), is_carousel_item: 'true' }
         : { image_url: String(it.imageUrl), is_carousel_item: 'true' };
-      const c = await graphPost(`${igId}/media`, token, params);
+      const c = await igPost(`${igId}/media`, token, params);
       if (it.videoUrl) {
         const s = await igWaitReady(String(c?.id), token);
         if (s !== 'FINISHED') return { ok: false, error: `Un video del carrusel no terminó de procesar (${s})` };
@@ -183,8 +177,8 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
       childIds.push(String(c?.id || ''));
     }
     if (childIds.length < 2) return { ok: false, error: 'El carrusel necesita al menos 2 elementos válidos' };
-    const parent = await graphPost(`${igId}/media`, token, { media_type: 'CAROUSEL', caption, children: childIds.join(','), ...collabParam });
-    const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(parent?.id || '') });
+    const parent = await igPost(`${igId}/media`, token, { media_type: 'CAROUSEL', caption, children: childIds.join(','), ...collabParam });
+    const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(parent?.id || '') });
     return { ok: true, id: out?.id };
   }
 
@@ -193,11 +187,11 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
     const params: Record<string, string> = { media_type: 'REELS', video_url: String(pub.videoUrl), caption, ...collabParam };
     if (pub.coverUrl) params.cover_url = String(pub.coverUrl);
     if (pub.shareToFeed === false) params.share_to_feed = 'false';
-    const c = await graphPost(`${igId}/media`, token, params);
+    const c = await igPost(`${igId}/media`, token, params);
     const s = await igWaitReady(String(c?.id), token);
     if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId: String(c?.id), error: 'El Reel sigue procesando — pulsa “Finalizar” en unos segundos.' };
     if (s !== 'FINISHED') return { ok: false, error: `El Reel no se pudo procesar (${s})` };
-    const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
+    const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
     return { ok: true, id: out?.id };
   }
 
@@ -207,50 +201,23 @@ async function publishInstagram(igId: string, token: string, pub: PublishBody): 
       ? { media_type: 'STORIES', video_url: String(pub.videoUrl) }
       : pub.imageUrl ? { media_type: 'STORIES', image_url: String(pub.imageUrl) } : null;
     if (!params) return { ok: false, error: 'La Story requiere una imagen o un video' };
-    const c = await graphPost(`${igId}/media`, token, params);
+    const c = await igPost(`${igId}/media`, token, params);
     if (pub.videoUrl) {
       const s = await igWaitReady(String(c?.id), token);
       if (s === 'IN_PROGRESS') return { ok: false, pending: true, creationId: String(c?.id), error: 'La Story de video sigue procesando — pulsa “Finalizar”.' };
       if (s !== 'FINISHED') return { ok: false, error: `La Story no se pudo procesar (${s})` };
     }
-    const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
+    const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
     return { ok: true, id: out?.id };
   }
 
-  // FEED IMAGE — the original path (alt text, collaborators + product tags here).
+  // FEED IMAGE — the original path (alt text + collaborators here).
   if (!pub.imageUrl) return { ok: false, error: 'Instagram requiere una imagen o un video (URL pública)' };
   const params: Record<string, string> = { image_url: String(pub.imageUrl), caption, ...collabParam };
   if (altText) params.alt_text = altText;
-  const tags = (pub.productTags || [])
-    .filter((t) => t && t.productId)
-    .map((t) => ({ product_id: String(t.productId), ...(t.x != null && t.y != null ? { x: t.x, y: t.y } : {}) }))
-    .slice(0, 5);
-  if (tags.length) params.product_tags = JSON.stringify(tags);
-  const c = await graphPost(`${igId}/media`, token, params);
-  const out = await graphPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
+  const c = await igPost(`${igId}/media`, token, params);
+  const out = await igPost(`${igId}/media_publish`, token, { creation_id: String(c?.id || '') });
   return { ok: true, id: out?.id };
-}
-
-/**
- * Publish a Facebook Page Reel from a hosted video URL — the 3-phase
- * video_reels flow (start → hosted-file upload via rupload → finish). No bytes
- * stream through us: rupload pulls the public URL we pass in the `file_url`
- * header, the same "Meta fetches your URL" model as IG.
- */
-async function publishFacebookReel(pageId: string, token: string, videoUrl: string, description: string): Promise<{ id: string }> {
-  const start = await graphPost(`${pageId}/video_reels`, token, { upload_phase: 'start' });
-  const videoId = String(start?.video_id || '');
-  if (!videoId) throw new Error('No se pudo iniciar la subida del Reel');
-  const up = await fetch(`https://rupload.facebook.com/video-upload/${GRAPH_VERSION}/${videoId}`, {
-    method: 'POST',
-    headers: { Authorization: `OAuth ${token}`, file_url: videoUrl },
-  });
-  const upData = await up.json().catch(() => ({}));
-  if (!up.ok || upData?.error) throw new Error(String(upData?.error?.message || `rupload ${up.status}`).slice(0, 200));
-  await graphPost(`${pageId}/video_reels`, token, {
-    upload_phase: 'finish', video_id: videoId, video_state: 'PUBLISHED', description,
-  });
-  return { id: videoId };
 }
 
 /**
@@ -262,7 +229,7 @@ async function mediaInsightValues(mediaId: string, token: string, metricSets: st
   let lastErr: unknown = null;
   for (const metric of metricSets) {
     try {
-      const r = await graph(`${mediaId}/insights`, token, { metric });
+      const r = await igGet(`${mediaId}/insights`, token, { metric });
       const out: Record<string, number> = {};
       for (const row of (r?.data || [])) {
         const v = row?.values?.[0]?.value;
@@ -274,6 +241,32 @@ async function mediaInsightValues(mediaId: string, token: string, metricSets: st
   throw lastErr || new Error('Sin métricas');
 }
 
+type Admin = SupabaseClient;
+
+/** The current IG user token, auto-refreshed when close to its 60-day expiry. */
+async function resolveToken(admin: Admin, cfg: { ig_access_token?: string; ig_token_expires_at?: string }): Promise<string> {
+  let token = cfg.ig_access_token || '';
+  if (!token) return '';
+  const exp = cfg.ig_token_expires_at ? Date.parse(cfg.ig_token_expires_at) : 0;
+  // Refresh inside the last 7 days of the window (IG tokens must be >24h old to
+  // refresh; a freshly minted one comfortably is by then).
+  if (exp && exp - Date.now() < 7 * 86_400_000) {
+    try {
+      const r = await fetch(`${IG}/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`);
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d?.access_token) {
+        token = String(d.access_token);
+        await admin.from('meta_social_config').update({
+          ig_access_token: token,
+          ig_token_expires_at: new Date(Date.now() + (Number(d.expires_in) || 5_184_000) * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('profile_id', TEAM);
+      }
+    } catch { /* keep the current token — a transient refresh blip isn't fatal */ }
+  }
+  return token;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
@@ -283,292 +276,232 @@ Deno.serve(async (req) => {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SERVICE_ROLE_KEY) {
     return json({ error: 'Server misconfigured' }, 500);
   }
-
-  // Verify the caller ourselves (gateway verify_jwt is off for the CORS
-  // preflight) — same as wa-send / claude-chat. The scheduler worker calls us
-  // server-to-server with the service-role key in x-internal-secret (it has no
-  // user JWT) — that bypass is for the publish path only; link/subscribe still
-  // require an admin user below.
-  const authHeader = req.headers.get('Authorization') || '';
-  const internal = (req.headers.get('x-internal-secret') || '') === SERVICE_ROLE_KEY;
-  const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  let userId = '';
-  if (!internal) {
-    if (!authHeader.startsWith('Bearer ')) return json({ error: 'Authorization header required' }, 401);
-    const { data: userData, error: userErr } = await caller.auth.getUser();
-    if (userErr || !userData?.user) return json({ error: 'Invalid or expired session' }, 401);
-    userId = userData.user.id;
-  }
+  // The OAuth redirect URI — must be registered verbatim in the Instagram app's
+  // Business login settings. Derived from the project URL, never hardcoded.
+  const redirectUri = `${SUPABASE_URL}/functions/v1/meta-social`;
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  // ── OAuth callback (Instagram → us). Public GET: no JWT, authenticated by
+  // the one-shot `state` we stored when the admin started the flow. ──────────
+  if (req.method === 'GET') {
+    const u = new URL(req.url);
+    const code = u.searchParams.get('code') || '';
+    const state = u.searchParams.get('state') || '';
+    const oauthErr = u.searchParams.get('error_description') || u.searchParams.get('error') || '';
+
+    const { data: cfg } = await admin
+      .from('meta_social_config')
+      .select('ig_app_id, ig_app_secret, oauth_state, oauth_return_to')
+      .eq('profile_id', TEAM)
+      .maybeSingle();
+    const returnTo = cfg?.oauth_return_to || SUPABASE_URL;
+    const back = (q: string) => Response.redirect(`${returnTo}${returnTo.includes('?') ? '&' : '?'}${q}`, 302);
+
+    if (oauthErr) return back(`ig_error=${encodeURIComponent(oauthErr.slice(0, 160))}`);
+    if (!code) return back('ig_error=missing_code');
+    if (!cfg?.oauth_state || state !== cfg.oauth_state) return back('ig_error=state_mismatch');
+
+    try {
+      // 1) authorization code → short-lived token (+ the IG user id).
+      const tr = await fetch(IG_TOKEN, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: cfg.ig_app_id,
+          client_secret: cfg.ig_app_secret,
+          grant_type: 'authorization_code',
+          redirect_uri: redirectUri,
+          code,
+        }),
+      });
+      const td = await tr.json().catch(() => ({}));
+      if (!tr.ok) throw new Error(td?.error_message || td?.error?.message || `token ${tr.status}`);
+      // Response is either flat { access_token, user_id } or { data:[{…}] }.
+      const first = td?.data?.[0] || td;
+      const short = String(first?.access_token || '');
+      if (!short) throw new Error('Instagram no devolvió un token');
+
+      // 2) short-lived → long-lived (60-day) token.
+      const lr = await fetch(`${IG}/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(cfg.ig_app_secret)}&access_token=${encodeURIComponent(short)}`);
+      const ld = await lr.json().catch(() => ({}));
+      const longToken = String(ld?.access_token || short);
+      const expiresIn = Number(ld?.expires_in) || 5_184_000;
+
+      // 3) resolve the account id + username for subsequent calls.
+      let userId = String(first?.user_id || '');
+      let username = '';
+      try {
+        const me = await igGet('me', longToken, { fields: 'user_id,username' });
+        userId = String(me?.user_id || userId);
+        username = String(me?.username || '');
+      } catch { /* keep the user_id from the token exchange */ }
+
+      await admin.from('meta_social_config').update({
+        ig_access_token: longToken,
+        ig_token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+        ig_user_id: userId,
+        ig_username: username,
+        access_token: '',
+        oauth_state: '',
+        updated_at: new Date().toISOString(),
+      }).eq('profile_id', TEAM);
+      await admin.from('settings').update({
+        meta_social_connected_at: new Date().toISOString(),
+        meta_social_ig_username: username,
+      }).eq('profile_id', TEAM);
+
+      return back('ig=connected');
+    } catch (e) {
+      return back(`ig_error=${encodeURIComponent(friendly(String((e as Error)?.message || e)).slice(0, 160))}`);
+    }
+  }
+
+  // ── POST: verify the caller (gateway verify_jwt is off for the CORS
+  // preflight). The scheduler worker calls us server-to-server with the
+  // service-role key in x-internal-secret (no user JWT) — that bypass is for
+  // the publish path only; admin actions still require an admin user. ────────
+  const authHeader = req.headers.get('Authorization') || '';
+  const internal = (req.headers.get('x-internal-secret') || '') === SERVICE_ROLE_KEY;
+  let userId = '';
+  if (!internal) {
+    if (!authHeader.startsWith('Bearer ')) return json({ error: 'Authorization header required' }, 401);
+    const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userData, error: userErr } = await caller.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: 'Invalid or expired session' }, 401);
+    userId = userData.user.id;
+  }
+  const requireAdmin = async (): Promise<string | null> => {
+    if (!userId) return 'Solo un administrador puede hacer esto.';
+    const { data: prof } = await admin.from('profiles').select('role, active').eq('id', userId).maybeSingle();
+    if (!prof || prof.role !== 'admin' || !prof.active) return 'Solo un administrador puede conectar Instagram.';
+    return null;
+  };
+
   let body: Body = {};
   try { body = await req.json(); } catch { /* empty body → handled below */ }
 
-  // ── link: validate + discover + persist ──────────────────────────────
-  // With no token in the body, reuse the WhatsApp integration's system-user
-  // token (write-only whatsapp_config) — one Meta system user runs both;
-  // the Page/IG/ad account just have to be assigned to it in Meta Business.
-  if (body.link) {
-    // Linking PERSISTS the Meta credentials (meta_social_config) — an
-    // admin-only action, like the save_* credential RPCs. The read / publish
-    // modes below stay open to the whole team; only connecting is gated. The
-    // caller is already authenticated above; here we also require admin.
-    const { data: prof } = await caller
-      .from('profiles')
-      .select('role, active')
-      .eq('id', userId)
-      .maybeSingle();
-    if (!prof || prof.role !== 'admin' || !prof.active) {
-      return json({ ok: false, error: 'Solo un administrador puede conectar Meta.' }, 403);
-    }
-    let token = String(body.link.token || '').trim();
-    let fromWhatsApp = false;
-    if (!token) {
-      const { data: wa } = await admin
-        .from('whatsapp_config')
-        .select('access_token')
-        .eq('profile_id', TEAM)
-        .maybeSingle();
-      token = wa?.access_token || '';
-      fromWhatsApp = true;
-      if (!token) {
-        return json({ ok: false, error: 'Sin token disponible: conecta WhatsApp primero (mismo usuario del sistema) o pega un token de Meta Business.' });
-      }
-    }
-    try {
-      // Pages the token can see, each with its page token + linked IG account.
-      const pages = await graph('me/accounts', token, {
-        fields: 'id,name,access_token,instagram_business_account{id,username}',
-        limit: '25',
-      });
-      const list: Array<{
-        id: string; name?: string; access_token?: string;
-        instagram_business_account?: { id?: string; username?: string };
-      }> = pages?.data || [];
-      if (!list.length) {
-        return json({
-          ok: false,
-          error: fromWhatsApp
-            ? 'El usuario del sistema de WhatsApp no administra ninguna página — en Meta Business, asígnale la página de Facebook (y la cuenta publicitaria) a ese usuario del sistema, o pega otro token.'
-            : 'El token no administra ninguna página de Facebook — usa un token de usuario del sistema con permisos de páginas.',
-        });
-      }
-      const page = (body.link.pageId && list.find((p) => p.id === body.link?.pageId)) || list[0];
-
-      // Ad accounts the token can read (optional — analytics work without ads).
-      let adAccountId = String(body.link.adAccountId || '');
-      if (!adAccountId) {
-        try {
-          const ads = await graph('me/adaccounts', token, { fields: 'id,name,account_status', limit: '25' });
-          const active = (ads?.data || []).find((a: { account_status?: number }) => a.account_status === 1) || (ads?.data || [])[0];
-          adAccountId = active?.id || '';
-        } catch { adAccountId = ''; }
-      }
-
-      const ig = page.instagram_business_account || {};
-      // A WhatsApp-sourced link stores EMPTY token sentinels: every later
-      // call re-reads the CURRENT whatsapp_config token (and re-derives the
-      // page token), so a WhatsApp re-connect heals this panel by itself.
-      // Only a manually pasted token is persisted here.
-      await admin.from('meta_social_config').upsert({
-        profile_id: TEAM,
-        access_token: fromWhatsApp ? '' : token,
-        page_id: page.id,
-        page_name: page.name || '',
-        page_token: fromWhatsApp ? '' : (page.access_token || ''),
-        ig_user_id: ig.id || '',
-        ig_username: ig.username || '',
-        ad_account_id: adAccountId,
-        updated_at: new Date().toISOString(),
-      });
-      await admin.from('settings').update({
-        meta_social_connected_at: new Date().toISOString(),
-        meta_social_page_name: page.name || '',
-        meta_social_ig_username: ig.username || '',
-      }).eq('profile_id', TEAM);
-
-      return json({
-        ok: true,
-        page: { id: page.id, name: page.name || '' },
-        ig: ig.id ? { id: ig.id, username: ig.username || '' } : null,
-        adAccountId: adAccountId || null,
-      });
-    } catch (e) {
-      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
-    }
+  // ── saveApp: persist the Instagram app credentials (admin) ─────────────
+  if (body.saveApp) {
+    const err = await requireAdmin();
+    if (err) return json({ ok: false, error: err }, 403);
+    const appId = String(body.saveApp.appId || '').trim();
+    const appSecret = String(body.saveApp.appSecret || '').trim();
+    if (!appId) return json({ ok: false, error: 'App ID requerido' }, 400);
+    // Upsert (the row may not exist yet). Leave the secret untouched when the
+    // field is left blank on a re-save, so re-entering the App ID never wipes it.
+    const patch: Record<string, unknown> = { profile_id: TEAM, ig_app_id: appId, access_token: '', updated_at: new Date().toISOString() };
+    if (appSecret) patch.ig_app_secret = appSecret;
+    const { error: upErr } = await admin.from('meta_social_config').upsert(patch);
+    if (upErr) return json({ ok: false, error: upErr.message });
+    await admin.from('settings').update({ meta_social_ig_app_id: appId }).eq('profile_id', TEAM);
+    return json({ ok: true, redirectUri });
   }
 
-  // Everything below needs stored credentials. Tokens resolve LIVE: a row
-  // linked from WhatsApp stores empty sentinels and always uses the current
-  // whatsapp_config token + a freshly derived page token, so it never goes
-  // stale on its own.
-  const { data: cfg } = await admin
-    .from('meta_social_config')
-    .select('access_token, page_id, page_name, page_token, ig_user_id, ig_username, ad_account_id')
-    .eq('profile_id', TEAM)
-    .maybeSingle();
-  if (!cfg) return json({ configured: false, error: 'Sin token de Meta' });
-  let userToken = cfg.access_token || '';
-  if (!userToken) {
-    const { data: wa } = await admin
-      .from('whatsapp_config')
-      .select('access_token')
+  // ── authorize: build the Instagram consent URL + a one-shot CSRF state (admin) ─
+  if (body.authorize) {
+    const err = await requireAdmin();
+    if (err) return json({ ok: false, error: err }, 403);
+    const { data: cfg } = await admin
+      .from('meta_social_config')
+      .select('ig_app_id, ig_app_secret')
       .eq('profile_id', TEAM)
       .maybeSingle();
-    userToken = wa?.access_token || '';
+    if (!cfg?.ig_app_id || !cfg?.ig_app_secret) {
+      return json({ ok: false, error: 'Guarda primero el App ID y el App Secret de Instagram.' });
+    }
+    const state = crypto.randomUUID();
+    await admin.from('meta_social_config').update({
+      oauth_state: state,
+      oauth_return_to: String(body.authorize.returnTo || '').trim(),
+      updated_at: new Date().toISOString(),
+    }).eq('profile_id', TEAM);
+    const url = new URL(IG_AUTHORIZE);
+    url.searchParams.set('client_id', cfg.ig_app_id);
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', SCOPES);
+    url.searchParams.set('state', state);
+    return json({ ok: true, url: url.toString(), redirectUri });
   }
-  if (!userToken) return json({ configured: false, error: 'Sin token de Meta' });
-  let pageToken = cfg.page_token || '';
-  if (!pageToken && cfg.page_id) {
-    try {
-      const p = await graph(cfg.page_id, userToken, { fields: 'access_token' });
-      pageToken = p?.access_token || '';
-    } catch { /* fall through to the user token */ }
-  }
-  pageToken = pageToken || userToken;
+
+  // Everything below needs a connected account + a live token.
+  const { data: cfg } = await admin
+    .from('meta_social_config')
+    .select('ig_app_id, ig_access_token, ig_token_expires_at, ig_user_id, ig_username')
+    .eq('profile_id', TEAM)
+    .maybeSingle();
+  if (!cfg) return json({ configured: false, error: 'Instagram sin conectar' });
+  const token = await resolveToken(admin, cfg);
+  if (!token) return json({ configured: false, error: 'Instagram sin conectar' });
+  const igId = cfg.ig_user_id || '';
 
   if (body.test) {
     try {
-      const p = await graph(cfg.page_id, pageToken, { fields: 'name' });
-      return json({ configured: true, ok: true, page: p?.name || cfg.page_name });
+      const me = await igGet('me', token, { fields: 'user_id,username' });
+      const name = me?.username || cfg.ig_username;
+      return json({ configured: true, ok: true, account: name, page: name ? `@${name}` : 'Instagram' });
     } catch (e) {
       return json({ configured: true, ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
   }
 
-  // ── setCampaignStatus: pause/resume a campaign — REAL MONEY moves, so
-  // the UI gates this behind an explicit confirm; the server only accepts
-  // the two reversible states.
-  if (body.setCampaignStatus) {
-    const campaignId = String(body.setCampaignStatus.campaignId || '').trim();
-    const status = String(body.setCampaignStatus.status || '').toUpperCase();
-    if (!campaignId || !['ACTIVE', 'PAUSED'].includes(status)) {
-      return json({ ok: false, error: 'campaignId y status (ACTIVE|PAUSED) requeridos' }, 400);
-    }
-    try {
-      await graphPost(campaignId, userToken, { status });
-      return json({ ok: true, status });
-    } catch (e) {
-      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
-    }
-  }
+  if (!igId) return json({ configured: false, error: 'Sin cuenta de Instagram vinculada' });
 
-  // ── replyComment: answer a comment in-thread. IG nests replies under the
-  // comment's `replies` edge; Facebook nests them under `comments`.
+  // ── replyComment: answer a comment in-thread (IG `replies` edge) ──────
   if (body.replyComment) {
     const commentId = String(body.replyComment.commentId || '').trim();
     const message = String(body.replyComment.message || '').trim();
     if (!commentId || !message) return json({ ok: false, error: 'commentId y message requeridos' }, 400);
-    const edge = body.replyComment.platform === 'facebook' ? 'comments' : 'replies';
     try {
-      const r = await graphPost(`${commentId}/${edge}`, pageToken, { message });
+      const r = await igPost(`${commentId}/replies`, token, { message });
       return json({ ok: true, id: r?.id });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
   }
 
-  // ── publish: FB Page (text/link/photo/Reel, now or scheduled) + IG
-  // (image/Reel/Story/carousel). Per-target results: one network failing
-  // doesn't waste the other's post.
+  // ── publish: IG image/Reel/Story/carousel (immediate). Worker-compatible
+  // shape: { ok, results:{ instagram } }. ───────────────────────────────────
   if (body.publish) {
     const pub = body.publish;
     const message = String(pub.message || '').trim();
-    const targets = pub.targets?.length ? pub.targets : ['facebook' as const];
-    const link = String(pub.link || '').trim();
     const imageUrl = String(pub.imageUrl || '').trim();
     const videoUrl = String(pub.videoUrl || '').trim();
     const carousel = (pub.carousel || []).filter((it) => it && (it.videoUrl || it.imageUrl));
-    const scheduleAt = Number(pub.scheduleAt) || 0;
-
-    // A media-only publish (Reel/Story/photo/carousel) needs no caption; a
-    // text post still does.
     const hasMedia = !!(imageUrl || videoUrl || carousel.length);
     if (!message && !hasMedia) return json({ ok: false, error: 'Escribe un texto o adjunta una imagen/video' }, 400);
 
-    if (scheduleAt) {
-      const min = Date.now() + 10 * 60_000;
-      const max = Date.now() + 30 * 86_400_000;
-      if (scheduleAt < min || scheduleAt > max) {
-        return json({ ok: false, error: 'La programación debe quedar entre 10 minutos y 30 días desde ahora.' });
-      }
-    }
-
     const results: Record<string, PublishResult> = {};
-
-    if (targets.includes('facebook')) {
-      try {
-        if (videoUrl) {
-          // FB Reel — no API scheduling for Reels, publishes now.
-          const r = await publishFacebookReel(cfg.page_id, pageToken, videoUrl, message);
-          results.facebook = { ok: true, id: r.id };
-        } else if (imageUrl) {
-          // Photo post (schedulable like a feed post).
-          const params: Record<string, string> = { url: imageUrl, caption: message };
-          if (scheduleAt) {
-            params.published = 'false';
-            params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
-          }
-          const r = await graphPost(`${cfg.page_id}/photos`, pageToken, params);
-          results.facebook = { ok: true, id: r?.post_id || r?.id };
-        } else {
-          const params: Record<string, string> = { message };
-          if (link) params.link = link;
-          if (scheduleAt) {
-            params.published = 'false';
-            params.scheduled_publish_time = String(Math.floor(scheduleAt / 1000));
-          }
-          const r = await graphPost(`${cfg.page_id}/feed`, pageToken, params);
-          results.facebook = { ok: true, id: r?.id };
-        }
-      } catch (e) {
-        results.facebook = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
-      }
+    try {
+      results.instagram = await publishInstagram(igId, token, { ...pub, message, imageUrl, videoUrl, carousel });
+    } catch (e) {
+      results.instagram = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
     }
 
-    if (targets.includes('instagram')) {
-      if (!cfg.ig_user_id) {
-        results.instagram = { ok: false, error: 'Sin cuenta de Instagram vinculada' };
-      } else if (scheduleAt) {
-        // IG Content Publishing has no native scheduling.
-        results.instagram = { ok: false, error: 'Instagram no admite programación por API — publícalo al momento' };
-      } else {
-        try {
-          results.instagram = await publishInstagram(cfg.ig_user_id, pageToken, { ...pub, message, imageUrl, videoUrl, carousel });
-        } catch (e) {
-          results.instagram = { ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) };
-        }
-      }
-    }
-
-    // First-comment automation (e.g. hashtags off the caption) — best-effort;
-    // a failure here never undoes the publish.
+    // First-comment automation (e.g. hashtags off the caption) — best-effort.
     const firstComment = String(pub.firstComment || '').trim();
     if (firstComment && results.instagram?.ok && results.instagram.id) {
-      try { await graphPost(`${results.instagram.id}/comments`, pageToken, { message: firstComment }); } catch { /* ignore */ }
+      try { await igPost(`${results.instagram.id}/comments`, token, { message: firstComment }); } catch { /* ignore */ }
     }
 
-    const anyOk = Object.values(results).some((r) => r.ok);
-    return json({ ok: anyOk, results });
+    return json({ ok: !!results.instagram?.ok, results });
   }
 
-  // ── finishPublish: publish an IG video container that was still processing
-  // when `publish` returned (the View polls this for Reels/video Stories).
+  // ── finishPublish: publish a still-processing IG video container ──────
   if (body.finishPublish) {
-    if (!cfg.ig_user_id) return json({ ok: false, error: 'Sin cuenta de Instagram vinculada' });
     const creationId = String(body.finishPublish.creationId || '').trim();
     if (!creationId) return json({ ok: false, error: 'creationId requerido' }, 400);
     try {
-      const s = await igWaitReady(creationId, pageToken);
+      const s = await igWaitReady(creationId, token);
       if (s === 'IN_PROGRESS') return json({ ok: false, pending: true, creationId, error: 'Sigue procesando — intenta de nuevo en unos segundos.' });
       if (s !== 'FINISHED') return json({ ok: false, error: `No se pudo procesar (${s})` });
-      const p = await graphPost(`${cfg.ig_user_id}/media_publish`, pageToken, { creation_id: creationId });
+      const p = await igPost(`${igId}/media_publish`, token, { creation_id: creationId });
       return json({ ok: true, id: p?.id });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
@@ -587,113 +520,50 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [profile, igProfile, igReach, igAudience, igProfileActions, igMedia, pageInsights, adAccount, adsDaily, adCampaigns, scheduled] = await Promise.all([
-      safe('page', () => graph(cfg.page_id, pageToken, { fields: 'name,fan_count,followers_count,link' })),
-      cfg.ig_user_id
-        ? safe('ig', () => graph(cfg.ig_user_id, pageToken, { fields: 'username,followers_count,media_count' }))
-        : Promise.resolve(null),
-      cfg.ig_user_id
-        ? safe('igReach', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
-          metric: 'reach', period: 'day', since: String(since), until: String(until),
-        }))
-        : Promise.resolve(null),
-      // Daily follower growth — the time_series shape (period=day). Its own
-      // call: mixing metric families 400s the whole insights request.
-      cfg.ig_user_id
-        ? safe('igAudience', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
-          metric: 'follower_count',
-          period: 'day', since: String(since), until: String(until),
-        }))
-        : Promise.resolve(null),
-      // Profile actions, 7d total. `profile_views` was REMOVED in v22 —
-      // `profile_links_taps` (the modern total_value metric) is the live
-      // "people acting on your profile" signal; total_value collapses the
-      // window to one number, so we ask for exactly the last 7 days.
-      cfg.ig_user_id
-        ? safe('igProfileActions', () => graph(`${cfg.ig_user_id}/insights`, pageToken, {
-          metric: 'profile_links_taps', metric_type: 'total_value',
-          period: 'day', since: String(since7), until: String(until),
-        }))
-        : Promise.resolve(null),
-      cfg.ig_user_id
-        ? safe('igMedia', () => graph(`${cfg.ig_user_id}/media`, pageToken, {
-          // comments ride along nested — recent triage + the full-post peek's
-          // comment list, without N+1 calls. media_url/thumbnail_url power the
-          // post-peek popups (the image of the post a comment is on, or a
-          // recent post seen in context).
-          fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(10){id,text,username,timestamp}',
-          limit: '6',
-        }))
-        : Promise.resolve(null),
-      // Facebook Page daily engagement + unique reach (deprecation-prone
-      // metric family — fails independently; the panel just omits it).
-      safe('pageInsights', () => graph(`${cfg.page_id}/insights`, pageToken, {
-        metric: 'page_post_engagements,page_impressions_unique',
-        period: 'day', since: String(since), until: String(until),
+    const [igProfile, igReach, igAudience, igProfileActions, igMedia] = await Promise.all([
+      safe('ig', () => igGet(igId, token, { fields: 'username,followers_count,media_count' })),
+      safe('igReach', () => igGet(`${igId}/insights`, token, {
+        metric: 'reach', period: 'day', since: String(since), until: String(until),
       })),
-      cfg.ad_account_id
-        ? safe('adAccount', () => graph(cfg.ad_account_id, userToken, { fields: 'name,currency' }))
-        : Promise.resolve(null),
-      cfg.ad_account_id
-        ? safe('ads', () => graph(`${cfg.ad_account_id}/insights`, userToken, {
-          date_preset: 'last_28d', time_increment: '1', level: 'account',
-          fields: 'spend,impressions,clicks,reach,actions,date_start',
-          limit: '40',
-        }))
-        : Promise.resolve(null),
-      // Campaigns via the campaigns edge (not insights): carries the id +
-      // live status the pause/resume control needs, with 28d insights nested.
-      cfg.ad_account_id
-        ? safe('campaigns', () => graph(`${cfg.ad_account_id}/campaigns`, userToken, {
-          fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
-          limit: '15',
-        }))
-        : Promise.resolve(null),
-      safe('scheduled', () => graph(`${cfg.page_id}/scheduled_posts`, pageToken, {
-        // full_picture gives the queued post a thumbnail for its peek popup.
-        fields: 'message,scheduled_publish_time,full_picture,permalink_url', limit: '10',
+      // Daily follower growth (time_series). Its own call: mixing metric
+      // families 400s the whole insights request.
+      safe('igAudience', () => igGet(`${igId}/insights`, token, {
+        metric: 'follower_count', period: 'day', since: String(since), until: String(until),
+      })),
+      // Profile actions, 7d total (profile_links_taps — the modern total_value metric).
+      safe('igProfileActions', () => igGet(`${igId}/insights`, token, {
+        metric: 'profile_links_taps', metric_type: 'total_value',
+        period: 'day', since: String(since7), until: String(until),
+      })),
+      safe('igMedia', () => igGet(`${igId}/media`, token, {
+        // comments ride along nested — recent triage + the full-post peek's
+        // comment list, without N+1 calls.
+        fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(10){id,text,username,timestamp}',
+        limit: '6',
       })),
     ]);
-
-    // Product catalogs owned by the business — visibility, not sync (Shopify's
-    // own Meta channel feeds them; we read counts so JARVIS can flag drift).
-    const catalogs = await safe('catalogs', () => graph('me/businesses', userToken, {
-      fields: 'name,owned_product_catalogs{name,product_count,vertical}',
-      limit: '5',
-    }));
 
     return json({
       ok: true,
       fetchedAt: Date.now(),
-      pageName: cfg.page_name,
       igUsername: cfg.ig_username,
-      hasIg: !!cfg.ig_user_id,
-      hasAds: !!cfg.ad_account_id,
-      page: profile,
+      hasIg: !!igId,
+      hasAds: false,
+      page: null,
       ig: igProfile,
-      adAccount,
+      adAccount: null,
       igReach: igReach?.data || null,
       igAudience: igAudience?.data || null,
       igProfileActions: igProfileActions?.data || null,
       igMedia: igMedia?.data || null,
-      pageInsights: pageInsights?.data || null,
-      adsDaily: adsDaily?.data || null,
-      adCampaigns: adCampaigns?.data || null,
-      scheduled: scheduled?.data || null,
-      businesses: catalogs?.data || null,
+      pageInsights: null,
+      adsDaily: null,
+      adCampaigns: null,
+      scheduled: null,
+      businesses: null,
       errors,
     });
   }
-
-  // ════════════════════════════════════════════════════════════════════
-  // Instagram Studio — the advanced IG surface (separate from the Marketing
-  // snapshot). All reads use the page token; every IG endpoint here is backed
-  // by scopes already granted (instagram_basic / _manage_insights /
-  // _manage_comments / _content_publish).
-  // ════════════════════════════════════════════════════════════════════
-  const igId = cfg.ig_user_id || '';
-  const needIg = body.igStudio || body.mediaInsights || body.mediaComments || body.hashtagSearch || body.catalogSearch;
-  if (needIg && !igId) return json({ ok: false, error: 'Sin cuenta de Instagram vinculada' });
 
   // ── igStudio: one consolidated read, sections fail independently ──────
   if (body.igStudio) {
@@ -706,53 +576,41 @@ Deno.serve(async (req) => {
         return null;
       }
     };
-    // Follower demographics — the modern total_value+breakdown shape (replaces
-    // the deprecated audience_* metrics). One call per dimension: mixing
-    // breakdowns is unreliable, and ≥100 followers is required or it errors
-    // (then the section is just absent).
-    const demo = (breakdown: string) => safe(`demo_${breakdown}`, () => graph(`${igId}/insights`, pageToken, {
+    // Follower demographics — total_value+breakdown shape. One call per
+    // dimension (mixing breakdowns is unreliable; ≥100 followers required).
+    const demo = (breakdown: string) => safe(`demo_${breakdown}`, () => igGet(`${igId}/insights`, token, {
       metric: 'follower_demographics', period: 'lifetime', metric_type: 'total_value',
       timeframe: 'last_30_days', breakdown,
     }));
 
     const [profile, reach, accountTotals, profileTaps, reachByFollow, publishLimit, media, stories, mentions, gender, age, country, city] = await Promise.all([
-      safe('profile', () => graph(igId, pageToken, {
+      safe('profile', () => igGet(igId, token, {
         fields: 'username,name,biography,followers_count,follows_count,media_count,profile_picture_url',
       })),
-      // Daily reach series, 28d (the sparkline) — the time_series shape.
-      safe('reach', () => graph(`${igId}/insights`, pageToken, {
+      safe('reach', () => igGet(`${igId}/insights`, token, {
         metric: 'reach', period: 'day', since: String(since), until: String(until),
       })),
-      // 28d account totals — the modern engagement metrics. `views` replaced
-      // the retired `impressions`; all need metric_type=total_value.
-      safe('accountTotals', () => graph(`${igId}/insights`, pageToken, {
+      safe('accountTotals', () => igGet(`${igId}/insights`, token, {
         metric: 'views,accounts_engaged,total_interactions', metric_type: 'total_value',
         period: 'day', since: String(since), until: String(until),
       })),
-      // `profile_views` was removed in v22 — `profile_links_taps` is the live
-      // "people acting on your profile" metric.
-      safe('profileTaps', () => graph(`${igId}/insights`, pageToken, {
+      safe('profileTaps', () => igGet(`${igId}/insights`, token, {
         metric: 'profile_links_taps', metric_type: 'total_value', period: 'day',
         since: String(since), until: String(until),
       })),
-      // Reach split follower vs non-follower — the discovery signal best tools surface.
-      safe('reachByFollow', () => graph(`${igId}/insights`, pageToken, {
+      safe('reachByFollow', () => igGet(`${igId}/insights`, token, {
         metric: 'reach', metric_type: 'total_value', period: 'day',
         breakdown: 'follow_type', since: String(since), until: String(until),
       })),
-      // How many of today's publish slots remain (quota_total currently 50/24h).
-      safe('publishLimit', () => graph(`${igId}/content_publishing_limit`, pageToken, { fields: 'config,quota_usage' })),
-      // The content grid.
-      safe('media', () => graph(`${igId}/media`, pageToken, {
+      safe('publishLimit', () => igGet(`${igId}/content_publishing_limit`, token, { fields: 'config,quota_usage' })),
+      safe('media', () => igGet(`${igId}/media`, token, {
         fields: 'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
         limit: '24',
       })),
-      // Active stories (last 24h).
-      safe('stories', () => graph(`${igId}/stories`, pageToken, {
+      safe('stories', () => igGet(`${igId}/stories`, token, {
         fields: 'id,media_type,media_url,thumbnail_url,permalink,timestamp', limit: '20',
       })),
-      // Media the account is @-tagged in (mentions wall).
-      safe('mentions', () => graph(`${igId}/tags`, pageToken, {
+      safe('mentions', () => igGet(`${igId}/tags`, token, {
         fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,username,timestamp,like_count,comments_count',
         limit: '12',
       })),
@@ -787,13 +645,11 @@ Deno.serve(async (req) => {
     const mediaId = String(body.mediaInsights.mediaId || '').trim();
     if (!mediaId) return json({ ok: false, error: 'mediaId requerido' }, 400);
     const isReel = String(body.mediaInsights.productType || '').toUpperCase() === 'REELS';
-    // Richest first → leaner fallbacks (metric names drift between media kinds
-    // and API versions; the helper keeps whatever answers).
     const sets = isReel
       ? ['reach,views,total_interactions,saved,shares,ig_reels_avg_watch_time', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions']
       : ['reach,views,total_interactions,saved,shares,profile_visits,follows', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions'];
     try {
-      const metrics = await mediaInsightValues(mediaId, pageToken, sets);
+      const metrics = await mediaInsightValues(mediaId, token, sets);
       return json({ ok: true, metrics });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
@@ -805,7 +661,7 @@ Deno.serve(async (req) => {
     const mediaId = String(body.mediaComments.mediaId || '').trim();
     if (!mediaId) return json({ ok: false, error: 'mediaId requerido' }, 400);
     try {
-      const r = await graph(`${mediaId}/comments`, pageToken, {
+      const r = await igGet(`${mediaId}/comments`, token, {
         fields: 'id,text,username,timestamp,like_count,hidden,replies{id,text,username,timestamp,like_count}',
         limit: '40',
       });
@@ -820,7 +676,7 @@ Deno.serve(async (req) => {
     const commentId = String(body.setCommentVisibility.commentId || '').trim();
     if (!commentId) return json({ ok: false, error: 'commentId requerido' }, 400);
     try {
-      await graphPost(commentId, pageToken, { hide: body.setCommentVisibility.hide ? 'true' : 'false' });
+      await igPost(commentId, token, { hide: body.setCommentVisibility.hide ? 'true' : 'false' });
       return json({ ok: true, hidden: !!body.setCommentVisibility.hide });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
@@ -830,7 +686,7 @@ Deno.serve(async (req) => {
     const commentId = String(body.deleteComment.commentId || '').trim();
     if (!commentId) return json({ ok: false, error: 'commentId requerido' }, 400);
     try {
-      const res = await fetch(`${GRAPH}/${commentId}?access_token=${encodeURIComponent(pageToken)}`, { method: 'DELETE' });
+      const res = await fetch(`${IG_API}/${commentId}?access_token=${encodeURIComponent(token)}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.error) throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
       return json({ ok: true });
@@ -839,52 +695,13 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── hashtagSearch: discovery — top media for a tag ───────────────────
-  if (body.hashtagSearch) {
-    const q = String(body.hashtagSearch.q || '').trim().replace(/^#/, '');
-    if (!q) return json({ ok: false, error: 'Escribe un hashtag' }, 400);
-    try {
-      const found = await graph('ig_hashtag_search', pageToken, { user_id: igId, q });
-      const hashtagId = String(found?.data?.[0]?.id || '');
-      if (!hashtagId) return json({ ok: false, error: `Sin resultados para #${q}` });
-      const top = await graph(`${hashtagId}/top_media`, pageToken, {
-        user_id: igId,
-        fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,like_count,comments_count,timestamp',
-        limit: '24',
-      });
-      return json({ ok: true, hashtag: { id: hashtagId, name: q }, media: top?.data || [] });
-    } catch (e) {
-      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
-    }
-  }
-
-  // ── catalogSearch: find Shopping products to tag (discovery) ─────────
-  if (body.catalogSearch) {
-    const q = String(body.catalogSearch.q || '').trim();
-    try {
-      const cats = await graph(`${igId}/available_catalogs`, pageToken, {});
-      const catalogId = String(cats?.data?.[0]?.catalog_id || '');
-      if (!catalogId) return json({ ok: false, error: 'Sin catálogo de compras vinculado en Instagram' });
-      const res = await graph(`${igId}/catalog_product_search`, pageToken, q ? { catalog_id: catalogId, q } : { catalog_id: catalogId });
-      return json({ ok: true, catalogId, products: res?.data || [] });
-    } catch (e) {
-      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
-    }
-  }
-
   // ── subscribeWebhooks: turn on real-time comment/mention delivery (admin) ─
   if (body.subscribeWebhooks) {
-    const { data: prof } = userId
-      ? await caller.from('profiles').select('role, active').eq('id', userId).maybeSingle()
-      : { data: null };
-    if (!prof || prof.role !== 'admin' || !prof.active) {
-      return json({ ok: false, error: 'Solo un administrador puede activar tiempo real.' }, 403);
-    }
+    const err = await requireAdmin();
+    if (err) return json({ ok: false, error: err }, 403);
     try {
-      const r = await graphPost(`${cfg.page_id}/subscribed_apps`, pageToken, {
-        subscribed_fields: 'comments,mentions,live_comments,story_insights',
-      });
-      return json({ ok: !!r?.success, fields: 'comments,mentions,live_comments,story_insights' });
+      const r = await igPost(`${igId}/subscribed_apps`, token, { subscribed_fields: 'comments,mentions' });
+      return json({ ok: !!r?.success, fields: 'comments,mentions' });
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
