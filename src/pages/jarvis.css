@@ -701,17 +701,16 @@
 }
 
 /* ── responsive — phones get one clean column, money pulse on top ─────── */
-/* Below xl the grid collapses to a single column (Tailwind only sets the
-   3-col template at xl). Keep every block from forcing a sideways scroll, and
-   reorder them so the commercial pulse — the headline — sits first on a phone
-   and the integration diagnostics last. Above xl the explicit template wins
-   and `order` is moot (each block is its own column anyway). */
+/* Below 620px the lock releases and the grid is a single scrolling column;
+   reorder the rails so the commercial pulse — the headline — sits first and
+   the integration diagnostics last. At ≥620px the grid is explicitly placed
+   (areas at half-screen, three tracks when wide), so `order` is moot there. */
 .jv-grid,
 .jv-col-left,
 .jv-col-center,
 .jv-col-right { min-width: 0; }
 
-@media (max-width: 1279px) {
+@media (max-width: 619.98px) {
   .jv-col-center { order: 1; }
   .jv-col-left { order: 2; }
   .jv-col-right { order: 3; }
@@ -743,7 +742,8 @@
    motion is decorative-but-restrained and fully disabled under reduced-motion.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* The grid: one column on small screens; three full-height rails at xl. */
+/* The grid: one scrolling column on phones; reflows to a locked 2- or 3-rail
+   command center from a half-screen window up (see the breakpoints below). */
 .jv-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -758,37 +758,61 @@
 .jv-console-panel { display: flex; flex-direction: column; min-height: 0; }
 .jv-fill { min-height: 0; }
 
-@media (min-width: 1280px) {
-  /* LOCK: the page no longer scrolls — the grid owns the leftover height. */
+/* ── LOCK: from a half-screen window up, the page stops scrolling — the grid
+   owns the leftover height, panels fill their rails and only their feed bodies
+   scroll. Shared by the 2-rail (half-screen) and 3-rail (wide) arrangements. */
+@media (min-width: 620px) {
   .jarvis {
     overflow: hidden;
-    padding: calc(0.85rem + env(safe-area-inset-top, 0px)) 1rem
+    padding: calc(0.85rem + env(safe-area-inset-top, 0px)) clamp(0.6rem, 1.4vw, 1rem)
       calc(0.85rem + env(safe-area-inset-bottom, 0px));
   }
-  .jv-grid {
-    flex: 1 1 auto;
-    min-height: 0;
-    grid-template-columns: 300px minmax(0, 1fr) 360px;
-    grid-template-rows: minmax(0, 1fr);
-    gap: 0.85rem;
-  }
+  .jv-grid { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
   .jv-col-left, .jv-col-center, .jv-col-right { height: 100%; min-height: 0; }
 
-  /* Center rail: business pulse takes the lion's share, social sits below. */
+  /* Business pulse leads its rail; the console is the tallest of the feeds. */
   .jv-col-center > section { flex: 1 1 0; min-height: 0; }
-  .jv-col-center > section:first-of-type { flex: 1.55 1 0; }
-
-  /* Right rail: two live feeds + the command console (the tallest). */
+  .jv-col-center > section:first-of-type { flex: 1.5 1 0; }
   .jv-col-right > section { flex: 1 1 0; min-height: 0; }
-  .jv-col-right > .jv-console-panel { flex: 1.55 1 0; }
+  .jv-col-right > .jv-console-panel { flex: 1.45 1 0; }
 
   /* Bodies flex to fill their panel and scroll only themselves. */
   .jv-fill { flex: 1 1 0; overflow-y: auto; }
 }
 
-/* Below the lock, cap the three live feeds so a long log doesn't run away
-   (the pulse/social bodies stay uncapped — they should show in full). */
-@media (max-width: 1279px) {
+/* ── HALF-SCREEN (≈ a window snapped to half a monitor) — TWO rails. The left
+   rail runs full height; the center (pulse + social) sits over the feeds +
+   console on the right. Reflows by grid-area, so it still fits one screen. */
+@media (min-width: 620px) and (max-width: 939.98px) {
+  .jv-grid {
+    grid-template-columns: clamp(200px, 30vw, 290px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.05fr) minmax(0, 1fr);
+    grid-template-areas:
+      "left center"
+      "left right";
+    gap: clamp(0.5rem, 1.4vw, 0.8rem);
+  }
+  .jv-col-left { grid-area: left; }
+  .jv-col-center { grid-area: center; }
+  .jv-col-right { grid-area: right; }
+}
+
+/* ── WIDE — THREE fluid rails. The side rails shrink with the viewport (clamp)
+   so the same command center holds its shape from a half-screen window up to a
+   full ultrawide, with no breakpoint pop and no scroll. */
+@media (min-width: 940px) {
+  .jv-grid {
+    grid-template-columns:
+      clamp(210px, 21vw, 300px)
+      minmax(0, 1fr)
+      clamp(248px, 25vw, 360px);
+    gap: clamp(0.6rem, 1vw, 0.85rem);
+  }
+}
+
+/* Below the lock (phones / quarter-screen) the page scrolls again; cap the
+   three live feeds so a long log doesn't run away. */
+@media (max-width: 619.98px) {
   .jv-timeline.jv-fill { max-height: 16rem; }
   .jv-feed.jv-fill { max-height: 18rem; }
   .jv-console.jv-fill { max-height: 20rem; }
