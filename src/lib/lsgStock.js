@@ -167,5 +167,7 @@ export async function reconcileOrderStock(orderId) {
   if (!orderId) return;
   let quotes = [];
   try { quotes = await db.quotes.where('orderId').equals(orderId).toArray(); } catch { return; }
-  for (const q of quotes) await reconcileQuoteStock(q.id);
+  // Independent per-quote reconciles (disjoint ledger rows) — run them
+  // concurrently, each guarded so one failure can't abort the others.
+  await Promise.all(quotes.map((q) => reconcileQuoteStock(q.id).catch(() => {})));
 }

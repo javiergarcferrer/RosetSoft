@@ -367,6 +367,9 @@ export default function Quotes() {
     if (ids.length === 0) return;
     const now = Date.now();
     await Promise.all(ids.map((id) => db.quotes.update(id, { status: 'archived', archivedAt: now })));
+    // Archiving frees an accepted quote — restock its LSG pieces (the single
+    // stepper-archive gets this via updateQuote; bulk must do it too).
+    for (const id of ids) reconcileQuoteStock(id).catch(() => {});
     clearSel();
   }
   // Bulk delete mirrors the per-row delete (cascade the quote's lines first).

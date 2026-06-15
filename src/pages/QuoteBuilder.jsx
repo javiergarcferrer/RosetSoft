@@ -43,6 +43,7 @@ import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import InventoryPicker from '../components/quote-builder/InventoryPicker.jsx';
 import AddSourceButtons from '../components/quote-builder/AddSourceButtons.jsx';
 import { useQuoteController } from '../components/quote-builder/useQuoteController.js';
+import { reconcileQuoteStock } from '../lib/lsgStock.js';
 import { useQuoteExport } from '../components/quote-builder/useQuoteExport.js';
 
 /**
@@ -325,6 +326,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     toggleGroupOptional, joinSet, ungroupLine, removeLine, reorderLines,
     moveTargetsFor, moveLineIntoCompound, extractFromLine,
   } = useQuoteController({ quoteId, quote, lines, groups, settings, ensurePersisted });
+
+  // On opening a quote, reconcile its LSG Shopify stock ONCE. The accept/order
+  // and revert transitions push their own deltas, but a committed quote's
+  // desired units can also drift while the editor is closed — a client toggling
+  // an optional/alternative LSG pick through the share link (applied
+  // server-side, across the Deno wall, so it can never reconcile itself), or a
+  // line edit on an already-ordered quote. This lazily heals that drift: it's
+  // two cheap reads + a no-op unless the quote actually holds stock and its
+  // desired units moved. Best-effort, fully detached.
+  useEffect(() => {
+    if (quoteId) reconcileQuoteStock(quoteId).catch(() => {});
+  }, [quoteId]);
 
   // Curated per-quote material library ("Paleta del proyecto") — the pinned
   // fabrics surfaced first in every material picker. `onAdd` takes the picker's

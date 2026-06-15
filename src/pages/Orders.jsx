@@ -10,7 +10,7 @@ import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveOrdersList } from '../core/quote/views/lists.js';
 import { viewerCompanySettings } from '../core/quote/index.js';
 import { currentOrderStage } from '../lib/orderStages.js';
-import { reconcileOrderStock } from '../lib/lsgStock.js';
+import { reconcileQuoteStock } from '../lib/lsgStock.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import StatusPill from '../components/StatusPill.jsx';
@@ -180,12 +180,15 @@ export default function Orders() {
       msg += `\n\nLas ${n} cotizaciones y ${c} contenedores vinculados quedarán libres (no se eliminan).`;
     }
     if (!confirm(msg)) return;
+    // Capture the attached quotes BEFORE the delete: quotes.order_id is
+    // `on delete set null`, so deleting the order nulls every linked quote's
+    // orderId at the DB level — a by-orderId lookup afterwards finds nothing.
+    // With the ids in hand, reconcile each freed quote (now order-less, so it
+    // holds no stock) to add its LSG pieces back on Shopify.
+    const freed = await db.quotes.where('orderId').equals(order.id).toArray();
     await db.orders.delete(order.id);
     invalidate();
-    // The freed quotes keep their (now dangling) orderId; reconcile reads the
-    // order as gone and adds their LSG pieces back on Shopify. Runs after the
-    // delete so it still finds the quotes by orderId.
-    reconcileOrderStock(order.id).catch(() => {});
+    for (const q of freed) reconcileQuoteStock(q.id).catch(() => {});
   }
 
   if (!loaded) {
