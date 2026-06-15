@@ -53,6 +53,22 @@ export type DecoratorBilling = 'commission' | 'trade_discount';
 export type OrderType = 'floor' | 'special';
 
 /**
+ * A named quote-terms template the dealer keeps in Configuración and applies to
+ * a quote with one tap — the NotesAndTermsCard picker writes its `body` into
+ * `quote.terms`. `orderType` (optional) tags which preset the picker SUGGESTS
+ * for a piso (stock/floor) vs special order, so the match for the quote's
+ * current type is highlighted. Stored as a jsonb array on
+ * settings.quote_terms_presets (opaque to rowMapping — keys kept verbatim).
+ * See lib/quoteTerms (DEFAULT_QUOTE_TERMS_PRESETS + resolveTermsPresetPicker).
+ */
+export interface QuoteTermsPreset {
+  id: string;
+  label: string;
+  body: string;
+  orderType?: OrderType;
+}
+
+/**
  * `orders.status` lifecycle — six main stages + cancelled.
  * Pinned by CHECK constraint (migration 20260519200000).
  * Source of truth for labels/timestamps: `lib/orderStages.js`.
@@ -149,6 +165,11 @@ export interface Settings {
   defaultMarginPct?: number;
   defaultDiscountPct?: number;
   quoteTerms?: string;
+  /** Named terms templates the dealer applies to a quote with one tap (the
+   *  NotesAndTermsCard picker writes the chosen body into `quote.terms`).
+   *  Seeded with a piso (stock) + special preset; the orderType tag drives the
+   *  picker's "Sugerido" highlight. See lib/quoteTerms. */
+  quoteTermsPresets?: QuoteTermsPreset[];
   quoteFooter?: string;
   /** Lower-cased email allow-list for bootstrap-admin promotion. */
   adminEmails?: string[];

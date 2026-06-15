@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Check, AlertTriangle, Shield, Loader2, ChevronDown, Lock } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Shield, Loader2, ChevronDown, Lock, Plus, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
@@ -15,8 +15,9 @@ import CredentialInput from '../components/settings/CredentialInput.jsx';
 import SettingsSection from '../components/settings/SettingsSection.jsx';
 import { clampPct } from '../lib/pricing.js';
 import { userMessageFor } from '../lib/errorMessages.js';
-import { db } from '../db/database.js';
+import { db, newId } from '../db/database.js';
 import { useLiveQuery } from '../db/hooks.js';
+import { resolveTermsPresets } from '../core/quote/index.js';
 import { storeLinkUrl } from '../lib/storefront.js';
 import { useExchangeRatePull } from '../lib/useExchangeRatePull.js';
 
@@ -188,10 +189,7 @@ export default function Settings() {
                 <div className="label">ITBIS</div>
                 <div className="input bg-ink-50 text-ink-500 cursor-not-allowed">18% (fijo)</div>
               </div>
-              <div className="sm:col-span-2">
-                <div className="label">Términos (se imprimen en el PDF)</div>
-                <textarea className="input min-h-[100px]" value={local.quoteTerms || ''} onChange={(e) => set('quoteTerms', e.target.value)} />
-              </div>
+              <QuoteTermsPresets local={local} set={set} />
               <div className="sm:col-span-2">
                 <div className="label">Pie de página (en cada página del PDF)</div>
                 <input className="input" value={local.quoteFooter || ''} onChange={(e) => set('quoteFooter', e.target.value)} />
@@ -403,6 +401,80 @@ function OrdersCard({ local, set }) {
         </div>
       </div>
     </SettingsSection>
+  );
+}
+
+
+/**
+ * Quote-terms templates — the named library the dealer applies to a quote with
+ * one tap (the quote editor's picker). Edits the whole `quoteTermsPresets` array
+ * in the page's local form state; the page-level "Guardar cambios" persists it.
+ * Each preset can be tagged Piso/Especial so the picker suggests it for that
+ * order type. Falls back to the seeded defaults when nothing is stored yet.
+ */
+function QuoteTermsPresets({ local, set }) {
+  const presets = resolveTermsPresets(local);
+  const update = (id, patch) =>
+    set('quoteTermsPresets', presets.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const add = () =>
+    set('quoteTermsPresets', [...presets, { id: newId(), label: '', body: '' }]);
+  const remove = (id) =>
+    set('quoteTermsPresets', presets.filter((p) => p.id !== id));
+
+  return (
+    <div className="sm:col-span-2">
+      <div className="label">Plantillas de términos (se imprimen en el PDF)</div>
+      <p className="text-xs text-ink-500 mb-2">
+        Crea términos para pedidos de piso (stock) y especiales. En la cotización los aplicas con
+        un toque; el que coincide con el tipo de orden aparece como «Sugerido».
+      </p>
+      <div className="space-y-3">
+        {presets.map((p) => (
+          <div key={p.id} className="rounded-lg border border-ink-200 bg-surface p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                className="input flex-1"
+                value={p.label || ''}
+                onChange={(e) => update(p.id, { label: e.target.value })}
+                placeholder="Título (p. ej. Pedido de piso)"
+                maxLength={40}
+                aria-label="Título de la plantilla"
+              />
+              <select
+                className="input w-auto shrink-0"
+                value={p.orderType || ''}
+                onChange={(e) => update(p.id, { orderType: e.target.value || undefined })}
+                aria-label="Tipo de orden sugerido"
+                title="Tipo de orden para el que se sugiere esta plantilla"
+              >
+                <option value="">Sin tipo</option>
+                <option value="floor">Piso</option>
+                <option value="special">Especial</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => remove(p.id)}
+                className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                title="Eliminar plantilla"
+                aria-label="Eliminar plantilla"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <textarea
+              className="input min-h-[80px]"
+              value={p.body || ''}
+              onChange={(e) => update(p.id, { body: e.target.value })}
+              placeholder="Validez, plazos de entrega, condiciones de pago…"
+              aria-label="Texto de la plantilla"
+            />
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={add} className="btn-ghost text-xs inline-flex items-center gap-1 mt-2">
+        <Plus size={13} /> Añadir plantilla
+      </button>
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Hash, AlertCircle, Plus, Loader2, MessageCircle, ExternalLink } from 'lucide-react';
+import { Hash, AlertCircle, Plus, Loader2, MessageCircle, ExternalLink, Check } from 'lucide-react';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -9,6 +9,7 @@ import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
   companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote,
+  initialQuoteTerms, resolveTermsPresetPicker,
 } from '../core/quote/index.js';
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
@@ -126,7 +127,9 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, init
     marginPct: settings?.defaultMarginPct || 0,
     discountPct: settings?.defaultDiscountPct || 0,
     shipping: 0,
-    terms: settings?.quoteTerms || '',
+    // A new draft starts as a piso (stock) order, so it prefills the matching
+    // terms preset; the picker in NotesAndTermsCard swaps it with one tap.
+    terms: initialQuoteTerms(settings, 'floor'),
     notes: '',
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -865,7 +868,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           <div className="hidden md:block">
             <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} />
           </div>
-          <NotesAndTermsCard quote={quote} onUpdateQuote={hx(updateQuote)} />
+          <NotesAndTermsCard quote={quote} settings={settings} onUpdateQuote={hx(updateQuote)} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
           {quote.orderId && <ShipmentTracking orderId={quote.orderId} />}
@@ -1089,7 +1092,12 @@ function ChatPaneCard({ quote, customer, settings }) {
   );
 }
 
-function NotesAndTermsCard({ quote, onUpdateQuote }) {
+function NotesAndTermsCard({ quote, settings, onUpdateQuote }) {
+  // The dealer's named-terms library, projected for THIS quote: the preset
+  // matching the order type (Piso / Especial) is flagged `suggested`, and the
+  // one whose body already equals the current terms is `applied`. One tap swaps
+  // the terms text — the textarea stays freely editable after.
+  const termsPresets = resolveTermsPresetPicker(settings, quote);
   return (
     <div className="card card-pad space-y-4">
       <h2 className="font-display font-semibold text-sm">Notas y términos</h2>
@@ -1111,6 +1119,37 @@ function NotesAndTermsCard({ quote, onUpdateQuote }) {
             <span>Términos</span>
             <span className="text-[9px] text-ink-400 normal-case tracking-normal">se imprimen en el PDF</span>
           </div>
+          {termsPresets.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2" role="group" aria-label="Plantillas de términos">
+              {termsPresets.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onUpdateQuote({ terms: p.body })}
+                  aria-pressed={p.applied}
+                  title={
+                    p.suggested
+                      ? `Sugerido para pedido ${p.orderType === 'special' ? 'especial' : 'de piso'}`
+                      : 'Aplicar estos términos'
+                  }
+                  className={[
+                    'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    p.applied
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : p.suggested
+                        ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-400/10 dark:text-amber-200 dark:border-amber-400/40'
+                        : 'border-ink-200 bg-surface text-ink-600 hover:bg-ink-50',
+                  ].join(' ')}
+                >
+                  {p.applied && <Check size={11} aria-hidden />}
+                  {p.label}
+                  {p.suggested && !p.applied && (
+                    <span className="text-[8px] uppercase tracking-wide opacity-70">Sugerido</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
           <DebouncedTextarea
             className="input min-h-[100px]"
             value={quote.terms || ''}

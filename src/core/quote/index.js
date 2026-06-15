@@ -36,6 +36,12 @@ export {
 //      re-base) the editor preview reuses to mirror the link's `materials` pick.
 export { applyAction, applyClientPick, reanchorMaterial } from './actions.js';
 
+// ---- terms presets (the dealer's named-terms library + the editor's one-tap
+//      picker that writes a preset body into quote.terms)
+export {
+  DEFAULT_QUOTE_TERMS_PRESETS, resolveTermsPresets, resolveTermsPresetPicker, initialQuoteTerms,
+} from '../../lib/quoteTerms.js';
+
 // ---- ViewModels (per-view projections off the Model)
 export { resolveQuoteView, linePriced, componentPriced } from './views/quoteView.js';
 export { resolveLineList } from './views/editor.js';
