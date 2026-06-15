@@ -89,6 +89,8 @@ type Body = {
   mediaComments?: { mediaId?: string };
   setCommentVisibility?: { commentId?: string; hide?: boolean };
   deleteComment?: { commentId?: string };
+  /** Pause/resume an Instagram ad campaign (Marketing API, confirm-gated). */
+  setCampaignStatus?: { campaignId?: string; status?: string };
   subscribeWebhooks?: boolean;
   // ── Instagram Direct (DM) inbox ──
   /** Send a Direct message to a contact (within Meta's 24h window). */
@@ -128,6 +130,33 @@ async function igPost(path: string, token: string, params: Record<string, string
   if (!res.ok || data?.error) {
     throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
   }
+  return data;
+}
+
+const FB_API = `https://graph.facebook.com/${GRAPH_VERSION}`;
+
+/** GET a Marketing-API (Facebook Graph) endpoint — Instagram ADS only. The
+ *  Instagram-Login token can't read ads, so these use the Business/system-user
+ *  token against an ad account. */
+async function fb(path: string, token: string, params: Record<string, string> = {}) {
+  const url = new URL(`${FB_API}/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  url.searchParams.set('access_token', token);
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
+  return data;
+}
+
+/** POST a Marketing-API endpoint (form-encoded) — e.g. pause/resume a campaign. */
+async function fbPost(path: string, token: string, params: Record<string, string>) {
+  const res = await fetch(`${FB_API}/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ ...params, access_token: token }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
   return data;
 }
 
@@ -454,13 +483,50 @@ Deno.serve(async (req) => {
   // Everything below needs a connected account + a live token.
   const { data: cfg } = await admin
     .from('meta_social_config')
-    .select('ig_app_id, ig_access_token, ig_token_expires_at, ig_user_id, ig_username')
+    .select('ig_app_id, ig_access_token, ig_token_expires_at, ig_user_id, ig_username, access_token, ad_account_id')
     .eq('profile_id', TEAM)
     .maybeSingle();
   if (!cfg) return json({ configured: false, error: 'Instagram sin conectar' });
   const token = await resolveToken(admin, cfg);
   if (!token) return json({ configured: false, error: 'Instagram sin conectar' });
   const igId = cfg.ig_user_id || '';
+
+  // ── Instagram ADS ride the Marketing API (graph.facebook.com) — the
+  // Instagram-Login token can't access ads, so they use the Business/system-user
+  // token (reused from whatsapp_config when meta_social_config has none), against
+  // an ad account discovered once and persisted. ────────────────────────────
+  let bizToken = cfg.access_token || '';
+  if (!bizToken) {
+    const { data: wa } = await admin.from('whatsapp_config').select('access_token').eq('profile_id', TEAM).maybeSingle();
+    bizToken = wa?.access_token || '';
+  }
+  let adAccountId = cfg.ad_account_id || '';
+  if (!adAccountId && bizToken) {
+    try {
+      const accts = await fb('me/adaccounts', bizToken, { fields: 'id,name,account_status', limit: '25' });
+      const active = (accts?.data || []).find((a: { account_status?: number }) => a.account_status === 1) || (accts?.data || [])[0];
+      adAccountId = active?.id || '';
+      if (adAccountId) await admin.from('meta_social_config').update({ ad_account_id: adAccountId, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
+    } catch { adAccountId = ''; }
+  }
+
+  // ── setCampaignStatus: pause/resume an Instagram ad campaign — REAL MONEY,
+  // so the UI gates it behind an explicit confirm and only the two reversible
+  // states are accepted. Doesn't need the IG account, just the ad campaign. ──
+  if (body.setCampaignStatus) {
+    const campaignId = String(body.setCampaignStatus.campaignId || '').trim();
+    const status = String(body.setCampaignStatus.status || '').toUpperCase();
+    if (!campaignId || !['ACTIVE', 'PAUSED'].includes(status)) {
+      return json({ ok: false, error: 'campaignId y status (ACTIVE|PAUSED) requeridos' }, 400);
+    }
+    if (!bizToken) return json({ ok: false, error: 'Sin token de anuncios — conecta WhatsApp o asigna el token de Meta Business al sistema.' });
+    try {
+      await fbPost(campaignId, bizToken, { status });
+      return json({ ok: true, status });
+    } catch (e) {
+      return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
+    }
+  }
 
   if (body.test) {
     try {
@@ -541,7 +607,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    const [igProfile, igReach, igAudience, igProfileActions, igMedia] = await Promise.all([
+    const [igProfile, igReach, igAudience, igProfileActions, igMedia, adAccount, adsDaily, adCampaigns] = await Promise.all([
       safe('ig', () => igGet(igId, token, { fields: 'username,followers_count,media_count' })),
       safe('igReach', () => igGet(`${igId}/insights`, token, {
         metric: 'reach', period: 'day', since: String(since), until: String(until),
@@ -562,6 +628,23 @@ Deno.serve(async (req) => {
         fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(10){id,text,username,timestamp}',
         limit: '6',
       })),
+      // ── Instagram ADS via the Marketing API (Business token, graph.facebook.com).
+      // Sections fail independently — no ad account/token just omits them. ──
+      adAccountId && bizToken
+        ? safe('adAccount', () => fb(adAccountId, bizToken, { fields: 'name,currency' }))
+        : Promise.resolve(null),
+      adAccountId && bizToken
+        ? safe('ads', () => fb(`${adAccountId}/insights`, bizToken, {
+          date_preset: 'last_28d', time_increment: '1', level: 'account',
+          fields: 'spend,impressions,clicks,reach,actions,date_start', limit: '40',
+        }))
+        : Promise.resolve(null),
+      adAccountId && bizToken
+        ? safe('campaigns', () => fb(`${adAccountId}/campaigns`, bizToken, {
+          fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
+          limit: '15',
+        }))
+        : Promise.resolve(null),
     ]);
 
     return json({
@@ -569,17 +652,17 @@ Deno.serve(async (req) => {
       fetchedAt: Date.now(),
       igUsername: cfg.ig_username,
       hasIg: !!igId,
-      hasAds: false,
+      hasAds: !!adAccountId,
       page: null,
       ig: igProfile,
-      adAccount: null,
+      adAccount,
       igReach: igReach?.data || null,
       igAudience: igAudience?.data || null,
       igProfileActions: igProfileActions?.data || null,
       igMedia: igMedia?.data || null,
       pageInsights: null,
-      adsDaily: null,
-      adCampaigns: null,
+      adsDaily: adsDaily?.data || null,
+      adCampaigns: adCampaigns?.data || null,
       scheduled: null,
       businesses: null,
       errors,

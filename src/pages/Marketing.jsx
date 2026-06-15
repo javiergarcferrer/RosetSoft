@@ -540,6 +540,29 @@ export default function Marketing() {
     }
   }, [replyText, reply, replyBusy]);
 
+  // ── ad campaign pause/resume (Marketing API; REAL MONEY → confirm-gated) ──
+  const [campBusy, setCampBusy] = useState(null);
+  const [campErr, setCampErr] = useState(null);
+  const toggleCampaign = useCallback(async (c) => {
+    if (campBusy || !c?.id) return;
+    const next = c.active ? 'PAUSED' : 'ACTIVE';
+    if (!window.confirm(c.active ? `¿Pausar la campaña “${c.name}”?` : `¿Reanudar la campaña “${c.name}”?`)) return;
+    setCampBusy(c.id);
+    setCampErr(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-social', {
+        body: { setCampaignStatus: { campaignId: c.id, status: next } },
+      });
+      if (error) throw new Error(error.message || 'sin respuesta');
+      if (!data?.ok) throw new Error(data?.error || 'No se pudo cambiar la campaña');
+      load();
+    } catch (e) {
+      setCampErr(e?.message || 'No se pudo cambiar la campaña');
+    } finally {
+      setCampBusy(null);
+    }
+  }, [campBusy, load]);
+
   return (
     <>
       <PageHeader
@@ -738,6 +761,38 @@ export default function Marketing() {
                 replyErr={replyErr}
                 sendReply={sendReply}
               />
+
+              {/* ad campaigns — view performance + pause/resume (Marketing API) */}
+              {m.hasAds && m.campaigns.length > 0 && (
+                <div className="card">
+                  <div className="card-header flex items-center justify-between">
+                    <span className="font-medium">Campañas de anuncios</span>
+                    {m.kpis.spend7 != null && (
+                      <span className="text-xs text-ink-400 tabular-nums">{m.kpis.spend7.toLocaleString('en-US', { maximumFractionDigits: 0 })}{m.adCurrency ? ` ${m.adCurrency}` : ''} · 7d</span>
+                    )}
+                  </div>
+                  {campErr && <div className="px-5 pt-2 text-xs text-red-600">{campErr}</div>}
+                  <div className="divide-y divide-ink-100">
+                    {m.campaigns.map((c) => (
+                      <div key={c.id} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+                        <span className={`flex-none h-2 w-2 rounded-full ${c.active ? 'bg-emerald-500' : 'bg-ink-300'}`} title={c.status || ''} />
+                        <span className="min-w-0 flex-1 truncate text-ink-800">{c.name}</span>
+                        <span className="flex-none text-xs text-ink-400 tabular-nums">
+                          {c.spend != null ? c.spend.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}{m.adCurrency ? ` ${m.adCurrency}` : ''}{c.results != null ? ` · ${c.results} res.` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={campBusy === c.id || !c.id}
+                          onClick={() => toggleCampaign(c)}
+                          className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${c.active ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                        >
+                          {campBusy === c.id ? '…' : c.active ? 'Pausar' : 'Reanudar'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* recent posts */}
               {m.posts.length > 0 && (

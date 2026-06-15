@@ -165,7 +165,8 @@ Server side = Deno Edge Functions (`supabase/functions/*`): public surfaces
 integrations `shopify-sync` (inventory mirror + LSG catalog import),
 `wa-send`/`wa-webhook` (WhatsApp send + inbound), `wa-draft` (Claude reply
 suggestions — never sends, human-in-the-loop), `meta-social` (Instagram
-publish/insights/comments/Direct via Instagram-Login OAuth — no Facebook Page),
+publish/insights/comments/Direct via Instagram-Login OAuth + Instagram ads via the
+Marketing API/Business token — no Facebook Page),
 `meta-webhook` (IG Direct messages → `ig_messages`; comments/mentions →
 `ig_events`), `ig-publish-worker` (IG scheduler worker — pg_cron fires due
 `scheduled_posts`, since IG has no native scheduling), `ecf-send` (DGII e-CF),

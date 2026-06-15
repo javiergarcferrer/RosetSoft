@@ -10,10 +10,14 @@ RosetSoft's Meta surface is now **two independent integrations**:
   the long-lived IG user token server-side (write-only `meta_social_config`) and
   talks to `graph.instagram.com`.
 
-The old **Facebook Pages / Ads / Business** surface was **removed** (no Page
-publishing/insights, no ad management, no catalogs, no `pages_*` / `ads_*` /
-`business_management`). The two integrations may share one Meta app or run as
-two — the Instagram webhook (`meta-webhook`) verifies against either app secret.
+The old **Facebook Pages** surface was **removed** (no Page publishing/insights,
+no catalogs, no `pages_*` / `business_management`). The **one** Facebook-side
+piece that stays is **Instagram ad management** — Meta exposes ad reads +
+pause/resume only through the **Marketing API** (`graph.facebook.com`), which the
+Instagram-Login token can't touch, so it rides the **Business/system-user token**
+(reused from `whatsapp_config`) on an ad account. The two integrations may share
+one Meta app or run as two — the Instagram webhook (`meta-webhook`) verifies
+against either app secret.
 
 Legend: ✅ wired today · ⬜ headroom (could be requested later).
 
@@ -34,6 +38,23 @@ Legend: ✅ wired today · ⬜ headroom (could be requested later).
 | `instagram_business_manage_insights` | ✅ | Account insights (reach, follower growth, profile-link taps, views/engagement totals, reach by follower type), per-post insights, follower demographics (gender/age/country/city), the content-publishing quota. |
 | `instagram_business_manage_messages` | ✅ | **Instagram Direct (DM) inbox** — receive DMs via `meta-webhook` (object=instagram, `messaging[]` → `ig_messages`) and reply within Meta's 24h window via `meta-social` `igSendDm`. The CRM inbox's second channel, beside WhatsApp. Requested in the OAuth consent scopes. |
 
+## Instagram ads — `meta-social` (Marketing API, Business token)
+Instagram ad management has **no Instagram-Login path** — it needs the Marketing
+API on `graph.facebook.com`, a Facebook **ad account**, and a **Business/system-
+user token** (reused from `whatsapp_config`; the ad account must be assigned to
+that system user in Meta Business Manager). This is the only Facebook dependency
+that remains.
+
+| Scope | Status | What it backs |
+|---|---|---|
+| `ads_read` | ✅ | Read ad-account + per-campaign insights (spend/reach/results, 28d) — the JARVIS social-pulse ad KPIs + ads↔sales weeks. |
+| `ads_management` | ✅ | Pause/resume campaigns (`setCampaignStatus`, confirm-gated) — the Marketing campaigns panel. |
+
+These two are NOT in the Instagram-Login OAuth consent (that token can't do ads);
+they ride the Business token, and are reviewed on the Marketing-API track
+("Ads Management Standard Access" → Advanced for production rate limits, +
+Business Verification).
+
 ## OAuth flow (Instagram Business Login)
 1. Admin pastes the **Instagram App ID + App Secret** in Configuración →
    Instagram (stored write-only via `meta-social` `saveApp`).
@@ -51,9 +72,10 @@ Legend: ✅ wired today · ⬜ headroom (could be requested later).
 ## Account requirements
 - The Instagram account must be a **professional** account (Business or
   Creator). It does **not** need to be linked to a Facebook Page.
-- App Review is still required for advanced access to the four
-  `instagram_business_*` scopes; the review screencast shows the Instagram Login
-  consent — no `pages_show_list` (or any `pages_*`) anywhere.
+- App Review is required for advanced access to the five `instagram_business_*`
+  scopes; the screencast shows the Instagram Login consent — no `pages_*`
+  anywhere. The ad scopes (`ads_read`/`ads_management`) are reviewed separately on
+  the Marketing-API track and need a Facebook ad account + Business Verification.
 
 ### Dropped vs the old Facebook-linked model
 Hashtag search and Shopping product tagging depended on the Facebook
@@ -65,5 +87,6 @@ else (publish, comments, insights, demographics, stories, mentions) carried over
   changes into `wa-*` or `whatsapp_config`.
 - The IG token + the app credentials live in `meta_social_config` (write-only);
   never surface them client-side or log them.
-- The legacy Facebook/Page/Ads columns on `meta_social_config` are retained but
-  unused (additive migration — no pasted credential is ever erased).
+- The legacy `page_*` columns on `meta_social_config` are retained but unused;
+  `access_token`/`ad_account_id` ARE used (the Business token + ad account for the
+  Marketing-API ads). No pasted credential is ever erased.

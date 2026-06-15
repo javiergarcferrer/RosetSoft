@@ -125,9 +125,11 @@ conventions).
   stores the Instagram app creds (`ig_app_id`/`ig_app_secret`) + the long-lived
   IG user token (`ig_access_token`/`ig_token_expires_at`, auto-refreshed) minted
   by the OAuth round-trip; calls go to graph.instagram.com (no Facebook Page).
-  The legacy `page_*`/`access_token`/`ad_account_id` columns are retained but
-  unused (additive — no pasted credential is erased). Backs the JARVIS "Social ·
-  Instagram" panel + the Instagram Direct inbox (`ig_messages`). Non-sensitive
+  The legacy `page_*` columns are dormant; `access_token`/`ad_account_id` hold the
+  Business token (reused from `whatsapp_config`) + ad account the Marketing API
+  uses for Instagram ads (graph.facebook.com — the IG token can't do ads). Backs
+  the JARVIS "Social · Instagram" panel (IG analytics + ad results), the Instagram
+  Direct inbox (`ig_messages`), and the Marketing campaigns panel. Non-sensitive
   mirrors on settings: `meta_social_connected_at`, `meta_social_ig_username`,
   `meta_social_ig_app_id`.
 
