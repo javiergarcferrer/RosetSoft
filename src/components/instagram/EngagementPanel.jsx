@@ -11,7 +11,7 @@ import { PostThumb, PostPeek } from './postMedia.jsx';
 
 const money = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
-export default function EngagementPanel({ comments = [], campaigns = [], hasAds, adCurrency, spend7, posts = [], onChanged }) {
+export default function EngagementPanel({ comments = [], campaigns = [], hasAds, adCurrency, spend7, posts = [], onChanged, onOpenAds }) {
   const showCampaigns = !!hasAds && campaigns.length > 0;
   const tabs = [
     { id: 'comments', label: 'Comentarios', icon: MessageSquare },
@@ -203,6 +203,13 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
       {/* Campañas */}
       {activeTab === 'campaigns' && (
         <div>
+          {onOpenAds && (
+            <div className="px-3 pt-2.5">
+              <button type="button" className="btn-secondary w-full text-sm" onClick={onOpenAds}>
+                <Megaphone size={14} /> Administrar anuncios
+              </button>
+            </div>
+          )}
           {spend7 != null && <div className="px-4 pt-2 text-xs text-ink-400 tabular-nums">{money(spend7)}{adCurrency ? ` ${adCurrency}` : ''} · 7d</div>}
           {campErr && <div className="px-4 pt-2 text-xs text-red-600">{campErr}</div>}
           {campaigns.length === 0 ? (

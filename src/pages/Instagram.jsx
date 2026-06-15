@@ -11,7 +11,7 @@
 // Function. `/marketing` and `/instagram-studio` both route here (old links).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram as InstagramIcon, Plus, RefreshCw } from 'lucide-react';
+import { Instagram as InstagramIcon, Megaphone, Plus, RefreshCw } from 'lucide-react';
 import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -23,6 +23,7 @@ import BestTimeCard from '../components/instagram/BestTimeCard.jsx';
 import ContentGrid from '../components/instagram/ContentGrid.jsx';
 import EngagementPanel from '../components/instagram/EngagementPanel.jsx';
 import ComposerCard from '../components/instagram/ComposerCard.jsx';
+import AdsManager from '../components/instagram/AdsManager.jsx';
 
 // Settle one meta-social result into { raw } or { error }. okGuard flags a 200
 // body that still carries a failure (e.g. { configured:false } / { ok:false }).
@@ -86,6 +87,7 @@ export default function Instagram() {
   const st = useMemo(() => (stud.raw ? resolveIgStudio(stud.raw) : null), [stud.raw]);
 
   const [composerOpen, setComposerOpen] = useState(false);
+  const [adsOpen, setAdsOpen] = useState(false);
 
   const anyData = !!(sp || st);
   const bothError = !!snap.error && !!stud.error;
@@ -132,6 +134,9 @@ export default function Instagram() {
             </div>
             <div className="flex items-center gap-2 ml-auto">
               <LivePill loading={loading} hasData={anyData} error={error} sinceLabel={freshLabel(loadedAt, nowTick)} onRefresh={load} />
+              <button type="button" className="btn-secondary" onClick={() => setAdsOpen(true)}>
+                <Megaphone size={15} /> Anuncios
+              </button>
               <button type="button" className="btn-brand" onClick={() => setComposerOpen(true)}>
                 <Plus size={15} /> Publicar
               </button>
@@ -192,6 +197,7 @@ export default function Instagram() {
                   spend7={sp?.kpis?.spend7}
                   posts={sp?.posts || []}
                   onChanged={load}
+                  onOpenAds={() => setAdsOpen(true)}
                 />
               </div>
               {st && (
@@ -217,6 +223,10 @@ export default function Instagram() {
 
       <Modal open={composerOpen} onClose={() => setComposerOpen(false)} title="Publicar en Instagram" size="lg">
         <ComposerCard publishLimit={st?.publishLimit} onPublished={load} />
+      </Modal>
+
+      <Modal open={adsOpen} onClose={() => setAdsOpen(false)} title="Anuncios de Instagram" size="xl">
+        <AdsManager onChanged={load} />
       </Modal>
     </>
   );

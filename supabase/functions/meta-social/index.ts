@@ -97,6 +97,31 @@ type Body = {
   igSendDm?: { recipientId?: string; text?: string };
   /** Pull recent Direct conversations into ig_messages (history backfill). */
   igBackfill?: boolean;
+  /** Full Ads-Manager surface — one op per call (see the `body.ads` handler):
+   *  board · children · insights · status · budget · rename · schedule ·
+   *  targeting · delete · duplicate · search · promotable · create. */
+  ads?: {
+    op?: string;
+    level?: string;
+    id?: string;
+    parentId?: string;
+    datePreset?: string;
+    status?: string;
+    name?: string;
+    currency?: string;
+    dailyBudget?: number | null;
+    lifetimeBudget?: number | null;
+    startTime?: string;
+    endTime?: string;
+    targeting?: Record<string, unknown>;
+    objective?: string;
+    optimizationGoal?: string;
+    billingEvent?: string;
+    mediaId?: string;
+    launchPaused?: boolean;
+    q?: string;
+    searchType?: string;
+  };
 };
 
 /** Translate Meta's token-death message into the action that fixes it. */
@@ -158,6 +183,105 @@ async function fbPost(path: string, token: string, params: Record<string, string
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.error) throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
   return data;
+}
+
+/** DELETE a Marketing-API node (campaign / ad set / ad — campaign cascades). */
+async function fbDelete(path: string, token: string) {
+  const res = await fetch(`${FB_API}/${path}?access_token=${encodeURIComponent(token)}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) throw new Error(String(data?.error?.message || `Graph ${res.status}`).slice(0, 200));
+  return data;
+}
+
+// Meta bills most currencies in 1/100 (cents); a few have no minor unit. Mirror
+// of lib/instagramAds currencyMinorUnits (the Deno wall forbids importing it).
+const AD_ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'HUF', 'TWD', 'UGX', 'CRC', 'PYG', 'COP']);
+const adMinorUnits = (currency: string) => (AD_ZERO_DECIMAL.has(String(currency || '').toUpperCase()) ? 1 : 100);
+/** Major-unit budget (e.g. dollars) → the minor-unit integer STRING the API wants. */
+const toMinorStr = (major: unknown, currency: string) => String(Math.round(Number(major || 0) * adMinorUnits(currency)));
+
+/** Resolve (and lazily persist) the team's ad account id for Marketing calls. */
+async function resolveAdAccount(admin: SupabaseClient, cfg: { ad_account_id?: string | null }, bizToken: string): Promise<string> {
+  if (cfg.ad_account_id) return cfg.ad_account_id;
+  if (!bizToken) return '';
+  try {
+    const accts = await fb('me/adaccounts', bizToken, { fields: 'id,name,account_status', limit: '25' });
+    const list = (accts?.data || []) as { id?: string; account_status?: number }[];
+    const active = list.find((a) => a.account_status === 1) || list[0];
+    const id = active?.id || '';
+    if (id) await admin.from('meta_social_config').update({ ad_account_id: id, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
+    return id;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Create a full campaign → ad set → ad that PROMOTES an existing Instagram post
+ * (the "boost" flow Ads Manager calls "Use existing post"). Every level is
+ * created PAUSED; the ad goes live only when launchPaused is false. Returns the
+ * ids created so the UI can show partial progress if a later step fails.
+ */
+async function createAd(adAccountId: string, bizToken: string, igId: string, a: NonNullable<Body['ads']>) {
+  const currency = String(a.currency || '');
+  const name = String(a.name || 'Anuncio').slice(0, 100);
+  const objective = String(a.objective || 'OUTCOME_ENGAGEMENT');
+  const optimizationGoal = String(a.optimizationGoal || 'POST_ENGAGEMENT');
+  const billingEvent = String(a.billingEvent || 'IMPRESSIONS');
+  const mediaId = String(a.mediaId || '').trim();
+  if (!mediaId) throw new Error('Elige una publicación de Instagram para promocionar.');
+  if (a.dailyBudget == null && a.lifetimeBudget == null) throw new Error('Define un presupuesto.');
+
+  const created: { campaignId?: string; adsetId?: string; adId?: string } = {};
+  // 1) Campaign (budget rides at the ad-set level here, so no CBO field).
+  const camp = await fbPost(`${adAccountId}/campaigns`, bizToken, {
+    name, objective, status: 'PAUSED', special_ad_categories: '[]',
+  });
+  created.campaignId = camp?.id;
+
+  // 2) Ad set — budget (cents), optimization + billing, targeting, schedule.
+  const adsetParams: Record<string, string> = {
+    name,
+    campaign_id: created.campaignId as string,
+    billing_event: billingEvent,
+    optimization_goal: optimizationGoal,
+    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+    status: 'PAUSED',
+    targeting: JSON.stringify(a.targeting || { geo_locations: { countries: ['DO'] }, publisher_platforms: ['instagram'] }),
+  };
+  if (a.dailyBudget != null) adsetParams.daily_budget = toMinorStr(a.dailyBudget, currency);
+  if (a.lifetimeBudget != null) adsetParams.lifetime_budget = toMinorStr(a.lifetimeBudget, currency);
+  if (a.startTime) adsetParams.start_time = String(a.startTime);
+  if (a.endTime) adsetParams.end_time = String(a.endTime);
+  // A lifetime budget requires an end_time — default to +7 days if none given.
+  if (a.lifetimeBudget != null && !a.endTime) adsetParams.end_time = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const adset = await fbPost(`${adAccountId}/adsets`, bizToken, adsetParams);
+  created.adsetId = adset?.id;
+
+  // 3) Creative from the existing IG post, then the ad that carries it. Some
+  // accounts still require a Page on the creative — attach one if the Business
+  // manages any (best-effort; if Meta rejects the shape its message surfaces).
+  let pageId = '';
+  try {
+    const pages = await fb('me/accounts', bizToken, { fields: 'id', limit: '5' });
+    pageId = (pages?.data || [])[0]?.id || '';
+  } catch { pageId = ''; }
+  const creativeParams: Record<string, string> = {
+    name: `${name} — creativo`,
+    source_instagram_media_id: mediaId,
+  };
+  if (igId) creativeParams.instagram_user_id = igId;
+  if (pageId) creativeParams.page_id = pageId;
+  const creative = await fbPost(`${adAccountId}/adcreatives`, bizToken, creativeParams);
+
+  const ad = await fbPost(`${adAccountId}/ads`, bizToken, {
+    name,
+    adset_id: created.adsetId as string,
+    creative: JSON.stringify({ creative_id: creative?.id }),
+    status: a.launchPaused ? 'PAUSED' : 'ACTIVE',
+  });
+  created.adId = ad?.id;
+  return { created, id: created.adId };
 }
 
 /** POST JSON to an IG Graph endpoint (the Direct messaging send takes a JSON
@@ -518,6 +642,146 @@ Deno.serve(async (req) => {
     } catch (e) {
       return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) });
     }
+  }
+
+  // ── ads: the full Marketing-API manager — read the campaign→ad-set→ad tree
+  // with insights, control the whole lifecycle (status / budget / schedule /
+  // targeting / rename / duplicate / delete), search audiences, and create new
+  // promotions. One op per call; each is independent and returns Meta's own
+  // error so the panel degrades to a message instead of blanking. The UI
+  // confirm-gates everything that moves money (REAL SPEND). ──
+  if (body.ads) {
+    const a = body.ads;
+    const op = String(a.op || '').trim();
+    if (!bizToken) return json({ ok: false, error: 'Sin token de anuncios — conecta WhatsApp o asigna el token de Meta Business al sistema.' });
+    const adAccountId = await resolveAdAccount(admin, cfg, bizToken);
+    if (!adAccountId && op !== 'promotable') return json({ ok: false, error: 'No se encontró una cuenta publicitaria en este Business.' });
+    const preset = String(a.datePreset || 'last_28d');
+    const INS = 'spend,impressions,clicks,reach,frequency,ctr,cpc,cpm,actions,cost_per_action_type';
+    // Run one op, normalizing success to { ok:true, ...payload } and any Graph
+    // failure to a friendly { ok:false, error } (HTTP 200 — the UI reads `ok`).
+    const wrap = async (fn: () => Promise<object>) => {
+      try { return json({ ok: true, ...(await fn()) }); }
+      catch (e) { return json({ ok: false, error: friendly(String((e as Error)?.message || e).slice(0, 200)) }); }
+    };
+
+    if (op === 'board') {
+      return wrap(async () => {
+        const account = await fb(adAccountId, bizToken, { fields: 'id,name,currency,account_status,amount_spent,balance,spend_cap' });
+        const campaigns = await fb(`${adAccountId}/campaigns`, bizToken, {
+          fields: `id,name,status,effective_status,objective,daily_budget,lifetime_budget,budget_remaining,start_time,stop_time,insights.date_preset(${preset}){${INS}}`,
+          limit: '50',
+        });
+        return { account, currency: account?.currency || null, campaigns: campaigns?.data || [] };
+      });
+    }
+
+    if (op === 'children') {
+      const parentId = String(a.parentId || '').trim();
+      const level = String(a.level || '').trim();
+      if (!parentId || !['adset', 'ad'].includes(level)) return json({ ok: false, error: 'parentId y level (adset|ad) requeridos' }, 400);
+      return wrap(async () => {
+        if (level === 'adset') {
+          const r = await fb(`${parentId}/adsets`, bizToken, {
+            fields: `id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget,budget_remaining,optimization_goal,billing_event,bid_strategy,start_time,end_time,targeting,insights.date_preset(${preset}){${INS}}`,
+            limit: '50',
+          });
+          return { level, rows: r?.data || [] };
+        }
+        const r = await fb(`${parentId}/ads`, bizToken, {
+          fields: `id,name,adset_id,status,effective_status,creative{id,thumbnail_url,image_url,effective_object_story_id},insights.date_preset(${preset}){${INS}}`,
+          limit: '50',
+        });
+        return { level, rows: r?.data || [] };
+      });
+    }
+
+    if (op === 'insights') {
+      const id = String(a.id || '').trim();
+      if (!id) return json({ ok: false, error: 'id requerido' }, 400);
+      return wrap(async () => ({ insights: await fb(`${id}/insights`, bizToken, { date_preset: preset, fields: INS, limit: '1' }) }));
+    }
+
+    if (op === 'status') {
+      const id = String(a.id || '').trim();
+      const status = String(a.status || '').toUpperCase();
+      if (!id || !['ACTIVE', 'PAUSED'].includes(status)) return json({ ok: false, error: 'id y status (ACTIVE|PAUSED) requeridos' }, 400);
+      return wrap(async () => { await fbPost(id, bizToken, { status }); return { status }; });
+    }
+
+    if (op === 'budget') {
+      const id = String(a.id || '').trim();
+      const currency = String(a.currency || '');
+      if (!id || (a.dailyBudget == null && a.lifetimeBudget == null)) return json({ ok: false, error: 'id y un presupuesto requeridos' }, 400);
+      const params: Record<string, string> = {};
+      if (a.dailyBudget != null) params.daily_budget = toMinorStr(a.dailyBudget, currency);
+      if (a.lifetimeBudget != null) params.lifetime_budget = toMinorStr(a.lifetimeBudget, currency);
+      return wrap(async () => { await fbPost(id, bizToken, params); return params; });
+    }
+
+    if (op === 'rename') {
+      const id = String(a.id || '').trim();
+      const name = String(a.name || '').trim().slice(0, 100);
+      if (!id || !name) return json({ ok: false, error: 'id y name requeridos' }, 400);
+      return wrap(async () => { await fbPost(id, bizToken, { name }); return { name }; });
+    }
+
+    if (op === 'schedule') {
+      const id = String(a.id || '').trim();
+      if (!id) return json({ ok: false, error: 'id requerido' }, 400);
+      const params: Record<string, string> = {};
+      if (a.startTime) params.start_time = String(a.startTime);
+      if (a.endTime) params.end_time = String(a.endTime);
+      if (!Object.keys(params).length) return json({ ok: false, error: 'startTime o endTime requerido' }, 400);
+      return wrap(async () => { await fbPost(id, bizToken, params); return params; });
+    }
+
+    if (op === 'targeting') {
+      const id = String(a.id || '').trim();
+      if (!id || !a.targeting) return json({ ok: false, error: 'id y targeting requeridos' }, 400);
+      return wrap(async () => { await fbPost(id, bizToken, { targeting: JSON.stringify(a.targeting) }); return {}; });
+    }
+
+    if (op === 'delete') {
+      const id = String(a.id || '').trim();
+      if (!id) return json({ ok: false, error: 'id requerido' }, 400);
+      return wrap(async () => { await fbDelete(id, bizToken); return { deleted: id }; });
+    }
+
+    if (op === 'duplicate') {
+      const id = String(a.id || '').trim();
+      const level = String(a.level || '').trim();
+      if (!id || !['campaign', 'adset'].includes(level)) return json({ ok: false, error: 'id y level (campaign|adset) requeridos' }, 400);
+      return wrap(async () => ({ copy: await fbPost(`${id}/copies`, bizToken, { deep_copy: level === 'campaign' ? 'true' : 'false', status_option: 'PAUSED' }) }));
+    }
+
+    if (op === 'search') {
+      const q = String(a.q || '').trim();
+      const type = String(a.searchType || 'adinterest');
+      if (!q) return json({ ok: false, error: 'q requerido' }, 400);
+      return wrap(async () => {
+        const r = await fb('search', bizToken, {
+          type, q, limit: '15',
+          ...(type === 'adgeolocation' ? { location_types: '["country","region","city"]' } : {}),
+        });
+        return { results: r?.data || [] };
+      });
+    }
+
+    if (op === 'promotable') {
+      if (!igId) return json({ ok: false, error: 'Sin cuenta de Instagram vinculada' });
+      return wrap(async () => {
+        const r = await igGet(`${igId}/media`, token, {
+          fields: 'caption,media_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count',
+          limit: '18',
+        });
+        return { media: r?.data || [] };
+      });
+    }
+
+    if (op === 'create') return wrap(() => createAd(adAccountId, bizToken, igId, a));
+
+    return json({ ok: false, error: `Operación de anuncios desconocida: ${op || '∅'}` }, 400);
   }
 
   if (body.test) {
