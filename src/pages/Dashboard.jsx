@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus, ArrowRight, Send, CheckCircle2, FileEdit, Clock, Package, Trophy, UserPlus, Receipt,
+  Plus, ArrowRight, Send, CheckCircle2, FileEdit, Clock, Package, UserPlus, Receipt,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import { readyToInvoice } from '../lib/quoteMilestones.js';
@@ -230,14 +230,6 @@ export default function Dashboard() {
               hint={loaded && kpis.dueValue > 0
                 ? `${usd(kpis.dueValue)} por cobrar`
                 : 'aceptadas sin entregar'}
-              to={quotesLink('accepted')}
-            />
-            <StatCard
-              label="Ganadas este mes"
-              value={loaded ? kpis.wonThisMonth : '—'}
-              icon={Trophy}
-              tone="brand"
-              hint={loaded && kpis.wonThisMonth > 0 ? usd(kpis.wonThisMonthValue) : 'cotizaciones aceptadas'}
               to={quotesLink('accepted')}
             />
             {/* Cross-core tile (banking roles): won sales the books haven't

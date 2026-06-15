@@ -893,11 +893,6 @@ export default function Jarvis() {
                   <span className="sub">{social.igUsername ? `@${social.igUsername}` : 'sin IG vinculado'}</span>
                 </div>
                 <div className="jv-kpi">
-                  <span className="label">Seguidores FB</span>
-                  <b className="jv-mono">{social.kpis.fbFollowers != null ? social.kpis.fbFollowers.toLocaleString('en-US') : '—'}</b>
-                  <span className="sub">{social.pageName || '—'}</span>
-                </div>
-                <div className="jv-kpi">
                   <span className="label">Alcance IG · 7d</span>
                   <b className="jv-mono">{social.kpis.reach7.toLocaleString('en-US')}</b>
                   <span className="sub">
@@ -955,21 +950,6 @@ export default function Jarvis() {
                     <b className="jv-mono">{social.kpis.profileActions7.toLocaleString('en-US')}</b>
                     <span className="sub">
                       acciones · {social.kpis.newFollowers7 >= 0 ? '+' : ''}{social.kpis.newFollowers7} seguidores
-                    </span>
-                  </div>
-                )}
-                {social.kpis.pageEngagement7 > 0 && (
-                  <div className="jv-kpi">
-                    <span className="label">Interacción FB · 7d</span>
-                    <b className="jv-mono">{social.kpis.pageEngagement7.toLocaleString('en-US')}</b>
-                    <span className="sub">
-                      {social.kpis.pageEngagementDeltaPct != null
-                        ? (
-                          <span className={`jv-delta ${social.kpis.pageEngagementDeltaPct >= 0 ? 'up' : 'down'}`}>
-                            {social.kpis.pageEngagementDeltaPct >= 0 ? '+' : ''}{social.kpis.pageEngagementDeltaPct}% vs 7d ant.
-                          </span>
-                        )
-                        : 'interacciones con publicaciones'}
                     </span>
                   </div>
                 )}
