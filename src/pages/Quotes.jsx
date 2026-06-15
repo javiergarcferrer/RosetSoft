@@ -16,6 +16,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveQuotesList } from '../core/quote/views/lists.js';
+import { viewerCompanySettings } from '../core/quote/index.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
 import InvoiceChip from '../components/InvoiceChip.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
@@ -190,7 +191,7 @@ function useQuoteOps(qu) {
 }
 
 export default function Quotes() {
-  const { profileId, profiles, settings, currentProfile } = useApp();
+  const { profileId, profiles, settings, currentProfile, isAdmin } = useApp();
   // Mías / Equipo scope — defaults to the signed-in seller's own quotes
   // (same toggle the home uses). Falls back to team when the current user
   // isn't known yet.
@@ -308,9 +309,9 @@ export default function Quotes() {
   } = useMemo(
     () => resolveQuotesList({
       quotes, customers, professionals, profiles, orders, containers, lines: allLines,
-      settings, scope, meId, q, tab, filters, sort,
+      settings: viewerCompanySettings(settings, isAdmin), scope, meId, q, tab, filters, sort,
     }),
-    [quotes, customers, professionals, profiles, orders, containers, allLines, settings, scope, meId, q, tab, filters, sort],
+    [quotes, customers, professionals, profiles, orders, containers, allLines, settings, isAdmin, scope, meId, q, tab, filters, sort],
   );
 
   // Column visibility (Shopify "edit columns") — persisted per browser. The

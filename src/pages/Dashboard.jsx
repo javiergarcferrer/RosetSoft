@@ -15,6 +15,7 @@ import { formatMoney } from '../lib/format.js';
 import { displayRatesFor, readExchangeRate } from '../lib/exchangeRate.js';
 import { orderStatusPill } from '../lib/statusPill.js';
 import { resolveDashboard } from '../core/quote/views/dashboard.js';
+import { viewerCompanySettings } from '../core/quote/index.js';
 import { useContainerEtas } from '../core/tracking/index.js';
 
 /**
@@ -61,7 +62,7 @@ const LIST_CAP = 6;   // rows per work queue before "Ver todas →"
 const ORDERS_CAP = 5; // rows in the Pedidos en curso strip
 
 export default function Dashboard() {
-  const { profileId, currentProfile, settings } = useApp();
+  const { profileId, currentProfile, settings, isAdmin } = useApp();
   const meId = currentProfile?.id || null;
   const [scope, setScope] = useState(SCOPE_MINE);
   // Can't scope to "mine" without knowing who I am — fall back to team.
@@ -117,12 +118,14 @@ export default function Dashboard() {
       lines: allLinesQ.data,
       orders: allOrdersQ.data,
       containers: allContainersQ.data,
-      settings,
+      // Company-account COST is admin-only; an employee sees list (the helper
+      // zeroes the discount but keeps the no-ITBIS company identity).
+      settings: viewerCompanySettings(settings, isAdmin),
       scopeIsTeam: effectiveScope === SCOPE_TEAM,
       meId,
       etaByCode,
     }),
-    [allQuotes, allCustomersQ.data, allLinesQ.data, allOrdersQ.data, allContainersQ.data, settings, effectiveScope, meId, etaByCode],
+    [allQuotes, allCustomersQ.data, allLinesQ.data, allOrdersQ.data, allContainersQ.data, settings, isAdmin, effectiveScope, meId, etaByCode],
   );
 
   // Track only what's on screen (the capped strip), not the whole order book.

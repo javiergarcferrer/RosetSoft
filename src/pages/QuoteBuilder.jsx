@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
-  companyDiscountPctFor, applyCompanyDiscount,
+  companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote,
 } from '../core/quote/index.js';
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
@@ -222,7 +222,7 @@ function DraftWorkspace({ profileId, settings, createdByUserId, initialRef, init
 /* -------------------------------------------------------------------------- */
 
 function Workspace({ quoteId, navigate, draftQuote, materialize }) {
-  const { settings, profileId, profiles } = useApp();
+  const { settings, profileId, profiles, isAdmin } = useApp();
   const dbQuote = useLiveQuery(() => db.quotes.get(quoteId), [quoteId], null);
   // Accounting → CRM through the bridge: the "Facturada · NCF" stamp for the
   // header once this quote has a sale posting in the books.
@@ -644,13 +644,18 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // document — are priced at dealer cost (every product price scaled by the
   // permanent companyDiscountPct). The editable line cards below keep the LIST
   // price (an honest qty × unit = total worksheet); the banner explains the gap.
-  const companyDiscountPct = companyDiscountPctFor(quote, settings);
+  // Company (house) account: a different beast. The dealer COST view (every
+  // product scaled by companyDiscountPct) is ADMIN-ONLY — an employee sees the
+  // LIST price (pct 0). ITBIS is suppressed for EITHER role: a company quote is
+  // an internal store-stock order, never a taxable customer sale.
+  const isCompanyQuote = isCompanyAccountQuote(quote, settings);
+  const companyDiscountPct = isAdmin ? companyDiscountPctFor(quote, settings) : 0;
   const orderLines = companyDiscountPct ? applyCompanyDiscount(lines, companyDiscountPct) : lines;
-  const totals = computeTotals(orderLines.filter(isPricedLine).map(lineForTotals), totalsQuote);
+  const totals = computeTotals(orderLines.filter(isPricedLine).map(lineForTotals), totalsQuote, { taxExempt: isCompanyQuote });
   // Range twin of the grand total — widens to "min … max" while any priced
   // line is quoted by range (material-less). Collapses to a point (and the UI
   // falls back to the single figure) once every line carries a real price.
-  const totalsRange = computeTotalsRange(orderLines, totalsQuote);
+  const totalsRange = computeTotalsRange(orderLines, totalsQuote, { taxExempt: isCompanyQuote });
 
   /* ---------------------------- render ---------------------------- */
 
@@ -775,17 +780,23 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
         // `min-w-0` lets the column shrink below its content's intrinsic width,
         // so a long money value / dimension spec can't force a horizontal scroll.
         <div className="space-y-5 min-w-0">
-          {/* Company-account orders: EVERY price (unit + total) reads at dealer
-              cost, badged −N%. Edits are stored back as the list price so the
-              public storefront keeps its retail basis. */}
-          {companyDiscountPct > 0 && (
+          {/* Company-account orders are a different beast: no ITBIS, and the
+              dealer COST view (every price at −N%, badged) is admin-only — an
+              employee sees LIST prices. The banner reflects whichever the
+              current viewer is looking at. */}
+          {isCompanyQuote && (
             <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800 flex items-start gap-2.5">
               <Hash size={15} className="mt-0.5 flex-shrink-0 text-brand-500" aria-hidden />
               <p className="min-w-0">
-                <span className="font-semibold">Cuenta empresa.</span>{' '}
-                Todos los precios muestran tu costo, con{' '}
-                <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
-                aplicado (precio del pedido para la tienda).
+                <span className="font-semibold">Cuenta empresa</span>{' '}
+                <span className="text-brand-500">· sin ITBIS.</span>{' '}
+                {companyDiscountPct > 0 ? (
+                  <>Todos los precios muestran tu costo, con{' '}
+                  <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
+                  aplicado (precio del pedido para la tienda).</>
+                ) : (
+                  <>Los precios mostrados son de lista.</>
+                )}
               </p>
             </div>
           )}

@@ -9,6 +9,11 @@
  * quoteTotals only when settings is supplied — so commissions/accounting (which
  * omit settings) and regular-customer quotes are never discounted.
  *
+ * A company quote is a different beast: it carries NO ITBIS (internal store-stock
+ * order, not a taxable customer sale), and the dealer COST view is admin-only —
+ * `viewerCompanySettings` zeroes the discount for an employee (LIST price) while
+ * keeping the company identity so the ITBIS exemption still holds for them.
+ *
  * Run with `npm test` (node:test + node:assert, via tsx).
  */
 
@@ -19,6 +24,7 @@ import {
   isCompanyAccountQuote,
   companyDiscountPctFor,
   applyCompanyDiscount,
+  viewerCompanySettings,
   computeTotals,
   lineForTotals,
 } from '../src/lib/pricing.js';
@@ -89,16 +95,32 @@ test('applyCompanyDiscount with pct 0 returns the lines unchanged (a copy)', () 
   assert.equal(out[0].unitPrice, 1000);
 });
 
-test('quoteTotals discounts a company quote ONLY when settings is supplied', () => {
+test('quoteTotals: a company quote (settings supplied) reads at cost AND drops ITBIS', () => {
   const lines = [{ id: 'l1', kind: 'item', qty: 1, unitPrice: 1000 }];
-  // Baseline: list price, no settings.
+  // No settings → not detected as the company account → LIST price, taxed.
   const list = quoteTotals(COMPANY_QUOTE, lines).grandTotal;
-  // With settings → the same quote reads at 40% (60% off) of list, end to end.
+  assert.equal(list, 1180);                                  // 1000 + 18% ITBIS
+  // With settings → 60% off (dealer cost) AND tax-exempt (internal order doc).
   const cost = quoteTotals(COMPANY_QUOTE, lines, SETTINGS).grandTotal;
-  assert.ok(Math.abs(cost - list * 0.4) < 1e-6, `expected ${list * 0.4}, got ${cost}`);
-  // The figure equals computing the totals on the pre-scaled lines.
-  const expected = computeTotals(applyCompanyDiscount(lines, 60).map(lineForTotals), COMPANY_QUOTE).grandTotal;
+  assert.equal(cost, 400);                                   // 1000 × 0.4, NO ITBIS
+  // Equals computing the totals on the pre-scaled lines with the exemption.
+  const expected = computeTotals(
+    applyCompanyDiscount(lines, 60).map(lineForTotals), COMPANY_QUOTE, { taxExempt: true },
+  ).grandTotal;
   assert.ok(Math.abs(cost - expected) < 1e-6);
+});
+
+test('viewerCompanySettings: cost is admin-only, but ITBIS stays exempt for an employee', () => {
+  const lines = [{ id: 'l1', kind: 'item', qty: 1, unitPrice: 1000 }];
+  // Admin keeps the discount → cost view, no tax.
+  assert.equal(viewerCompanySettings(SETTINGS, true), SETTINGS);
+  assert.equal(quoteTotals(COMPANY_QUOTE, lines, viewerCompanySettings(SETTINGS, true)).grandTotal, 400);
+  // Employee: discount zeroed (LIST price) but storeCustomerId kept → still a
+  // company quote → still NO ITBIS.
+  const empSettings = viewerCompanySettings(SETTINGS, false);
+  assert.equal(empSettings.companyDiscountPct, 0);
+  assert.equal(empSettings.storeCustomerId, 'acct-1');
+  assert.equal(quoteTotals(COMPANY_QUOTE, lines, empSettings).grandTotal, 1000); // list, no ITBIS
 });
 
 test('quoteTotals never discounts a regular customer quote', () => {

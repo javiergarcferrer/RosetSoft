@@ -150,6 +150,23 @@ export function applyCompanyDiscount(
 }
 
 /**
+ * Settings as a given VIEWER may see the company-account COST. The dealer's
+ * permanent cost discount (`companyDiscountPct`) is admin-only — an employee
+ * gets it zeroed so company-account surfaces read at LIST price for them. The
+ * company-account IDENTITY (`storeCustomerId`) is preserved either way, so the
+ * ITBIS exemption (a company quote is never taxed) still applies for everyone.
+ * Pure: the same object for an admin, a shallow clone with the discount off
+ * otherwise. The single role gate every dealer surface routes settings through.
+ */
+export function viewerCompanySettings(
+  settings: { storeCustomerId?: string | null; companyDiscountPct?: number } | null | undefined,
+  canSeeCost: boolean,
+) {
+  if (canSeeCost) return settings;
+  return { ...(settings || {}), companyDiscountPct: 0 };
+}
+
+/**
  * Compute totals for a quote.
  *
  * Order of operations matters when both margin and discount are non-zero:
@@ -185,6 +202,7 @@ export function applyCompanyDiscount(
 export function computeTotals(
   lines: readonly PricingLine[] | null | undefined,
   quote: PricingQuote = {},
+  opts: { taxExempt?: boolean } = {},
 ): Totals {
   const subtotal = (lines || []).reduce((acc, l) => {
     const unit = applyLineAdjustments(l?.basePrice, l?.lineMarginPct, l?.lineDiscountPct);
@@ -201,7 +219,11 @@ export function computeTotals(
   const afterDiscount = afterMargin - discountAmt;
   const courtesyDiscountAmt = afterDiscount * (courtesyPct / 100);
   const taxableBase = afterDiscount - courtesyDiscountAmt;
-  const taxAmt = taxableBase * (ITBIS_PCT / 100);
+  // A company-account quote is an internal cost / order document, not a taxable
+  // customer sale → ITBIS is suppressed (opts.taxExempt). Every other quote
+  // taxes the post-courtesy base at the fixed ITBIS rate.
+  const taxExempt = !!opts.taxExempt;
+  const taxAmt = taxExempt ? 0 : taxableBase * (ITBIS_PCT / 100);
   const shipping = Math.max(0, safeNum(quote.shipping, 0));
   const grandTotal = taxableBase + taxAmt + shipping;
 
@@ -214,7 +236,7 @@ export function computeTotals(
     taxAmt: safeNum(taxAmt),
     shipping,
     grandTotal: safeNum(grandTotal),
-    taxPct: ITBIS_PCT,
+    taxPct: taxExempt ? 0 : ITBIS_PCT,
   };
 }
 
@@ -732,6 +754,7 @@ export function quoteHasRange(lines: readonly QuoteLine[] | null | undefined): b
 export function computeTotalsRange(
   lines: readonly QuoteLine[] | null | undefined,
   quote: PricingQuote = {},
+  opts: { taxExempt?: boolean } = {},
 ): MoneyRange {
   let subMin = 0;
   let subMax = 0;
@@ -745,11 +768,13 @@ export function computeTotalsRange(
   const discountPct = clampPct(quote.discountPct);
   const courtesyPct = clampPct(quote.courtesyDiscountPct);
   const shipping = Math.max(0, safeNum(quote.shipping, 0));
+  const taxExempt = !!opts.taxExempt;
   const grand = (subtotal: number): number => {
     const afterMargin = subtotal * (1 + marginPct / 100);
     const afterDiscount = afterMargin * (1 - discountPct / 100);
     const taxable = afterDiscount * (1 - courtesyPct / 100);
-    return taxable + taxable * (ITBIS_PCT / 100) + shipping;
+    const tax = taxExempt ? 0 : taxable * (ITBIS_PCT / 100);
+    return taxable + tax + shipping;
   };
   return { min: safeNum(grand(subMin)), max: safeNum(grand(subMax)) };
 }

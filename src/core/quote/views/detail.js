@@ -123,7 +123,7 @@ const ORDER_STAGE_ORDER = [
 // orders (direct match OR any of the customer's quotes is attached, sorted by
 // stage), and the committed / all-time value roll-ups.
 // ---------------------------------------------------------------------------
-export function resolveCustomerDetail({ customerId, quotes, orders, lines }) {
+export function resolveCustomerDetail({ customerId, quotes, orders, lines, settings }) {
   const qs = Array.isArray(quotes) ? quotes : [];
   const os = Array.isArray(orders) ? orders : [];
   const linesByQuote = linesByQuoteId(lines);
@@ -132,7 +132,9 @@ export function resolveCustomerDetail({ customerId, quotes, orders, lines }) {
   const totalByQuote = new Map();
   const quotesByStatus = new Map();
   for (const q of qs) {
-    totalByQuote.set(q.id, quoteGrandTotal(q, linesByQuote.get(q.id) || []));
+    // settings → the store customer's company-account quotes read at cost
+    // (admin) / list (employee) and carry no ITBIS, like every other surface.
+    totalByQuote.set(q.id, quoteGrandTotal(q, linesByQuote.get(q.id) || [], settings));
     const key = q.status || 'draft';
     if (!quotesByStatus.has(key)) quotesByStatus.set(key, []);
     quotesByStatus.get(key).push(q);

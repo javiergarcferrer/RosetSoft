@@ -15,6 +15,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 import { resolveCustomerDetail } from '../core/quote/views/detail.js';
+import { viewerCompanySettings } from '../core/quote/index.js';
 import { resolveQuoteInvoiceStatus, resolveCustomerAccount } from '../core/bridge/index.js';
 import InvoiceChip from '../components/InvoiceChip.jsx';
 import { formatDop } from '../lib/format.js';
@@ -100,7 +101,7 @@ export default function CustomerDetail() {
 
   // The 360's "Cuenta" card (admin/accounting): what this client owes, with a
   // jump into their estado de cuenta in Banca.
-  const { currentProfile } = useApp();
+  const { currentProfile, settings, isAdmin } = useApp();
   const canBank = currentProfile?.role === 'admin' || currentProfile?.role === 'accounting';
   const payments = useLiveQuery(
     () => (canBank ? db.payments.where('partyId').equals(customerId).toArray() : Promise.resolve([])),
@@ -122,8 +123,9 @@ export default function CustomerDetail() {
       quotes,
       orders: allOrders,
       lines: allLines,
+      settings: viewerCompanySettings(settings, isAdmin),
     }),
-    [quotes, allOrders, allLines, customerId],
+    [quotes, allOrders, allLines, customerId, settings, isAdmin],
   );
 
   if (!customer) {

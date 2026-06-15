@@ -26,6 +26,7 @@ import {
 } from '../lib/containerTracking.js';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 import { resolveOrderDetail } from '../core/quote/views/detail.js';
+import { viewerCompanySettings } from '../core/quote/index.js';
 import { resolveOrderRegistration } from '../core/quote/views/registration.js';
 import { safeDynamicImport } from '../lib/dynamicImport.js';
 
@@ -54,7 +55,7 @@ import { safeDynamicImport } from '../lib/dynamicImport.js';
  */
 export default function OrderDetail() {
   const { orderId } = useParams();
-  const { profileId, settings, profiles } = useApp();
+  const { profileId, settings, profiles, isAdmin } = useApp();
 
   const order = useLiveQuery(() => db.orders.get(orderId), [orderId], null);
 
@@ -115,9 +116,10 @@ export default function OrderDetail() {
       containers,
       customers,
       lines: allLines,
-      settings,
+      // Company-account cost is admin-only here too; tax-exemption is preserved.
+      settings: viewerCompanySettings(settings, isAdmin),
     }),
-    [order, quotes, unattachedQuotes, containers, customers, allLines, settings],
+    [order, quotes, unattachedQuotes, containers, customers, allLines, settings, isAdmin],
   );
 
   const [picker, setPicker] = useState(false);

@@ -456,7 +456,7 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
                 accent
               />
             ) : null}
-            <TotalRow label={`ITBIS (${ITBIS_PCT}%)`} value={fmt(totals.taxAmt)} muted />
+            {totals.taxPct ? <TotalRow label={`ITBIS (${ITBIS_PCT}%)`} value={fmt(totals.taxAmt)} muted /> : null}
             {quote.shipping ? <TotalRow label="Envío" value={fmt(totals.shipping)} muted /> : null}
           </div>
           {/* The anchored grand-total band. */}

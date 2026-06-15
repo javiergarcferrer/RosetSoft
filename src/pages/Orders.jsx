@@ -8,6 +8,7 @@ import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveOrdersList } from '../core/quote/views/lists.js';
+import { viewerCompanySettings } from '../core/quote/index.js';
 import { currentOrderStage } from '../lib/orderStages.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
@@ -84,7 +85,7 @@ const ORDER_COLS_STORAGE_KEY = 'rs.orders.cols.v1';
  */
 
 export default function Orders() {
-  const { profileId, settings } = useApp();
+  const { profileId, settings, isAdmin } = useApp();
 
   // Gate the empty state on `loaded` — same reason as Customers / Quotes:
   // don't flash "Sin pedidos" on every navigation, only once we know it's
@@ -126,9 +127,10 @@ export default function Orders() {
     customerLabelByOrderId, totalByOrder, quoteCountByOrder, containerCountByOrder,
   } = useMemo(
     () => resolveOrdersList({
-      orders, customers, quotes: allQuotes, containers: allContainers, lines: allLines, settings,
+      orders, customers, quotes: allQuotes, containers: allContainers, lines: allLines,
+      settings: viewerCompanySettings(settings, isAdmin),
     }),
-    [orders, customers, allQuotes, allContainers, allLines, settings],
+    [orders, customers, allQuotes, allContainers, allLines, settings, isAdmin],
   );
 
   // Column visibility (Shopify "edit columns") — persisted per browser. The

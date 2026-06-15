@@ -152,6 +152,31 @@ test('computeTotals: order of ops is margin → discount → tax → shipping', 
   assert.equal(Math.round(t.grandTotal * 100) / 100, 121.82);
 });
 
+test('computeTotals: taxExempt drops ITBIS entirely (company-account quote)', () => {
+  // Same inputs as the order-of-ops case, but tax-exempt: base 99 + shipping 5,
+  // NO ITBIS. taxAmt and taxPct both report 0 so surfaces can hide the row.
+  const t = computeTotals(
+    [{ qty: 1, basePrice: 100, lineMarginPct: 0, lineDiscountPct: 0 }],
+    { marginPct: 10, discountPct: 10, shipping: 5 },
+    { taxExempt: true },
+  );
+  assert.equal(Math.round(t.taxableBase * 100) / 100, 99);
+  assert.equal(t.taxAmt, 0);
+  assert.equal(t.taxPct, 0);
+  assert.equal(Math.round(t.grandTotal * 100) / 100, 104); // 99 + 5, no tax
+});
+
+test('computeTotalsRange: taxExempt drops ITBIS on both ends', () => {
+  const lines = [{ qty: 1, priceMin: 100, priceMax: 200 }];
+  const taxed = computeTotalsRange(lines, {});
+  const exempt = computeTotalsRange(lines, {}, { taxExempt: true });
+  // Exempt ends are the pre-tax base; taxed ends carry the +18%.
+  assert.equal(Math.round(exempt.min), 100);
+  assert.equal(Math.round(exempt.max), 200);
+  assert.equal(Math.round(taxed.min), 118);
+  assert.equal(Math.round(taxed.max), 236);
+});
+
 test('computeTotals: Friends & Family courtesy stacks after the regular discount, before tax', () => {
   // 1000 subtotal, no margin.
   // discount 10% → 100 → afterDiscount 900

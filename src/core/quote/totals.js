@@ -10,6 +10,7 @@
 // for the surfaces that only need a quote's bottom line.
 import {
   computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
+  isCompanyAccountQuote,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 
@@ -36,7 +37,10 @@ export function quoteTotals(quote, lines, settings) {
   const pct = companyDiscountPctFor(quote, settings);
   const eff = pct ? applyCompanyDiscount(lines, pct) : (lines || []);
   const rows = eff.filter(isPricedLine).map(lineForTotals);
-  return computeTotals(rows, quote);
+  // A company-account quote is never taxed (internal order/cost doc), regardless
+  // of whether THIS viewer sees cost (admin) or list (employee) — the discount
+  // is role-gated upstream via `companyDiscountPct`, the exemption is not.
+  return computeTotals(rows, quote, { taxExempt: isCompanyAccountQuote(quote, settings) });
 }
 
 // The single figure most list/detail rows show.

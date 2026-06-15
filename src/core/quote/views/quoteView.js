@@ -15,6 +15,7 @@ import {
   lineHasRange, lineTotalRange, alternativeGroupInfo, setGroupInfo,
   lineQty, lineBasePrice, lineListUnit, applyLineAdjustments, clampPct,
   isRangeLine, lineTotal, isRangeComponent, componentSubtotal, componentSubtotalRange,
+  isCompanyAccountQuote,
 } from '../../../lib/pricing.js';
 import { isPricedLine } from '../../../lib/constants.js';
 import { isGroupOptional } from '../../../lib/quoteGroups.js';
@@ -88,11 +89,14 @@ export function resolveQuoteView({ quote, lines, settings, quoteGroups }) {
   const ls = Array.isArray(lines) ? lines : [];
   const q = quote || {};
 
-  const totals = computeTotals(ls.filter(isPricedLine).map(lineForTotals), q);
+  // Company-account quotes carry no ITBIS (internal order/cost document); the
+  // cost discount itself is already baked into `lines` by the caller (role-gated).
+  const taxExempt = isCompanyAccountQuote(q, settings);
+  const totals = computeTotals(ls.filter(isPricedLine).map(lineForTotals), q, { taxExempt });
   const totalsRange = computeTotalsRange(ls, {
     marginPct: q.marginPct, discountPct: q.discountPct,
     courtesyDiscountPct: q.courtesyDiscountPct, shipping: q.shipping,
-  });
+  }, { taxExempt });
 
   // Section → group-run structure (the card boundaries), resolved once. Each
   // run carries its member line ids + (for set/alternative) its footer data.
