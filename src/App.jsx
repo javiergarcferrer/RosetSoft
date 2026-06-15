@@ -20,8 +20,7 @@ import OrderDetail from './pages/OrderDetail.jsx';
 import Comisiones from './pages/Comisiones.jsx';
 import Chats from './pages/Chats.jsx';
 import Difusion from './pages/Difusion.jsx';
-import Marketing from './pages/Marketing.jsx';
-import InstagramStudio from './pages/InstagramStudio.jsx';
+import Instagram from './pages/Instagram.jsx';
 import PublicStore from './pages/PublicStore.jsx';
 import DataDeletion from './pages/DataDeletion.jsx';
 import Settings from './pages/Settings.jsx';
@@ -242,8 +241,8 @@ function ProtectedApp() {
             <Route index element={<RoleHome />} />
             <Route path="chats" element={<Chats />} />
             <Route path="chats/difusion" element={<Difusion />} />
-            <Route path="marketing" element={<Marketing />} />
-            <Route path="instagram-studio" element={<InstagramStudio />} />
+            <Route path="marketing" element={<Instagram initialTab="marketing" />} />
+            <Route path="instagram-studio" element={<Instagram initialTab="studio" />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />
