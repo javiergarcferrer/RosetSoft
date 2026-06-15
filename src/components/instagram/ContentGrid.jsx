@@ -119,8 +119,8 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
   }, []);
 
   return (
-    <div className="card">
-      <div className="card-header">
+    <div className="card lg:flex lg:h-full lg:flex-col">
+      <div className="card-header lg:shrink-0">
         <span className="flex items-center gap-2 font-medium"><Images size={15} /> Contenido</span>
         {mentions.length > 0 && (
           <div className="inline-flex rounded-full border border-ink-200 bg-surface p-0.5 text-xs" role="tablist" aria-label="Vista de contenido">
@@ -142,7 +142,7 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
           </div>
         )}
       </div>
-      <div className="card-pad space-y-4">
+      <div className="card-pad space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
         {stories.length > 0 && !showMentions && (
           <div className="flex gap-3 overflow-x-auto pb-1">
             {stories.map((s) => (
@@ -160,7 +160,7 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
         {items.length === 0 ? (
           <div className="text-sm text-ink-400">{showMentions ? 'Nadie te ha etiquetado todavía.' : 'Sin publicaciones.'}</div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2">
             {items.map((item) => <MediaTile key={item.id} item={item} onClick={() => openPost(item)} />)}
           </div>
         )}

@@ -120,8 +120,8 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
   }, [loadEvents]);
 
   return (
-    <div className="card flex flex-col">
-      <div className="p-2 border-b border-ink-100">
+    <div className="card flex flex-col lg:h-full">
+      <div className="p-2 border-b border-ink-100 shrink-0">
         <div className="inline-flex w-full rounded-full border border-ink-200 bg-surface p-0.5 text-xs" role="tablist" aria-label="Interacción">
           {tabs.map((t) => {
             const on = activeTab === t.id;
@@ -142,12 +142,17 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
         </div>
       </div>
 
+      {/* Tab body — the single internal scroll region on the lg command board
+          (each tab's own list drops its cap there, below); on phones it's a
+          plain block and the per-tab max-heights bound the rail instead. */}
+      <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+
       {/* Comentarios */}
       {activeTab === 'comments' && (
         comments.length === 0 ? (
           <div className="px-4 py-4 text-sm text-ink-400">Sin comentarios recientes.</div>
         ) : (
-          <div className="max-h-[30rem] overflow-y-auto divide-y divide-ink-100">
+          <div className="max-h-[30rem] lg:max-h-none lg:overflow-visible overflow-y-auto divide-y divide-ink-100">
             {comments.map((c) => {
               const open = reply?.id === c.id;
               return (
@@ -203,7 +208,7 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
           {campaigns.length === 0 ? (
             <div className="px-4 py-4 text-sm text-ink-400">Sin campañas activas.</div>
           ) : (
-            <div className="max-h-[30rem] overflow-y-auto divide-y divide-ink-100">
+            <div className="max-h-[30rem] lg:max-h-none lg:overflow-visible overflow-y-auto divide-y divide-ink-100">
               {campaigns.map((c) => (
                 <div key={c.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
                   <span className={`flex-none h-2 w-2 rounded-full ${c.active ? 'bg-emerald-500' : 'bg-ink-300'}`} title={c.status || ''} />
@@ -241,7 +246,7 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
               Activa el tiempo real para recibir comentarios y menciones en segundos (sin recargar).
             </p>
           ) : (
-            <div className="max-h-[28rem] overflow-y-auto divide-y divide-ink-100">
+            <div className="max-h-[28rem] lg:max-h-none lg:overflow-visible overflow-y-auto divide-y divide-ink-100">
               {events.map((e) => (
                 <div key={e.id} className="py-2 text-sm">
                   <span className="rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-500">{e.kind === 'mention' ? 'mención' : 'comentario'}</span>{' '}
@@ -253,6 +258,7 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
           )}
         </div>
       )}
+      </div>
 
       <PostPeek post={peek} onClose={() => setPeek(null)} />
     </div>
