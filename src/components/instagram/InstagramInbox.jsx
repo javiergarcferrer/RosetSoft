@@ -39,7 +39,7 @@ export default function InstagramInbox({ onBack }) {
 
   // Poll for inbound the webhook wrote since last fetch (the inbox is near-live).
   useEffect(() => {
-    const id = setInterval(() => invalidate('igMessages'), POLL_MS);
+    const id = setInterval(() => invalidate(), POLL_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -58,7 +58,7 @@ export default function InstagramInbox({ onBack }) {
 
   // Opening a thread clears its unread badge (local read state).
   useEffect(() => {
-    if (selectedKey && thread.items.length) markIgThreadRead(thread.items);
+    if (selectedKey && thread.items.length) markIgThreadRead(thread.items).catch(() => {});
   }, [selectedKey, thread.items]);
 
   const send = useCallback(async () => {
@@ -69,7 +69,7 @@ export default function InstagramInbox({ onBack }) {
     const r = await sendInstagramDm(selectedKey, text);
     if (r.ok) {
       setDraft('');
-      invalidate('igMessages');
+      invalidate();
     } else {
       setSendErr(r.error || 'No se pudo enviar');
     }
@@ -82,7 +82,7 @@ export default function InstagramInbox({ onBack }) {
     setSyncNote(null);
     const r = await backfillInstagramDms();
     setSyncNote(r.ok ? `Sincronizados ${r.count} mensajes` : (r.error || 'No se pudo sincronizar'));
-    if (r.ok) invalidate('igMessages');
+    if (r.ok) invalidate();
     setSyncing(false);
   }, [syncing]);
 

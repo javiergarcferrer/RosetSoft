@@ -211,3 +211,19 @@ Social · Meta panel in `src/pages/Jarvis.jsx`.
   Jarvis's View now renders ops-feed rows and funnel labels as <Link> whenever
   `to` is present (no-op until your branch lands; no shared hunks, merge stays
   clean). This session keeps pulse.js untouched so your diff applies as-is.
+
+---
+
+## Feature backlog
+
+- [ ] **Repost past Instagram stories.** Let the dealer re-publish a previous
+      story as a fresh 24h Story from the Studio/Marketing surface.
+      Feasibility note: IG stories EXPIRE after 24h and `/{ig-user}/stories`
+      returns ONLY active (last-24h) stories — archived/expired stories are NOT
+      retrievable via the Graph API. So "repost" = re-publishing from media we
+      still hold a URL for (a recent post's `media_url`, a re-uploaded asset, or
+      an active story) through the existing publish path
+      (`instagram_business_content_publish` → STORIES container → `/media_publish`,
+      already in meta-social `publishInstagram`). Scope: a "Repost as story"
+      action on a past post/story that feeds its media URL into the Story flow.
+      No new permission needed.
