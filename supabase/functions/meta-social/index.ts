@@ -1190,6 +1190,7 @@ Deno.serve(async (req) => {
       // Per-message content pass for the rows the nested read left empty (the
       // common case). Newest-first and capped so a long history can't blow the
       // function budget; a single message read failing just leaves its label.
+      const enrichedIds = new Set<string>();
       const toFetch = rows
         .filter((r) => r.ig_message_id && !r.body)
         .sort((a, b) => Date.parse(String(b.created_at)) - Date.parse(String(a.created_at)))
@@ -1203,7 +1204,7 @@ Deno.serve(async (req) => {
           const node = nodes[j] as Record<string, any> | null;
           if (!node) return;
           const { kind, body: text } = igDmContent(node);
-          if (text) { r.kind = kind; r.body = text; } // non-empty for text AND media
+          if (text) { r.kind = kind; r.body = text; enrichedIds.add(String(r.ig_message_id)); } // non-empty for text AND media
           const fromId = String(node?.from?.id || '');
           if (fromId) {
             const outbound = fromId === String(igId);
@@ -1213,6 +1214,20 @@ Deno.serve(async (req) => {
             r.status = outbound ? 'sent' : 'received';
           }
         });
+      }
+
+      // Heal what the FIRST (blank) backfill already stored: the insert below is
+      // ignore-on-conflict, so it skips existing rows — without this their empty
+      // body would linger forever. A plain UPDATE of body+kind only ever upgrades
+      // a blank to the content we just resolved; it never touches read_at or the
+      // PK, so unread badges and ids stay put, and a no-op on a row not yet stored
+      // (brand-new message) just matches nothing. Scoped to the rows we enriched.
+      const healed = rows.filter((r) => enrichedIds.has(String(r.ig_message_id)));
+      for (let i = 0; i < healed.length; i += BATCH) {
+        await Promise.all(healed.slice(i, i + BATCH).map((r) =>
+          admin.from('ig_messages').update({ body: r.body, kind: r.kind })
+            .eq('profile_id', TEAM).eq('ig_message_id', r.ig_message_id)
+            .then(() => {}, () => {})));
       }
 
       if (rows.length) await admin.from('ig_messages').upsert(rows, { onConflict: 'ig_message_id', ignoreDuplicates: true });
