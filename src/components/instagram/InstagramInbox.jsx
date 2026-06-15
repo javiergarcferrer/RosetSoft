@@ -248,7 +248,7 @@ function ThreadMessages({ items }) {
         return (
           <div key={m.id} className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[78%] rounded-2xl px-3 py-1.5 text-sm ${out ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-900'}`}>
-              <span className="whitespace-pre-wrap break-words">{m.body || '—'}</span>
+              <span className="whitespace-pre-wrap break-words">{m.displayBody || m.body || '—'}</span>
               <span className={`mt-0.5 block text-right text-[10px] ${out ? 'text-white/70' : 'text-ink-400'}`}>
                 {timeLabel(m.createdAt)}{out && m.status === 'failed' ? ' · falló' : ''}
               </span>

@@ -301,6 +301,31 @@ async function igPostJson(path: string, token: string, payload: Record<string, u
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Renderable {kind, body} for an Instagram DM message NODE read from the Graph
+ *  API — the backfill twin of meta-webhook's dmContent (which reads the webhook
+ *  payload shape; the Deno↔Vite wall forbids sharing it, so the rule is copied
+ *  and kept equivalent). Text wins; else label the first attachment / story;
+ *  else a blank the per-message pass leaves for the thread VM to label. Tolerant
+ *  of both attachment shapes (nested `attachments.data[]` vs a bare array). */
+function igDmContent(node: Record<string, any>): { kind: string; body: string } {
+  const text = node?.message;
+  if (text) return { kind: 'text', body: String(text).slice(0, 1000) };
+  if (node?.story) return { kind: 'story_mention', body: 'Mención en historia' };
+  const list = node?.attachments?.data
+    || (Array.isArray(node?.attachments) ? node.attachments : []);
+  const att = list?.[0] || null;
+  if (att) {
+    const type = String(att.type || '').toLowerCase();
+    if (type.includes('image') || att.image_data) return { kind: 'image', body: '📷 Imagen' };
+    if (type.includes('video') || att.video_data) return { kind: 'video', body: '🎬 Video' };
+    if (type.includes('audio') || att.audio_data) return { kind: 'audio', body: '🎤 Audio' };
+    if (type.includes('share')) return { kind: 'share', body: '↗️ Publicación compartida' };
+    if (att.file_url || att.file_data) return { kind: 'file', body: '📎 Archivo' };
+    return { kind: 'attachment', body: '📎 Adjunto' };
+  }
+  return { kind: 'unknown', body: '' };
+}
+
 type PublishResult = { ok: boolean; id?: string; error?: string; pending?: boolean; creationId?: string };
 
 /**
@@ -1110,23 +1135,31 @@ Deno.serve(async (req) => {
 
   // ── igBackfill: pull recent Direct conversations into ig_messages, so the
   // inbox has history before/independent of live webhooks. Dedupes on the
-  // message id (the partial unique index the webhook also relies on). ──────
+  // message id (the partial unique index the webhook also relies on).
+  //
+  // The conversations edge reliably returns each message's id + created_time +
+  // from, but NOT its text/attachments in the nested expansion — those live on
+  // the individual /{message-id} node. So we read the thread shells here, then
+  // backfill CONTENT with a bounded, newest-first per-message pass; without it
+  // every history row lands with an empty body and the thread is a wall of "—". ─
   if (body.igBackfill) {
     try {
       const convos = await igGet('me/conversations', token, {
         platform: 'instagram',
-        fields: 'participants,updated_time,messages.limit(25){id,created_time,from,to,message}',
+        fields: 'participants,updated_time,messages.limit(25){id,created_time,from,to,message,attachments}',
         limit: '20',
       });
-      const rows: Array<Record<string, unknown>> = [];
+      const rows: Array<Record<string, any>> = [];
       for (const c of (convos?.data || [])) {
         const parts = (c?.participants?.data || []) as Array<{ id?: string; username?: string }>;
         const other = parts.find((p) => String(p?.id) !== String(igId)) || parts[0] || {};
         const threadKey = String(other?.id || '');
         if (!threadKey) continue;
+        const username = other?.username ? String(other.username) : null;
         for (const m of (c?.messages?.data || [])) {
           const fromId = String(m?.from?.id || '');
           const outbound = fromId === String(igId);
+          const { kind, body: text } = igDmContent(m as Record<string, any>);
           rows.push({
             id: crypto.randomUUID(), profile_id: TEAM,
             direction: outbound ? 'out' : 'in',
@@ -1134,8 +1167,8 @@ Deno.serve(async (req) => {
             thread_key: threadKey,
             sender_id: fromId || null,
             recipient_id: outbound ? threadKey : igId,
-            username: other?.username ? String(other.username) : null,
-            kind: 'text', body: m?.message ? String(m.message) : '',
+            username,
+            kind, body: text,
             status: outbound ? 'sent' : 'received',
             read_at: new Date().toISOString(), // history is read; never blows up unread badges
             payload: m,
@@ -1143,6 +1176,35 @@ Deno.serve(async (req) => {
           });
         }
       }
+
+      // Per-message content pass for the rows the nested read left empty (the
+      // common case). Newest-first and capped so a long history can't blow the
+      // function budget; a single message read failing just leaves its label.
+      const toFetch = rows
+        .filter((r) => r.ig_message_id && !r.body)
+        .sort((a, b) => Date.parse(String(b.created_at)) - Date.parse(String(a.created_at)))
+        .slice(0, 150);
+      const BATCH = 10;
+      for (let i = 0; i < toFetch.length; i += BATCH) {
+        const slice = toFetch.slice(i, i + BATCH);
+        const nodes = await Promise.all(slice.map((r) =>
+          igGet(String(r.ig_message_id), token, { fields: 'id,created_time,from,to,message,attachments' }).catch(() => null)));
+        slice.forEach((r, j) => {
+          const node = nodes[j] as Record<string, any> | null;
+          if (!node) return;
+          const { kind, body: text } = igDmContent(node);
+          if (text) { r.kind = kind; r.body = text; } // non-empty for text AND media
+          const fromId = String(node?.from?.id || '');
+          if (fromId) {
+            const outbound = fromId === String(igId);
+            r.direction = outbound ? 'out' : 'in';
+            r.sender_id = fromId;
+            r.recipient_id = outbound ? r.thread_key : igId;
+            r.status = outbound ? 'sent' : 'received';
+          }
+        });
+      }
+
       if (rows.length) await admin.from('ig_messages').upsert(rows, { onConflict: 'ig_message_id', ignoreDuplicates: true });
       return json({ ok: true, count: rows.length });
     } catch (e) {

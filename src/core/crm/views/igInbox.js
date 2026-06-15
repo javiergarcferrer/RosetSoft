@@ -110,7 +110,11 @@ export function resolveIgThread(messages, { threadKey, now = Date.now() } = {}) 
   const key = (threadKey || '').trim();
   const items = (messages || [])
     .filter((m) => (m.threadKey || '').trim() === key)
-    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    // `displayBody` carries the label fallback so a bubble never renders a bare
+    // "—": a media / text-less row shows its kind label, the same rule the
+    // conversation list uses for `lastBody`.
+    .map((m) => ({ ...m, displayBody: m.body || labelForKind(m.kind) }));
   let lastInboundAt = 0;
   for (const m of items) {
     if (m.direction === 'in' && (m.createdAt || 0) > lastInboundAt) lastInboundAt = m.createdAt || 0;

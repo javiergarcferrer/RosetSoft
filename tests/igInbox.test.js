@@ -71,6 +71,17 @@ test('needle filters by handle and name', () => {
   assert.deepEqual(resolveIgConversations(messages, { needle: 'rober', now: NOW }).map((c) => c.key), ['B']);
 });
 
+test('thread items expose a displayBody that labels empty/media rows (never a bare —)', () => {
+  const messages = [
+    msg({ threadKey: 'A', body: 'hola', kind: 'text', createdAt: NOW - 3 * MIN }),
+    msg({ threadKey: 'A', body: '', kind: 'image', createdAt: NOW - 2 * MIN }),
+    msg({ threadKey: 'A', body: '', kind: 'text', createdAt: NOW - 1 * MIN }),
+  ];
+  const th = resolveIgThread(messages, { threadKey: 'A', now: NOW });
+  // text passes through; an empty image labels; an empty text falls back to "Mensaje"
+  assert.deepEqual(th.items.map((m) => m.displayBody), ['hola', '📷 Imagen', 'Mensaje']);
+});
+
 test('resolveIgThread filters to one thread, oldest-first, with the window state', () => {
   const messages = [
     msg({ threadKey: 'A', body: 'a2', createdAt: NOW - 5 * MIN }),
