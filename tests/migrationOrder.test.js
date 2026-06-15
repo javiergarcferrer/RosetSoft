@@ -36,6 +36,26 @@ test('migration filenames carry a 14-digit timestamp prefix', () => {
   assert.equal(bad.length, 0, `Unparseable migration names:\n  ${bad.join('\n  ')}`);
 });
 
+test('no two migrations share a version (14-digit) prefix', () => {
+  // Supabase tracks applied migrations by VERSION (the timestamp prefix), not by
+  // filename — `schema_migrations` keys on it. Two files with the SAME prefix
+  // collide: once one claims the version, the deploy treats the version as
+  // already applied and SILENTLY SKIPS the other, so its DDL never runs and the
+  // column/table never appears (the 20260722080000 incident: contact_rnc_status
+  // ran, settings_company_discount was skipped → company_discount_pct missing).
+  // Filename-ordering (the test below) can't catch this — the suffixes differ —
+  // so it's a separate guard. A red means RENAME one file to a unique later
+  // version, never just reorder the suffix.
+  const byVersion = new Map();
+  for (const f of files) {
+    const v = f.slice(0, 14);
+    if (!byVersion.has(v)) byVersion.set(v, []);
+    byVersion.get(v).push(f);
+  }
+  const dups = [...byVersion.values()].filter((g) => g.length > 1);
+  assert.equal(dups.length, 0, `\nDuplicate migration versions:\n  ${dups.map((g) => g.join('  ==  ')).join('\n  ')}\n`);
+});
+
 test('no migration is back-dated relative to the chain that existed when it was added', () => {
   // Latest git addition per file (newest-first log → first sighting wins);
   // files with no committed addition are working-tree-new → added "now".
