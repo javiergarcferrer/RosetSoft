@@ -12,6 +12,7 @@ import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
 import useColumns from '../components/search/useColumns.js';
 import useColumnWidths from '../components/search/useColumnWidths.jsx';
 import { db } from '../db/database.js';
+import { reconcileQuoteStock } from '../lib/lsgStock.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -185,6 +186,9 @@ function useQuoteOps(qu) {
     const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
     await db.quoteLines.bulkDelete(lines.map((l) => l.id));
     await db.quotes.delete(qu.id);
+    // Deleting a committed quote frees its LSG pieces — reconcile reads the
+    // quote as gone and adds them back on Shopify (then clears the ledger row).
+    reconcileQuoteStock(qu.id).catch(() => {});
   }
 
   return { del };
@@ -375,6 +379,8 @@ export default function Quotes() {
       const qlines = await db.quoteLines.where('quoteId').equals(id).toArray();
       await db.quoteLines.bulkDelete(qlines.map((l) => l.id));
       await db.quotes.delete(id);
+      // Free each deleted quote's LSG pieces back to Shopify (best-effort).
+      reconcileQuoteStock(id).catch(() => {});
     }
     clearSel();
   }

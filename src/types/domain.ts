@@ -1525,6 +1525,24 @@ export interface Order {
   updatedAt?: number;
 }
 
+/**
+ * Per-quote LifestyleGarden inventory reservation ledger (table
+ * lsg_stock_commitments; id = the quote id, 1:1). `committed` records the units
+ * of each LSG product currently deducted from the Shopify storefront on this
+ * quote's behalf — the desired-state reference the reconciler in lib/lsgStock
+ * diffs against so a commit never double-deducts and a revert restocks exactly
+ * what was taken. See lib/lsgSale (the pure math) and lib/lsgStock (the push).
+ */
+export interface LsgStockCommitment {
+  /** = the quote id. */
+  id: string;
+  profileId?: string;
+  /** { "<lsg productId>": units } — units removed from Shopify for this quote. */
+  committed: Record<string, number>;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Container {
   id: string;
   profileId: string;

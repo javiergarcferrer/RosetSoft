@@ -101,7 +101,10 @@ Deno.serve(async (req: Request) => {
     const conn = await connectShopify(admin, TEAM, STORE_LSG);
     if (!conn.configured) return json({ configured: false, store: STORE_LSG, message: 'Shopify no conectado' });
     try {
-      const r = await adjustLsgInventory(conn.gql, body.lsgAdjust);
+      const r = await adjustLsgInventory(conn.gql, body.lsgAdjust, {
+        idempotencyKey: typeof body.idempotencyKey === 'string' ? body.idempotencyKey : undefined,
+        reference: typeof body.reference === 'string' ? body.reference : undefined,
+      });
       return json({ configured: true, store: STORE_LSG, ...r }, r.ok ? 200 : 502);
     } catch (e) {
       return json({ configured: true, ok: false, store: STORE_LSG, error: `No se pudo ajustar el inventario LSG: ${(e as Error).message}` }, 502);

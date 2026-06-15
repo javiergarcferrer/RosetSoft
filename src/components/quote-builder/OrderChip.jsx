@@ -4,8 +4,6 @@ import { Package, ArrowRight, Plus } from 'lucide-react';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../lib/orderStages.js';
-import { lsgSaleAdjustments } from '../../lib/lsgSale.js';
-import { pushLsgInventoryAdjust } from '../../lib/shopifySync.js';
 import Modal from '../Modal.jsx';
 
 /**
@@ -250,35 +248,10 @@ async function createOrderFromQuote({ quote, profileId, onAttach }) {
     }),
   });
   invalidate();
+  // Attaching to the order (orderId null → set) is what commits the quote's
+  // LifestyleGarden pieces to a sale; the reconciler wired into that quote write
+  // (useQuoteController.updateQuote / OrderDetail) deducts them from the LSG
+  // Shopify store — and restocks on a later detach/cancel/revert. So all this
+  // needs to do is attach; the stock push follows from the state change.
   if (onAttach) onAttach(id);
-
-  // Two-way LSG sync (PUSH): committing the quote to an order means its
-  // LifestyleGarden pieces are sold, so decrement them on the LSG Shopify store
-  // — its live storefront can't then oversell the same unit. Creating the order
-  // is a once-per-quote action (the chip flips to the attached order after), so
-  // this fires once. Best-effort and fully detached: a Shopify hiccup, a
-  // missing scope, or no LSG lines never blocks or delays the order.
-  pushLsgSaleFor(quote).catch(() => {});
-}
-
-/**
- * Resolve a quote's PRICED LifestyleGarden lines to Shopify decrements and push
- * them. Loads the quote's lines + the LSG catalog (to map a line's SKU back to
- * its `lsg-<variantId>` id), then hands off to pushLsgInventoryAdjust. Pure
- * mapping lives in lib/lsgSale (lsgSaleAdjustments), pinned by tests.
- */
-async function pushLsgSaleFor(quote) {
-  const lines = await db.quoteLines.where('quoteId').equals(quote.id).toArray();
-  const refs = new Set();
-  for (const l of lines) {
-    if (l.reference) refs.add(l.reference);
-    for (const c of l.components || []) if (c?.reference) refs.add(c.reference);
-  }
-  if (!refs.size) return;
-  const lsg = await db.products.where('brand').equals('lifestylegarden').toArray();
-  const lsgByRef = new Map();
-  for (const p of lsg) if (refs.has(p.reference)) lsgByRef.set(p.reference, p.id);
-  if (!lsgByRef.size) return;
-  const adjustments = lsgSaleAdjustments(lines, lsgByRef);
-  if (adjustments.length) await pushLsgInventoryAdjust(adjustments);
 }

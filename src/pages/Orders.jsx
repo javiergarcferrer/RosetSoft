@@ -10,6 +10,7 @@ import { formatDateTime, formatMoney } from '../lib/format.js';
 import { resolveOrdersList } from '../core/quote/views/lists.js';
 import { viewerCompanySettings } from '../core/quote/index.js';
 import { currentOrderStage } from '../lib/orderStages.js';
+import { reconcileOrderStock } from '../lib/lsgStock.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import StatusPill from '../components/StatusPill.jsx';
@@ -181,6 +182,10 @@ export default function Orders() {
     if (!confirm(msg)) return;
     await db.orders.delete(order.id);
     invalidate();
+    // The freed quotes keep their (now dangling) orderId; reconcile reads the
+    // order as gone and adds their LSG pieces back on Shopify. Runs after the
+    // delete so it still finds the quotes by orderId.
+    reconcileOrderStock(order.id).catch(() => {});
   }
 
   if (!loaded) {

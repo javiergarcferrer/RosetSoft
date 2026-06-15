@@ -22,8 +22,14 @@ export interface SyncRequest {
   ensureCron?: boolean;
   /** Cron tick: re-pull the LSG catalog (Bearer service key only). */
   cron?: boolean;
-  /** LSG inventory write-back: decrement Shopify when sold in ALCOVER. */
+  /** LSG inventory write-back: signed deltas (negative deducts a sale, positive
+   *  restocks a revert) applied to the LifestyleGarden store. */
   lsgAdjust?: Array<{ productId?: string; variantId?: string; delta: number }>;
+  /** Per-push idempotency key for the lsgAdjust mutation (Admin API 2026-04
+   *  requires the @idempotent directive). */
+  idempotencyKey?: string;
+  /** referenceDocumentUri stored on the lsgAdjust adjustment (audit trail). */
+  reference?: string;
 }
 
 /**

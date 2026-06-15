@@ -15,6 +15,7 @@ import type {
   ModelFabrics,
   QuoteGroup,
   Product,
+  LsgStockCommitment,
   Account,
   JournalEntry,
   JournalLine,
@@ -88,6 +89,7 @@ const TABLES = {
   containers:    { db: 'containers',    pk: 'id' },
   materials:     { db: 'materials',     pk: 'id' },
   products:      { db: 'products',      pk: 'id' },
+  lsgStockCommitments: { db: 'lsg_stock_commitments', pk: 'id' },
   modelFabrics:  { db: 'model_fabrics', pk: 'id' },
   accounts:      { db: 'accounts',        pk: 'code' },
   journalEntries:{ db: 'journal_entries', pk: 'id' },
@@ -138,6 +140,7 @@ export interface TableRowMap {
   containers: Container;
   materials: Material;
   products: Product;
+  lsgStockCommitments: LsgStockCommitment;
   modelFabrics: ModelFabrics;
   accounts: Account;
   journalEntries: JournalEntry;

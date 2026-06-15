@@ -25,6 +25,7 @@ import {
   validateContainerNo, detectCarrier, normalizeContainerNo,
 } from '../lib/containerTracking.js';
 import ContainerTracking from '../components/ContainerTracking.jsx';
+import { reconcileQuoteStock, reconcileOrderStock } from '../lib/lsgStock.js';
 import { resolveOrderDetail } from '../core/quote/views/detail.js';
 import { viewerCompanySettings } from '../core/quote/index.js';
 import { resolveOrderRegistration } from '../core/quote/views/registration.js';
@@ -203,6 +204,8 @@ export default function OrderDetail() {
       cancelledAt: Date.now(),
       updatedAt: Date.now(),
     });
+    // A cancelled order frees its quotes — add their LSG pieces back on Shopify.
+    reconcileOrderStock(orderId).catch(() => {});
   }
 
   async function uncancel() {
@@ -215,6 +218,8 @@ export default function OrderDetail() {
       cancelledAt: null,
       updatedAt: Date.now(),
     });
+    // Reactivating re-commits the accepted quotes — re-deduct their LSG pieces.
+    reconcileOrderStock(orderId).catch(() => {});
   }
 
   async function addContainer() {
@@ -248,6 +253,8 @@ export default function OrderDetail() {
   async function attachQuote(quoteId) {
     await db.quotes.update(quoteId, { orderId, updatedAt: Date.now() });
     invalidate();
+    // Committing the quote to this order deducts its LSG pieces from Shopify.
+    reconcileQuoteStock(quoteId).catch(() => {});
     setPicker(false);
   }
 
@@ -255,6 +262,8 @@ export default function OrderDetail() {
     if (!confirm('¿Quitar la cotización de este pedido? La cotización seguirá existiendo.')) return;
     await db.quotes.update(quoteId, { orderId: null, updatedAt: Date.now() });
     invalidate();
+    // Freed from the order — add its LSG pieces back on Shopify.
+    reconcileQuoteStock(quoteId).catch(() => {});
   }
 
   return (

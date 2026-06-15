@@ -115,18 +115,32 @@ export async function ensureShopifyRefreshCron() {
   return invokeShopify({ ensureCron: true });
 }
 
+/** A per-push idempotency key. Admin API 2026-04 REQUIRES one on
+ *  inventoryAdjustQuantities (@idempotent directive) so a retried request can't
+ *  double-apply a signed delta; randomUUID with a non-crypto fallback. */
+function newIdempotencyKey() {
+  try { return crypto.randomUUID(); } catch { /* older/insecure context */ }
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 /**
- * Push LSG inventory decrements to the LifestyleGarden Shopify store — the PUSH
- * half of the two-way sync: when an LSG product is sold inside ALCOVER, lower
- * its available count on Shopify so the storefront can't oversell. `items` =
- * [{ productId | variantId, delta }] (delta NEGATIVE for a sale). Safe to call
- * fire-and-forget (`.catch(() => {})`). Returns { ok, adjusted, skipped, errors }
- * or { configured:false }.
+ * Push LSG inventory deltas to the LifestyleGarden Shopify store — the PUSH half
+ * of the two-way sync: when an LSG product is committed to a sale inside ALCOVER
+ * lower its available count (delta NEGATIVE) so the storefront can't oversell;
+ * when the sale is reverted, add it back (delta POSITIVE). `items` =
+ * [{ productId | variantId, delta }]. `opts.reference` is stored as the Shopify
+ * adjustment's referenceDocumentUri (audit trail); `opts.idempotencyKey` lets a
+ * caller reuse a key across retries (one is generated otherwise). Safe to call
+ * fire-and-forget (`.catch(() => {})`). Returns
+ * { ok, adjusted, skipped, errors, applied } (applied = the items Shopify
+ * actually changed) or { configured:false }.
  */
-export async function pushLsgInventoryAdjust(items) {
+export async function pushLsgInventoryAdjust(items, opts = {}) {
   const list = Array.isArray(items) ? items.filter((i) => i && Number(i.delta)) : [];
-  if (!list.length) return { ok: true, adjusted: 0, skipped: 0, errors: [] };
-  return invokeShopify({ lsgAdjust: list });
+  if (!list.length) return { ok: true, adjusted: 0, skipped: 0, errors: [], applied: [] };
+  const body = { lsgAdjust: list, idempotencyKey: opts.idempotencyKey || newIdempotencyKey() };
+  if (opts.reference) body.reference = opts.reference;
+  return invokeShopify(body);
 }
 
 /**

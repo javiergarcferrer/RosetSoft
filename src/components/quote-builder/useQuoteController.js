@@ -7,6 +7,7 @@ import {
 } from '../../lib/quoteGroups.js';
 import { isModularLine, absorbLineAsComponents, extractComponentsAsLine } from '../../lib/modules.js';
 import { boundedPush, diffLinesForRestore } from '../../lib/quoteHistory.js';
+import { reconcileQuoteStock } from '../../lib/lsgStock.js';
 import { useUndoToast } from './UndoToast.jsx';
 
 // How many edit steps the workspace remembers for undo/redo. Each step is a
@@ -120,6 +121,11 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
       const { toDelete, toPut } = diffLinesForRestore(current, snap.lines);
       for (const id of toDelete) await db.quoteLines.delete(id);
       for (const l of toPut) await db.quoteLines.put(l);
+      // Undo/redo can restore a different accept/order state — re-reconcile LSG
+      // Shopify stock to the restored snapshot. The committed ledger lives in
+      // its own table (untouched by the snapshot), so this restocks/deducts the
+      // exact difference and never rewinds the reservation.
+      reconcileQuoteStock(quoteId).catch(() => {});
     } finally {
       markSaved();
     }
@@ -185,6 +191,10 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         number: persisted?.number ?? quote.number,
         updatedAt: Date.now(),
       });
+      // A status or order-attachment change is exactly what flips whether this
+      // quote's LSG pieces should be deducted from Shopify — accept + order
+      // deducts, revert / detach restocks. Reconcile (idempotent, best-effort).
+      if ('status' in patch || 'orderId' in patch) reconcileQuoteStock(quoteId).catch(() => {});
     } finally {
       markSaved();
     }
