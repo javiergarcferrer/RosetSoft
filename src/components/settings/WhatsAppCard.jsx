@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, AlertTriangle, MessageCircle, Send, ChevronDown, Copy, Lock, RefreshCw, QrCode, Zap, Plus, Pencil, Trash2, X } from 'lucide-react';
-import { newId } from '../../db/database.js';
+import { db, newId } from '../../db/database.js';
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
@@ -10,6 +10,7 @@ import {
   listWaQrCodes, createWaQrCode, deleteWaQrCode,
 } from '../../lib/whatsapp.js';
 import { runCoexistenceSignup } from '../../lib/waEmbeddedSignup.js';
+import { resolveWaHealth } from '../../core/crm/index.js';
 import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
 
@@ -194,6 +195,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
       {connectedAt ? (
         <>
           <WebhookRow settings={settings} />
+          <ReceptionHealth />
           <TemplateRow settings={settings} saveSettings={saveSettings} />
           <CatalogRow settings={settings} saveSettings={saveSettings} />
           <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
@@ -1234,6 +1236,127 @@ function BusinessProfileRow() {
         </p>
       </div>
     </details>
+  );
+}
+
+/**
+ * Reception health + end-to-end self-test — "how do I know I'm not missing
+ * messages?". Passive: surfaces any VERIFIED delivery wa-webhook failed to store
+ * (wa_webhook_events with processed=false → Meta is redelivering it) and when the
+ * last inbound landed. Active: "Probar recepción" watches the inbound count and
+ * confirms when a real message arrives — proving Meta → webhook → DB end to end,
+ * the one check that catches a wrong App Secret or an unsubscribed `messages`
+ * field (which leave nothing to count passively).
+ */
+function ReceptionHealth() {
+  const [health, setHealth] = useState(null);
+  const [probe, setProbe] = useState('idle'); // idle | waiting | ok | timeout | error
+  const baseline = useRef(0);
+  const timer = useRef(null);
+
+  async function loadHealth() {
+    try {
+      const failedEvents = await db.waWebhookEvents.where('processed').equals(false).toArray();
+      const last = await db.waMessages.where('direction').equals('in').orderBy('createdAt').reverse().first();
+      setHealth(resolveWaHealth({ failedEvents, lastInboundAt: last?.createdAt ?? null }));
+    } catch {
+      // Table not migrated yet / transient read — hide the passive row, keep the test.
+      setHealth(null);
+    }
+  }
+  useEffect(() => {
+    loadHealth();
+    return () => { if (timer.current) clearInterval(timer.current); };
+  }, []);
+
+  async function startProbe() {
+    if (probe === 'waiting') return;
+    setProbe('waiting');
+    try {
+      baseline.current = await db.waMessages.where('direction').equals('in').count();
+    } catch {
+      setProbe('error');
+      return;
+    }
+    const startedAt = Date.now();
+    if (timer.current) clearInterval(timer.current);
+    timer.current = setInterval(async () => {
+      try {
+        const n = await db.waMessages.where('direction').equals('in').count();
+        if (n > baseline.current) {
+          clearInterval(timer.current); timer.current = null;
+          setProbe('ok');
+          loadHealth();
+        } else if (Date.now() - startedAt > 120_000) {
+          clearInterval(timer.current); timer.current = null;
+          setProbe('timeout');
+        }
+      } catch { /* transient read — keep polling until the timeout */ }
+    }, 4000);
+  }
+
+  const down = health?.status === 'down';
+  return (
+    <div className="mt-4 rounded-lg border border-ink-100 px-4 py-3.5">
+      <div className="font-medium text-sm text-ink-800 mb-2 inline-flex items-center gap-1.5">
+        <MessageCircle size={14} className="text-emerald-600" aria-hidden /> Recepción de mensajes
+      </div>
+
+      {down ? (
+        <div className="rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-[11px] text-rose-800">
+          <div className="font-semibold inline-flex items-center gap-1">
+            <AlertTriangle size={12} /> {health.failedCount} entrega(s) no se pudieron guardar
+          </div>
+          <p className="mt-1">
+            Meta las está reintentando automáticamente
+            {health.oldestFailedAt ? ` (la más antigua: ${formatDateTime(health.oldestFailedAt)})` : ''}.
+            Si persiste, revisa los registros de la función wa-webhook.
+          </p>
+          {health.errorSample && <p className="mt-1 font-mono break-words text-rose-700">{health.errorSample}</p>}
+        </div>
+      ) : health ? (
+        <p className="text-[11px] text-ink-500 inline-flex items-start gap-1.5">
+          <Check size={12} className="text-emerald-600 shrink-0 mt-px" aria-hidden />
+          {health.lastInboundAt
+            ? `Sin entregas fallidas. Último mensaje recibido ${health.hoursSinceInbound === 0 ? 'hace menos de 1 h' : `hace ${health.hoursSinceInbound} h`}.`
+            : 'Sin entregas fallidas. Aún no se ha recibido ningún mensaje.'}
+        </p>
+      ) : null}
+
+      <div className="mt-2.5">
+        <button type="button" onClick={startProbe} disabled={probe === 'waiting'}
+          className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+          {probe === 'waiting' ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+          Probar recepción
+        </button>
+        {probe === 'waiting' && (
+          <p className="text-[11px] text-ink-500 mt-2">
+            Envía un WhatsApp a tu número <strong>desde otro teléfono</strong> ahora — esperando a que llegue (hasta 2 min)…
+          </p>
+        )}
+        {probe === 'ok' && (
+          <p className="text-[11px] text-emerald-700 mt-2 flex items-start gap-1.5">
+            <Check size={13} className="mt-px shrink-0" /> Mensaje recibido — la recepción funciona de extremo a extremo.
+          </p>
+        )}
+        {probe === 'timeout' && (
+          <p className="text-[11px] text-amber-700 mt-2 flex items-start gap-1.5">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>
+              No llegó ningún mensaje en 2 min. Revisa: (1) el campo <strong>messages</strong> está suscrito en
+              Meta → WhatsApp → Configuration; (2) el <strong>App Secret</strong> guardado es correcto;
+              (3) la Callback URL está verificada.
+            </span>
+          </p>
+        )}
+        {probe === 'error' && (
+          <p className="text-[11px] text-rose-600 mt-2">No se pudo iniciar la prueba. Inténtalo de nuevo.</p>
+        )}
+        <p className="text-[11px] text-ink-400 mt-2">
+          Comprueba de extremo a extremo que los mensajes entrantes llegan a la app. Cualquier mensaje nuevo de un cliente confirma la prueba.
+        </p>
+      </div>
+    </div>
   );
 }
 

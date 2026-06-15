@@ -482,6 +482,25 @@ export interface WaTemplateRejection {
 }
 
 /**
+ * A durable, replayable log of ONE verified inbound webhook delivery from Meta
+ * (wa-webhook writes it before processing). `processed` flips true only once the
+ * batch is stored; an unprocessed row with `processError` set is a delivery that
+ * failed to persist — surfaced as a reception alarm and redelivered by Meta.
+ */
+export interface WaWebhookEvent {
+  id: string;
+  profileId: string;
+  /** When wa-webhook logged the delivery. */
+  receivedAt?: number | null;
+  /** Inbound messages carried in the batch. */
+  messageCount: number;
+  processed: boolean;
+  processError?: string | null;
+  /** Meta's raw payload, as received. */
+  raw?: unknown;
+}
+
+/**
  * One frame on the Claude uplink — the JARVIS dashboard's channel to the
  * Claude agent. `role:'user'` rows are directives typed in the dashboard
  * (status: pending → seen → done as the agent picks them up); `role:'claude'`

@@ -41,6 +41,7 @@ import type {
   IgEvent,
   IgMessage,
   WaTemplateRejection,
+  WaWebhookEvent,
 } from '../types/domain.ts';
 
 /**
@@ -114,6 +115,7 @@ const TABLES = {
   igEvents:           { db: 'ig_events',           pk: 'id' },
   igMessages:         { db: 'ig_messages',         pk: 'id' },
   waTemplateRejections: { db: 'wa_template_rejections', pk: 'id' },
+  waWebhookEvents:    { db: 'wa_webhook_events',    pk: 'id' },
 } as const satisfies Record<string, TableDef>;
 
 export type TableName = keyof typeof TABLES;
@@ -163,6 +165,7 @@ export interface TableRowMap {
   igEvents: IgEvent;
   igMessages: IgMessage;
   waTemplateRejections: WaTemplateRejection;
+  waWebhookEvents: WaWebhookEvent;
 }
 
 // Row mapping (snake_case ↔ camelCase + *At timestamp coercion) is in

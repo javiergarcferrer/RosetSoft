@@ -34,4 +34,5 @@ export {
 } from './views/groups.js';
 export { buildDraftTurns } from './views/draft.js';
 export { resolveTemplateHealth } from './views/templates.js';
+export { resolveWaHealth } from './views/health.js';
 export { waDigits, phoneKey, displayPhone, groupKey, isGroupKey, groupIdFromKey } from '../../lib/phone.js';

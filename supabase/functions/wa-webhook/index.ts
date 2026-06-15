@@ -14,8 +14,12 @@
 // can't authenticate Meta, so inbound processing stays off until it's pasted
 // in Configuración.
 //
-// Always answer 2xx once authenticated, even on partial failures — Meta
-// retries non-2xx with backoff and eventually disables the webhook.
+// Reliability: every VERIFIED delivery is first logged to wa_webhook_events
+// (deduped by a hash of the body), THEN processed. If a message fails to store
+// we answer 5xx so Meta REDELIVERS it (every insert dedupes on wa_id, so retries
+// are idempotent) and the row stays flagged for the in-app reception alarm +
+// replay. Parse/structure errors still answer 2xx — a retry can't fix those, and
+// Meta disables a webhook that always fails.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
@@ -73,6 +77,12 @@ async function validSignature(raw: string, header: string | null, secret: string
   let diff = 0;
   for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ given.charCodeAt(i);
   return diff === 0;
+}
+
+/** Hex SHA-256 of a string — the dedupe key for a webhook delivery. */
+async function sha256hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** The renderable text of an inbound message, per Meta message type. */
@@ -148,6 +158,32 @@ Deno.serve(async (req: Request) => {
 
   let body: Record<string, any> = {};
   try { body = JSON.parse(raw); } catch { return new Response('bad json', { status: 200 }); }
+
+  // ── Dead-letter capture (reliability) ──────────────────────────────────────
+  // Log the VERIFIED delivery BEFORE processing, keyed by a hash of the body so
+  // Meta retries collapse onto ONE row. This is the durable, replayable record
+  // that lets a delivered message survive a transient store error: if a message
+  // fails to persist below, we mark this row unprocessed and answer 5xx so Meta
+  // REDELIVERS the batch (every insert dedupes on wa_id → idempotent).
+  const eventId = `wae-${await sha256hex(raw)}`;
+  let messageCount = 0;
+  for (const entry of body.entry || []) {
+    for (const change of entry.changes || []) messageCount += ((change.value || {}).messages || []).length;
+  }
+  {
+    const { error } = await admin.from('wa_webhook_events').upsert(
+      { id: eventId, profile_id: TEAM, message_count: messageCount, processed: false, process_error: null, raw: body },
+      { onConflict: 'id' },
+    );
+    if (error) {
+      // Can't even log the delivery → don't ACK; let Meta redeliver.
+      console.error('[wa-webhook] event capture failed:', error.message);
+      return new Response('event log unavailable', { status: 503 });
+    }
+  }
+
+  // Message-store failures collected here drive the 5xx retry at the end.
+  const storeErrors: string[] = [];
 
   // Contact links resolved once per delivery (both tables are small).
   let customers: { id: string; phone: string | null }[] | null = null;
@@ -360,7 +396,7 @@ Deno.serve(async (req: Request) => {
             payload: msg,
             created_at: new Date(tsMs).toISOString(),
           }, { onConflict: 'wa_id', ignoreDuplicates: true });
-          if (error) console.error('[wa-webhook] inbound insert failed:', error.message);
+          if (error) { console.error('[wa-webhook] inbound insert failed:', error.message); storeErrors.push(`inbound ${msg.id || '?'}: ${error.message}`); }
           if (!error && groupId) await ensureGroup(groupId, value as Record<string, any>);
           const media = inboundMedia(msg);
           if (!error && media && msg.id) await persistMedia(msg.id, media);
@@ -388,7 +424,7 @@ Deno.serve(async (req: Request) => {
             payload: { ...echo, smbEcho: true },
             created_at: new Date(tsMs).toISOString(),
           }, { onConflict: 'wa_id', ignoreDuplicates: true });
-          if (error) console.error('[wa-webhook] echo insert failed:', error.message);
+          if (error) { console.error('[wa-webhook] echo insert failed:', error.message); storeErrors.push(`echo ${echo.id}: ${error.message}`); }
           const echoMedia = inboundMedia(echo);
           if (!error && echoMedia && echo.id) await persistMedia(echo.id, echoMedia);
         }
@@ -425,7 +461,7 @@ Deno.serve(async (req: Request) => {
             if (!rows.length) continue;
             const { error } = await admin.from('wa_messages')
               .upsert(rows, { onConflict: 'wa_id', ignoreDuplicates: true });
-            if (error) console.error('[wa-webhook] history sync insert failed:', error.message);
+            if (error) { console.error('[wa-webhook] history sync insert failed:', error.message); storeErrors.push(`history ${phone}: ${error.message}`); }
           }
         }
 
@@ -458,9 +494,22 @@ Deno.serve(async (req: Request) => {
       }
     }
   } catch (e) {
-    // Answer 200 anyway — a parse hiccup must not make Meta disable the webhook.
+    // An unexpected throw mid-batch may have left messages unstored — record it
+    // so the 5xx below triggers a Meta redelivery (idempotent; the raw event is
+    // already captured above as the backstop).
     console.error('[wa-webhook] processing error:', (e as Error).message);
+    storeErrors.push(`processing: ${(e as Error).message}`);
   }
 
+  // Mark the dead-letter row processed (or not) and answer Meta. A message-store
+  // failure → 5xx so Meta REDELIVERS the batch; the row stays flagged for the
+  // in-app reception alarm + replay.
+  const failed = storeErrors.length > 0;
+  const { error: markErr } = await admin.from('wa_webhook_events')
+    .update({ processed: !failed, process_error: failed ? storeErrors.slice(0, 5).join(' | ').slice(0, 1000) : null })
+    .eq('id', eventId);
+  if (markErr) console.error('[wa-webhook] event mark failed:', markErr.message);
+
+  if (failed) return new Response('store failed; retry', { status: 503 });
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 });
