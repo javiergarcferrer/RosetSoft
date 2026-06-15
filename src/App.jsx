@@ -23,6 +23,7 @@ import Difusion from './pages/Difusion.jsx';
 import Marketing from './pages/Marketing.jsx';
 import InstagramStudio from './pages/InstagramStudio.jsx';
 import PublicStore from './pages/PublicStore.jsx';
+import DataDeletion from './pages/DataDeletion.jsx';
 import Settings from './pages/Settings.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import NotFound from './pages/NotFound.jsx';
@@ -344,6 +345,11 @@ export default function App() {
               lives OUTSIDE RequireAuth so a customer never hits the login wall;
               the `store` Edge Function serves a public-safe, margin-free catalog. */}
           <Route path="/tienda" element={<PublicStore />} />
+          {/* Public, logged-out data-deletion instructions. Lives OUTSIDE
+              RequireAuth (a Meta reviewer / a member of the public must reach
+              it without a login) and is pinned light by isPublicRoute. This is
+              the URL pasted into the Meta App Dashboard's "User Data Deletion". */}
+          <Route path="/eliminar-datos" element={<DataDeletion />} />
           <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
         </Routes>
       </NavMemoryProvider>

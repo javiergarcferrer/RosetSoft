@@ -29,7 +29,9 @@ const VALUES = new Set(['light', 'dark', 'system']);
 
 /** The customer-facing, always-light routes (HashRouter paths). */
 export function isPublicRoute(hash = (typeof location !== 'undefined' ? location.hash : '')) {
-  return hash.indexOf('#/q/') === 0 || hash.indexOf('#/tienda') === 0;
+  return hash.indexOf('#/q/') === 0
+    || hash.indexOf('#/tienda') === 0
+    || hash.indexOf('#/eliminar-datos') === 0;
 }
 
 function systemPrefersDark() {
