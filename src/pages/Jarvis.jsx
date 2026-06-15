@@ -414,6 +414,9 @@ export default function Jarvis() {
   const MOBILE_BOARDS = ['Comercial', 'Sistemas', 'Enlace'];
   const gridRef = useRef(null);
   const [activeBoard, setActiveBoard] = useState(0);
+  // While a pager-tap smooth scroll animates, suppress the observer so the
+  // active tab doesn't strobe through the boards it passes over.
+  const boardSuppressUntil = useRef(0);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 619.98px)');
     let io;
@@ -429,6 +432,7 @@ export default function Jarvis() {
       );
       io = new IntersectionObserver(
         (entries) => {
+          if (Date.now() < boardSuppressUntil.current) return; // let a tap-scroll settle
           for (const e of entries) {
             if (e.isIntersecting && e.intersectionRatio >= 0.55) {
               const i = boards.indexOf(e.target);
@@ -447,6 +451,7 @@ export default function Jarvis() {
   const goToBoard = useCallback((i) => {
     const grid = gridRef.current;
     if (!grid) return;
+    boardSuppressUntil.current = Date.now() + 600;
     grid.scrollTo({ left: i * grid.clientWidth, behavior: 'smooth' });
     setActiveBoard(i);
   }, []);

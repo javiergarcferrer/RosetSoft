@@ -4,6 +4,7 @@
 // a hero KPI row, the 28-day reach trend with its follower/discovery split,
 // the top posts by engagement, the best publishing window, and the freshest
 // comments to triage — each a glance, detail one tap away in its own section.
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Heart, MessageCircle, Clock, TrendingUp, ArrowRight, Film,
@@ -38,7 +39,9 @@ function TopPost({ post }) {
   );
 }
 
-export default function Overview({ st, sp, onGoToInteraccion, onGoToContenido }) {
+// Memoized: the page re-renders every second to tick the live-freshness pill;
+// the overview's data only changes on an actual load, so skip those ticks.
+function Overview({ st, sp, onGoToInteraccion, onGoToContenido }) {
   // Prefer igStudio's richer 28-day KPIs; fall back to socialPulse's 7-day.
   const followers = st?.profile.followers ?? sp?.kpis.igFollowers ?? 0;
   const reach28 = st?.kpis.reach28 ?? null;
@@ -172,3 +175,5 @@ export default function Overview({ st, sp, onGoToInteraccion, onGoToContenido })
     </div>
   );
 }
+
+export default memo(Overview);

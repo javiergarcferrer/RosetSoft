@@ -208,8 +208,8 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
                     <div key={c.id} className={`text-sm ${c.hidden ? 'opacity-50' : ''}`}>
                       <div className="flex items-baseline gap-2">
                         <span className="min-w-0">
-                          <span className="font-medium text-ink-900">@{c.username || 'usuario'}</span>{' '}
-                          <span className="text-ink-600">{c.text}</span>
+                          {c.username ? <span className="font-medium text-ink-900">@{c.username} </span> : null}
+                          <span className={c.username ? 'text-ink-600' : 'text-ink-800'}>{c.text}</span>
                         </span>
                         <span className="ml-auto shrink-0 text-[11px] text-ink-400">{c.ago}</span>
                       </div>

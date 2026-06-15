@@ -112,9 +112,13 @@ export default function Instagram() {
   // ── the swipe/tap board deck ─────────────────────────────────────────
   const deckRef = useRef(null);
   const [active, setActive] = useState(0);
+  // While a tap-driven smooth scroll animates, suppress the observer so the
+  // active tab doesn't strobe through every board it passes over.
+  const suppressUntil = useRef(0);
   const goToSection = useCallback((i) => {
     const deck = deckRef.current;
     setActive(i);
+    suppressUntil.current = Date.now() + 600;
     if (deck) deck.scrollTo({ left: i * deck.clientWidth, behavior: 'smooth' });
   }, []);
   // Keep the active tab synced to whichever board is centered (robust to swipe).
@@ -124,6 +128,7 @@ export default function Instagram() {
     const boards = Array.from(deck.children);
     const io = new IntersectionObserver(
       (entries) => {
+        if (Date.now() < suppressUntil.current) return; // let a tap-scroll settle
         for (const e of entries) {
           if (e.isIntersecting && e.intersectionRatio >= 0.55) {
             const i = boards.indexOf(e.target);
@@ -136,14 +141,17 @@ export default function Instagram() {
     boards.forEach((b) => io.observe(b));
     return () => io.disconnect();
   }, [anyData, sections.length]);
-  // If sections shrink under the cursor (igStudio drops out), don't strand.
+  // If sections shrink under the cursor (igStudio drops out), clamp to the
+  // last surviving section rather than bouncing all the way to Resumen.
   useEffect(() => {
-    if (active > sections.length - 1) goToSection(0);
+    if (active > sections.length - 1) goToSection(sections.length - 1);
   }, [sections.length, active, goToSection]);
   const goToId = useCallback((id) => {
     const i = sections.findIndex((s) => s.id === id);
     if (i >= 0) goToSection(i);
   }, [sections, goToSection]);
+  const goInteraccion = useCallback(() => goToId('interaccion'), [goToId]);
+  const goContenido = useCallback(() => goToId('contenido'), [goToId]);
 
   // ── viewport lock — measure the room below the app-shell chrome so the
   // page fills it exactly and never scrolls (works on mobile too, where a
@@ -156,9 +164,18 @@ export default function Instagram() {
       const el = shellRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      const parent = el.parentElement;
-      const pb = parent ? parseFloat(getComputedStyle(parent).paddingBottom) || 0 : 0;
-      setShellH(Math.max(380, Math.round(window.innerHeight - top - pb)));
+      // Sum the bottom padding of every wrapper between the shell and the app
+      // scroll container (<main>): the shell sits at the end of those padded
+      // wrappers, so their bottom padding is the real gap beneath it. (The
+      // immediate parent is an unpadded max-w wrapper — the inset lives on the
+      // grandparent, so reading only the parent under-counts and overshoots.)
+      let pb = 0;
+      const mainEl = el.closest('main');
+      for (let node = el.parentElement; node; node = node.parentElement) {
+        pb += parseFloat(getComputedStyle(node).paddingBottom) || 0;
+        if (node === mainEl) break;
+      }
+      setShellH(Math.max(320, Math.round(window.innerHeight - top - pb)));
     };
     measure();
     window.addEventListener('resize', measure);
@@ -263,7 +280,7 @@ export default function Instagram() {
                 aria-label={sec.label}
               >
                 {sec.id === 'resumen' && (
-                  <Overview st={st} sp={sp} onGoToInteraccion={() => goToId('interaccion')} onGoToContenido={() => goToId('contenido')} />
+                  <Overview st={st} sp={sp} onGoToInteraccion={goInteraccion} onGoToContenido={goContenido} />
                 )}
                 {sec.id === 'contenido' && st && (
                   <div className="h-full">
