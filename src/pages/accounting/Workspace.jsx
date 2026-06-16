@@ -30,6 +30,7 @@ import {
   commissionOwedAt, reportedCommission,
 } from '../../lib/commissions.js';
 import { resolveSales, resolveWorkspaceEntries } from '../../core/accounting/sales.js';
+import { activeFiscalPlugin } from '../../core/accounting/index.js';
 import { groupFamilies } from '../../lib/catalog.js';
 import { resolveWarehouseOrder } from '../../core/quote/index.js';
 import RowCards from '../../components/RowCards.jsx';
@@ -163,6 +164,10 @@ export default function AccountingWorkspace() {
   }, [productsQ.data]);
 
   const loaded = quotesQ.loaded && customersQ.loaded && linesQ.loaded && professionalsQ.loaded;
+
+  // Sales-tax label from the active jurisdiction plugin (DR: "ITBIS"). The
+  // sales screen never hardcodes the tax name — the engine is country-agnostic.
+  const taxName = activeFiscalPlugin(settings).tax.name;
 
   const customerById = useMemo(() => {
     const m = new Map();
@@ -561,6 +566,7 @@ export default function AccountingWorkspace() {
                 lines={linesByQuote.get(e.quote.id) || []}
                 settings={settings}
                 families={families}
+                taxName={taxName}
                 savingPaid={savingPaid}
                 onSellerPaid={setSellerPaid}
                 onProPaid={setProPaid}
@@ -621,7 +627,7 @@ export default function AccountingWorkspace() {
  * BOTH commissions owed on the sale — vendedor and, if assigned, the
  * profesional (with the invoicing mode), each tickable as paid once earned.
  */
-function SaleCard({ entry, lines, settings, families, savingPaid, onSellerPaid, onProPaid }) {
+function SaleCard({ entry, lines, settings, families, taxName, savingPaid, onSellerPaid, onProPaid }) {
   const {
     quote, customer, creator, professional, mode, decoratorPct, base, grandTotal, totals,
     commissionPct, potentialCommission, sellerReported, sellerPayable, sellerPaid, sellerHasCommission,
@@ -740,6 +746,7 @@ function SaleCard({ entry, lines, settings, families, savingPaid, onSellerPaid, 
             totals={totals}
             currency={currency}
             rates={rates}
+            taxName={taxName}
             onExportCsv={() => downloadQuoteInvoiceCsv(quote, customer, lines)}
           />
 
@@ -987,7 +994,7 @@ function PaidToggle({ paid, busy, onToggle }) {
  * plus the totals breakdown, and a one-click per-quote Odoo CSV. Gives
  * the accountant everything to key the invoice without opening the PDF.
  */
-function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv }) {
+function QuoteAccountingDetail({ invLines, totals, currency, rates, taxName, onExportCsv }) {
   const fmt = (v) => formatMoney(v, currency, rates);
   return (
     <div className="space-y-3 min-w-0">
@@ -1033,7 +1040,7 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, onExportCsv 
         <TotalLine label="Subtotal" value={fmt(totals.subtotal)} />
         {totals.discountAmt > 0 && <TotalLine label="Descuento" value={`–${fmt(totals.discountAmt)}`} />}
         <TotalLine label="Base imponible" value={fmt(totals.taxableBase)} />
-        <TotalLine label={`ITBIS (${totals.taxPct}%)`} value={fmt(totals.taxAmt)} />
+        <TotalLine label={`${taxName} (${totals.taxPct}%)`} value={fmt(totals.taxAmt)} />
         {totals.shipping > 0 && <TotalLine label="Envío" value={fmt(totals.shipping)} />}
         <TotalLine label="Total" value={fmt(totals.grandTotal)} strong />
       </div>

@@ -66,6 +66,11 @@ export {
 } from '../../lib/accounting/ecf.js';
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';
 
+// ── fiscal jurisdiction PLUGIN seam — the country-agnostic engine reads the
+// active plugin (DGII today) for the tax name/rate, fiscal-id format, e-CF
+// receipt and the periodic filings, so a jurisdiction move swaps one module.
+export { activeFiscalPlugin, dgiiPlugin, FISCAL_PLUGINS } from './fiscal/index.js';
+
 // ── cobros / pagos + cuentas por cobrar / pagar
 export { resolveReceivables, resolvePayables, resolvePartyStatement, resolveStatementFor } from './receivables.js';
 export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';

@@ -8,7 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
-import { resolveItbisLiquidation } from '../../core/accounting/index.js';
+import { resolveItbisLiquidation, activeFiscalPlugin } from '../../core/accounting/index.js';
 
 /**
  * DGII — the single Dominican-fiscal pane. ALL DR tax logic routes from here:
@@ -21,8 +21,13 @@ import { resolveItbisLiquidation } from '../../core/accounting/index.js';
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export default function Impuestos() {
-  const { profileId } = useApp();
+  const { profileId, settings } = useApp();
   const scope = profileId || 'team';
+  // Everything jurisdiction-specific on this pane — the authority name, the tax
+  // label, the list of filings — comes from the active fiscal plugin (DGII).
+  // Swap the plugin and this pane re-skins for the new country; nothing here
+  // hardcodes "DGII" or "ITBIS".
+  const fiscal = activeFiscalPlugin(settings);
 
   const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
   const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
@@ -42,21 +47,17 @@ export default function Impuestos() {
   }), [salesQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
 
   const monthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
-  const forms = [
-    { code: '606', label: 'Compras y gastos (606)', desc: 'Comprobantes de proveedores del mes', to: '/accounting/expenses?tab=606' },
-    { code: '607', label: 'Ventas (607)', desc: 'Comprobantes de ventas del mes', to: '/accounting/facturacion?tab=607' },
-    { code: 'IT-1', label: 'Liquidación de ITBIS (IT-1)', desc: 'Débito fiscal − crédito fiscal', to: '/accounting/facturacion?tab=it1' },
-    { code: 'e-CF', label: 'Comprobantes e-CF', desc: 'Emisión / transmisión y secuencias e-NCF', to: '/accounting/facturacion?tab=607' },
-  ];
+  // The filings to file — straight from the plugin (DR: 606 · 607 · IT-1 · e-CF).
+  const forms = fiscal.reports;
 
   return (
-    <AccountingGate title="DGII">
-      <PageHeader title="DGII" subtitle={`Operaciones fiscales · ITBIS de ${monthLabel}`} />
+    <AccountingGate title={fiscal.authority}>
+      <PageHeader title={fiscal.authority} subtitle={`Operaciones fiscales · ${fiscal.tax.name} de ${monthLabel}`} />
 
       {!loaded ? <ListLoading /> : (
         <div className="space-y-4">
           <div className="card p-5 max-w-2xl">
-            <h2 className="eyebrow font-semibold text-ink-600 mb-3 inline-flex items-center gap-1.5"><Percent size={14} /> ITBIS del mes</h2>
+            <h2 className="eyebrow font-semibold text-ink-600 mb-3 inline-flex items-center gap-1.5"><Percent size={14} /> {fiscal.tax.name} del mes</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="min-w-0">
                 <div className="eyebrow mb-1">Débito fiscal (ventas)</div>
@@ -86,7 +87,7 @@ export default function Impuestos() {
                   <ChevronRight size={16} className="text-ink-300 group-hover:text-ink-600 transition-colors" />
                 </div>
                 <div className="text-sm font-medium text-ink-900 mt-1">{f.label}</div>
-                <div className="text-xs text-ink-500 mt-0.5">{f.desc}</div>
+                <div className="text-xs text-ink-500 mt-0.5">{f.description}</div>
               </Link>
             ))}
           </div>
