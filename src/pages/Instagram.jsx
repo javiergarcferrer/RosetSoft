@@ -267,9 +267,10 @@ export default function Instagram() {
         style={shellH ? { height: `${shellH}px` } : undefined}
       >
         {/* Header — compact identity + live pill + the two primary actions.
-            pt-1 keeps the avatar's ring-2 off the shell's overflow-hidden top
-            edge (the header sits flush against it, so the ring would clip). */}
-        <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pb-3 pt-1">
+            pt-1/pl-1 keep the avatar's ring-2 off the shell's overflow-hidden
+            top AND left edges (the header sits flush against both corners, so
+            the ring would clip — see the sliver to the left of the avatar). */}
+        <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pb-3 pl-1 pt-1">
           <div className="flex min-w-0 items-center gap-3">
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-ink-100 ring-2 ring-brand-200">
               <ImageView id={null} fallbackUrl={st?.profile?.avatarUrl} alt="" className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
