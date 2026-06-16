@@ -4,15 +4,16 @@
 //   GET  → the public Togo catalog: the active `togo_models` with their RETAIL
 //          price (list × the dealer's default margin; markup baked in, never the
 //          list/cost), the FX rate and store identity. No token — it's public.
-//   POST → a quote REQUEST (lead): the visitor's contact + their plan layout
-//          becomes a DRAFT QUOTE in the dealer's pipeline (the configurator is a
-//          view of the quoting engine, so a web lead feeds the same engine). The
-//          line is a normal modular Togo line priced at LIST + the quote's margin,
-//          so the dealer reviews/sends it exactly like any other quote.
+//   POST → a quote REQUEST (lead): the visitor's contact + their plan layout is
+//          stored as a PENDING row in `togo_requests` — held on the dealer's Togo
+//          workspace (Solicitudes tab), NOT injected into Cotizaciones. The dealer
+//          triages it there and promotes the ones they want into the regular quote
+//          pipeline (a one-tap "Pasar a cotización" that replays the placements
+//          through the same configurator engine → a draft quote).
 //
 // Why a function: used logged-OUT, but the DB is behind RLS (`to authenticated`).
 // This runs with the service role and exposes only public-safe data + writes a
-// draft the dealer must act on. verify_jwt=false (see config.toml).
+// pending lead the dealer must act on. verify_jwt=false (see config.toml).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
@@ -97,83 +98,37 @@ async function buildCatalog(admin: Admin): Promise<Row> {
   };
 }
 
-// Assign the next per-(profile, number) quote number, retrying on a unique clash.
-async function insertQuoteWithNumber(admin: Admin, base: Row): Promise<number> {
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const { data } = await admin.from('quotes')
-      .select('number').eq('profile_id', TEAM_PROFILE_ID)
-      .order('number', { ascending: false }).limit(1);
-    const max = num((data as Row[])?.[0]?.number) || 1000;
-    const number = Math.max(1000, max) + 1;
-    const { error } = await admin.from('quotes').insert({ ...base, number });
-    if (!error) return number;
-    if (error.code !== '23505') throw error; // not a number clash → real failure
-  }
-  throw new Error('could not assign a quote number');
-}
-
 async function captureLead(admin: Admin, body: Row): Promise<Row> {
   const contact = (body.contact || {}) as Row;
   const name = str(contact.name, 120).trim();
   const phone = str(contact.phone, 40).trim();
   const email = str(contact.email, 160).trim();
   const note = str(body.note, 1000).trim();
-  const items = Array.isArray(body.items) ? (body.items as Row[]).slice(0, MAX_ITEMS) : [];
+  const rawItems = Array.isArray(body.items) ? (body.items as Row[]).slice(0, MAX_ITEMS) : [];
   if (!name || (!phone && !email)) return Promise.reject(Object.assign(new Error('contact required'), { status: 400 }));
-  if (!items.length) return Promise.reject(Object.assign(new Error('empty configuration'), { status: 400 }));
+  if (!rawItems.length) return Promise.reject(Object.assign(new Error('empty configuration'), { status: 400 }));
 
-  const { rates, marginPct, models, products } = await loadContext(admin);
-  const modelById = new Map(models.map((m) => [String(m.id), m]));
+  // Keep only placements of CURRENTLY-known models, normalized to the exact shape
+  // the dealer pane replays through the configurator VM. (camelCase keys survive
+  // the JSONB round-trip — the app's rowMapping only converts top-level columns.)
+  const { models } = await loadContext(admin);
+  const known = new Set(models.map((m) => String(m.id)));
+  const items = rawItems
+    .map((it) => ({ modelId: String(it.modelId || ''), x: num(it.x), y: num(it.y), rot: num(it.rot) }))
+    .filter((it) => known.has(it.modelId));
+  if (!items.length) return Promise.reject(Object.assign(new Error('no known models'), { status: 400 }));
 
-  // Build the modular line — one module per placed piece, LIST price (the quote's
-  // margin applies on top), plan geometry inline (round-trips like any Togo line).
-  const components = items.map((it) => {
-    const m = modelById.get(String(it.modelId));
-    if (!m) return null;
-    const base = baseProductFor(m.product_root as string | null, products);
-    const w = num(m.width_cm), d = num(m.depth_cm);
-    return {
-      id: newId(),
-      name: base ? String(base.name || m.name) : String(m.name),
-      reference: base ? String(base.reference || '') : '',
-      subtype: '',
-      dimensions: w && d ? `${w}×${d} cm` : '',
-      qty: 1,
-      unitPrice: base ? num(base.price_usd) : 0,
-      moduleGroup: newId(),
-      moduleName: String(m.name),
-      plan: { pieceId: String(m.id), x: num(it.x), y: num(it.y), rot: num(it.rot), widthCm: w, depthCm: d },
-    };
-  }).filter(Boolean);
-  if (!components.length) return Promise.reject(Object.assign(new Error('no known models'), { status: 400 }));
-
+  const est = num(body.estimateUsd);
   const nowISO = new Date().toISOString();
-  const quoteId = newId();
-  const notes = [
-    'Solicitud web (configurador Togo)',
-    `Nombre: ${name}`,
-    phone ? `Teléfono: ${phone}` : '',
-    email ? `Correo: ${email}` : '',
-    note ? `Nota: ${note}` : '',
-  ].filter(Boolean).join('\n');
-
-  const number = await insertQuoteWithNumber(admin, {
-    id: quoteId, profile_id: TEAM_PROFILE_ID, customer_id: null, professional_id: null,
-    status: 'draft', currency_code: 'USD', order_type: 'floor',
-    margin_pct: marginPct, discount_pct: 0, shipping: 0,
-    rates, notes, created_at: nowISO, updated_at: nowISO,
+  const { error } = await admin.from('togo_requests').insert({
+    id: newId(), profile_id: TEAM_PROFILE_ID, status: 'pending',
+    contact: { name, phone, email }, items, note: note || null,
+    estimate_usd: est > 0 ? est : null,
+    created_at: nowISO, updated_at: nowISO,
   });
+  if (error) throw error;
 
-  const { error: lineErr } = await admin.from('quote_lines').insert({
-    id: newId(), quote_id: quoteId, kind: 'item', sort_order: 0,
-    family: 'Togo', reference: '', name: 'Togo — solicitud web', subtype: '',
-    dimensions: '', description: '', page_ref: '', image_id: null,
-    qty: 1, unit_price: 0, line_margin_pct: 0, line_discount_pct: 0,
-    notes: '', components, is_optional: false,
-  });
-  if (lineErr) throw lineErr;
-
-  return { ok: true, number };
+  return { ok: true };
 }
 
 Deno.serve(async (req: Request) => {

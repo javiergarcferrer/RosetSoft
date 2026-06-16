@@ -30,7 +30,7 @@ function crmGroup(role) {
     label: 'Ventas',
     items: [
       { to: '/quotes', label: 'Cotizaciones', icon: FileText },
-      { to: '/togo', label: 'Configurador Togo', icon: Sofa, sub: true },
+      { to: '/togo', label: 'Togo', icon: Sofa, sub: true },
       { to: '/orders', label: 'Pedidos', icon: Package },
       ...(role === 'admin' ? [{ to: '/chats', label: 'WhatsApp', icon: MessageCircle }] : []),
       { to: '/customers', label: 'Clientes', icon: Users },
@@ -65,7 +65,6 @@ const ADMIN_GROUP = {
       icon: PackageSearch,
       children: [
         { to: '/admin/materials', label: 'Materiales', icon: Layers },
-        { to: '/admin/catalog/togo', label: 'Togo', icon: Sofa },
       ],
     },
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },

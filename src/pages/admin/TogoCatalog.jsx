@@ -6,18 +6,19 @@ import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { groupFamilies } from '../../lib/catalog.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import { TOGO_SEEDS } from '../../assets/togo/seeds.js';
 
 /**
- * Togo catalog admin — the dealer-managed picture catalog the configurator reads.
- * Upload a model's DWG → it's converted to a top-down plan IN THE BROWSER (the
- * libredwg WASM is lazy-loaded only here, on the first drop) → name it, bind it
- * to a Ligne Roset product for pricing, and save. Reliable because each model is
- * an explicit, dealer-authored entry — no name-matching guesswork.
+ * The "Modelos" tab of the Togo workspace (TogoWorkspace) — the dealer-managed
+ * picture catalog the configurator reads, plus the website embed snippet. Upload
+ * a model's DWG → it's converted to a top-down plan IN THE BROWSER (the libredwg
+ * WASM is lazy-loaded only here, on the first drop) → name it, bind it to a Ligne
+ * Roset product for pricing, and save. Reliable because each model is an explicit,
+ * dealer-authored entry — no name-matching guesswork. Renders no page chrome of
+ * its own (the workspace owns the header + tabs); admin-only.
  */
-export default function TogoCatalog() {
+export default function TogoModels() {
   const { isAdmin, profileId } = useApp();
   const models = useLiveQuery(
     () => (profileId ? db.togoModels.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
@@ -36,12 +37,7 @@ export default function TogoCatalog() {
   }, [products]);
 
   if (!isAdmin) {
-    return (
-      <>
-        <PageHeader title="Catálogo Togo" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo Togo." />
-      </>
-    );
+    return <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo Togo." />;
   }
 
   const sorted = [...(models || [])].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.name || '').localeCompare(b.name || ''));
@@ -72,8 +68,6 @@ export default function TogoCatalog() {
 
   return (
     <>
-      <PageHeader title="Catálogo Togo" subtitle="Modelos del configurador · sube el DWG de cada pieza" />
-
       <AddModelCard families={families} profileId={profileId} nextSort={sorted.length ? Math.max(...sorted.map((m) => m.sortOrder || 0)) + 1 : 0} />
 
       {sorted.length > 0 && <EmbedCard />}

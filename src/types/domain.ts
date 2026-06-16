@@ -1352,7 +1352,8 @@ export interface Product {
 
 /**
  * A Togo configurator model — one dealer-managed entry in the picture catalog
- * (`/admin/catalog/togo`). The dealer uploads the model's DWG (converted IN the
+ * (the Togo workspace → Modelos tab, `/togo/modelos`). The dealer uploads the
+ * model's DWG (converted IN the
  * browser to a top-down plan `svg` + measured cm footprint) and binds it to a
  * Ligne Roset family (`productRoot`) so the configurator prices it by grade. The
  * configurator's palette is the set of these rows — no more name-matching.
@@ -1373,6 +1374,45 @@ export interface TogoModel {
   svg: string;
   sortOrder?: number;
   active?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** One placed piece in a web Togo request — mirrors the configurator placement. */
+export interface TogoRequestItem {
+  /** The `togo_models.id` the visitor placed. */
+  modelId: string;
+  x: number;
+  y: number;
+  /** Rotation in degrees (0/90/180/270). */
+  rot: number;
+}
+
+/** The visitor's contact captured by the public widget. */
+export interface TogoRequestContact {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
+/**
+ * A lead from the PUBLIC Togo configurator widget (`#/embed/togo`). Captured by
+ * the `togo-embed` Edge Function into `togo_requests` and held on the Togo
+ * workspace's Solicitudes tab until the dealer promotes it into the regular quote
+ * pipeline (→ a draft quote). `items` replay through the same configurator VM as
+ * the internal builder; `status` walks pending → converted | dismissed.
+ */
+export interface TogoRequest {
+  id: string;
+  profileId: string;
+  status: 'pending' | 'converted' | 'dismissed';
+  contact: TogoRequestContact;
+  items: TogoRequestItem[];
+  note?: string | null;
+  /** The retail estimate (USD) the visitor saw at submit — a display snapshot. */
+  estimateUsd?: number | null;
+  /** The draft quote created when the request was promoted. */
+  quoteId?: string | null;
   createdAt?: number;
   updatedAt?: number;
 }

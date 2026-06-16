@@ -33,14 +33,13 @@ import NotFound from './pages/NotFound.jsx';
 // Layout's <Suspense> shows the loading state while a chunk fetches; the
 // safeDynamicImport wrapper recovers stale-deploy chunk misses with a reload.
 const lazyPage = (loader) => lazy(() => safeDynamicImport(loader));
-const TogoConfigurator = lazyPage(() => import('./pages/TogoConfigurator.jsx'));
+const TogoWorkspace = lazyPage(() => import('./pages/TogoWorkspace.jsx'));
 const TogoEmbed = lazyPage(() => import('./pages/embed/TogoEmbed.jsx'));
 const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
 const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
 const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
 const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
-const AdminTogoCatalog = lazyPage(() => import('./pages/admin/TogoCatalog.jsx'));
 const InventoryExistencias = lazyPage(() => import('./pages/inventory/Existencias.jsx'));
 const InventoryLifestyleGarden = lazyPage(() => import('./pages/inventory/LifestyleGarden.jsx'));
 const AccountingWorkspace = lazyPage(() => import('./pages/accounting/Workspace.jsx'));
@@ -254,8 +253,10 @@ function ProtectedApp() {
             <Route path="professionals/:professionalId" element={<ProfessionalDetail />} />
             <Route path="quotes" element={<Quotes />} />
             <Route path="quotes/new" element={<QuoteBuilder />} />
-            {/* Togo plan configurator — drag pieces in top-down view → a modular quote. */}
-            <Route path="togo" element={<TogoConfigurator />} />
+            {/* Togo — the single workspace: configurador + web solicitudes + modelos.
+                Tab rides in the URL (/togo, /togo/solicitudes, /togo/modelos). */}
+            <Route path="togo" element={<TogoWorkspace />} />
+            <Route path="togo/:tab" element={<TogoWorkspace />} />
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:orderId" element={<OrderDetail />} />
@@ -277,8 +278,8 @@ function ProtectedApp() {
                 from the Roset page. */}
             <Route path="admin/catalog" element={<AdminCatalogs />} />
             <Route path="admin/catalog/roset" element={<AdminCatalog />} />
-            {/* Togo configurator catalog — dealer uploads a DWG per model. */}
-            <Route path="admin/catalog/togo" element={<AdminTogoCatalog />} />
+            {/* Togo models moved into the unified Togo workspace (Modelos tab). */}
+            <Route path="admin/catalog/togo" element={<Navigate to="/togo/modelos" replace />} />
             {/* LifestyleGarden moved out of Catálogos into the standalone
                 Inventario section — old bookmarks redirect there. */}
             <Route path="admin/catalog/lifestylegarden" element={<Navigate to="/inventario/lifestylegarden" replace />} />

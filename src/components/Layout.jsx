@@ -364,7 +364,7 @@ export default function Layout() {
               {group.items.map((item) => (
                 <Fragment key={item.to}>
                   {/* `sub` can come from the item itself (a flat sub-item like
-                      Configurador Togo) or be forced on a revealed child below. */}
+                      Togo) or be forced on a revealed child below. */}
                   <SidebarLink item={item} sub={item.sub} pathname={location.pathname} waUnread={waUnread} compact={showRailIcons} />
                   {/* Children reveal (indented) only while their section is open —
                       and never in the icon rail, where indented icons read poorly. */}

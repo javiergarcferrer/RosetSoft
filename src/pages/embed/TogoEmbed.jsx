@@ -108,6 +108,7 @@ export default function TogoEmbed() {
       <RequestForm
         storeName={data.storeName}
         items={placed.map((p) => ({ modelId: p.pieceId, x: p.x, y: p.y, rot: p.rot }))}
+        estimateUsd={vm.subtotalUsd}
         totalDop={formatMoney(vm.subtotalUsd, 'DOP', rates)}
         onBack={() => setStep('build')}
         onDone={() => setStep('done')}
@@ -207,7 +208,7 @@ function Centered({ children }) {
   return <div className="min-h-full bg-surface grid place-items-center p-6">{children}</div>;
 }
 
-function RequestForm({ storeName, items, totalDop, onBack, onDone }) {
+function RequestForm({ storeName, items, estimateUsd, totalDop, onBack, onDone }) {
   const [form, setForm] = useState({ name: '', phone: '', email: '', note: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -219,7 +220,7 @@ function RequestForm({ storeName, items, totalDop, onBack, onDone }) {
     if (!valid || busy) return;
     setBusy(true); setError(null);
     try {
-      await submitTogoRequest({ contact: { name: form.name, phone: form.phone, email: form.email }, items, note: form.note });
+      await submitTogoRequest({ contact: { name: form.name, phone: form.phone, email: form.email }, items, estimateUsd, note: form.note });
       onDone();
     } catch (err) {
       setError(err?.message || 'No se pudo enviar. Intenta de nuevo.');

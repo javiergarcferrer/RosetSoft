@@ -16,6 +16,7 @@ import type {
   QuoteGroup,
   Product,
   TogoModel,
+  TogoRequest,
   LsgStockCommitment,
   Account,
   JournalEntry,
@@ -91,6 +92,7 @@ const TABLES = {
   materials:     { db: 'materials',     pk: 'id' },
   products:      { db: 'products',      pk: 'id' },
   togoModels:    { db: 'togo_models',   pk: 'id' },
+  togoRequests:  { db: 'togo_requests', pk: 'id' },
   lsgStockCommitments: { db: 'lsg_stock_commitments', pk: 'id' },
   modelFabrics:  { db: 'model_fabrics', pk: 'id' },
   accounts:      { db: 'accounts',        pk: 'code' },
@@ -143,6 +145,7 @@ export interface TableRowMap {
   materials: Material;
   products: Product;
   togoModels: TogoModel;
+  togoRequests: TogoRequest;
   lsgStockCommitments: LsgStockCommitment;
   modelFabrics: ModelFabrics;
   accounts: Account;

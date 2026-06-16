@@ -1,16 +1,16 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, Palette, Layers, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
-import { groupFamilies, productForGrade } from '../lib/catalog.js';
+import { productForGrade } from '../lib/catalog.js';
 import { composeSubtype } from '../lib/subtype.js';
 import { formatMoney } from '../lib/format.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import {
   effectiveRates, initialQuoteTerms,
-  resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, buildTogoModularSeed,
+  resolveConfigurator, resolveTogoModels, resolvePlacement, snapPlacement, footprintOf, clampToPlan, buildTogoModularSeed,
   PLAN_W_CM, PLAN_H_CM, PX_PER_CM,
 } from '../core/quote/index.js';
 import SwatchPicker from '../components/quote-builder/SwatchPicker.jsx';
@@ -18,61 +18,33 @@ import ImageView from '../components/ImageView.jsx';
 
 const SCALE = PX_PER_CM;
 
-export default function TogoConfigurator() {
+/**
+ * The internal Togo plan builder — the "Configurador" tab of the Togo workspace
+ * (TogoWorkspace). Drag pieces in a top-down view, pick fabrics, create a quote.
+ * Renders no page chrome of its own (the workspace owns the header + tabs);
+ * `onManageModels`, when given (admin), jumps to the Modelos tab from the empty
+ * state. The palette + pricing come from `resolveTogoModels`, the SAME projection
+ * the Solicitudes inbox replays a web request through.
+ */
+export default function TogoBuilder({ onManageModels }) {
   const navigate = useNavigate();
   const { profileId, settings, currentProfile } = useApp();
 
-  // The dealer-managed picture catalog (uploaded in /admin/catalog/togo).
+  // The dealer-managed picture catalog (managed in the Modelos tab).
   const models = useLiveQuery(
     () => (profileId ? db.togoModels.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
     [profileId], [],
-  );
-  const activeModels = useMemo(
-    () => (models || []).filter((m) => m.active !== false && m.svg)
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.name || '').localeCompare(b.name || '')),
-    [models],
   );
   const products = useLiveQuery(
     () => (profileId ? db.products.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
     [profileId], [],
   );
-  const families = useMemo(() => {
-    const m = new Map();
-    for (const f of groupFamilies(products)) m.set(f.root, f);
-    return m;
-  }, [products]);
-
-  const svgById = useMemo(() => {
-    const o = {};
-    for (const m of activeModels) o[m.id] = m.svg;
-    return o;
-  }, [activeModels]);
-
-  // Each model → its base render + price facts (cheapest grade when bound).
-  const resolvedById = useMemo(() => {
-    const out = {};
-    for (const m of activeModels) {
-      const fam = m.productRoot ? families.get(m.productRoot) : null;
-      let unitPrice = null; let reference = ''; let name = m.name; let subtype = ''; let dimensions = '';
-      if (fam) {
-        const grade = fam.graded ? fam.grades[0] : '';
-        const p = productForGrade(fam, grade);
-        if (p) {
-          unitPrice = Number(p.priceUsd) || 0;
-          reference = p.reference || '';
-          name = p.name || fam.name || m.name;
-          subtype = grade ? composeSubtype(grade, '') : (p.subtype || '');
-          dimensions = p.dimensions || '';
-        }
-      }
-      out[m.id] = {
-        id: m.id, label: m.name, name, reference, subtype,
-        widthCm: m.widthCm, depthCm: m.depthCm, root: m.productRoot || null,
-        unitPrice, dimensions: dimensions || `${m.widthCm}×${m.depthCm} cm`,
-      };
-    }
-    return out;
-  }, [activeModels, families]);
+  // Active palette + price facts (cheapest grade when bound) — one projection,
+  // shared with the Solicitudes inbox so a placement prices the same everywhere.
+  const { families, activeModels, resolvedById, svgById } = useMemo(
+    () => resolveTogoModels(models, products),
+    [models, products],
+  );
 
   const [placed, setPlaced] = useState([]);
   const [selectedUid, setSelectedUid] = useState(null);
@@ -255,26 +227,17 @@ export default function TogoConfigurator() {
   }, [placed, creating, profileId, currentProfile, settings, resolvedById, navigate]);
 
   return (
-    <div className="space-y-5">
-      <header className="flex items-center gap-2.5">
-        <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-50 text-brand-600">
-          <Sofa size={18} aria-hidden />
-        </span>
-        <div className="flex-1">
-          <h1 className="font-display font-semibold text-lg leading-tight">Configurador Togo</h1>
-          <p className="text-xs text-ink-500">Arrastra piezas en planta · elige telas · crea la cotización.</p>
-        </div>
-        <Link to="/admin/catalog/togo" className="btn-ghost text-xs">Gestionar modelos</Link>
-      </header>
-
+    <div className="space-y-4">
       {activeModels.length === 0 ? (
         <div className="card card-pad text-center py-12">
           <Sofa size={26} className="mx-auto text-ink-300 mb-3" />
           <h2 className="font-display font-semibold text-sm">Aún no hay modelos Togo</h2>
           <p className="text-xs text-ink-500 mt-1.5 max-w-sm mx-auto">
-            Sube el DWG de cada pieza en el catálogo Togo para empezar a configurar.
+            Sube el DWG de cada pieza en la pestaña <b>Modelos</b> para empezar a configurar.
           </p>
-          <Link to="/admin/catalog/togo" className="btn-primary text-sm mt-4 inline-flex"><Plus size={15} /> Ir al catálogo Togo</Link>
+          {onManageModels && (
+            <button type="button" onClick={onManageModels} className="btn-primary text-sm mt-4 inline-flex"><Plus size={15} /> Ir a Modelos</button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[18rem_minmax(0,1fr)] gap-5 items-start">

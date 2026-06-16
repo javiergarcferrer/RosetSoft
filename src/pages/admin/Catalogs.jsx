@@ -44,8 +44,9 @@ export default function Catalogs() {
         {BRANDS.map((b) => (
           <BrandCard key={b.brand} {...b} />
         ))}
-        {/* The Togo configurator's picture catalog — dealer uploads a DWG per model. */}
-        <Link to="/admin/catalog/togo" className="card flex items-center gap-3 px-4 sm:px-5 py-4 hover:bg-ink-50 active:bg-ink-100 transition-colors">
+        {/* The Togo configurator's picture catalog — now the Modelos tab of the
+            unified Togo workspace (dealer uploads a DWG per model). */}
+        <Link to="/togo/modelos" className="card flex items-center gap-3 px-4 sm:px-5 py-4 hover:bg-ink-50 active:bg-ink-100 transition-colors">
           <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 border border-brand-100">
             <Sofa size={18} aria-hidden />
           </span>

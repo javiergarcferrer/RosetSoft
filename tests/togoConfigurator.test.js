@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   footprintOf, snapPlacement, clampToPlan, resolvePlacement,
-  buildTogoComponents, buildTogoModularSeed, resolveConfigurator,
+  buildTogoComponents, buildTogoModularSeed, resolveConfigurator, resolveTogoModels,
 } from '../src/core/quote/views/configuratorView.js';
 import { compoundSubtotal } from '../src/lib/pricing.js';
 import { modulesOf, isModularLine } from '../src/lib/modules.js';
@@ -122,6 +122,37 @@ test('module groups are unique per piece, and rotation rides on the plan', () =>
   assert.equal(groups.size, comps.length, 'module groups must not collide');
   assert.equal(comps[1].plan.rot, 90, 'the settee was placed rotated 90°');
   assert.equal(comps[1].plan.pieceId, 'gb');
+});
+
+// ---- the palette projection shared by the builder + the Solicitudes inbox ----
+test('resolveTogoModels prices each model at its cheapest grade, drops inactive/empty', () => {
+  const products = [
+    { reference: '15420000A', name: 'Togo Armchair', priceUsd: 1200, brand: 'ligne-roset', dimensions: '102×102 cm' },
+    { reference: '15420000G', name: 'Togo Armchair', priceUsd: 1500, brand: 'ligne-roset' },
+  ];
+  const models = [
+    { id: 'm1', name: 'Sillón Togo', productRoot: '15420000', widthCm: 102, depthCm: 102, svg: '<svg/>', active: true, sortOrder: 1 },
+    { id: 'm2', name: 'Sin vincular', productRoot: null, widthCm: 87, depthCm: 102, svg: '<svg/>', active: true, sortOrder: 0 },
+    { id: 'm3', name: 'Inactivo', productRoot: '15420000', widthCm: 0, depthCm: 0, svg: '<svg/>', active: false, sortOrder: 2 },
+    { id: 'm4', name: 'Sin dibujo', productRoot: null, widthCm: 1, depthCm: 1, svg: '', active: true, sortOrder: 3 },
+  ];
+  const { activeModels, resolvedById, svgById } = resolveTogoModels(models, products);
+
+  // Inactive + svg-less models are dropped; the rest sort by sortOrder.
+  assert.deepEqual(activeModels.map((m) => m.id), ['m2', 'm1']);
+  assert.equal(svgById.m1, '<svg/>');
+  assert.equal(svgById.m3, undefined);
+
+  // A bound model prices at its CHEAPEST grade (A=1200, not G=1500).
+  assert.equal(resolvedById.m1.unitPrice, 1200);
+  assert.equal(resolvedById.m1.reference, '15420000A');
+  // An unbound model has no price; dimensions fall back to its footprint.
+  assert.equal(resolvedById.m2.unitPrice, null);
+  assert.equal(resolvedById.m2.dimensions, '87×102 cm');
+
+  // A request's placements replay through the SAME resolved palette → real total.
+  const placed = [{ uid: 'u1', pieceId: 'm1', x: 0, y: 0, rot: 0 }];
+  assert.equal(resolveConfigurator(placed, resolvedById, { scale: 1 }).subtotalUsd, 1200);
 });
 
 test('resolveConfigurator mirrors compoundSubtotal and lays tiles out in px', () => {

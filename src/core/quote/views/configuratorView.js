@@ -12,6 +12,8 @@
 // `resolveConfigurator` projects to px via `scale`. Snapping is trivial because
 // every Togo piece shares the iconic 102 cm depth — pieces click flush on a grid.
 import { compoundSubtotal } from '../../../lib/pricing.js';
+import { groupFamilies, productForGrade } from '../../../lib/catalog.js';
+import { composeSubtype } from '../../../lib/subtype.js';
 
 // Plan canvas extent (cm) and the cm→px scale the View renders at. A Togo "room"
 // of ~7.6 × 5.4 m comfortably holds an L- or U-shaped sectional.
@@ -22,6 +24,47 @@ export const SNAP_GRID_CM = 2;   // free-ish fine grid every drag lands on
 export const EDGE_SNAP_CM = 8;   // flush-to-neighbour threshold
 
 const norm360 = (deg) => (((deg % 360) + 360) % 360);
+
+/**
+ * Resolve the dealer's saved Togo models (`togo_models`) + the product catalog
+ * into the configurator's palette: the active, drawable models sorted for
+ * display, each merged with its catalog binding (cheapest grade → base price,
+ * reference, subtype, dimensions). The SINGLE source the internal builder AND the
+ * Solicitudes inbox (replaying a web request) read, so a placement prices the
+ * same wherever it's resolved. Pure — no React, no db. Returns:
+ *   { families, activeModels, resolvedById, svgById }
+ */
+export function resolveTogoModels(models, products) {
+  const families = new Map();
+  for (const f of groupFamilies(products || [])) families.set(f.root, f);
+  const activeModels = (models || [])
+    .filter((m) => m.active !== false && m.svg)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.name || '').localeCompare(b.name || ''));
+  const resolvedById = {};
+  const svgById = {};
+  for (const m of activeModels) {
+    svgById[m.id] = m.svg;
+    const fam = m.productRoot ? families.get(m.productRoot) : null;
+    let unitPrice = null; let reference = ''; let name = m.name; let subtype = ''; let dimensions = '';
+    if (fam) {
+      const grade = fam.graded ? fam.grades[0] : '';
+      const p = productForGrade(fam, grade);
+      if (p) {
+        unitPrice = Number(p.priceUsd) || 0;
+        reference = p.reference || '';
+        name = p.name || fam.name || m.name;
+        subtype = grade ? composeSubtype(grade, '') : (p.subtype || '');
+        dimensions = p.dimensions || '';
+      }
+    }
+    resolvedById[m.id] = {
+      id: m.id, label: m.name, name, reference, subtype,
+      widthCm: m.widthCm, depthCm: m.depthCm, root: m.productRoot || null,
+      unitPrice, dimensions: dimensions || `${m.widthCm}×${m.depthCm} cm`,
+    };
+  }
+  return { families, activeModels, resolvedById, svgById };
+}
 
 /** Footprint (cm) of a piece at a rotation — 90°/270° swap width and depth. */
 export function footprintOf(piece, rot) {

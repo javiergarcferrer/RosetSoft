@@ -37,8 +37,10 @@ export async function fetchTogoCatalog() {
 
 /**
  * Submit a quote request (a lead). `payload` =
- *   { contact: { name, phone, email }, items: [{ modelId, x, y, rot }], note }
- * Resolves to { ok, number } (the new draft quote's number) or throws.
+ *   { contact: { name, phone, email }, items: [{ modelId, x, y, rot }],
+ *     estimateUsd?, note? }
+ * The lead lands as a PENDING togo_request on the dealer's Togo workspace (it is
+ * NOT auto-injected into Cotizaciones). Resolves to { ok } or throws.
  */
 export async function submitTogoRequest(payload) {
   const r = await fetch(endpoint(), {
