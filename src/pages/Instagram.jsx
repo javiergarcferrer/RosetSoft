@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
+import { useMediaQuery } from '../components/Layout.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { resolveSocialPulse, resolveIgStudio } from '../core/jarvis/index.js';
@@ -48,6 +49,10 @@ export default function Instagram() {
   const { settings } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
   const username = settings?.metaSocialIgUsername;
+  // Desktop keeps the swipe/snap board deck; phones drop horizontal scrolling
+  // entirely and render just the active board, switched by the bottom bar (the
+  // swipe deck leaked sideways and fought the vertical scroll — see render).
+  const isDesktop = useMediaQuery('(min-width: 768px)');
 
   // Two independent reads, kept apart so one failing never blanks the other.
   const [snap, setSnap] = useState({ raw: null, error: null, at: null });
@@ -191,6 +196,54 @@ export default function Instagram() {
     };
   }, [linked, anyData]);
 
+  // One board's content — the single render path shared by the desktop swipe
+  // deck and the mobile single-board view, so the two can never drift.
+  const renderBoard = (sec) => (
+    <>
+      {sec.id === 'resumen' && (
+        <Overview st={st} sp={sp} onGoToInteraccion={goInteraccion} onGoToContenido={goContenido} />
+      )}
+      {sec.id === 'contenido' && st && (
+        <div className="h-full">
+          <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} />
+        </div>
+      )}
+      {sec.id === 'anuncios' && (
+        <div className="mx-auto h-full max-w-3xl lg:max-w-none">
+          <CampaignsCard
+            campaigns={sp?.campaigns || []}
+            adCurrency={sp?.adCurrency}
+            spend7={sp?.kpis?.spend7}
+            hasAds={!!sp?.hasAds}
+            onChanged={load}
+            onPublish={() => setComposerOpen(true)}
+            onCreateAd={() => setAdsOpen(true)}
+          />
+        </div>
+      )}
+      {sec.id === 'audiencia' && st && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <AudienceCard audience={st.audience} errors={st.errors} />
+          <BestTimeCard bestTimes={st.bestTimes} />
+        </div>
+      )}
+      {sec.id === 'interaccion' && (
+        <div className="mx-auto h-full max-w-2xl lg:max-w-none">
+          <EngagementPanel
+            comments={sp?.recentComments || []}
+            campaigns={sp?.campaigns || []}
+            hasAds={!!sp?.hasAds}
+            adCurrency={sp?.adCurrency}
+            spend7={sp?.kpis?.spend7}
+            posts={sp?.posts || []}
+            onChanged={load}
+            onOpenAds={() => setAdsOpen(true)}
+          />
+        </div>
+      )}
+    </>
+  );
+
   if (!linked) {
     return (
       <>
@@ -269,7 +322,10 @@ export default function Instagram() {
           ) : (
             <div className="card card-pad text-sm text-ink-400">Leyendo Instagram…</div>
           )
-        ) : (
+        ) : isDesktop ? (
+          // Desktop: the swipe/snap board deck. Each board clips its own
+          // horizontal overflow (overflow-x-hidden) so nothing leaks into the
+          // deck's horizontal scroll and knocks the snap off-center.
           <div
             ref={deckRef}
             className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [overscroll-behavior:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -277,53 +333,23 @@ export default function Instagram() {
             {sections.map((sec) => (
               <section
                 key={sec.id}
-                className="min-w-0 h-full shrink-0 basis-full snap-start overflow-y-auto overscroll-contain pb-4 [scroll-snap-stop:always]"
+                className="min-w-0 h-full shrink-0 basis-full snap-start overflow-y-auto overflow-x-hidden overscroll-contain pb-4 [scroll-snap-stop:always]"
                 aria-label={sec.label}
               >
-                {sec.id === 'resumen' && (
-                  <Overview st={st} sp={sp} onGoToInteraccion={goInteraccion} onGoToContenido={goContenido} />
-                )}
-                {sec.id === 'contenido' && st && (
-                  <div className="h-full">
-                    <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} />
-                  </div>
-                )}
-                {sec.id === 'anuncios' && (
-                  <div className="mx-auto h-full max-w-3xl lg:max-w-none">
-                    <CampaignsCard
-                      campaigns={sp?.campaigns || []}
-                      adCurrency={sp?.adCurrency}
-                      spend7={sp?.kpis?.spend7}
-                      hasAds={!!sp?.hasAds}
-                      onChanged={load}
-                      onPublish={() => setComposerOpen(true)}
-                      onCreateAd={() => setAdsOpen(true)}
-                    />
-                  </div>
-                )}
-                {sec.id === 'audiencia' && st && (
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <AudienceCard audience={st.audience} errors={st.errors} />
-                    <BestTimeCard bestTimes={st.bestTimes} />
-                  </div>
-                )}
-                {sec.id === 'interaccion' && (
-                  <div className="mx-auto h-full max-w-2xl lg:max-w-none">
-                    <EngagementPanel
-                      comments={sp?.recentComments || []}
-                      campaigns={sp?.campaigns || []}
-                      hasAds={!!sp?.hasAds}
-                      adCurrency={sp?.adCurrency}
-                      spend7={sp?.kpis?.spend7}
-                      posts={sp?.posts || []}
-                      onChanged={load}
-                      onOpenAds={() => setAdsOpen(true)}
-                    />
-                  </div>
-                )}
+                {renderBoard(sec)}
               </section>
             ))}
           </div>
+        ) : (
+          // Mobile: NO horizontal scroll — render only the active board, full
+          // width, vertical scroll only. The bottom bar is the switcher.
+          <section
+            key={sections[active]?.id}
+            className="min-w-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-4"
+            aria-label={sections[active]?.label}
+          >
+            {sections[active] && renderBoard(sections[active])}
+          </section>
         )}
 
         {st && Object.keys(st.errors).length > 0 && active === 0 && (
