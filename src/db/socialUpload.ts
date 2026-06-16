@@ -64,33 +64,8 @@ async function toInstagramJpeg(file: File): Promise<Blob> {
   return blob;
 }
 
-/**
- * Upload a device file and return its public URL + kind. Images are converted
- * to IG-spec JPEG; videos are validated and uploaded as-is (MP4/MOV ≤300 MB).
- * `onProgress` is best-effort (Storage gives no native progress, so it's a
- * coarse 0→1 around the request).
- */
-export async function uploadSocialMedia(file: File): Promise<SocialMedia> {
-  if (!file) throw new Error('No se recibió ningún archivo.');
-  const isVideo = /^video\//.test(file.type);
-  let blob: Blob;
-  let ext: string;
-  let type: 'image' | 'video';
-
-  if (isVideo) {
-    if (!/(mp4|quicktime)/.test(file.type)) throw new Error('Video no soportado — usa MP4 o MOV.');
-    if (file.size > VIDEO_MAX_BYTES) throw new Error(`Video muy grande (${(file.size / 1048576).toFixed(0)} MB). Máximo 300 MB.`);
-    blob = file;
-    ext = file.type.includes('quicktime') ? 'mov' : 'mp4';
-    type = 'video';
-  } else if (/^image\//.test(file.type) || /\.(heic|heif)$/i.test(file.name)) {
-    blob = await toInstagramJpeg(file);
-    ext = 'jpg';
-    type = 'image';
-  } else {
-    throw new Error(`Formato no soportado: ${file.type || 'desconocido'}.`);
-  }
-
+/** Put a ready blob into the public `social` bucket → its public URL + kind. */
+async function putSocialBlob(blob: Blob, ext: string, type: 'image' | 'video'): Promise<SocialMedia> {
   const path = `${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(SOCIAL_BUCKET).upload(path, blob, {
     contentType: type === 'video' ? (ext === 'mov' ? 'video/quicktime' : 'video/mp4') : 'image/jpeg',
@@ -101,6 +76,43 @@ export async function uploadSocialMedia(file: File): Promise<SocialMedia> {
   const { data } = supabase.storage.from(SOCIAL_BUCKET).getPublicUrl(path);
   if (!data?.publicUrl) throw new Error('No se pudo obtener la URL pública.');
   return { url: data.publicUrl, type };
+}
+
+/**
+ * Upload a device file and return its public URL + kind. Images are converted
+ * to IG-spec JPEG; videos are validated and uploaded as-is (MP4/MOV ≤300 MB).
+ * Used directly for VIDEO and as the raw-image fallback; cropped images take the
+ * `uploadSocialImage` blob path below (already IG-spec — no second re-encode).
+ */
+export async function uploadSocialMedia(file: File): Promise<SocialMedia> {
+  if (!file) throw new Error('No se recibió ningún archivo.');
+  const isVideo = /^video\//.test(file.type);
+
+  if (isVideo) {
+    if (!/(mp4|quicktime)/.test(file.type)) throw new Error('Video no soportado — usa MP4 o MOV.');
+    if (file.size > VIDEO_MAX_BYTES) throw new Error(`Video muy grande (${(file.size / 1048576).toFixed(0)} MB). Máximo 300 MB.`);
+    return putSocialBlob(file, file.type.includes('quicktime') ? 'mov' : 'mp4', 'video');
+  }
+  if (/^image\//.test(file.type) || /\.(heic|heif)$/i.test(file.name)) {
+    return putSocialBlob(await toInstagramJpeg(file), 'jpg', 'image');
+  }
+  throw new Error(`Formato no soportado: ${file.type || 'desconocido'}.`);
+}
+
+/**
+ * Upload an already-cropped image blob (the IG cropper outputs an exact-spec
+ * 1080-wide baseline JPEG). We only guard the byte cap here — re-encoding a
+ * second time would just soften the crop the dealer carefully framed — and
+ * fall back to a one-pass re-compress if a huge source somehow overshoots.
+ */
+export async function uploadSocialImage(blob: Blob): Promise<SocialMedia> {
+  if (!blob || !blob.size) throw new Error('No se recibió ninguna imagen.');
+  let out = blob;
+  if (out.size > IMG_MAX_BYTES) {
+    // Rare safety net: decode + re-encode the cropped image down under the cap.
+    out = await toInstagramJpeg(new File([blob], 'crop.jpg', { type: 'image/jpeg' }));
+  }
+  return putSocialBlob(out, 'jpg', 'image');
 }
 
 /** Best-effort cleanup of a staged file (e.g. the user removed it before publishing). */

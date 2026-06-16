@@ -1,41 +1,84 @@
-// Device-media picker for the Instagram composer. Uploads files to the public
-// `social` bucket (images re-encoded to IG-spec JPEG) and hands the parent an
-// ordered list of { url, type }. Single-media modes keep one item; carousel
-// allows 2–10 with up/down/remove reordering (an accessible, touch-safe
-// alternative to drag-and-drop per the responsive-UX research).
-import { useCallback, useRef, useState } from 'react';
-import { ImagePlus, Film, X, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
-import { uploadSocialMedia, removeSocialMedia } from '../db/socialUpload.js';
+// Device-media picker for the Instagram composer. Picks files, runs every IMAGE
+// through the IG cropper (frame it exactly as Instagram will show it), uploads
+// the result to the public `social` bucket, and hands the parent an ordered list
+// of { url, type }. Videos skip the cropper and upload as-is. Single-media modes
+// keep one item; carousel allows 2–10 with up/down/remove reordering (an
+// accessible, touch-safe alternative to drag-and-drop) and locks every slide to
+// the first slide's ratio, since IG renders a carousel at one shared aspect.
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ImagePlus, Film, X, ArrowUp, ArrowDown, RefreshCw, Crop } from 'lucide-react';
+import { uploadSocialMedia, uploadSocialImage, removeSocialMedia } from '../db/socialUpload.js';
+import ImageCropper from './instagram/ImageCropper.jsx';
 
 let keySeq = 0;
+const isVideoFile = (f) => /^video\//.test(f?.type || '');
 
-export default function MediaPicker({ items, onChange, max = 1, accept = 'image/*,video/*' }) {
+export default function MediaPicker({ items, onChange, max = 1, accept = 'image/*,video/*', mode = 'feed' }) {
   const [busy, setBusy] = useState(0);
   const [error, setError] = useState(null);
+  const [queue, setQueue] = useState([]); // files awaiting processing (crop/upload)
+  const [pending, setPending] = useState(null); // { file, key } currently in the cropper
+  const [carouselRatioId, setCarouselRatioId] = useState(null); // locked across slides
   const inputRef = useRef(null);
 
-  const addFiles = useCallback(async (fileList) => {
+  // Append a finished upload, honoring the per-mode cap (single modes replace).
+  const commitMedia = useCallback((media) => {
+    onChange((prev) => {
+      const next = [...prev, { ...media, key: `m${keySeq++}` }];
+      return max === 1 ? next.slice(-1) : next.slice(0, max);
+    });
+  }, [max, onChange]);
+
+  // Pull the next queued file: videos upload straight away, images open the
+  // cropper (which blocks the queue until the dealer confirms or cancels).
+  useEffect(() => {
+    if (pending || !queue.length) return;
+    const [next, ...rest] = queue;
+    if (isVideoFile(next)) {
+      setQueue(rest);
+      setBusy((b) => b + 1);
+      uploadSocialMedia(next)
+        .then(commitMedia)
+        .catch((e) => setError(e?.message || 'No se pudo subir el archivo'))
+        .finally(() => setBusy((b) => Math.max(0, b - 1)));
+    } else {
+      setQueue(rest);
+      setPending({ file: next, key: keySeq++ });
+    }
+  }, [pending, queue, commitMedia]);
+
+  // Free the carousel ratio lock once the set empties or the mode leaves carousel.
+  useEffect(() => {
+    if (mode !== 'carousel' || items.length === 0) setCarouselRatioId(null);
+  }, [mode, items.length]);
+
+  const inflight = queue.length + (pending ? 1 : 0);
+
+  const addFiles = useCallback((fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
     setError(null);
-    const room = Math.max(0, max - items.length);
-    const take = files.slice(0, room === 0 ? max : room);
-    setBusy((b) => b + take.length);
-    for (const file of take) {
-      try {
-        const media = await uploadSocialMedia(file);
-        onChange((prev) => {
-          const next = [...prev, { ...media, key: `m${keySeq++}` }];
-          // Single-media modes keep only the latest pick.
-          return max === 1 ? next.slice(-1) : next.slice(0, max);
-        });
-      } catch (e) {
-        setError(e?.message || 'No se pudo subir el archivo');
-      } finally {
-        setBusy((b) => Math.max(0, b - 1));
-      }
+    if (max === 1) { setQueue([files[files.length - 1]]); return; } // single → last pick replaces
+    const room = Math.max(0, max - items.length - inflight);
+    if (room <= 0) return;
+    setQueue((q) => [...q, ...files.slice(0, room)]);
+  }, [max, items.length, inflight]);
+
+  const onCropConfirm = useCallback(async (croppedFile, ratioId) => {
+    setPending(null);
+    if (mode === 'carousel' && !carouselRatioId) setCarouselRatioId(ratioId);
+    setBusy((b) => b + 1);
+    try {
+      commitMedia(await uploadSocialImage(croppedFile));
+    } catch (e) {
+      setError(e?.message || 'No se pudo subir la imagen');
+    } finally {
+      setBusy((b) => Math.max(0, b - 1));
     }
-  }, [items.length, max, onChange]);
+  }, [mode, carouselRatioId, commitMedia]);
+
+  // Cancelling the cropper drops the rest of this pick batch — a clean "stop".
+  const onCropCancel = useCallback(() => { setPending(null); setQueue([]); }, []);
 
   const removeAt = useCallback((i) => {
     const it = items[i];
@@ -53,7 +96,8 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
     });
   }, [onChange]);
 
-  const full = items.length >= max;
+  const full = max > 1 && items.length + inflight >= max;
+  const working = busy > 0 || inflight > 0;
 
   return (
     <div className="space-y-2">
@@ -75,13 +119,20 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
             )}
           </div>
         ))}
+        {/* in-flight placeholder so the grid doesn't jump while uploading */}
+        {working && (
+          <div className="grid h-24 w-24 place-items-center rounded-lg bg-ink-100 ring-1 ring-ink-200 text-ink-400">
+            <RefreshCw size={18} className="animate-spin" />
+          </div>
+        )}
         {!full && (
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
             className="grid h-24 w-24 place-items-center rounded-lg border-2 border-dashed border-ink-200 text-ink-400 hover:border-brand-400 hover:text-brand-600"
+            aria-label="Añadir imagen o video"
           >
-            {busy > 0 ? <RefreshCw size={20} className="animate-spin" /> : <ImagePlus size={20} />}
+            <ImagePlus size={20} />
           </button>
         )}
       </div>
@@ -94,10 +145,24 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
         onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
       />
       <div className="flex items-center justify-between text-xs text-ink-400">
-        <span>{max > 1 ? `${items.length}/${max} · imágenes o videos` : 'Imagen o video desde tu dispositivo'}</span>
-        {busy > 0 && <span className="text-ink-500">Subiendo…</span>}
+        <span className="inline-flex items-center gap-1">
+          <Crop size={12} />
+          {max > 1 ? `${items.length}/${max} · recorta cada imagen al formato de IG` : 'Imagen (con recorte de IG) o video'}
+        </span>
+        {working && <span className="text-ink-500">Procesando…</span>}
       </div>
       {error && <div className="text-xs text-red-600">{error}</div>}
+
+      {pending && (
+        <ImageCropper
+          key={pending.key}
+          file={pending.file}
+          mode={mode}
+          lockedRatioId={mode === 'carousel' ? carouselRatioId : null}
+          onConfirm={onCropConfirm}
+          onCancel={onCropCancel}
+        />
+      )}
     </div>
   );
 }

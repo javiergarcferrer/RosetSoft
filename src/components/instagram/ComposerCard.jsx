@@ -157,6 +157,7 @@ export default function ComposerCard({ publishLimit, onPublished }) {
           items={pubMedia}
           onChange={setPubMedia}
           max={maxMedia}
+          mode={pubMode}
           accept={pubMode === 'reel' ? 'video/*' : 'image/*,video/*'}
         />
 
