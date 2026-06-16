@@ -25,7 +25,7 @@ export type Gql = <T = unknown>(query: string, variables?: Record<string, unknow
 
 export type Connection =
   | { configured: false }
-  | { configured: true; domain: string; gql: Gql };
+  | { configured: true; domain: string; gql: Gql; verifyScopes: () => Promise<string[]> };
 
 /**
  * Load `store`'s connection row and build its authenticated GraphQL caller.
@@ -46,6 +46,10 @@ export async function connectShopify(admin: any, team: string, store: string): P
   let token = isTokenCacheValid(c.access_token, c.token_expires_at, Date.now())
     ? (c.access_token as string)
     : '';
+  // The scopes the LAST mint reported on the token's own `scope` field — the
+  // authoritative, lag-free granted set (verifyScopes reads it). Empty until a
+  // mint happens this request (a cached token never carried it here).
+  let mintedScopes: string[] = [];
 
   /** Mint a fresh 24h token and persist it as the row's cache (best-effort —
    *  a failed cache write only costs a re-mint next call). */
@@ -65,6 +69,7 @@ export async function connectShopify(admin: any, team: string, store: string): P
       const reason = grant.reason || `HTTP ${r.status}`;
       throw new Error(`Shopify rechazó las credenciales de la app para ${domain} (HTTP ${r.status}): ${reason}. Verifica que la app del Dev Dashboard esté en la MISMA organización que la tienda, que esté INSTALADA en ella, y que el secret no se haya rotado después de copiarlo.`);
     }
+    mintedScopes = grant.grantedScopes;
     await admin.from('shopify_config')
       .update({ access_token: grant.accessToken, token_expires_at: tokenCacheExpiryIso(grant.expiresIn, Date.now()) })
       .eq('profile_id', team).eq('store', store);
@@ -116,5 +121,29 @@ export async function connectShopify(admin: any, team: string, store: string): P
   }
 
   const gql: Gql = (query, variables = {}) => call(query, variables, false);
-  return { configured: true, domain, gql };
+
+  /**
+   * The scopes the connection's token ACTUALLY carries, for the connection
+   * test. Force a fresh mint so the answer reflects the app's CURRENT released
+   * config (the client-credentials token's own `scope` field) — NOT a cached
+   * token and NOT `currentAppInstallation.accessScopes`, which reports the
+   * per-installation granted set and lags the released config (so a dealer who
+   * just added write_inventory/read_locations sees them as "missing"). Falls
+   * back to the installation grant only if the mint response carried no scope.
+   */
+  async function verifyScopes(): Promise<string[]> {
+    // Ensure a mint happened THIS request so mintedScopes reflects the live
+    // token (a cached token never carried its scope here); reuse it if the
+    // first gql call already minted, so the test doesn't mint twice.
+    if (!mintedScopes.length) token = await mintToken();
+    if (mintedScopes.length) return mintedScopes;
+    try {
+      const r = await call<{ currentAppInstallation: { accessScopes: { handle: string }[] } }>(
+        `{ currentAppInstallation { accessScopes { handle } } }`, {}, false,
+      );
+      return r.currentAppInstallation.accessScopes.map((s) => s.handle);
+    } catch { return []; }
+  }
+
+  return { configured: true, domain, gql, verifyScopes };
 }

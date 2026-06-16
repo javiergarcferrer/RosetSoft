@@ -76,34 +76,50 @@ export function tokenCacheExpiryIso(expiresInSecs: unknown, nowMs: number): stri
   return new Date(nowMs + (Number(expiresInSecs) || 86399) * 1000).toISOString();
 }
 
+/** Split the grant response's comma-separated `scope` string into handles
+ *  (`"read_products, write_inventory"` → `['read_products','write_inventory']`).
+ *  PURE. This is the AUTHORITATIVE, token-specific granted-scope list per
+ *  shopify.dev's client-credentials docs — preferred over the per-installation
+ *  `currentAppInstallation.accessScopes`, which reports the installation's
+ *  granted set and LAGS the app's released config (the source of the false
+ *  "missing write_inventory/read_locations" the dealer hit after adding them). */
+export function parseScopeList(scope: unknown): string[] {
+  return typeof scope === 'string'
+    ? scope.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+}
+
 /**
  * Parse the client-credentials grant response (PURE — pinned by tests).
  * Shopify's OAuth endpoint answers in several shapes: a token grant
- * ({access_token, expires_in}), an OAuth error ({error, error_description}),
- * a legacy error ({errors: string | object}), or non-JSON (HTML error page).
- * `reason` carries the most specific message available for the failure path —
- * e.g. shop_not_permitted, which means the app and store aren't in the same
- * Dev Dashboard organization or the app isn't installed on the store.
+ * ({access_token, scope, expires_in}), an OAuth error ({error,
+ * error_description}), a legacy error ({errors: string | object}), or non-JSON
+ * (HTML error page). `reason` carries the most specific message available for
+ * the failure path — e.g. shop_not_permitted, which means the app and store
+ * aren't in the same Dev Dashboard organization or the app isn't installed on
+ * the store. `grantedScopes` is the token's OWN scope list (the response's
+ * `scope` field) — what the token can actually do.
  */
 export function parseGrantResponse(rawBody: string): {
   accessToken: string | null;
   expiresIn: number | null;
+  grantedScopes: string[];
   reason: string;
 } {
   let b: Record<string, unknown> | null = null;
   try { b = JSON.parse(rawBody); } catch { /* non-JSON body */ }
   if (b && typeof b === 'object') {
     if (typeof b.access_token === 'string' && b.access_token) {
-      return { accessToken: b.access_token, expiresIn: Number(b.expires_in) || null, reason: '' };
+      return { accessToken: b.access_token, expiresIn: Number(b.expires_in) || null, grantedScopes: parseScopeList(b.scope), reason: '' };
     }
     const detail = [b.error, b.error_description].filter((v) => typeof v === 'string' && v).join(': ');
-    if (detail) return { accessToken: null, expiresIn: null, reason: detail };
+    if (detail) return { accessToken: null, expiresIn: null, grantedScopes: [], reason: detail };
     if (b.errors != null) {
-      return { accessToken: null, expiresIn: null, reason: typeof b.errors === 'string' ? b.errors : JSON.stringify(b.errors) };
+      return { accessToken: null, expiresIn: null, grantedScopes: [], reason: typeof b.errors === 'string' ? b.errors : JSON.stringify(b.errors) };
     }
   }
   const snippet = String(rawBody || '').replace(/\s+/g, ' ').trim().slice(0, 180);
-  return { accessToken: null, expiresIn: null, reason: snippet };
+  return { accessToken: null, expiresIn: null, grantedScopes: [], reason: snippet };
 }
 
 /**

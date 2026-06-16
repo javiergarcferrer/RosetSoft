@@ -23,6 +23,7 @@ import {
   isTokenCacheValid,
   tokenCacheExpiryIso,
   parseGrantResponse,
+  parseScopeList,
   accessDeniedField,
   accessDeniedMessage,
   TOKEN_EXPIRY_SKEW_MS,
@@ -88,11 +89,23 @@ test('tokenCacheExpiryIso: stamps expires_in seconds, defaulting to 24h', () => 
   assert.equal(tokenCacheExpiryIso('bogus', now), new Date(now + 86_399_000).toISOString());
 });
 
-test('parseGrantResponse: token grant', () => {
-  const g = parseGrantResponse(JSON.stringify({ access_token: 'shpat_x', scope: 'read_products', expires_in: 86399 }));
+test('parseGrantResponse: token grant + the token\'s OWN scope list', () => {
+  const g = parseGrantResponse(JSON.stringify({ access_token: 'shpat_x', scope: 'read_products, write_inventory ,read_locations', expires_in: 86399 }));
   assert.equal(g.accessToken, 'shpat_x');
   assert.equal(g.expiresIn, 86399);
   assert.equal(g.reason, '');
+  // The connection test trusts THIS (the token's own granted scopes), not the
+  // lagging per-installation currentAppInstallation.accessScopes.
+  assert.deepEqual(g.grantedScopes, ['read_products', 'write_inventory', 'read_locations']);
+  // An error grant carries no scopes.
+  assert.deepEqual(parseGrantResponse(JSON.stringify({ errors: 'invalid_client' })).grantedScopes, []);
+});
+
+test('parseScopeList: splits/trims the comma-separated scope string', () => {
+  assert.deepEqual(parseScopeList('read_products, write_inventory'), ['read_products', 'write_inventory']);
+  assert.deepEqual(parseScopeList(''), []);
+  assert.deepEqual(parseScopeList(undefined), []);
+  assert.deepEqual(parseScopeList(null), []);
 });
 
 test('parseGrantResponse: surfaces every error shape Shopify answers with', () => {

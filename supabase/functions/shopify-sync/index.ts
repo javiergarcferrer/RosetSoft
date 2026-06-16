@@ -125,9 +125,11 @@ Deno.serve(async (req: Request) => {
       const shop = (await gql<{ shop: { name: string; myshopifyDomain: string } }>(
         `{ shop { name myshopifyDomain } }`,
       )).shop;
-      const granted = (await gql<{ currentAppInstallation: { accessScopes: { handle: string }[] } }>(
-        `{ currentAppInstallation { accessScopes { handle } } }`,
-      )).currentAppInstallation.accessScopes.map((s) => s.handle);
+      // The token's OWN granted scopes (the mint response's `scope`), not
+      // currentAppInstallation.accessScopes — the latter reports the
+      // per-installation granted set, which lags the app's released config and
+      // wrongly flags freshly-added write_inventory/read_locations as missing.
+      const granted = await conn.verifyScopes();
       const missingScopes = requiredScopes(store).filter((s) => !granted.includes(s));
       return json({ configured: true, ok: true, store, shop: shop.name, domain: shop.myshopifyDomain, missingScopes });
     } catch (e) {
