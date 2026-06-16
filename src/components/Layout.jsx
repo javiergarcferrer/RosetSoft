@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Menu, X, PanelLeftClose, PanelLeft, Search } from 'lucide-react';
+import { Menu, X, Search, Bot } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ProfileMenu from './ProfileMenu.jsx';
 import ViewAsToggle from './ViewAsToggle.jsx';
@@ -30,6 +30,7 @@ export default function Layout() {
   // the single entry link).
   const navGroups = navForRole(currentProfile?.role, {
     accountingOpen: location.pathname.startsWith('/accounting'),
+    configOpen: location.pathname.startsWith('/settings') || location.pathname.startsWith('/admin/users'),
   });
   // Unread WhatsApp badge on the nav entry — inbound messages not yet opened
   // in the inbox. Rides the same live-query invalidation as the rest of the
@@ -165,50 +166,65 @@ export default function Layout() {
           pb-safe-area / pl-safe-area keep the panel content clear of the
           notch, home indicator, and landscape ear. */}
       <aside
-        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:static inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-transform duration-200 md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
+        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:relative inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-[transform,margin-left] duration-200 md:duration-300 md:ease-[cubic-bezier(0.22,1,0.36,1)] md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
           navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
-        } ${collapsed ? 'md:hidden' : ''}`}
+        } ${collapsed ? 'md:-ml-60' : 'md:ml-0'}`}
         aria-label="Navegación principal"
       >
-        <div className="px-5 py-5 border-b border-ink-800 flex items-start justify-between gap-3">
-          {/* Brand block — typographic logo. See the mobile topbar's matching
-              block for the rationale on the white-tint filter and the lack of
-              a background box. */}
-          <div className="min-w-0 flex flex-col items-start gap-1.5">
-            {settings?.logoImageId ? (
-              <ImageView
-                id={settings.logoImageId}
-                alt={company + ' logo'}
-                className="h-9 max-w-[180px] object-contain object-left"
-                style={{ filter: 'brightness(0) invert(1)' }}
-                placeholderClassName="h-9 w-32"
-              />
-            ) : (
-              <div className="font-wordmark text-lg leading-tight truncate" title={company}>
-                {company}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center -mr-2 -my-2">
-            {/* Desktop: collapse the sidebar out of the way (it reappears via the
-                floating toggle by the page's top-left corner). */}
-            <button
-              onClick={() => setCollapsed(true)}
-              className="hidden md:inline-flex items-center justify-center w-9 h-9 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
-              aria-label="Ocultar menú"
-              title="Ocultar menú"
-            >
-              <PanelLeftClose size={18} />
-            </button>
+        {/* Collapse handle — an elongated pill pinned to the sidebar's right
+            edge; the hover gently widens + warms it. (Replaces the old square
+            button; hidden while collapsed, where the left-edge handle reopens.) */}
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className={`hidden md:block absolute right-0 top-1/2 z-10 h-16 w-1.5 -translate-y-1/2 rounded-l-full bg-ink-700/70 transition-all duration-200 hover:w-2.5 hover:bg-brand-500/80 ${collapsed ? 'md:opacity-0' : ''}`}
+          aria-label="Ocultar menú"
+          title="Ocultar menú"
+        />
+        <div className="px-5 py-5 border-b border-ink-800">
+          <div className="flex items-start justify-between gap-3">
+            {/* Brand block — typographic logo. See the mobile topbar's matching
+                block for the rationale on the white-tint filter and the lack of
+                a background box. */}
+            <div className="min-w-0 flex flex-col items-start gap-1.5">
+              {settings?.logoImageId ? (
+                <ImageView
+                  id={settings.logoImageId}
+                  alt={company + ' logo'}
+                  className="h-9 max-w-[180px] object-contain object-left"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                  placeholderClassName="h-9 w-32"
+                />
+              ) : (
+                <div className="font-wordmark text-lg leading-tight truncate" title={company}>
+                  {company}
+                </div>
+              )}
+            </div>
             {/* Mobile: close the slide-in drawer. */}
             <button
               onClick={() => setNavOpen(false)}
-              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
+              className="md:hidden -mr-2 -my-2 inline-flex items-center justify-center w-11 h-11 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
               aria-label="Cerrar menú"
             >
               <X size={20} />
             </button>
           </div>
+          {/* JARVIS — the global command center, one tap beneath the brand
+              (admin-only, like the /jarvis route's own gate). */}
+          {isAdmin && (
+            <NavLink
+              to="/jarvis"
+              onClick={() => setNavOpen(false)}
+              className={({ isActive }) => `mt-3 flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'border-brand-500/60 bg-brand-600/20 text-white shadow-[0_0_18px_-6px_rgba(168,86,32,0.7)]'
+                  : 'border-ink-700/70 bg-ink-800/40 text-ink-200 hover:border-ink-600 hover:bg-ink-800 hover:text-white'
+              }`}
+            >
+              <Bot size={15} /> JARVIS
+            </NavLink>
+          )}
         </div>
 
         {/* Global search trigger — a quiet "Buscar… ⌘K" pill under the brand.
@@ -249,7 +265,7 @@ export default function Layout() {
                   {group.label}
                 </div>
               )}
-              {group.items.map(({ to, label, icon: Icon, end, match }) => {
+              {group.items.map(({ to, label, icon: Icon, end, match, sub }) => {
                 // Section links highlight on ANY of their tab routes (`match`);
                 // plain links fall back to NavLink's own active state.
                 const sectionActive = match ? match.includes(location.pathname) : null;
@@ -260,7 +276,9 @@ export default function Layout() {
                     end={end}
                     className={({ isActive }) => {
                       const on = sectionActive != null ? sectionActive : isActive;
-                      return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${
+                      // A `sub` item (Usuarios beneath Configuración) is indented
+                      // and a touch quieter, reading as a child of the row above.
+                      return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${sub ? 'ml-4 border-l border-ink-700/60 rounded-l-none' : ''} ${
                         on
                           ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(168,86,32,0.55)]'
                           : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
@@ -292,12 +310,10 @@ export default function Layout() {
         <button
           type="button"
           onClick={() => setCollapsed(false)}
-          className="hidden md:inline-flex fixed top-3 left-2.5 z-20 items-center justify-center w-9 h-9 rounded-md bg-surface text-ink-600 border border-ink-200 shadow-soft hover:bg-ink-50 hover:text-ink-900 transition-colors"
+          className="hidden md:block fixed left-0 top-1/2 z-30 h-16 w-1.5 -translate-y-1/2 rounded-r-full bg-ink-300 shadow-soft transition-all duration-200 hover:w-2.5 hover:bg-brand-500"
           aria-label="Mostrar menú"
           title="Mostrar menú"
-        >
-          <PanelLeft size={18} />
-        </button>
+        />
       )}
 
       {/* Single scroll container for the whole app shell. html/body are

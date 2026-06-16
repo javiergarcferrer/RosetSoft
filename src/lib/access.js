@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  MessageCircle, Landmark, Bot, Instagram,
+  MessageCircle, Landmark, Instagram,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -39,25 +39,30 @@ const COMMISSIONS = { items: [{ to: '/comisiones', label: 'Comisiones', icon: Wa
 const ADMIN_GROUP = {
   label: 'Administración',
   items: [
-    { to: '/admin/users', label: 'Usuarios', icon: Shield },
-    { to: '/admin/materials', label: 'Materiales', icon: Layers },
-    { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
+    { to: '/marketing', label: 'Instagram', icon: Instagram, match: ['/marketing', '/instagram-studio'] },
     {
       to: '/inventario/existencias',
       label: 'Inventario',
       icon: Boxes,
       match: ['/inventario/existencias', '/inventario/lifestylegarden'],
     },
-    { to: '/marketing', label: 'Instagram', icon: Instagram, match: ['/marketing', '/instagram-studio'] },
+    { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
+    { to: '/admin/materials', label: 'Materiales', icon: Layers },
     // Single entry point — the full accounting section nav only joins the
     // sidebar while the admin is INSIDE /accounting/* (see navForRole).
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
-    { to: '/jarvis', label: 'JARVIS', icon: Bot },
   ],
 };
 
 const ACCOUNTING_GROUP = { label: 'Contabilidad', items: accountingSectionNav };
-const CONFIG = { items: [{ to: '/settings', label: 'Configuración', icon: SettingsIcon }] };
+// Configuración, with Usuarios revealed beneath it only while that section is
+// open (on /settings or /admin/users) — same contextual pattern as accounting.
+const configGroup = (configOpen) => ({
+  items: [
+    { to: '/settings', label: 'Configuración', icon: SettingsIcon },
+    ...(configOpen ? [{ to: '/admin/users', label: 'Usuarios', icon: Shield, sub: true }] : []),
+  ],
+});
 
 /**
  * The unified sidebar for a role. ONE structure; the role reveals its slice:
@@ -66,18 +71,18 @@ const CONFIG = { items: [{ to: '/settings', label: 'Configuración', icon: Setti
  *   • admin      — everything, both cores, in one place.
  * `team` is the shared settings row, not a human, so it gets nothing.
  */
-export function navForRole(role, { accountingOpen = true } = {}) {
+export function navForRole(role, { accountingOpen = true, configOpen = true } = {}) {
   if (role === 'accounting') return [{ items: accountingSectionNav }];
   if (role === 'admin') {
     // The admin's sidebar stays lean: the Contabilidad section list only
-    // appears while they're inside /accounting/* (Layout passes the route
-    // context); otherwise the Administración group's single "Contabilidad"
-    // link is the way in. Callers that need the full map regardless —
-    // GlobalSearch indexing destinations — get it by default.
+    // appears while they're inside /accounting/*, and Usuarios only while
+    // inside Configuración (Layout passes the route context). Callers that
+    // need the full map regardless — GlobalSearch indexing destinations — get
+    // it by default (both flags default true).
     return [
       HOME, CRM_GROUP, COMMISSIONS, ADMIN_GROUP,
       ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
-      CONFIG,
+      configGroup(configOpen),
     ];
   }
   if (role === 'employee') return [HOME, CRM_GROUP, COMMISSIONS];
