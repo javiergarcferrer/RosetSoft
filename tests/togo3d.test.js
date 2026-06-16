@@ -42,7 +42,14 @@ test('togoParts builds a floor-standing, footprint-bounded, cohesive body', () =
 
   // Armless (chauffeuse) drops the arm parts; chaise keeps one.
   assert.equal(togoParts(87, 102, { armCount: 0 }).filter((p) => p.role === 'arm').length, 0);
-  assert.equal(togoParts(131, 162, { armCount: 1 }).filter((p) => p.role === 'arm').length, 1);
+  const chaise = togoParts(131, 162, { armCount: 1 });
+  assert.equal(chaise.filter((p) => p.role === 'arm').length, 1);
+  // Single-arm pieces must ALSO stay inside the footprint (the backrest tuck-
+  // behind once overflowed the armed side) — the 3D mass matches the 2D tile.
+  for (const p of chaise) {
+    assert.ok(p.x - p.w / 2 >= -131 / 2 - 0.5 && p.x + p.w / 2 <= 131 / 2 + 0.5, `${p.role} exceeds width`);
+    assert.ok(p.z - p.d / 2 >= -162 / 2 - 0.5 && p.z + p.d / 2 <= 162 / 2 + 0.5, `${p.role} exceeds depth`);
+  }
 });
 
 test('inferTogoKind maps to a canonical Togo piece (label, then footprint), for GLB lookup', () => {

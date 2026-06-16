@@ -69,10 +69,13 @@ export function togoParts(widthCm, depthCm, { armCount = 2 } = {}) {
     r: clamp(Math.min(SEAT_TOP, seatDepth) * 0.5, 9, 19),
   });
   // Backrest — a thick body at the rear; its lower half overlaps the seat so the
-  // two read as one continuous form (the quilt sells the recline).
+  // two read as one continuous form (the quilt sells the recline). Its centre is
+  // clamped so even the single-arm (chaise) tuck-behind stays inside the
+  // footprint AABB — the 3D mass must match the 2D plan tile.
+  const backX = clamp(seatXc, -(W / 2 - backW / 2), W / 2 - backW / 2);
   parts.push({
     role: 'back', w: backW, h: BACK_TOP, d: backThick,
-    x: seatXc, y: BACK_TOP / 2, z: -D / 2 + backThick / 2,
+    x: backX, y: BACK_TOP / 2, z: -D / 2 + backThick / 2,
     r: clamp(Math.min(backThick, BACK_TOP) * 0.42, 10, 18),
   });
   // Arms — full-depth bodies on the sides, overlapping the seat.
@@ -97,7 +100,9 @@ export function togoParts(widthCm, depthCm, { armCount = 2 } = {}) {
 export function inferTogoKind(label = '', widthCm = 0, depthCm = 0) {
   const s = String(label).toLowerCase();
   for (const p of TOGO_PIECES) {
-    if ((p.match || []).some((k) => k !== 'togo' && s.includes(k))) return p.id;
+    // Skip the generic 'togo' and bare-digit keywords ('2','3') — a stray number
+    // in the label ("Togo 2025") must not false-match a piece count.
+    if ((p.match || []).some((k) => k !== 'togo' && !/^\d+$/.test(k) && s.includes(k))) return p.id;
   }
   if (widthCm > 0 && depthCm > 0) {
     let best = null, bestD = Infinity;

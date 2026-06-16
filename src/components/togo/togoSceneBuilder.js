@@ -103,7 +103,14 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
 function placeRealModel(THREE, object, material, desc, pieceGroup) {
   const clone = object.clone(true);
   clone.traverse((o) => {
-    if (o.isMesh) { o.material = material; o.castShadow = true; o.receiveShadow = true; }
+    if (o.isMesh) {
+      o.material = material;
+      // clone(true) shares the source geometry by reference; clone it so the
+      // group OWNS its buffers and disposeGroup never frees the cached model's.
+      if (o.geometry) o.geometry = o.geometry.clone();
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
   });
   if (desc?.upAxis === 'z') clone.rotation.x = -Math.PI / 2;       // CAD Z-up → three Y-up
   if (desc?.rotateY) clone.rotation.y += (desc.rotateY * Math.PI) / 180;
@@ -211,14 +218,19 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   };
 }
 
-/** Dispose every geometry/material/texture under a group (free GPU memory). */
+/** Dispose every geometry/material/(swatch) texture under a group (free GPU
+ *  memory). Idempotent per object via a seen-set, so a material/geometry shared
+ *  across many meshes (the real-model path) is disposed exactly ONCE. The shared
+ *  quilt normal map is intentionally NOT touched — the owner disposes it. */
 export function disposeGroup(group) {
+  const seen = new Set();
+  const once = (o, fn) => { if (o && !seen.has(o)) { seen.add(o); fn(); } };
   group?.traverse?.((o) => {
-    if (o.geometry) o.geometry.dispose();
+    once(o.geometry, () => o.geometry.dispose());
     const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
     for (const m of mats) {
-      if (m.map) m.map.dispose();
-      m.dispose();
+      once(m.map, () => m.map.dispose());
+      once(m, () => m.dispose());
     }
   });
 }

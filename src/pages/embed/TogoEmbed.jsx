@@ -337,11 +337,10 @@ export default function TogoEmbed() {
                         className={`px-2 py-1 text-[11px] ${i ? 'border-l border-ink-200' : ''} ${finishKey === f.key ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}>{f.label}</button>
                     ))}
                   </div>
-                  <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-500">
+                  <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-500 ml-1">
                     Trama
                     <input type="range" min="1.5" max="5" step="0.5" value={weave} onChange={(e) => setWeave(Number(e.target.value))} className="w-20 accent-brand-500" />
                   </label>
-                  <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs ml-auto disabled:opacity-40" title="Aplicar una tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
                 </div>
                 <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[54vh] min-h-[400px] rounded-lg border border-ink-200 overflow-hidden bg-ink-50/40" />
               </div>

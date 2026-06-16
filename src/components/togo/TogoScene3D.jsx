@@ -80,6 +80,8 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       }),
     ]);
     if (!api.current) return; // unmounted while awaiting
+    const rep = (finishRef.current?.repeat) || DEFAULT_FINISH.repeat;
+    if (l.quilt) l.quilt.repeat.set(rep, rep);                 // quilt scale follows the weave control
     if (l.group) { l.scene.remove(l.group); disposeGroup(l.group); }
     l.group = buildTogoGroup(l.deps, sd, {
       ...DEFAULT_FINISH,
@@ -96,16 +98,39 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
     if (!l.framed && (sd.pieces || []).length) {
       l.camera.position.set(r * 0.7, r * 0.5, r * 1.45);
       l.controls.target.set(0, 18, 0);
-      l.camera.lookAt(0, 18, 0);
-      l.framed = true;
+      l.framed = true;                            // controls.update() derives the orientation
     }
     l.controls.update();
+    l.requestRender();
+  }, []);
+
+  // Re-skin in place on a finish change — update the material scalars + texture
+  // scale on the EXISTING meshes (no geometry rebuild), so the material editor
+  // is instant and the weave slider rescales both the swatch and the quilt.
+  const reskin = useCallback(() => {
+    const l = api.current;
+    if (!l || !l.group) return;
+    const f = { ...DEFAULT_FINISH, ...(finishRef.current || {}) };
+    const rep = f.repeat || 3;
+    if (l.quilt) l.quilt.repeat.set(rep, rep);
+    const seen = new Set();
+    l.group.traverse((o) => {
+      const m = o.material;
+      if (!m || seen.has(m)) return;
+      seen.add(m);
+      if ('roughness' in m) m.roughness = f.roughness;
+      if ('sheen' in m) m.sheen = f.sheen;
+      if ('sheenRoughness' in m) m.sheenRoughness = f.sheenRoughness;
+      if (m.normalScale) m.normalScale.set(f.normalScale, f.normalScale);
+      if (m.map) m.map.repeat.set(rep, rep);
+    });
     l.requestRender();
   }, []);
 
   // Mount once: load three, build renderer/scene/camera/controls/stage.
   useEffect(() => {
     let alive = true; let ro = null;
+    let autoRaf = 0, pendingRaf = 0, autoTimer = 0;  // hoisted so cleanup can cancel them
     (async () => {
       let mods;
       try {
@@ -153,19 +178,19 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       const requestRender = () => {
         if (scheduled || !alive) return;
         scheduled = true;
-        requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); });
+        pendingRaf = requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); });
       };
       controls.addEventListener('change', requestRender);
 
-      // Gentle intro turntable; its loop is the ONLY continuous render, and it
-      // stops on the first interaction (then we're fully on-demand).
-      let autoRaf = 0;
+      // Gentle intro turntable; the ONLY continuous render. It stops on the first
+      // interaction OR after a few seconds — a BOUNDED intro, never an idle GPU
+      // spin — after which we're fully on-demand.
       const autoLoop = () => {
         if (!alive || !controls.autoRotate) { autoRaf = 0; return; }
         controls.update(); renderer.render(scene, camera);
         autoRaf = requestAnimationFrame(autoLoop);
       };
-      const stopAuto = () => { controls.autoRotate = false; };
+      const stopAuto = () => { controls.autoRotate = false; clearTimeout(autoTimer); autoTimer = 0; };
       renderer.domElement.addEventListener('pointerdown', stopAuto, { once: true });
 
       const disposeStage = setupTogoStage(deps, renderer, scene, 300);
@@ -174,12 +199,12 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       api.current = {
         THREE, deps, renderer, scene, camera, controls, disposeStage, stopAuto, quilt,
         group: null, texCache: new Map(), modelCache: new Map(), framed: false,
-        requestRender, getAutoRaf: () => autoRaf,
+        requestRender,
       };
 
       await rebuild();
       if (!alive) return;
-      if (controls.autoRotate) autoLoop(); else requestRender();
+      if (controls.autoRotate) { autoLoop(); autoTimer = setTimeout(stopAuto, 9000); } else requestRender();
 
       ro = new ResizeObserver(() => {
         const W = mount.clientWidth, H = mount.clientHeight;
@@ -190,11 +215,13 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
 
     return () => {
       alive = false;
+      cancelAnimationFrame(autoRaf);
+      cancelAnimationFrame(pendingRaf);
+      clearTimeout(autoTimer);
       ro?.disconnect();
       const l = api.current;
       api.current = null;
       if (l) {
-        cancelAnimationFrame(l.getAutoRaf?.() || 0);
         l.renderer?.domElement?.removeEventListener?.('pointerdown', l.stopAuto);
         l.controls?.dispose?.();
         disposeGroup(l.group);
@@ -208,8 +235,10 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
     };
   }, [autoRotate, rebuild]);
 
-  // Re-skin / re-lay the scene whenever the layout, fabrics, or finish change.
-  useEffect(() => { if (api.current) rebuild(); }, [scene3d, material, rebuild]);
+  // Layout/fabric change → rebuild geometry; finish change → re-skin in place
+  // (no geometry churn, so the material editor stays instant).
+  useEffect(() => { if (api.current) rebuild(); }, [scene3d, rebuild]);
+  useEffect(() => { if (api.current) reskin(); }, [material, reskin]);
 
   return <div ref={mountRef} className={className} aria-label="Vista 3D de la configuración Togo" />;
 }
