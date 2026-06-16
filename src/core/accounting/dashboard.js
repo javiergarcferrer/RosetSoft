@@ -147,10 +147,22 @@ export function resolveAccountingDashboard({
   const expenseDonut = { segments: donutSegments, total: round2(donutSegments.reduce((s, c) => s + c.amount, 0)) };
 
   // Cobros aging split + last-30-day collections → the "Invoices" card.
+  // `notDue`/`overdue` keep the two-way split the strip used; `buckets` exposes
+  // the full 0–30 / 31–60 / 61–90 / +90 profile the aging bars render.
+  // DSO (días de cobro) = open AR over average daily credit sales of the
+  // trailing 365 days; null when sales history is too thin to be meaningful.
+  const sales365 = round2((salesPostings || [])
+    .filter((s) => (s.postedAt || 0) > end - 365 * DAY && (s.postedAt || 0) <= end)
+    .reduce((s, p) => s + (Number(p.total) || 0), 0));
   const ar = {
     unpaid: cxc.totals.balance,
     notDue: cxc.totals.d0_30,
     overdue: round2(cxc.totals.d31_60 + cxc.totals.d61_90 + cxc.totals.d90),
+    buckets: {
+      d0_30: cxc.totals.d0_30, d31_60: cxc.totals.d31_60,
+      d61_90: cxc.totals.d61_90, d90: cxc.totals.d90,
+    },
+    dso: sales365 > 1 ? Math.round(cxc.totals.balance / (sales365 / 365)) : null,
   };
   const collected30 = round2((payments || [])
     .filter((p) => p.direction === 'in' && p.partyType === 'customer' && (p.paidAt || 0) >= end - 30 * DAY)
@@ -174,6 +186,12 @@ export function resolveAccountingDashboard({
     ingresosMonth: income.totalIncome,
     egresosMonth: round2(income.totalCosts + income.totalExpenses),
     utilidadMonth: income.netIncome,
+    // The P&L bridge steps for the waterfall: ingresos → costo de ventas →
+    // gastos → utilidad neta (costs/expenses split out of egresosMonth).
+    pnl: {
+      income: income.totalIncome, costs: income.totalCosts,
+      expenses: income.totalExpenses, net: income.netIncome,
+    },
     itbis,
     ecfPending,
     ecfSeqAlerts,

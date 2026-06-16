@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 /**
  * Lean, dependency-free chart primitives for the accounting dashboard —
@@ -7,10 +7,16 @@ import { useId } from 'react';
  * inline SVG / CSS on the app's design tokens. Colors are passed in by the
  * caller so the incoming design system can re-skin them in one place.
  *
- * Three shapes cover the dashboard:
- *   • <Donut>     — ring with proportional segments + a center slot (gastos).
- *   • <BarPairs>  — grouped vertical bars, two per period (flujo de caja).
- *   • <AreaChart> — filled line over time (ventas).
+ * The shapes that cover the dashboard:
+ *   • <Donut>      — ring with proportional segments + a center slot (gastos).
+ *   • <BarPairs>   — grouped vertical bars, two per period (flujo de caja).
+ *   • <AreaChart>  — filled line over time (ventas).
+ *   • <Sparkline>  — Tufte word-sized trend on a KPI card.
+ *   • <YoYColumns> — this year solid over last year's ghost.
+ *   • <BulletBar>  — Few bullet: current value + a previous-period marker tick.
+ *   • <Waterfall>  — the P&L bridge: ingresos → costo → gastos → utilidad.
+ *   • <AgingBars>  — receivables by age bucket on one shared scale.
+ *   • <CountUp>    — an animated, reduced-motion-aware number (KPI heroes).
  */
 
 /** Ring chart. `segments: [{ value, color }]`; `children` fills the center. */
@@ -240,4 +246,143 @@ export function Legend({ items = [] }) {
       ))}
     </div>
   );
+}
+
+/**
+ * Waterfall (cascada) — the P&L bridge. `steps: [{ label, value, total? }]`:
+ * a `total` step is drawn from the zero baseline (Ingresos opens, Utilidad
+ * closes); the rest FLOAT by their signed `value` off the running cumulative,
+ * so the eye walks revenue down through costs and gastos to the bottom line.
+ * Rises read emerald, drops rose, totals ink; a hairline connects the steps and
+ * a zero baseline anchors the scale (handles a negative utilidad). Bars ease to
+ * their new size on a period switch (motion-safe only). Amounts ride `title`.
+ */
+export function Waterfall({ steps = [], height = 132, colors = {}, format }) {
+  const inc = colors.increase || '#059669';
+  const dec = colors.decrease || '#fb7185';
+  const tot = colors.total || 'rgb(var(--ink-400))';
+  const fmt = format || ((v) => String(v));
+
+  // Running cumulative → each bar's [lo, hi] on the value axis + its end level.
+  let run = 0;
+  const segs = steps.map((s) => {
+    const v = Number(s.value) || 0;
+    let lo, hi, end;
+    if (s.total) { lo = Math.min(0, v); hi = Math.max(0, v); end = v; }
+    else { const next = run + v; lo = Math.min(run, next); hi = Math.max(run, next); end = next; }
+    const seg = { label: s.label, value: v, total: !!s.total, lo, hi, end, run };
+    run = s.total ? v : end;
+    return seg;
+  });
+
+  const min = Math.min(0, ...segs.map((s) => s.lo));
+  const max = Math.max(0, ...segs.map((s) => s.hi));
+  const span = Math.max(1, max - min);
+  const yPct = (val) => ((max - val) / span) * 100; // top offset, %
+
+  return (
+    <div className="min-w-0 w-full">
+      <div className="relative flex items-stretch gap-1.5" style={{ height }}>
+        {/* zero baseline */}
+        <div className="absolute inset-x-0 border-t border-dashed border-ink-200" style={{ top: `${yPct(0)}%` }} />
+        {segs.map((s, i) => {
+          const top = yPct(s.hi);
+          const h = ((s.hi - s.lo) / span) * 100;
+          const color = s.total ? tot : (s.value >= 0 ? inc : dec);
+          const sign = s.value > 0 && !s.total ? '+' : '';
+          return (
+            <div key={s.label} className="relative flex-1 min-w-0" title={`${s.label}: ${sign}${fmt(s.value)}`}>
+              {/* connector from the previous step's end level */}
+              {i > 0 && (
+                <div className="absolute h-px bg-ink-300/70" style={{ top: `${yPct(segs[i - 1].end)}%`, left: '-0.375rem', width: '0.375rem' }} />
+              )}
+              <div
+                className="absolute inset-x-0 mx-auto w-[68%] max-w-8 rounded-[3px] motion-safe:transition-all motion-safe:duration-500 motion-safe:ease-out"
+                style={{
+                  top: `${top}%`,
+                  height: `${Math.max(1.5, h)}%`,
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${color} 70%, rgb(var(--surface))), ${color} 88%)`,
+                  boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 35%, rgb(var(--surface))), 0 1px 2px rgba(59,56,48,0.18)`,
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-1.5 mt-1.5">
+        {segs.map((s) => (
+          <div key={s.label} className="flex-1 text-center text-[10px] text-ink-400 uppercase tracking-wide truncate">{s.label}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Aging bars — receivables by age bucket on ONE shared scale (small multiples),
+ * so the overdue tail reads at a glance against the current column. `buckets:
+ * [{ label, value, tone }]`; the row label and amount flank the bar. The bar
+ * eases to its new width on a period switch (motion-safe only).
+ */
+export function AgingBars({ buckets = [], format }) {
+  const fmt = format || ((v) => String(v));
+  const max = Math.max(1, ...buckets.map((b) => Math.abs(b.value || 0)));
+  return (
+    <div className="space-y-1.5">
+      {buckets.map((b) => {
+        const v = Math.abs(b.value || 0);
+        return (
+          <div key={b.label} className="flex items-center gap-2 text-xs min-w-0" title={`${b.label} días: ${fmt(b.value || 0)}`}>
+            <span className="w-11 shrink-0 text-ink-400 tabular-nums">{b.label}</span>
+            <div className="flex-1 h-2.5 rounded-full bg-ink-100 overflow-hidden min-w-0" style={{ boxShadow: 'inset 0 1px 2px rgba(59,56,48,0.10)' }}>
+              <div className="h-full rounded-full motion-safe:transition-all motion-safe:duration-500 motion-safe:ease-out"
+                style={{
+                  width: `${v > 0 ? Math.max(3, (v / max) * 100) : 0}%`,
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${b.tone} 70%, rgb(var(--surface))), ${b.tone})`,
+                }} />
+            </div>
+            <span className="w-20 shrink-0 text-right tabular-nums text-ink-600">{fmt(b.value || 0)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function'
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * CountUp — an animated number for the KPI heroes. It eases (cubic ease-out)
+ * from the currently shown value to the new one, then hands the result to
+ * `format`; on mount it rises from zero, so a freshly loaded panel or a period
+ * switch feels alive. It animates ONLY on a value change (the `value` dep), not
+ * on every background re-render, and honors prefers-reduced-motion (it snaps
+ * straight to the value). `format` receives the in-flight float each frame.
+ */
+export function CountUp({ value = 0, format = (n) => String(Math.round(n)), duration = 650, className = '' }) {
+  const [display, setDisplay] = useState(0);
+  const displayRef = useRef(0);
+  displayRef.current = display;
+  const rafRef = useRef(0);
+
+  useEffect(() => {
+    const to = Number(value) || 0;
+    const from = Number(displayRef.current) || 0;
+    if (prefersReducedMotion() || from === to) { setDisplay(to); return undefined; }
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      setDisplay(from + (to - from) * eased);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+      else setDisplay(to);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [value, duration]);
+
+  return <span className={className}>{format(display)}</span>;
 }

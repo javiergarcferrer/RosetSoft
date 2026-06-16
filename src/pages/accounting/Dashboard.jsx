@@ -16,7 +16,7 @@ import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
-import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar } from '../../components/charts/MiniCharts.jsx';
+import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar, Waterfall, AgingBars, CountUp } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   resolveAccountingDashboard, resolvePeriod, resolveComparativeKpis,
@@ -40,6 +40,14 @@ const C = {
 // on either canvas); the two neutral fillers ride the ink ramp so they don't
 // glare as bright grey slices in dark mode.
 const DONUT = ['#c96a2a', '#e8a76d', '#059669', 'rgb(var(--ink-400))', '#f59e0b', 'rgb(var(--ink-200))'];
+// Receivables aging ramp — neutral while current, warming into rose as the
+// debt ages, so the +90 tail reads as the alarming one.
+const AGING = [
+  { key: 'd0_30', label: '0–30', tone: 'rgb(var(--ink-300))' },
+  { key: 'd31_60', label: '31–60', tone: '#f59e0b' },
+  { key: 'd61_90', label: '61–90', tone: '#e8a76d' },
+  { key: 'd90', label: '+90', tone: '#f43f5e' },
+];
 
 const SOURCE = {
   manual: 'Manual', sale: 'Venta', expense: 'Gasto', purchase: 'Compra',
@@ -192,16 +200,6 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   return to ? <Link to={to} className="block active:scale-[0.99] transition-transform min-w-0">{body}</Link> : body;
 }
 
-/** Simple proportional progress bar (P&L rows). */
-function Bar({ value, max, tone }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="h-2.5 rounded-full bg-ink-100 overflow-hidden">
-      <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
-
 /**
  * Resumen del negocio — the accounting home, in the QuickBooks "Business
  * overview" shape: a grid of live financial widgets (flujo de caja, gastos,
@@ -292,8 +290,8 @@ export default function AccountingDashboard() {
 
   const monthLabel = period.label;
   const ventasKpi = kpis.find((k) => k.key === 'ventas');
-  const pnlMax = Math.max(d.ingresosMonth, d.egresosMonth, 1);
-  const arTotal = Math.max(d.ar.unpaid, 1);
+  // Net cash movement across the visible window — does the saldo grow or bleed?
+  const cashNet = d.monthsSeries.reduce((s, m) => s + (m.cashIn - m.cashOut), 0);
   const segLabel = { customer: 'Cliente', seller: 'Vendedor', canal: 'Canal', ecfType: 'Comprobante' }[groupBy];
 
   // Column visibility (Shopify "edit columns"), persisted per browser, one key
@@ -322,7 +320,7 @@ export default function AccountingDashboard() {
               <div key={k.key} className="stat-card p-3.5 min-w-0">
                 <div className="eyebrow-xs text-ink-500 truncate mb-1.5">{k.label}</div>
                 <div className={`stat-value text-xl whitespace-nowrap ${k.key === 'utilidad' ? (k.current >= 0 ? 'text-emerald-700' : 'text-rose-700') : ''}`}>
-                  {formatDop(k.current)}
+                  <CountUp value={k.current} format={formatDop} />
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <DeltaChip delta={k.deltaPrev} vs={period.prev.label} />
@@ -368,14 +366,20 @@ export default function AccountingDashboard() {
             {/* Flujo de caja */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Flujo de caja" to="/accounting/ledger" action="Ver mayor →" />
-              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.cash)}</div>
+              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900"><CountUp value={d.cash} format={formatDop} /></div>
               <div className="text-xs text-ink-400 mb-3">Saldo en caja y bancos</div>
               <div className="mt-auto">
                 <BarPairs
                   data={d.monthsSeries.map((m) => ({ label: m.label, a: m.cashIn, b: m.cashOut }))}
                   colors={[C.in, C.out]} format={formatDop}
                 />
-                <Legend items={[{ label: 'Entradas', color: C.in }, { label: 'Salidas', color: C.out }]} />
+                <div className="flex items-center justify-between gap-2">
+                  <Legend items={[{ label: 'Entradas', color: C.in }, { label: 'Salidas', color: C.out }]} />
+                  <span className="mt-3 text-xs whitespace-nowrap shrink-0">
+                    <span className="text-ink-400">Neto 6m </span>
+                    <span className={`tabular-nums font-medium ${cashNet >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{cashNet >= 0 ? '+' : ''}{formatDop(cashNet)}</span>
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -408,18 +412,24 @@ export default function AccountingDashboard() {
             <div className="card p-4 flex flex-col">
               <CardHead title="Ganancia y pérdida" note={monthLabel} />
               <div className={`font-display text-2xl font-semibold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {formatDop(d.utilidadMonth)}
+                <CountUp value={d.utilidadMonth} format={formatDop} />
               </div>
               <div className="text-xs text-ink-400 mb-3">Utilidad neta de {monthLabel}</div>
-              <div className="space-y-3 mt-auto">
-                <div>
-                  <div className="flex items-center justify-between gap-2 text-sm mb-1 flex-wrap"><span className="text-ink-500">Ingresos</span><span className="tabular-nums font-medium shrink-0">{formatDop(d.ingresosMonth)}</span></div>
-                  <Bar value={d.ingresosMonth} max={pnlMax} tone="bg-emerald-500" />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between gap-2 text-sm mb-1 flex-wrap"><span className="text-ink-500">Egresos</span><span className="tabular-nums font-medium shrink-0">{formatDop(d.egresosMonth)}</span></div>
-                  <Bar value={d.egresosMonth} max={pnlMax} tone="bg-rose-400" />
-                </div>
+              <div className="mt-auto">
+                {d.pnl.income === 0 && d.pnl.net === 0 && d.egresosMonth === 0 ? (
+                  <div className="flex items-center justify-center h-[132px] text-sm text-ink-400">Sin actividad este mes.</div>
+                ) : (
+                  <Waterfall
+                    steps={[
+                      { label: 'Ingresos', value: d.pnl.income, total: true },
+                      { label: 'Costo', value: -d.pnl.costs },
+                      { label: 'Gastos', value: -d.pnl.expenses },
+                      { label: 'Utilidad', value: d.pnl.net, total: true },
+                    ]}
+                    colors={{ increase: C.income, decrease: C.expense, total: 'rgb(var(--ink-400))' }}
+                    format={formatDop}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -429,20 +439,13 @@ export default function AccountingDashboard() {
             {/* Cuentas por cobrar */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
-              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(d.ar.unpaid)}</div>
-              <div className="text-xs text-ink-400 mb-3">Sin cobrar</div>
+              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900"><CountUp value={d.ar.unpaid} format={formatDop} /></div>
+              <div className="text-xs text-ink-400 mb-3">Sin cobrar{d.ar.dso != null ? ` · ${d.ar.dso} días de cobro (DSO)` : ''}</div>
               <div className="mt-auto">
-                <div className="h-2.5 rounded-full overflow-hidden flex bg-ink-100">
-                  <div className="h-full" style={{ width: `${(d.ar.overdue / arTotal) * 100}%`, backgroundColor: C.overdue }} />
-                  <div className="h-full" style={{ width: `${(d.ar.notDue / arTotal) * 100}%`, backgroundColor: C.current }} />
-                </div>
-                <div className="flex flex-wrap justify-between text-xs mt-2 gap-1">
-                  <span className="text-rose-600">Vencido {formatDop(d.ar.overdue)}</span>
-                  <span className="text-ink-500">Por vencer {formatDop(d.ar.notDue)}</span>
-                </div>
+                <AgingBars buckets={AGING.map((a) => ({ label: a.label, value: d.ar.buckets[a.key], tone: a.tone }))} format={formatDop} />
                 <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-ink-100">
                   <span className="text-ink-500">Cobrado (30 días)</span>
-                  <span className="tabular-nums font-medium text-emerald-700">{formatDop(d.collected30)}</span>
+                  <span className="tabular-nums font-medium text-emerald-700"><CountUp value={d.collected30} format={formatDop} /></span>
                 </div>
               </div>
             </div>
@@ -450,7 +453,7 @@ export default function AccountingDashboard() {
             {/* Ventas */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Ventas" note="6 meses" />
-              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(ventasKpi?.current || 0)}</div>
+              <div className="font-display text-2xl font-semibold tabular-nums text-ink-900"><CountUp value={ventasKpi?.current || 0} format={formatDop} /></div>
               <div className="text-xs text-ink-400 mb-3">Facturado en {monthLabel}</div>
               <div className="mt-auto">
                 <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))} color={C.sales} />
@@ -475,7 +478,7 @@ export default function AccountingDashboard() {
               )}
               <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-ink-100">
                 <span className="text-ink-500 font-medium">Total</span>
-                <span className="tabular-nums font-semibold text-ink-900">{formatDop(d.cash)}</span>
+                <span className="tabular-nums font-semibold text-ink-900"><CountUp value={d.cash} format={formatDop} /></span>
               </div>
             </div>
           </div>
