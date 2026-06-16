@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -8,11 +8,12 @@ import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
-  resolveTogoDxf, placementsFromPlaced,
+  resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
 } from '../../core/quote/index.js';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
+import TogoScene3D from '../../components/togo/TogoScene3D.jsx';
 
 const SCALE = PX_PER_CM;
 
@@ -53,6 +54,7 @@ export default function TogoEmbed() {
   const [step, setStep] = useState('build'); // 'build' | 'form' | 'done'
   const [matOpen, setMatOpen] = useState(false);
   const [matMode, setMatMode] = useState('one'); // 'one' (selected piece) | 'all'
+  const [view, setView] = useState('2d');        // '2d' plan editor | '3d' preview
 
   useEffect(() => {
     let active = true;
@@ -92,6 +94,7 @@ export default function TogoEmbed() {
   }, [models]);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
+  const scene3d = useMemo(() => resolveTogoScene(scenePlacementsFromPlaced(placed, resolvedById)), [placed, resolvedById]);
   const selected = placed.find((p) => p.uid === selectedUid) || null;
   const selectedFamily = selected ? (families.get(resolvedById[selected.pieceId]?.root) || null) : null;
   const selResolved = selected ? resolvePlacement(selected, resolvedById) : null;
@@ -262,7 +265,14 @@ export default function TogoEmbed() {
         <section className="space-y-3 min-w-0">
           <div className="rounded-xl border border-ink-200 bg-surface p-2.5">
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-              <span className="text-[11px] text-ink-500">{vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla'}</span>
+              <div className="flex items-center gap-2 min-w-0">
+                {/* 2D plan (edit) ⇄ 3D preview (covered in the chosen fabric). */}
+                <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden shrink-0">
+                  <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 ${view === '2d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Square size={13} /> 2D</button>
+                  <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 border-l border-ink-200 ${view === '3d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Box size={13} /> 3D</button>
+                </div>
+                <span className="text-[11px] text-ink-500 hidden sm:inline truncate">{view === '3d' ? 'Arrastra para girar · rueda para acercar' : (vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla')}</span>
+              </div>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
                 <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
@@ -297,6 +307,9 @@ export default function TogoEmbed() {
               </div>
             )}
 
+            {view === '3d' ? (
+              <TogoScene3D scene3d={scene3d} className="w-full h-[58vh] min-h-[420px] rounded-lg border border-ink-200 overflow-hidden bg-ink-50/40" />
+            ) : (
             <div className="overflow-auto rounded-lg border border-ink-200 bg-ink-50/40">
               <div
                 className="relative mx-auto"
@@ -332,6 +345,7 @@ export default function TogoEmbed() {
                 })}
               </div>
             </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-ink-200 bg-surface p-3 flex flex-wrap items-center justify-between gap-3 sticky bottom-2">

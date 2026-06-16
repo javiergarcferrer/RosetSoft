@@ -15,6 +15,7 @@ import { compoundSubtotal } from '../../../lib/pricing.js';
 import { groupFamilies, productForGrade } from '../../../lib/catalog.js';
 import { composeSubtype } from '../../../lib/subtype.js';
 import { planToDxf } from '../../../lib/togo/planToDxf.js';
+import { inferTogoForm } from '../../../lib/togo/togoModel.js';
 
 // Plan canvas extent (cm) and the cm→px scale the View renders at. A Togo "room"
 // of ~7.6 × 5.4 m comfortably holds an L- or U-shaped sectional.
@@ -309,6 +310,74 @@ export function placementsFromComponents(components, svgById = {}) {
 /** Whether a quote line carries a Togo plan (so the View shows the DXF action). */
 export function lineHasTogoPlan(line) {
   return !!(line?.components || []).some((c) => c?.plan && Number.isFinite(Number(c.plan.x)));
+}
+
+// ── 3D scene projection — placements → a top-down-agnostic 3D layout ────────
+// Pure (no three.js): turns the SAME placed pieces the 2D plan uses into a
+// centred, real-cm 3D scene the lazy three.js viewer renders. The plan works in
+// y-DOWN screen cm; 3D is y-UP with the floor on XZ, so plan-y maps to world-Z
+// and the whole layout is recentred on the origin (so the camera frames it).
+// Rotation rides through as degrees; the renderer spins each piece's group.
+
+/** Build 3D scene placements from the configurator's live `placed` state. */
+export function scenePlacementsFromPlaced(placed, resolvedById) {
+  return (placed || []).map((p) => {
+    const r = resolvePlacement(p, resolvedById);
+    return {
+      x: p.x, y: p.y, rot: p.rot,
+      widthCm: Number(r.widthCm) || 0, depthCm: Number(r.depthCm) || 0,
+      label: r.label || r.name || 'Togo', fabricCode: p.material?.code || r.code || '',
+    };
+  });
+}
+
+/** Build 3D scene placements from a quote line's modular components (the plan
+ *  + swatch code ride along), so a promoted quote previews in 3D too. */
+export function scenePlacementsFromComponents(components) {
+  return (components || [])
+    .filter((c) => c && c.plan && Number.isFinite(Number(c.plan.x)))
+    .map((c) => ({
+      x: Number(c.plan.x), y: Number(c.plan.y), rot: c.plan.rot,
+      widthCm: Number(c.plan.widthCm) || 0, depthCm: Number(c.plan.depthCm) || 0,
+      label: c.moduleName || c.name || 'Togo', fabricCode: '',
+    }));
+}
+
+/**
+ * Project scene placements → the 3D layout the viewer renders: each piece with
+ * its world (x,z) centre in cm, its 90° rotation, an inferred form (arm count),
+ * and the fabric code. Plus the overall footprint (for the camera + readout).
+ */
+export function resolveTogoScene(placements) {
+  const list = placements || [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const items = list.map((p) => {
+    const rot = norm360(p.rot);
+    const fp = footprintOf({ widthCm: p.widthCm, depthCm: p.depthCm }, rot);
+    const x0 = Number(p.x) || 0, y0 = Number(p.y) || 0;
+    minX = Math.min(minX, x0); minY = Math.min(minY, y0);
+    maxX = Math.max(maxX, x0 + fp.w); maxY = Math.max(maxY, y0 + fp.h);
+    return { rot, cx: x0 + fp.w / 2, cy: y0 + fp.h / 2, p };
+  });
+  const has = Number.isFinite(minX);
+  const cx = has ? (minX + maxX) / 2 : 0;
+  const cy = has ? (minY + maxY) / 2 : 0;
+  const pieces = items.map(({ rot, cx: pcx, cy: pcy, p }, i) => ({
+    id: i,
+    label: p.label || 'Togo',
+    widthCm: Number(p.widthCm) || 0,
+    depthCm: Number(p.depthCm) || 0,
+    form: inferTogoForm(p.label, p.widthCm, p.depthCm),
+    x: +(pcx - cx).toFixed(2),
+    z: +(pcy - cy).toFixed(2),
+    rotationDeg: rot,
+    fabricCode: p.fabricCode || '',
+  }));
+  return {
+    count: pieces.length,
+    pieces,
+    overallCm: has ? { widthCm: Math.round(maxX - minX), depthCm: Math.round(maxY - minY) } : { widthCm: 0, depthCm: 0 },
+  };
 }
 
 /** Project placements → a downloadable DXF + a tidy filename. Pure (no DOM). */

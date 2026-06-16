@@ -98,6 +98,75 @@ DXF viewers): all entities, layers, header vars and labels round-trip. Pinned by
 - **Quote** (`TotalsDock`) → "Plano DXF", shown only when the quote carries a
   Togo plan line — so a request promoted out of the inbox stays exportable.
 
+## 3D configurator — engines, UI, and what we shipped
+
+Research into online **3D** configurators (engines + UI), to build a highly
+visual, easy-to-use 3D Togo builder.
+
+### The asset reality (decisive)
+
+The source Togo DWGs (`scripts/togo-dwg/*.dwg`) contain **no extractable 3D** —
+only the flat "Mobilier 2D" plan layer (thousands of `POLYLINE3D` at z=0); the
+"Mobilier 3D" layer is declared but empty, and there are no ACIS/solid/mesh
+signatures. So real Togo meshes must come from a 3D source, not these files.
+**Ligne Roset opened official OFML 3D data — incl. the Togo — to the pCon
+Community for verified trade pros (Dec 2025)**: that's the dealer's legitimate,
+lowest-risk channel for true models. Until then we **generate** geometry from the
+real footprints. (Commissioning ~5 clean GLBs ≈ $750–$2,000; marketplace "Togo"
+models carry trademark/"editorial-use-only" risk — avoid.)
+
+### Engine landscape
+
+- **three.js** is the de-facto web engine; Roomle (+WASM), Spline, Vectary all
+  build on it, `<model-viewer>` embeds it, Marxent uses Babylon. ~155–168 KB gzip
+  → **must be code-split** (our `safeDynamicImport`).
+- **three.js + react-three-fiber + drei** is the recommended stack for a React
+  *multi-piece planner* (drei `Stage`/`Environment`/`ContactShadows`/`OrbitControls`).
+  We used **raw three.js** (one dep, no version coupling) with the built-in
+  `RoomEnvironment` IBL — great PBR shading with **no HDR asset to ship**.
+- **`<model-viewer>`** is the lowest-effort **AR** on-ramp (one GLB `src` +
+  auto-USDZ for iOS Quick Look). Reserve it for the AR step once we have GLBs.
+- Commercial vendors: **Threekit** (Lovesac), **Cylindo/Chaos** (pre-rendered
+  image spins — fights free-form modularity), **Roomle** (docking-point snapping
+  + SDK), **Emersya** (Vitra), **3D Cloud/Marxent** (a ready **Sectional
+  Configurator** — the closest analog). All real-time vendors swap fabric the
+  same way we do.
+
+### Fabric swap (the "covered in the chosen material" ask)
+
+One material per piece, set `material.map` to the swatch texture; **albedo is
+`SRGBColorSpace`**, `RepeatWrapping` + `repeat` to tile, `roughness ~0.9,
+metalness 0`. Diffuse-only is enough for fabric. We read the LR swatch through
+the existing `swatch-proxy` so WebGL can use it cross-origin.
+
+### UI patterns worth copying (Lovesac · Cylindo Modular Designer · Vitra/Emersya)
+
+Canvas-dominant + mobile-first control rail · **live dimensions + live price** on
+every change · swatch grid (selected + dots, recolor in place) · auto-fit camera
++ reset · auto-rotate + interaction prompt · loading state (never a blank canvas)
+· **AR present but secondary** (Baymard: ~87% skip AR; swatches + dimensions
+convert more) · **"request a quote" as the primary outcome** (fits our quote
+pipeline) · constrained/valid combinations only.
+
+### What we shipped (v1)
+
+A **2D⇄3D toggle** in the configurator (`TogoEmbed`): edit in the 2D plan,
+toggle to a real-time three.js view of the same layout, each piece **upholstered
+in its chosen fabric**, orbit + auto-rotate, soft IBL + contact shadow.
+- `src/lib/togo/togoModel.js` — procedural Togo parts (ribbed, legless, puffy)
+  sized to the real footprint; arms inferred from label/shape. Pure, tested.
+- `src/core/quote/views/configuratorView.js` `resolveTogoScene` — placements →
+  centred 3D layout (plan y→world z). Pure, tested.
+- `src/components/togo/{togoSceneBuilder.js,TogoScene3D.jsx}` — three.js
+  (code-split via `safeDynamicImport`; `RoomEnvironment` IBL, no asset).
+- Verified by headless WebGL screenshot of the scene builder + the production
+  build's code-split three chunk; pinned by `tests/togo3d.test.js`.
+
+**Roadmap to photoreal:** swap the per-piece procedural build for a GLB load
+(`useGLTF`/`GLTFLoader`) once the dealer exports Togo models from pCon/OFML — the
+layout, fabric-swap and UI wiring are unchanged. Then add `<model-viewer>` AR
+(GLB + auto-USDZ) and, later, in-3D drag/snap editing.
+
 ## Sources
 
 - DXF technical: [ezdxf file structure](https://ezdxf.readthedocs.io/en/stable/dxfinternals/filestructure.html) ·

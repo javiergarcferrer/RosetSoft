@@ -60,5 +60,6 @@ export {
   snapPlacement, footprintOf, clampToPlan, resolvePlacement,
   buildTogoComponents, buildTogoModularSeed,
   resolveTogoDxf, placementsFromPlaced, placementsFromComponents, lineHasTogoPlan,
+  resolveTogoScene, scenePlacementsFromPlaced, scenePlacementsFromComponents,
   PLAN_W_CM, PLAN_H_CM, PX_PER_CM, SNAP_GRID_CM, EDGE_SNAP_CM,
 } from './views/configuratorView.js';
