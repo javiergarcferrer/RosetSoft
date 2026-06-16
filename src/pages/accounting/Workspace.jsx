@@ -12,6 +12,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import LigneRosetReport from '../../components/accounting/LigneRosetReport.jsx';
 import Dropdown, { DropdownItem } from '../../components/primitives/Dropdown.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
@@ -113,6 +114,12 @@ const SUMMARY_DEFAULT_COLS = {
  */
 export default function AccountingWorkspace() {
   const { profileId, profiles, currentProfile, settings } = useApp();
+
+  // Which sales lens is showing: the per-cycle sales + commissions ('ciclo'),
+  // or the Ligne Roset monthly sell-through ('lr'). Both are SALES logic, so
+  // both live on this one screen — the LR report is the shared component, the
+  // same one its standalone page renders.
+  const [lens, setLens] = useState('ciclo'); // 'ciclo' | 'lr'
 
   // Cycle state — same shape as admin/Commissions so the math agrees.
   const [mode, setMode] = useState('current'); // 'current' | 'previous' | 'custom'
@@ -400,15 +407,10 @@ export default function AccountingWorkspace() {
         title="Ventas"
         subtitle={`Comando de ventas · Ciclo ${formatCycle(cycle)}`}
         actions={
-          <>
-          {/* The one report that leaves this screen: the monthly Ligne Roset
-              supplier sell-through. Everything else a sale needs lives in its
-              row below — this is the single top-level button. */}
-          <Link to="/accounting/ligne-roset" className="btn-secondary text-sm whitespace-nowrap">
-            <FileBarChart size={14} aria-hidden /> Reporte Ligne Roset
-          </Link>
-          {/* The four Odoo exports are one-shot commands — ONE menu instead of
-             four buttons crowding (and wrapping) the page header. */}
+          /* The four Odoo exports apply to the cycle lens (clientes / facturas
+             / comisiones del ciclo) — hidden on the Ligne Roset lens, which
+             carries its own export. ONE menu instead of four crowding buttons. */
+          lens === 'ciclo' ? (
           <Dropdown
             align="right"
             ariaLabel="Exportar CSV para Odoo"
@@ -462,10 +464,20 @@ export default function AccountingWorkspace() {
               </>
             )}
           </Dropdown>
-          </>
+          ) : null
         }
       />
 
+      {/* Sales lens toggle — the two ways to read the cycle's SALES, both on
+          this one screen: the per-sale cycle view and the Ligne Roset monthly
+          sell-through. */}
+      <div className="flex flex-wrap gap-1 mb-4 p-1 rounded-lg bg-ink-100/60 w-fit">
+        <LensTab active={lens === 'ciclo'} onClick={() => setLens('ciclo')} icon={FileCheck} label="Ventas del ciclo" />
+        <LensTab active={lens === 'lr'} onClick={() => setLens('lr')} icon={FileBarChart} label="Reporte Ligne Roset" />
+      </div>
+
+      {lens === 'ciclo' && (
+      <>
       {/* Cycle picker */}
       <div className="card card-pad mb-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -616,6 +628,10 @@ export default function AccountingWorkspace() {
           )}
         </details>
       )}
+      </>
+      )}
+
+      {lens === 'lr' && <LigneRosetReport />}
     </AccountingGate>
   );
 }
@@ -1056,6 +1072,25 @@ function TotalLine({ label, value, strong }) {
       <span>{label}</span>
       <span className="whitespace-nowrap">{value}</span>
     </div>
+  );
+}
+
+/** A segment of the sales-lens toggle (Ventas del ciclo ↔ Reporte Ligne Roset). */
+function LensTab({ active, onClick, icon: Icon, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors select-none ${
+        active
+          ? 'bg-surface text-ink-900 shadow-xs'
+          : 'text-ink-500 hover:text-ink-800'
+      }`}
+    >
+      <Icon size={14} className={active ? 'text-brand-600' : 'text-ink-400'} aria-hidden />
+      {label}
+    </button>
   );
 }
 
