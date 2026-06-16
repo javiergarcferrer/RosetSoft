@@ -310,7 +310,9 @@ export default function Layout() {
               )}
               {group.items.map((item) => (
                 <Fragment key={item.to}>
-                  <SidebarLink item={item} pathname={location.pathname} waUnread={waUnread} />
+                  {/* `sub` can come from the item itself (a flat sub-item like
+                      Configurador Togo) or be forced on a revealed child below. */}
+                  <SidebarLink item={item} sub={item.sub} pathname={location.pathname} waUnread={waUnread} />
                   {/* Children reveal (indented) only while their section is open. */}
                   {isSectionOpen(item, location.pathname) && item.children.map((c) => (
                     <SidebarLink key={c.to} item={c} sub pathname={location.pathname} waUnread={waUnread} />
