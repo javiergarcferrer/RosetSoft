@@ -955,10 +955,17 @@ Deno.serve(async (req) => {
     }
     // Primary = the pinned account, else first active, else first; persist it so
     // the create wizard and the other readers keep targeting the same one.
-    const primaryAcct = adAccts.find((a) => a.id === cfg.ad_account_id)
+    let primaryAcct: AdAcct | null = adAccts.find((a) => a.id === cfg.ad_account_id)
       || adAccts.find((a) => a.account_status === 1)
       || adAccts[0]
       || null;
+    // Robustness: if me/adaccounts hiccupped (transient/rate-limit) but we already
+    // know the pinned account, still read it — a list blip must never blank the
+    // whole pane (the prior single-account read had no such dependency).
+    if (!primaryAcct && cfg.ad_account_id) {
+      primaryAcct = { id: cfg.ad_account_id };
+      adAccts = [primaryAcct];
+    }
     const adAccountId = primaryAcct?.id || '';
     if (adAccountId && adAccountId !== cfg.ad_account_id) {
       await admin.from('meta_social_config').update({ ad_account_id: adAccountId, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
