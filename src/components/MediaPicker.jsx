@@ -6,9 +6,11 @@
 // accessible, touch-safe alternative to drag-and-drop) and locks every slide to
 // the first slide's ratio, since IG renders a carousel at one shared aspect.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ImagePlus, Film, X, ArrowUp, ArrowDown, RefreshCw, Crop } from 'lucide-react';
+import { ImagePlus, Film, X, ArrowUp, ArrowDown, RefreshCw, Crop, Columns3 } from 'lucide-react';
 import { uploadSocialMedia, uploadSocialImage, removeSocialMedia } from '../db/socialUpload.js';
+import { MIN_SLICES } from '../lib/imageCrop.js';
 import ImageCropper from './instagram/ImageCropper.jsx';
+import PanoramaCropper from './instagram/PanoramaCropper.jsx';
 
 let keySeq = 0;
 const isVideoFile = (f) => /^video\//.test(f?.type || '');
@@ -19,7 +21,9 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
   const [queue, setQueue] = useState([]); // files awaiting processing (crop/upload)
   const [pending, setPending] = useState(null); // { file, key } currently in the cropper
   const [carouselRatioId, setCarouselRatioId] = useState(null); // locked across slides
+  const [pano, setPano] = useState(null); // { file, key } currently in the panorama cropper
   const inputRef = useRef(null);
+  const panoInputRef = useRef(null);
 
   // Append a finished upload, honoring the per-mode cap (single modes replace).
   const commitMedia = useCallback((media) => {
@@ -53,6 +57,9 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
   }, [mode, items.length]);
 
   const inflight = queue.length + (pending ? 1 : 0);
+  // Room left in the carousel; a sliding panorama needs space for ≥2 tiles.
+  const room = Math.max(0, max - items.length - inflight);
+  const canPanorama = max > 1 && room >= MIN_SLICES && !pano;
 
   const addFiles = useCallback((fileList) => {
     const files = Array.from(fileList || []);
@@ -79,6 +86,37 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
 
   // Cancelling the cropper drops the rest of this pick batch — a clean "stop".
   const onCropCancel = useCallback(() => { setPending(null); setQueue([]); }, []);
+
+  // ── Sliding panorama: one wide image → N carousel tiles ──────────────────
+  const openPanorama = useCallback((fileList) => {
+    const f = Array.from(fileList || [])[0];
+    if (!f) return;
+    if (isVideoFile(f)) { setError('La panorámica deslizante necesita una imagen, no un video.'); return; }
+    setError(null);
+    setPano({ file: f, key: keySeq++ });
+  }, []);
+
+  const onPanoConfirm = useCallback(async (files, ratioId) => {
+    setPano(null);
+    const batch = (files || []).slice(0, Math.max(0, max - items.length));
+    if (!batch.length) return;
+    // The whole panorama shares one ratio — lock the carousel to it.
+    setCarouselRatioId(ratioId);
+    setBusy((b) => b + 1);
+    try {
+      for (const f of batch) {
+        // Sequential so carousel order = swipe order = left→right pan.
+        // eslint-disable-next-line no-await-in-loop
+        commitMedia(await uploadSocialImage(f));
+      }
+    } catch (e) {
+      setError(e?.message || 'No se pudo subir la panorámica.');
+    } finally {
+      setBusy((b) => Math.max(0, b - 1));
+    }
+  }, [max, items.length, commitMedia]);
+
+  const onPanoCancel = useCallback(() => setPano(null), []);
 
   const removeAt = useCallback((i) => {
     const it = items[i];
@@ -144,6 +182,24 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
         className="hidden"
         onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
       />
+      {canPanorama && (
+        <div>
+          <button
+            type="button"
+            onClick={() => panoInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-ink-200 px-3 py-2 text-xs font-medium text-ink-500 hover:border-brand-400 hover:text-brand-600"
+          >
+            <Columns3 size={14} /> Panorámica deslizante
+          </button>
+          <input
+            ref={panoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { openPanorama(e.target.files); e.target.value = ''; }}
+          />
+        </div>
+      )}
       <div className="flex items-center justify-between text-xs text-ink-400">
         <span className="inline-flex items-center gap-1">
           <Crop size={12} />
@@ -161,6 +217,16 @@ export default function MediaPicker({ items, onChange, max = 1, accept = 'image/
           lockedRatioId={mode === 'carousel' ? carouselRatioId : null}
           onConfirm={onCropConfirm}
           onCancel={onCropCancel}
+        />
+      )}
+
+      {pano && (
+        <PanoramaCropper
+          key={pano.key}
+          file={pano.file}
+          maxSlices={room}
+          onConfirm={onPanoConfirm}
+          onCancel={onPanoCancel}
         />
       )}
     </div>

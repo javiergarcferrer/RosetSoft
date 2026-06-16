@@ -1,27 +1,37 @@
-// IG-accurate image cropper — frames a device photo to an Instagram ratio
-// (square / portrait / landscape feed, or a 9:16 story) with pan + zoom, then
-// exports the EXACT pixels at IG's spec (1080-wide baseline JPEG) so the
-// composer preview is what publishes — Meta never silently re-crops it. A
-// full-screen overlay (portal to <body>) that sits above the Publicar modal.
-// All the cover/clamp/zoom math lives in the pure Model (lib/imageCrop); this
-// View only decodes, paints the live frame, and draws the final canvas.
+// Panorama cropper — frames a wide landscape and cuts it into N equal Instagram
+// tiles for a "sliding feed" carousel: swiping the carousel pans across one
+// continuous image. It's the single ImageCropper generalized to N outputs —
+// N tiles of the chosen per-slide ratio = ONE crop window of aspect N·ratio
+// (panoramaFrameAspect), so the same cover/clamp/zoom Model frames the band and
+// `sliceWindows` cuts it into seam-continuous strips. Exports N exact-spec
+// 1080-wide baseline JPEGs in swipe order. Full-screen overlay (portal to
+// <body>) that sits above the Publicar modal. All the geometry lives in the pure
+// Model (lib/imageCrop); this View only decodes, paints the live band, draws the
+// slice guides, and renders each final strip to its own canvas.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, X, ZoomIn, RefreshCw } from 'lucide-react';
+import { Check, X, ZoomIn, RefreshCw, Minus, Plus, MoveHorizontal } from 'lucide-react';
 import {
-  ratiosForMode, defaultRatio, ratioById, cropWindow, baseCropSize, outputSize,
-  clamp, MIN_ZOOM, MAX_ZOOM,
+  TILE_RATIOS, MIN_SLICES, MAX_SLICES, panoramaFrameAspect, sliceWindows, clampSlices,
+  cropWindow, baseCropSize, outputSize, clamp, MIN_ZOOM, MAX_ZOOM,
 } from '../../lib/imageCrop.js';
 import { loadOriented, toJpeg, IMG_MAX_BYTES } from './cropCanvas.js';
 
-export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null, onConfirm, onCancel }) {
-  const ratios = useMemo(() => ratiosForMode(mode), [mode]);
-  const [ratioId, setRatioId] = useState(() => lockedRatioId || defaultRatio(mode).id);
+const IG_MIN_TILE_W = 320; // IG rejects carousel images narrower than this
+
+export default function PanoramaCropper({ file, maxSlices = MAX_SLICES, onConfirm, onCancel }) {
+  // The carousel's remaining room caps the count; never below 2 (it's a panorama).
+  const slideCap = clamp(Math.round(maxSlices), MIN_SLICES, MAX_SLICES);
+  const [tileId, setTileId] = useState(TILE_RATIOS[0].id);
+  const [slices, setSlices] = useState(() => clampSlices(3, slideCap));
   const [zoom, setZoom] = useState(1);
   const [center, setCenter] = useState({ cx: 0, cy: 0 });
   const [img, setImg] = useState(null); // { canvas, w, h, previewUrl }
   const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
   const [busy, setBusy] = useState(false);
+
+  const tile = useMemo(() => TILE_RATIOS.find((r) => r.id === tileId) || TILE_RATIOS[0], [tileId]);
+  const frameAspect = panoramaFrameAspect(slices, tile.aspect);
 
   // ── decode (once per file) ──────────────────────────────────────────────
   useEffect(() => {
@@ -44,13 +54,10 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [file]);
 
-  // Locked ratio (carousel) follows the lock; otherwise reset to the mode default
-  // whenever the mode changes so a story never opens on a feed ratio.
-  useEffect(() => { setRatioId(lockedRatioId || defaultRatio(mode).id); }, [lockedRatioId, mode]);
+  // Keep the count inside the carousel's room if the cap tightens.
+  useEffect(() => { setSlices((n) => clampSlices(n, slideCap)); }, [slideCap]);
 
-  const ratio = ratioById(ratioId);
-
-  // ── frame box — fit the target aspect into the measured stage ───────────
+  // ── frame box — fit the (wide) band aspect into the measured stage ──────
   const stageRef = useRef(null);
   const frameRef = useRef(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
@@ -65,19 +72,17 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
   }, [status]);
 
   const frame = useMemo(() => {
-    const pad = 0; // the stage already carries the padding
-    const boxW = Math.max(0, stage.w - pad);
-    const boxH = Math.max(0, stage.h - pad);
+    const boxW = stage.w;
+    const boxH = stage.h;
     if (!boxW || !boxH) return { w: 0, h: 0 };
-    // Fit aspect (w/h) into the box.
-    if (boxW / boxH > ratio.aspect) return { w: Math.round(boxH * ratio.aspect), h: Math.round(boxH) };
-    return { w: Math.round(boxW), h: Math.round(boxW / ratio.aspect) };
-  }, [stage.w, stage.h, ratio.aspect]);
+    if (boxW / boxH > frameAspect) return { w: Math.round(boxH * frameAspect), h: Math.round(boxH) };
+    return { w: Math.round(boxW), h: Math.round(boxW / frameAspect) };
+  }, [stage.w, stage.h, frameAspect]);
 
   // Resolve the live crop window + the <img> transform that shows it.
   const view = useMemo(() => {
     if (!img || !frame.w) return null;
-    const win = cropWindow(img.w, img.h, ratio.aspect, zoom, center.cx, center.cy);
+    const win = cropWindow(img.w, img.h, frameAspect, zoom, center.cx, center.cy);
     const s = frame.w / win.sw; // display scale (frame.h / win.sh is identical)
     return {
       win,
@@ -87,7 +92,7 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
       left: -win.sx * s,
       top: -win.sy * s,
     };
-  }, [img, frame.w, ratio.aspect, zoom, center.cx, center.cy]);
+  }, [img, frame.w, frameAspect, zoom, center.cx, center.cy]);
 
   // ── gestures: pan (1 finger / drag) + pinch-zoom (2 fingers) ────────────
   const pointers = useRef(new Map());
@@ -97,7 +102,7 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
   // fixed; pass null to zoom around the frame center (slider / wheel).
   const applyZoom = useCallback((nextZoom, anchor) => {
     if (!img || !frame.w) return;
-    const cur = cropWindow(img.w, img.h, ratio.aspect, zoom, center.cx, center.cy);
+    const cur = cropWindow(img.w, img.h, frameAspect, zoom, center.cx, center.cy);
     const s0 = frame.w / cur.sw;
     const rect = frameRef.current?.getBoundingClientRect();
     const ax = anchor && rect ? anchor.x - rect.left : frame.w / 2;
@@ -105,14 +110,14 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
     const srcX = cur.sx + ax / s0;
     const srcY = cur.sy + ay / s0;
     const z1 = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
-    const base = baseCropSize(img.w, img.h, ratio.aspect);
+    const base = baseCropSize(img.w, img.h, frameAspect);
     const sw1 = base.w / z1;
     const sh1 = base.h / z1;
     const s1 = frame.w / sw1;
-    const clamped = cropWindow(img.w, img.h, ratio.aspect, z1, srcX - ax / s1 + sw1 / 2, srcY - ay / s1 + sh1 / 2);
+    const clamped = cropWindow(img.w, img.h, frameAspect, z1, srcX - ax / s1 + sw1 / 2, srcY - ay / s1 + sh1 / 2);
     setZoom(z1);
     setCenter({ cx: clamped.cx, cy: clamped.cy });
-  }, [img, frame.w, frame.h, ratio.aspect, zoom, center.cx, center.cy]);
+  }, [img, frame.w, frame.h, frameAspect, zoom, center.cx, center.cy]);
 
   const onPointerDown = useCallback((e) => {
     if (!view) return;
@@ -141,10 +146,10 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
     const dx = (e.clientX - prev.x) / view.s;
     const dy = (e.clientY - prev.y) / view.s;
     setCenter((c) => {
-      const w = cropWindow(img.w, img.h, ratio.aspect, zoom, c.cx - dx, c.cy - dy);
+      const w = cropWindow(img.w, img.h, frameAspect, zoom, c.cx - dx, c.cy - dy);
       return { cx: w.cx, cy: w.cy };
     });
-  }, [view, img, ratio.aspect, zoom, applyZoom]);
+  }, [view, img, frameAspect, zoom, applyZoom]);
 
   const endPointer = useCallback((e) => {
     pointers.current.delete(e.pointerId);
@@ -158,46 +163,59 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
     applyZoom(zoom * factor, { x: e.clientX, y: e.clientY });
   }, [view, zoom, applyZoom]);
 
-  // Switching ratio re-centers + resets zoom — predictable, like IG.
-  const changeRatio = useCallback((id) => {
-    setRatioId(id);
+  // Re-center + reset zoom whenever the band aspect changes (count or tile
+  // ratio) so the new frame opens predictably on the middle of the photo.
+  useEffect(() => {
     setZoom(1);
-    if (img) setCenter({ cx: img.w / 2, cy: img.h / 2 });
-  }, [img]);
+    setCenter((c) => (img ? { cx: img.w / 2, cy: img.h / 2 } : c));
+  }, [slices, tileId, img]);
 
-  // ── export the framed pixels at IG spec ─────────────────────────────────
+  const setCount = useCallback((n) => setSlices(clampSlices(n, slideCap)), [slideCap]);
+
+  // Live per-tile source width → flag a count that would publish below IG's min.
+  const tileSrcW = view ? view.win.sw / slices : 0;
+  const lowRes = status === 'ready' && tileSrcW > 0 && Math.min(1080, Math.round(tileSrcW)) < IG_MIN_TILE_W;
+
+  // ── export each strip at IG spec ─────────────────────────────────────────
   const confirm = useCallback(async () => {
-    if (!img || busy) return;
+    if (!img || busy || status !== 'ready') return;
     setBusy(true);
     try {
-      const win = cropWindow(img.w, img.h, ratio.aspect, zoom, center.cx, center.cy);
-      const out = outputSize(ratio.aspect, win.sw);
-      const canvas = document.createElement('canvas');
-      canvas.width = out.w; canvas.height = out.h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('no-ctx');
-      ctx.fillStyle = '#ffffff'; // JPEG has no alpha — flatten onto white
-      ctx.fillRect(0, 0, out.w, out.h);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img.canvas, win.sx, win.sy, win.sw, win.sh, 0, 0, out.w, out.h);
-      let quality = 0.92;
-      let blob = await toJpeg(canvas, quality);
-      while (blob.size > IMG_MAX_BYTES && quality > 0.5) {
-        quality -= 0.1;
-        blob = await toJpeg(canvas, quality);
+      const win = cropWindow(img.w, img.h, frameAspect, zoom, center.cx, center.cy);
+      const rects = sliceWindows(win, slices);
+      const files = [];
+      for (let i = 0; i < rects.length; i += 1) {
+        const r = rects[i];
+        const out = outputSize(tile.aspect, r.sw);
+        const canvas = document.createElement('canvas');
+        canvas.width = out.w; canvas.height = out.h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('no-ctx');
+        ctx.fillStyle = '#ffffff'; // JPEG has no alpha — flatten onto white
+        ctx.fillRect(0, 0, out.w, out.h);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img.canvas, r.sx, r.sy, r.sw, r.sh, 0, 0, out.w, out.h);
+        let quality = 0.92;
+        // eslint-disable-next-line no-await-in-loop
+        let blob = await toJpeg(canvas, quality);
+        while (blob.size > IMG_MAX_BYTES && quality > 0.5) {
+          quality -= 0.1;
+          // eslint-disable-next-line no-await-in-loop
+          blob = await toJpeg(canvas, quality);
+        }
+        files.push(new File([blob], `ig-pano-${i + 1}.jpg`, { type: 'image/jpeg' }));
       }
-      const cropped = new File([blob], `ig-${ratio.id}.jpg`, { type: 'image/jpeg' });
-      onConfirm?.(cropped, ratio.id);
+      onConfirm?.(files, tile.id);
     } catch {
       setBusy(false);
     }
-  }, [img, busy, ratio, zoom, center.cx, center.cy, onConfirm]);
+  }, [img, busy, status, frameAspect, zoom, center.cx, center.cy, slices, tile, onConfirm]);
 
-  // Esc cancels, Enter confirms — in the CAPTURE phase with stopImmediate so the
-  // composer Modal underneath (which also Esc-closes on window) never fires too;
-  // refs keep the listener stable without re-binding on every pan/zoom. Body
-  // scroll stays locked while the overlay owns the screen.
+  // Esc cancels, Enter confirms — capture phase + stopImmediate so the composer
+  // Modal underneath (which also Esc-closes) never fires too; refs keep the
+  // listener stable without re-binding on every pan/zoom. Body scroll stays
+  // locked while the overlay owns the screen.
   const confirmRef = useRef(confirm);
   const cancelRef = useRef(onCancel);
   useEffect(() => { confirmRef.current = confirm; cancelRef.current = onCancel; });
@@ -212,7 +230,11 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
     return () => { window.removeEventListener('keydown', onKey, true); document.body.style.overflow = prev; };
   }, []);
 
-  const showRatios = !lockedRatioId && ratios.length > 1;
+  // The interior slice boundaries (fractions of the frame width) for the guides.
+  const dividers = useMemo(
+    () => Array.from({ length: Math.max(0, slices - 1) }, (_, i) => ((i + 1) / slices) * 100),
+    [slices],
+  );
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex flex-col bg-black/95 text-white animate-in fade-in duration-150">
@@ -221,20 +243,18 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
         <button type="button" onClick={onCancel} className="grid h-11 w-11 place-items-center rounded-full text-white/80 hover:bg-white/10 hover:text-white" aria-label="Cancelar">
           <X size={22} />
         </button>
-        <div className="text-sm font-medium text-white/90">
-          {mode === 'story' || mode === 'reel' ? 'Recortar historia' : 'Recortar para Instagram'}
-        </div>
+        <div className="text-sm font-medium text-white/90">Panorámica deslizante</div>
         <button
           type="button"
           onClick={confirm}
           disabled={status !== 'ready' || busy}
           className="inline-flex h-11 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-black hover:bg-white/90 disabled:opacity-40"
         >
-          {busy ? <RefreshCw size={16} className="animate-spin" /> : <Check size={17} />} Listo
+          {busy ? <RefreshCw size={16} className="animate-spin" /> : <Check size={17} />} Crear {slices}
         </button>
       </div>
 
-      {/* stage — the framing area */}
+      {/* stage — the framing band */}
       <div ref={stageRef} className="relative min-h-0 flex-1 select-none overflow-hidden p-3 sm:p-6">
         <div className="grid h-full w-full place-items-center">
           {status === 'loading' && (
@@ -266,13 +286,21 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
                   style={{ width: view.imgW, height: view.imgH, left: view.left, top: view.top }}
                 />
               )}
-              {/* thirds guides — fade out once the user starts framing is overkill;
-                  keep them subtle and always on, like IG's grid. */}
+              {/* slice guides — one line per cut, plus a card number per tile, so
+                  the dealer sees exactly what each carousel slide will be. */}
               <div className="pointer-events-none absolute inset-0">
-                <div className="absolute left-1/3 top-0 h-full w-px bg-white/25" />
-                <div className="absolute left-2/3 top-0 h-full w-px bg-white/25" />
-                <div className="absolute top-1/3 left-0 w-full h-px bg-white/25" />
-                <div className="absolute top-2/3 left-0 w-full h-px bg-white/25" />
+                {dividers.map((pct, i) => (
+                  <div key={i} className="absolute top-0 h-full w-px bg-white/70 shadow-[0_0_0_0.5px_rgba(0,0,0,0.4)]" style={{ left: `${pct}%` }} />
+                ))}
+                {Array.from({ length: slices }, (_, i) => (
+                  <span
+                    key={i}
+                    className="absolute top-2 grid h-6 min-w-6 -translate-x-1/2 place-items-center rounded-full bg-black/55 px-1.5 text-[11px] font-semibold text-white"
+                    style={{ left: `${((i + 0.5) / slices) * 100}%` }}
+                  >
+                    {i + 1}
+                  </span>
+                ))}
               </div>
             </div>
           )}
@@ -296,16 +324,38 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
               aria-label="Zoom"
             />
           </div>
-          {/* ratio chips */}
-          {showRatios && (
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {ratios.map((r) => {
-                const on = r.id === ratioId;
+
+          {/* slice count + per-tile ratio */}
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCount(slices - 1)}
+                disabled={slices <= MIN_SLICES}
+                className="grid h-9 w-9 place-items-center rounded-full bg-white/12 text-white hover:bg-white/20 disabled:opacity-30"
+                aria-label="Menos imágenes"
+              >
+                <Minus size={16} />
+              </button>
+              <span className="min-w-20 text-center text-sm tabular-nums text-white/90">{slices} imágenes</span>
+              <button
+                type="button"
+                onClick={() => setCount(slices + 1)}
+                disabled={slices >= slideCap}
+                className="grid h-9 w-9 place-items-center rounded-full bg-white/12 text-white hover:bg-white/20 disabled:opacity-30"
+                aria-label="Más imágenes"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {TILE_RATIOS.map((r) => {
+                const on = r.id === tileId;
                 return (
                   <button
                     key={r.id}
                     type="button"
-                    onClick={() => changeRatio(r.id)}
+                    onClick={() => setTileId(r.id)}
                     className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${on ? 'bg-white text-black' : 'bg-white/12 text-white/80 hover:bg-white/20'}`}
                     aria-pressed={on}
                   >
@@ -314,9 +364,15 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
                 );
               })}
             </div>
-          )}
-          {lockedRatioId && (
-            <p className="text-center text-[11px] text-white/50">Todo el carrusel comparte el mismo formato ({ratio.label}).</p>
+          </div>
+
+          <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-white/50">
+            <MoveHorizontal size={13} /> Se publican {slices} tarjetas; al deslizar el carrusel se ve la imagen completa.
+          </p>
+          {lowRes && (
+            <p className="text-center text-[11px] text-amber-300/90">
+              Con {slices} cortes cada imagen queda algo pequeña ({Math.round(tileSrcW)} px). Usa menos cortes o una foto más ancha para máxima nitidez.
+            </p>
           )}
         </div>
       )}

@@ -101,3 +101,50 @@ export function outputSize(aspect: number, srcW: number): { w: number; h: number
   const w = Math.max(1, Math.round(Math.min(OUTPUT_WIDTH, srcW)));
   return { w, h: Math.max(1, Math.round(w / aspect)) };
 }
+
+// ── Carousel panorama ("sliding feed") ──────────────────────────────────────
+// A wide landscape cut into equal vertical tiles, posted as a carousel: swiping
+// pans across one continuous image. The trick that lets us reuse ALL of the
+// cover/clamp/zoom math above: N tiles of aspect `a` laid side by side = ONE
+// crop window of aspect N·a. So we frame the band with `cropWindow` (at the
+// N·a aspect) and cut it into N equal strips — adjacent strips share an exact
+// source edge at the same vertical crop, so the seams line up and the swipe
+// reads as a single image. IG never re-crops it (each strip is exact IG spec).
+
+// IG carousels hold 2–10 cards; a sliding panorama needs at least two strips.
+export const MIN_SLICES = 2;
+export const MAX_SLICES = 10;
+
+// The per-tile ratios that read well as a sliding feed — tall portrait (most
+// screen, IG's default) or square. A landscape per-tile ratio defeats the
+// effect (the band would be near-flat), so the panorama tool offers only these.
+export const TILE_RATIOS: IgRatio[] = [RATIO_PORTRAIT, RATIO_SQUARE];
+
+/** Clamp a requested slice count into the IG carousel range, honoring an
+ *  optional lower cap (e.g. the carousel's remaining room). */
+export function clampSlices(n: number, cap: number = MAX_SLICES): number {
+  const hi = clamp(Math.round(cap), MIN_SLICES, MAX_SLICES);
+  return clamp(Math.round(n), MIN_SLICES, hi);
+}
+
+/** The crop-window aspect (w/h) for `slices` tiles of `tileAspect` side by side
+ *  — i.e. the single window the framing math covers before we cut it. */
+export function panoramaFrameAspect(slices: number, tileAspect: number): number {
+  const n = Math.max(1, Math.round(slices));
+  return n * tileAspect;
+}
+
+export type SliceRect = { sx: number; sy: number; sw: number; sh: number };
+
+/**
+ * Cut a resolved crop `win` into `slices` equal vertical strips, left→right (=
+ * carousel swipe order). Every strip shares the band's top + height, and each
+ * strip starts exactly where the previous one ended, so the tiles reassemble
+ * into one seamless image. Each strip's aspect therefore equals the band aspect
+ * ÷ slices = the per-tile ratio, by construction.
+ */
+export function sliceWindows(win: SliceRect, slices: number): SliceRect[] {
+  const n = Math.max(1, Math.round(slices));
+  const sw = win.sw / n;
+  return Array.from({ length: n }, (_, i) => ({ sx: win.sx + i * sw, sy: win.sy, sw, sh: win.sh }));
+}
