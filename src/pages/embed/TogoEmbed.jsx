@@ -1,27 +1,56 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
+import { swatchUrl } from '../../lib/swatchImage.js';
+import { productForGrade } from '../../lib/catalog.js';
+import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
 import {
-  resolveConfigurator, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
+  resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
 } from '../../core/quote/index.js';
+import Modal from '../../components/Modal.jsx';
+import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
+import ImageView from '../../components/ImageView.jsx';
 
 const SCALE = PX_PER_CM;
 
 /**
  * PUBLIC, no-login Togo configurator — embedded in the dealer's website via an
- * <iframe>. A visitor drags Togo pieces into a top-down plan, sees the live retail
- * total (DOP), and requests a quote; the request becomes a DRAFT quote in the
- * dealer's pipeline (POST → togo-embed). Reuses the SAME pure ViewModel as the
- * internal configurator; it just feeds it data from the public Edge Function
- * instead of the DB. Renders OUTSIDE the app shell (no AppContext/session) and is
- * pinned light (isPublicRoute), so it sits cleanly inside any page.
+ * <iframe>, and shown back IN the app (Togo workspace → Configurador tab) as a
+ * live preview of exactly what's deployed. This is THE single configurator: a
+ * visitor drags Togo pieces into a top-down plan, PICKS FABRICS (the same
+ * MaterialColorPicker the internal quote editor uses, fed by public-safe catalog
+ * data from `togo-embed`), sees the live retail total (DOP), and requests a
+ * quote → a pending togo_request the dealer promotes. Reuses the SAME pure VM as
+ * the rest of the app; it just feeds it data from the Edge Function instead of
+ * the DB. Renders OUTSIDE the app shell (no AppContext/session) and is pinned
+ * light, so it sits cleanly inside any page.
  */
+
+// material + color → the { grade, fabric, code } shape a placement carries. Mirrors
+// SwatchPicker.toPick; `code` lets us render the LR swatch (swatchUrl) with no DB.
+function toPick(material, color) {
+  return { grade: material.grade || '', fabric: composeFabricLabel(material, color), code: color?.code || '' };
+}
+
+// Rehydrate the per-model family JSON the Edge Function sends into the SAME
+// CatalogFamily shape productForGrade expects (byGrade as a Map).
+function familyFromJson(f) {
+  if (!f || !f.root) return null;
+  return {
+    root: f.root, name: f.name || '', graded: !!f.graded, grades: f.grades || [],
+    brand: 'ligne-roset', family: '',
+    byGrade: new Map(Object.entries(f.byGrade || {})),
+  };
+}
+
 export default function TogoEmbed() {
   const [cat, setCat] = useState({ status: 'loading', data: null, error: null });
   const [placed, setPlaced] = useState([]);
   const [selectedUid, setSelectedUid] = useState(null);
   const [step, setStep] = useState('build'); // 'build' | 'form' | 'done'
+  const [matOpen, setMatOpen] = useState(false);
+  const [matMode, setMatMode] = useState('one'); // 'one' (selected piece) | 'all'
 
   useEffect(() => {
     let active = true;
@@ -34,16 +63,41 @@ export default function TogoEmbed() {
   const data = cat.data;
   const rates = data?.rates || { USD: 1, DOP: 60 };
   const models = useMemo(() => (data?.models || []).filter((m) => m.svg), [data]);
+  const materials = useMemo(() => data?.materials || [], [data]);
   const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m.svg])), [models]);
+
+  // Per-model family (grades + retail prices) so a fabric pick reprices exactly
+  // like the internal configurator (productForGrade), keyed by family root.
+  const families = useMemo(() => {
+    const map = new Map();
+    for (const m of models) {
+      const fam = familyFromJson(m.family);
+      if (fam) map.set(fam.root, fam);
+    }
+    return map;
+  }, [models]);
+
   const resolvedById = useMemo(() => {
     const o = {};
     for (const m of models) {
-      o[m.id] = { id: m.id, label: m.name, widthCm: m.widthCm, depthCm: m.depthCm, unitPrice: m.priceUsd };
+      o[m.id] = {
+        id: m.id, label: m.name, widthCm: m.widthCm, depthCm: m.depthCm,
+        unitPrice: m.priceUsd, root: m.family?.root || m.root || null,
+        offeredKeys: m.offeredFabricKeys || [],
+      };
     }
     return o;
   }, [models]);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
+  const selected = placed.find((p) => p.uid === selectedUid) || null;
+  const selectedFamily = selected ? (families.get(resolvedById[selected.pieceId]?.root) || null) : null;
+  const selResolved = selected ? resolvePlacement(selected, resolvedById) : null;
+  const codeByUid = useMemo(() => {
+    const o = {};
+    for (const p of placed) if (p.material?.code) o[p.uid] = p.material.code;
+    return o;
+  }, [placed]);
 
   const addPiece = useCallback((modelId) => {
     const r = resolvedById[modelId]; if (!r) return;
@@ -66,6 +120,50 @@ export default function TogoEmbed() {
     }));
   }, [selectedUid, resolvedById]);
   const deleteSel = useCallback(() => { setPlaced((prev) => prev.filter((p) => p.uid !== selectedUid)); setSelectedUid(null); }, [selectedUid]);
+
+  // Material pick for the selected piece → reprice by grade + stamp swatch/subtype.
+  const onPickMaterial = useCallback((pick) => {
+    if (!selected) return;
+    const p = selectedFamily ? productForGrade(selectedFamily, pick.grade) : null;
+    setPlaced((prev) => prev.map((row) => (row.uid === selected.uid ? {
+      ...row,
+      material: {
+        grade: pick.grade, fabric: pick.fabric, code: pick.code || '', swatchImageId: null,
+        subtype: composeSubtype(pick.grade, pick.fabric),
+        reference: p?.reference || '',
+        unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) : (resolvedById[row.pieceId]?.unitPrice ?? null),
+      },
+    } : row)));
+  }, [selected, selectedFamily, resolvedById]);
+
+  // Apply ONE fabric to EVERY piece, repricing each by its OWN bound model.
+  const applyFabricToAll = useCallback((pick) => {
+    setPlaced((prev) => prev.map((row) => {
+      const fam = families.get(resolvedById[row.pieceId]?.root);
+      const p = fam ? productForGrade(fam, pick.grade) : null;
+      return {
+        ...row,
+        material: {
+          grade: pick.grade, fabric: pick.fabric, code: pick.code || '', swatchImageId: null,
+          subtype: composeSubtype(pick.grade, pick.fabric),
+          reference: p?.reference || '',
+          unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) : (resolvedById[row.pieceId]?.unitPrice ?? null),
+        },
+      };
+    }));
+  }, [families, resolvedById]);
+
+  const clearFabric = useCallback(() => {
+    if (!selectedUid) return;
+    setPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
+  }, [selectedUid]);
+
+  const openMaterial = useCallback((mode) => {
+    if (mode === 'one' && !selectedUid) return;
+    if (mode === 'all' && !placed.length) return;
+    setMatMode(mode);
+    setMatOpen(true);
+  }, [selectedUid, placed.length]);
 
   const dragRef = useRef(null);
   const onTileDown = useCallback((e, p) => {
@@ -107,7 +205,10 @@ export default function TogoEmbed() {
     return (
       <RequestForm
         storeName={data.storeName}
-        items={placed.map((p) => ({ modelId: p.pieceId, x: p.x, y: p.y, rot: p.rot }))}
+        items={placed.map((p) => ({
+          modelId: p.pieceId, x: p.x, y: p.y, rot: p.rot,
+          ...(p.material ? { material: { grade: p.material.grade, fabric: p.material.fabric, code: p.material.code } } : {}),
+        }))}
         estimateUsd={vm.subtotalUsd}
         totalDop={formatMoney(vm.subtotalUsd, 'DOP', rates)}
         onBack={() => setStep('build')}
@@ -122,7 +223,7 @@ export default function TogoEmbed() {
         <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 text-brand-600"><Sofa size={16} /></span>
         <div className="min-w-0">
           <h1 className="font-display font-semibold text-base leading-tight truncate">Configura tu Togo</h1>
-          <p className="text-[11px] text-ink-500">Arrastra las piezas y arma tu sofá · {data.storeName}</p>
+          <p className="text-[11px] text-ink-500">Arrastra las piezas, elige tus telas y arma tu sofá · {data.storeName}</p>
         </div>
       </header>
 
@@ -151,11 +252,38 @@ export default function TogoEmbed() {
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <span className="text-[11px] text-ink-500">{vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla'}</span>
               <div className="flex items-center gap-1">
-                <button type="button" onClick={rotateSel} disabled={!selectedUid} className="btn-ghost text-xs disabled:opacity-40" title="Rotar"><RotateCw size={14} /></button>
-                <button type="button" onClick={deleteSel} disabled={!selectedUid} className="btn-ghost text-xs text-red-600 disabled:opacity-40" title="Quitar"><Trash2 size={14} /></button>
+                <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
                 <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
               </div>
             </div>
+
+            {/* Selected-piece panel — name, fabric, price, size + per-piece actions. */}
+            {selected && selResolved && (
+              <div className="mb-2 flex flex-wrap items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2">
+                <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[selected.pieceId] }} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium truncate">{selResolved.label}</div>
+                  <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
+                    {selected.material?.code && <ImageView id={null} fallbackUrl={swatchUrl(selected.material.code)} alt="" className="w-3 h-3 rounded-sm object-cover" />}
+                    <span>{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin opciones de tela')}</span>
+                    <span className="text-ink-300">·</span>
+                    <span className="tabular-nums font-medium text-ink-700">{selResolved.unitPrice != null ? formatMoney(selResolved.unitPrice, 'DOP', rates) : 'sin precio'}</span>
+                    <span className="text-ink-400 tabular-nums">· {selResolved.widthCm}×{selResolved.depthCm} cm</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {selectedFamily && (
+                    <button type="button" onClick={() => openMaterial('one')} className="btn-ghost text-xs" title="Elegir tela"><Palette size={14} /> Tela</button>
+                  )}
+                  {selected.material && (
+                    <button type="button" onClick={clearFabric} className="btn-ghost text-xs text-ink-500" title="Quitar tela"><X size={14} /></button>
+                  )}
+                  <button type="button" onClick={rotateSel} className="btn-ghost text-xs" title="Rotar"><RotateCw size={14} /></button>
+                  <button type="button" onClick={deleteSel} className="btn-ghost text-xs text-red-600" title="Quitar"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-auto rounded-lg border border-ink-200 bg-ink-50/40">
               <div
                 className="relative mx-auto"
@@ -170,6 +298,7 @@ export default function TogoEmbed() {
               >
                 {vm.tiles.map((t) => {
                   const sel = t.uid === selectedUid;
+                  const code = codeByUid[t.uid];
                   return (
                     <div
                       key={t.uid}
@@ -181,7 +310,10 @@ export default function TogoEmbed() {
                     >
                       <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
                       <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: svgById[t.pieceId] }} />
-                      <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">{t.dimsLabel}</span>
+                      <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
+                        {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
+                        {t.dimsLabel}
+                      </span>
                     </div>
                   );
                 })}
@@ -200,7 +332,45 @@ export default function TogoEmbed() {
           </div>
         </section>
       </div>
+
+      <FabricModal
+        open={matOpen}
+        onClose={() => setMatOpen(false)}
+        onSelect={matMode === 'all' ? applyFabricToAll : onPickMaterial}
+        materials={materials}
+        family={matMode === 'all' ? null : selectedFamily}
+        nameFilter={matMode === 'all' ? undefined : nameFilterOf(resolvedById[selected?.pieceId]?.offeredKeys)}
+        currentGrade={matMode === 'all' ? undefined : selected?.material?.grade}
+        currentFabric={matMode === 'all' ? undefined : selected?.material?.fabric}
+      />
     </div>
+  );
+}
+
+function nameFilterOf(keys) {
+  return Array.isArray(keys) && keys.length ? new Set(keys) : undefined;
+}
+
+/** The fabric picker — the SAME MaterialColorPicker the internal editor uses,
+ *  wrapped in a Modal, fed public-safe catalog data (no DB). */
+function FabricModal({ open, onClose, onSelect, materials, family, nameFilter, currentGrade, currentFabric }) {
+  const [title, setTitle] = useState('Elegir material');
+  useEffect(() => { if (open) setTitle('Elegir material'); }, [open]);
+  return (
+    <Modal open={open} onClose={onClose} title={title} size="lg">
+      {open && (
+        <MaterialColorPicker
+          materials={materials}
+          family={family}
+          nameFilter={nameFilter}
+          currentGrade={currentGrade}
+          currentFabric={currentFabric}
+          autoDrill
+          onPick={(material, color) => { onSelect(toPick(material, color)); onClose(); }}
+          onTitleChange={setTitle}
+        />
+      )}
+    </Modal>
   );
 }
 
@@ -234,7 +404,7 @@ function RequestForm({ storeName, items, estimateUsd, totalDop, onBack, onDone }
         <button type="button" onClick={onBack} className="btn-ghost text-xs text-ink-500"><ArrowLeft size={14} /> Volver al diseño</button>
         <div>
           <h2 className="font-display font-semibold text-lg">Solicita tu cotización</h2>
-          <p className="text-xs text-ink-500 mt-0.5">{storeName} te contactará con el precio final y las telas disponibles. Estimado: <b className="text-ink-700 tabular-nums">{totalDop}</b></p>
+          <p className="text-xs text-ink-500 mt-0.5">{storeName} te contactará con el precio final y la disponibilidad. Estimado: <b className="text-ink-700 tabular-nums">{totalDop}</b></p>
         </div>
         <div>
           <label className="label">Nombre *</label>
@@ -252,7 +422,7 @@ function RequestForm({ storeName, items, estimateUsd, totalDop, onBack, onDone }
         </div>
         <div>
           <label className="label">Nota (opcional)</label>
-          <textarea className="input min-h-[72px]" value={form.note} onChange={set('note')} placeholder="Color preferido, dudas, dirección de entrega…" />
+          <textarea className="input min-h-[72px]" value={form.note} onChange={set('note')} placeholder="Dudas, dirección de entrega…" />
         </div>
         {error && <div role="alert" className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2"><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /> {error}</div>}
         <p className="text-[11px] text-ink-400">* Indica al menos un teléfono o correo para que podamos contactarte.</p>
@@ -270,7 +440,7 @@ function DoneScreen({ storeName, onReset }) {
       <div className="text-center max-w-sm space-y-3">
         <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center justify-center"><Check size={26} /></div>
         <h2 className="font-display font-semibold text-lg">¡Solicitud enviada!</h2>
-        <p className="text-sm text-ink-500">{storeName} recibió tu diseño y te contactará pronto con el precio final y las telas disponibles.</p>
+        <p className="text-sm text-ink-500">{storeName} recibió tu diseño y te contactará pronto con el precio final y la disponibilidad.</p>
         <button type="button" onClick={onReset} className="btn-ghost text-sm">Diseñar otro</button>
       </div>
     </div>

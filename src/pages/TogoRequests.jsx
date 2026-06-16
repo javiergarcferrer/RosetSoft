@@ -6,6 +6,9 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { formatMoney, formatDateTime } from '../lib/format.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
+import { productForGrade } from '../lib/catalog.js';
+import { composeSubtype } from '../lib/subtype.js';
+import { swatchUrl } from '../lib/swatchImage.js';
 import {
   effectiveRates, initialQuoteTerms,
   resolveConfigurator, resolveTogoModels, buildTogoModularSeed,
@@ -43,7 +46,7 @@ export default function TogoRequests() {
     [profileId], [],
   );
 
-  const { resolvedById, svgById } = useMemo(() => resolveTogoModels(models, products), [models, products]);
+  const { families, resolvedById, svgById } = useMemo(() => resolveTogoModels(models, products), [models, products]);
   const rates = useMemo(() => effectiveRates(settings), [settings]);
 
   const pending = useMemo(
@@ -61,9 +64,24 @@ export default function TogoRequests() {
     if (busyId) return;
     setBusyId(req.id);
     try {
-      const placed = (req.items || []).map((it) => ({
-        uid: newId(), pieceId: it.modelId, x: it.x, y: it.y, rot: it.rot,
-      }));
+      // Replay the placements — carrying the visitor's fabric pick, repriced by
+      // grade against the DEALER's catalog (list price; the quote's margin applies
+      // on top), exactly as the internal editor would.
+      const placed = (req.items || []).map((it) => {
+        const base = { uid: newId(), pieceId: it.modelId, x: it.x, y: it.y, rot: it.rot };
+        const mat = it.material;
+        if (mat && (mat.grade || mat.fabric)) {
+          const fam = families.get(resolvedById[it.modelId]?.root);
+          const p = fam ? productForGrade(fam, mat.grade) : null;
+          base.material = {
+            grade: mat.grade || '', fabric: mat.fabric || '', swatchImageId: null,
+            subtype: composeSubtype(mat.grade, mat.fabric),
+            reference: p?.reference || '',
+            unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) : (resolvedById[it.modelId]?.unitPrice ?? null),
+          };
+        }
+        return base;
+      });
       const id = newId();
       const c = req.contact || {};
       const notes = [
@@ -102,7 +120,7 @@ export default function TogoRequests() {
       console.error('[togo] could not promote request', e);
       setBusyId(null);
     }
-  }, [busyId, profileId, currentProfile, settings, resolvedById, navigate]);
+  }, [busyId, profileId, currentProfile, settings, families, resolvedById, navigate]);
 
   const dismiss = useCallback(async (req) => {
     await db.togoRequests.update(req.id, { status: 'dismissed', updatedAt: Date.now() });
@@ -150,6 +168,15 @@ function RequestCard({ req, rates, resolvedById, svgById, busy, onPromote, onDis
   );
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: THUMB_SCALE }), [placed, resolvedById]);
   const phoneDigits = (c.phone || '').replace(/\D/g, '');
+  // Distinct fabrics the visitor chose, with swatches.
+  const fabrics = useMemo(() => {
+    const seen = new Map();
+    for (const it of (req.items || [])) {
+      const m = it.material;
+      if (m?.fabric && !seen.has(m.fabric)) seen.set(m.fabric, m.code || '');
+    }
+    return [...seen.entries()].map(([fabric, code]) => ({ fabric, code }));
+  }, [req]);
 
   return (
     <div className="card card-pad space-y-3">
@@ -193,6 +220,17 @@ function RequestCard({ req, rates, resolvedById, svgById, busy, onPromote, onDis
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {fabrics.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {fabrics.map((f) => (
+            <span key={f.fabric} className="inline-flex items-center gap-1 rounded-full border border-ink-200 px-2 py-0.5 text-[11px]">
+              {f.code && <img src={swatchUrl(f.code)} alt="" className="w-3 h-3 rounded-sm object-cover" />}
+              <span className="truncate max-w-[180px]">{f.fabric}</span>
+            </span>
+          ))}
         </div>
       )}
 

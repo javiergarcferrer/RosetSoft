@@ -1121,7 +1121,7 @@ export interface LineComponent {
   moduleSelected?: boolean;
   /**
    * Top-down PLAN geometry for a piece placed in the Togo configurator
-   * (`src/pages/TogoConfigurator.jsx`). Each placed Togo piece is one module of a
+   * (the public embed `src/pages/embed/TogoEmbed.jsx`). Each placed Togo piece is one module of a
    * modular line; its position rides inline on the JSONB component so a configured
    * layout round-trips with the quote — no `layout` column, no migration. Absent
    * on a normally-added component. Centimetres; `rot` ∈ {0, 90, 180, 270}. Built
