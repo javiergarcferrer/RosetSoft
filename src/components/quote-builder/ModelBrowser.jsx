@@ -173,8 +173,9 @@ function groupAndRank(products, tokens) {
 
 /** Search mode — relevance-ranked matches grouped by category, scoped to the
  *  active brand. Owns its query so a fresh search shows a loader rather than a
- *  stale/empty flash. */
-function PickerSearch({ profileId, brand, term, onPick }) {
+ *  stale/empty flash. Exported so the Inventario picker can drop the LSG results
+ *  into its combined cross-catalogue search (driven by ITS shared search box). */
+export function PickerSearch({ profileId, brand, term, onPick }) {
   const { data: products, loaded } = useLiveQueryStatus(
     () => searchProducts(profileId, term, SEARCH_LIMIT, brand),
     [profileId, brand, term],
@@ -206,8 +207,9 @@ function PickerSearch({ profileId, brand, term, onPick }) {
 }
 
 /** Browse mode — the active brand's categories, collapsed; opening one
- *  lazy-loads its models. */
-function PickerBrowse({ profileId, brand, onPick }) {
+ *  lazy-loads its models. Exported so the Inventario picker reuses it for the
+ *  LifestyleGarden browse tab (empty query). */
+export function PickerBrowse({ profileId, brand, onPick }) {
   const { data: categories, loaded, error } = useLiveQueryStatus(
     () => catalogCategories(profileId, brand),
     [profileId, brand],

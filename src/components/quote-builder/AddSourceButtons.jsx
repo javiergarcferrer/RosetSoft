@@ -5,8 +5,8 @@ import { BookOpen, Boxes } from 'lucide-react';
  * deliberately SEPARATE because the two sources are fundamentally different:
  *   • Catálogo  → the Ligne Roset catalog (CatalogPicker): a SKU/model priced
  *                 by grade + fabric, ordered from the manufacturer.
- *   • Inventario → our own stock on hand (InventoryPicker): the manual
- *                 existencias list AND the LifestyleGarden Shopify stock — a
+ *   • Inventario → our own stock on hand (InventoryPicker): the Ligne Roset
+ *                 (import-fed) stock AND the LifestyleGarden Shopify stock — a
  *                 physical unit already on hand, at its selling price.
  *
  * They used to be icon-only (a book and boxes) — the PRIMARY way to add a
@@ -36,7 +36,7 @@ export default function AddSourceButtons({ onOpenCatalog, onOpenInventory, varia
         type="button"
         onClick={onOpenInventory}
         className={cls}
-        title="Agregar desde el inventario (existencias y LifestyleGarden)"
+        title="Agregar desde el inventario (Ligne Roset y LifestyleGarden)"
       >
         <Boxes size={size} aria-hidden /> Inventario
       </button>

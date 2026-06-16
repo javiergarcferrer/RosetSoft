@@ -5,11 +5,12 @@ import { NavLink, useLocation } from 'react-router-dom';
  * AccountingSubnav, but Inventario is a STANDALONE section (no longer a
  * Contabilidad center), so its two surfaces own this strip themselves rather
  * than reading it from the accounting section map:
- *   • Existencias     — the team's manual stock list (no accounting posting).
+ *   • Ligne Roset     — our on-hand stock (import-fed `inventory_items`). The
+ *     route slug stays /existencias (stable bookmarks); only the label moved.
  *   • LifestyleGarden — the stock synced from the LSG Shopify store.
  */
 const TABS = [
-  { to: '/inventario/existencias', label: 'Existencias' },
+  { to: '/inventario/existencias', label: 'Ligne Roset' },
   { to: '/inventario/lifestylegarden', label: 'LifestyleGarden' },
 ];
 
