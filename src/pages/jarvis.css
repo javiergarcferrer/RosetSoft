@@ -707,6 +707,17 @@
 .jv-col-center,
 .jv-col-right { min-width: 0; }
 
+/* Base grid — the mobile-first default. It MUST be declared BEFORE the phone
+   deck and the desktop track media queries so both override it by source order.
+   (A later bare `.jv-grid { display: grid }` would otherwise win over the deck's
+   `display: flex` at equal specificity and collapse the swipeable board deck
+   back into one tall vertical stack — the page would scroll and break.) */
+.jv-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
 /* ════════════════════════════════════════════════════════════════════════
    MOBILE (< 620px): the command center is a NO-SCROLL, swipeable DECK.
    The page never scrolls. The grid turns into a horizontal scroll-snap rail
@@ -721,7 +732,22 @@
     overflow: hidden;                       /* LOCK — the page itself can't scroll */
     padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 0 0;
   }
-  .jv-header { padding: 0 0.75rem 0.5rem; }
+  .jv-header { padding: 0 0.75rem 0.5rem; gap: 0.55rem; }
+
+  /* The FECHA/SISTEMAS readouts and the "centro de mando" pill are desktop-only
+     HUD chrome — on phones they overflow the bar and overlap the wordmark (the
+     integrity % already headlines the Sistemas board). The readouts carry a
+     Tailwind `hidden`, but `.jv-readout { display: flex }` overrides it, so they
+     must be hidden here explicitly. The ⌘K button collapses to its icon — there
+     is no physical keyboard to drive the shortcut on a phone. */
+  .jv-brand { gap: 0.45rem; min-width: 0; }
+  .jv-brand-tag,
+  .jv-statusline .jv-readout { display: none; }
+  .jv-statusline { gap: 0.5rem; }
+  .jv-clock { font-size: 0.92rem; }
+  .jv-header-actions { gap: 0.4rem; }
+  .jv-header-actions .jv-btn { padding: 0 0.55rem; }
+  .jv-header-actions button.jv-btn .jv-mono { display: none; }  /* hide the "K" */
 
   .jv-grid {
     flex: 1 1 auto;
@@ -840,13 +866,8 @@
    decorative-but-restrained and fully disabled under reduced-motion.
    ════════════════════════════════════════════════════════════════════════ */
 
-/* The grid: one scrolling column on phones; reflows to a locked 2- or 3-rail
-   command center from a half-screen window up (see the breakpoints below). */
-.jv-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-}
+/* (The base `.jv-grid` display/track default is declared earlier — ahead of the
+   phone deck — so the deck's `display: flex` wins on phones; see that block.) */
 /* Keep the HUD bar + grid above the decorative backdrop layers. */
 .jv-header, .jv-grid { position: relative; z-index: 1; }
 
