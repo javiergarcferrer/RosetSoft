@@ -1,7 +1,8 @@
 // Integraciones — the hub for every external tool Alcover connects to (under
 // Configuración). Each row shows live status and EXPANDS IN PLACE to its real
-// connection/config screen — the same components Settings uses (WhatsAppCard,
-// InstagramCard, ShopifyCard), so configuring happens here, not on a link-out.
+// connection/config screen (WhatsAppCard + BusinessProfileCard, InstagramCard,
+// ShopifyCard). Integration config lives ONLY here — the general Configuración
+// view carries no integration cards, so there's no link-out and no duplication.
 // Gmail + Drive are shown as "coming soon" placeholders so the roadmap is clear.
 import { useState } from 'react';
 import { MessageCircle, Instagram as InstagramIcon, ShoppingBag, Mail, HardDrive, ChevronDown } from 'lucide-react';
@@ -10,6 +11,7 @@ import { useApp } from '../context/AppContext.jsx';
 import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
 import InstagramCard from '../components/settings/InstagramCard.jsx';
 import ShopifyCard from '../components/settings/ShopifyCard.jsx';
+import BusinessProfileCard from '../components/whatsapp/BusinessProfileCard.jsx';
 import { SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 
 function StatusPill({ connected, comingSoon }) {
@@ -36,7 +38,12 @@ export default function Integrations() {
       id: 'whatsapp', icon: MessageCircle, name: 'WhatsApp',
       desc: 'Bandeja, plantillas y difusión por WhatsApp Cloud API.',
       connected: !!settings?.whatsappConnectedAt,
-      config: <WhatsAppCard settings={settings} saveSettings={saveSettings} />,
+      config: (
+        <div className="space-y-4">
+          <WhatsAppCard settings={settings} saveSettings={saveSettings} />
+          <BusinessProfileCard connected={!!settings?.whatsappConnectedAt} />
+        </div>
+      ),
     },
     {
       id: 'instagram', icon: InstagramIcon, name: 'Instagram',

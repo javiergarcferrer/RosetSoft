@@ -7,11 +7,6 @@ import { useApp } from '../context/AppContext.jsx';
 import { effectiveDopRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { formatDateTime } from '../lib/format.js';
-import { SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
-import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
-import InstagramCard from '../components/settings/InstagramCard.jsx';
-import ShopifyCard from '../components/settings/ShopifyCard.jsx';
-import BusinessProfileCard from '../components/whatsapp/BusinessProfileCard.jsx';
 import CredentialInput from '../components/settings/CredentialInput.jsx';
 import SettingsSection from '../components/settings/SettingsSection.jsx';
 import { clampPct } from '../lib/pricing.js';
@@ -203,18 +198,6 @@ export default function Settings() {
 
         {/* Public storefront */}
         <StoreCard settings={settings} saveSettings={saveSettings} customers={customers} />
-
-        {/* WhatsApp Business (Cloud API) */}
-        <WhatsAppCard settings={settings} saveSettings={saveSettings} />
-        {/* Public WhatsApp Business profile (about / address / hours / photo). */}
-        <BusinessProfileCard connected={!!settings?.whatsappConnectedAt} />
-
-        {/* Instagram (Instagram API with Instagram Login) — publish + insights. */}
-        <InstagramCard />
-
-        {/* Shopify connections — one per store. */}
-        <ShopifyCard settings={settings} store={SHOPIFY_STORE_ALCOVER} />
-        <ShopifyCard settings={settings} store={SHOPIFY_STORE_LSG} />
       </div>
     </>
   );
