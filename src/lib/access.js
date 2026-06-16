@@ -25,14 +25,16 @@ export const ROLES = ['admin', 'employee', 'accounting', 'team'];
 const HOME = { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] };
 
 // The CRM "Ventas" group. Togo sits as a peer of Cotizaciones/Pedidos (no longer
-// nested). The customer CHANNELS (WhatsApp + Instagram) live in their own group
-// below, in brand colors.
+// nested). Comisiones — the bridge surface between a CRM sale and an accounting
+// payout — lives here too, right after Pedidos. The customer CHANNELS (WhatsApp +
+// Instagram) live in their own group below, in brand colors.
 const CRM_GROUP = {
   label: 'Ventas',
   items: [
     { to: '/quotes', label: 'Cotizaciones', icon: FileText },
     { to: '/togo', label: 'Togo', icon: TogoIcon },
     { to: '/orders', label: 'Pedidos', icon: Package },
+    { to: '/comisiones', label: 'Comisiones', icon: Wallet },
     { to: '/customers', label: 'Clientes', icon: Users },
     { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
   ],
@@ -49,10 +51,6 @@ const CHANNELS_GROUP = {
   ],
 };
 
-// The bridge surface — commissions sit between a CRM sale and an accounting
-// payout, so every role that earns or pays them can reach it.
-const COMMISSIONS = { items: [{ to: '/comisiones', label: 'Comisiones', icon: Wallet }] };
-
 // The `children` primitive: a parent item carries sub-items that the sidebar
 // reveals (indented) ONLY while that parent's section is open — Layout's
 // `isSectionOpen` decides from the route, so the same code path drives
@@ -63,18 +61,18 @@ const ADMIN_GROUP = {
   label: 'Administración',
   items: [
     {
-      to: '/inventario/existencias',
-      label: 'Inventario',
-      icon: Boxes,
-      match: ['/inventario/existencias', '/inventario/lifestylegarden'],
-    },
-    {
       to: '/admin/catalog',
       label: 'Catálogos',
       icon: PackageSearch,
       children: [
         { to: '/admin/materials', label: 'Materiales', icon: Layers },
       ],
+    },
+    {
+      to: '/inventario/existencias',
+      label: 'Inventario',
+      icon: Boxes,
+      match: ['/inventario/existencias', '/inventario/lifestylegarden'],
     },
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
   ],
@@ -111,12 +109,12 @@ export function navForRole(role, { accountingOpen = true } = {}) {
     // primitive, and GlobalSearch flattens them so every destination stays
     // searchable. Only the Contabilidad workspace nav is route-gated here.
     return [
-      HOME, CRM_GROUP, CHANNELS_GROUP, COMMISSIONS, ADMIN_GROUP,
+      HOME, CRM_GROUP, CHANNELS_GROUP, ADMIN_GROUP,
       ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
       CONFIG_GROUP,
     ];
   }
-  if (role === 'employee') return [HOME, CRM_GROUP, COMMISSIONS];
+  if (role === 'employee') return [HOME, CRM_GROUP];
   return [];
 }
 
