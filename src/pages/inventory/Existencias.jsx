@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Boxes, Plus, Loader2, Check, X, ArrowDownToLine, RefreshCw } from 'lucide-react';
+import { Boxes, Loader2, Check, ArrowDownToLine, RefreshCw } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -123,10 +123,6 @@ export default function Existencias() {
   );
   const selectedItem = useMemo(() => itemsQ.data.find((i) => i.id === selectedId) || null, [itemsQ.data, selectedId]);
 
-  const [showItem, setShowItem] = useState(!!params.get('new'));
-  const [itemForm, setItemForm] = useState({ sku: '', name: '', unit: 'unidad' });
-  const [savingItem, setSavingItem] = useState(false);
-
   const [outQty, setOutQty] = useState(() => params.get('qty') || '');
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
@@ -146,21 +142,6 @@ export default function Existencias() {
     tableRef: kardexTableRef, tableStyle: kardexTableStyle, thProps: kardexThProps,
     ResizeHandle: KardexResizeHandle, reset: resetKardexWidths,
   } = useColumnWidths(kardexCols.cols, 'rs.existencias.kardex.widths.v1');
-
-  async function createItem() {
-    if (!itemForm.name.trim()) return;
-    setSavingItem(true);
-    try {
-      await db.inventoryItems.put({
-        id: newId(), profileId: scope, sku: itemForm.sku.trim(), name: itemForm.name.trim(),
-        unit: itemForm.unit.trim() || 'unidad', qtyOnHand: 0, avgCost: 0,
-      });
-      setItemForm({ sku: '', name: '', unit: 'unidad' });
-      setShowItem(false);
-    } finally {
-      setSavingItem(false);
-    }
-  }
 
   async function registerSalida() {
     setErr('');
@@ -199,8 +180,6 @@ export default function Existencias() {
     }
   }
 
-  const field = 'input';
-
   return (
     <InventoryGate title="Inventario">
       <InventorySubnav />
@@ -211,29 +190,11 @@ export default function Existencias() {
             <button type="button" onClick={syncAll} disabled={syncing} className="btn-secondary">
               {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} <span className="hidden sm:inline">Sincronizar Shopify</span><span className="sm:hidden">Shopify</span>
             </button>
-            <button type="button" onClick={() => setShowItem((v) => !v)} className="btn-primary"><Plus size={15} /> <span className="hidden sm:inline">Nuevo artículo</span><span className="sm:hidden">Nuevo</span></button>
           </div>
         )} />
 
-      {showItem && (
-        <div className="card p-4 mb-4 border-ink-300">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-semibold">Nuevo artículo</h3>
-            <button type="button" onClick={() => setShowItem(false)} className="btn-icon text-ink-400" aria-label="Cerrar"><X size={18} /></button>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <input value={itemForm.sku} onChange={(e) => setItemForm((f) => ({ ...f, sku: e.target.value }))} placeholder="SKU / referencia" className={`${field} w-44`} />
-            <input value={itemForm.name} onChange={(e) => setItemForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre" className={`${field} flex-1 min-w-[200px]`} />
-            <input value={itemForm.unit} onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))} placeholder="Unidad" className={`${field} w-28`} />
-            <button type="button" onClick={createItem} disabled={savingItem || !itemForm.name.trim()} className="btn-primary">
-              {savingItem ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar
-            </button>
-          </div>
-        </div>
-      )}
-
       {!loaded ? <ListLoading /> : inv.count === 0 ? (
-        <EmptyState icon={Boxes} title="Sin artículos" description="Crea un artículo y regístralo desde Compras." />
+        <EmptyState icon={Boxes} title="Sin artículos" description="Los artículos entran desde Importaciones (expediente) o Compras — no se crean a mano." />
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="min-w-0">

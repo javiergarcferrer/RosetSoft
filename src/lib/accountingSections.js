@@ -85,7 +85,6 @@ export const QUICK_CREATE = [
   ] },
   { group: 'Otros', items: [
     { label: 'Asiento contable', to: '/accounting/ledger?new=1' },
-    { label: 'Artículo de inventario', to: '/inventario/existencias?new=1' },
     { label: 'Cuenta del catálogo', to: '/accounting/chart' },
   ] },
 ];

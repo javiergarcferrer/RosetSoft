@@ -33,6 +33,7 @@ import NotFound from './pages/NotFound.jsx';
 // Layout's <Suspense> shows the loading state while a chunk fetches; the
 // safeDynamicImport wrapper recovers stale-deploy chunk misses with a reload.
 const lazyPage = (loader) => lazy(() => safeDynamicImport(loader));
+const TogoConfigurator = lazyPage(() => import('./pages/TogoConfigurator.jsx'));
 const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
 const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
@@ -251,6 +252,8 @@ function ProtectedApp() {
             <Route path="professionals/:professionalId" element={<ProfessionalDetail />} />
             <Route path="quotes" element={<Quotes />} />
             <Route path="quotes/new" element={<QuoteBuilder />} />
+            {/* Togo plan configurator — drag pieces in top-down view → a modular quote. */}
+            <Route path="togo" element={<TogoConfigurator />} />
             <Route path="quotes/:quoteId" element={<QuoteBuilder />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/:orderId" element={<OrderDetail />} />

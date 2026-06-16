@@ -110,10 +110,15 @@ const ContainerTrackingMap = forwardRef(function ContainerTrackingMap({ route, v
       ref={wrapRef}
       className={`vmap-leaf min-w-0 w-full ${expanded ? 'fixed inset-2 z-[60] sm:inset-4' : 'relative'}`}
     >
-      <div className="relative h-full w-full">
+      <div className={`relative w-full ${expanded ? 'h-full' : 'h-48 sm:h-64'}`}>
+        {/* Leaflet mutates this element's classList at runtime (leaflet-container,
+            leaflet-grab, zoom-anim classes…). Its className must therefore stay
+            CONSTANT across renders — if React rewrites it (e.g. an expanded-state
+            size toggle), it clobbers Leaflet's own classes and the map goes blank.
+            So the expand sizing lives on the parent above, never here. */}
         <div
           ref={elRef}
-          className={`w-full rounded-lg border border-ink-100 bg-ink-50 z-0 ${expanded ? 'h-full' : 'h-48 sm:h-64'}`}
+          className="h-full w-full rounded-lg border border-ink-100 bg-ink-50 z-0"
           aria-label="Mapa del viaje del contenedor"
         />
 

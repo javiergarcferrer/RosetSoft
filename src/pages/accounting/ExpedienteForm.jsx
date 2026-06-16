@@ -6,7 +6,6 @@ import { formatDop } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { parseInvoicePdf } from '../../lib/loadRosetInvoice.js';
-import { resolveOrderRegistration } from '../../core/quote/views/registration.js';
 import SearchPicker from '../../components/SearchPicker.jsx';
 import {
   resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
@@ -117,48 +116,6 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     return () => clearTimeout(t);
   }, [scope, head, embs, costs, hasContent]);
 
-  /** Seed the embarque's lines from the order the user already enumerated —
-   *  the registration rows carry reference/name/qty; FOB stays for the
-   *  invoice. Replaces current lines after a confirm when they have content. */
-  const [seeding, setSeeding] = useState(false);
-  async function seedFromOrder() {
-    if (!head.orderId || seeding) return;
-    setErr('');
-    setSeeding(true);
-    try {
-      const [orderQuotes, allLines] = await Promise.all([
-        db.quotes.where('orderId').equals(head.orderId).toArray(),
-        db.quoteLines.toArray(),
-      ]);
-      const quoteIds = new Set(orderQuotes.map((q) => q.id));
-      const reg = resolveOrderRegistration({
-        order: orders.find((o) => o.id === head.orderId) || null,
-        quotes: orderQuotes,
-        lines: allLines.filter((l) => quoteIds.has(l.quoteId)),
-        customers: [], professionals: [], profiles: [],
-      });
-      const rows = reg.groups.flatMap((g) => g.rows);
-      if (!rows.length) { setErr('El pedido no tiene artículos pedibles que sembrar.'); return; }
-      const hasContent = embs.some((e) => e.bl
-        || e.facturas.some((f) => f.supplierId || f.invoiceRef
-          || f.lines.some((l) => l.name || l.itemId || l.qty !== '' || l.fob !== '')));
-      if (hasContent && !confirm('¿Reemplazar las líneas actuales con los artículos del pedido?')) return;
-      setEmbs([{
-        ...blankEmbarque(),
-        facturas: [{
-          ...blankFactura(),
-          lines: rows.map((r) => ({
-            id: newId(), itemId: '', name: r.name, reference: r.reference,
-            qty: String(r.qty || 1), fob: '', selectivo: '',
-          })),
-        }],
-      }]);
-      setSeededFrom('order');
-    } finally {
-      setSeeding(false);
-    }
-  }
-
   function resetForm() {
     try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ }
     setHead(defaults);
@@ -228,19 +185,26 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     try {
       // Free-text lines first become real inventory items, so the kardex IN and
       // the stored expediente both point at them — entry never blocks on
-      // pre-creating artículos.
+      // pre-creating artículos. A non-empty SKU is UNIQUE per profile
+      // (inventory_items_sku_uq), so reuse an item that already carries that SKU
+      // — an existing one, or one just minted earlier in THIS save — instead of
+      // inserting a duplicate. That collision (a SKU repeated across lines, or an
+      // item orphaned by a previous failed save) is what raised the false "Ya
+      // existe un registro con esos datos".
       const newItems = [];
+      const idBySku = new Map(items.filter((i) => (i.sku || '').trim()).map((i) => [(i.sku || '').trim(), i.id]));
       const embsPatched = embs.map((e) => ({
         ...e,
         facturas: e.facturas.map((f) => ({
           ...f,
           lines: f.lines.map((l) => {
             if (l.itemId || !(l.name || '').trim() || !(Number(l.qty) > 0)) return l;
+            const sku = (l.reference || '').trim();
+            const reuse = sku ? idBySku.get(sku) : null;
+            if (reuse) return { ...l, itemId: reuse };
             const itemId = newId();
-            newItems.push({
-              id: itemId, profileId: scope, sku: (l.reference || '').trim(), name: l.name.trim(),
-              unit: 'unidad', qtyOnHand: 0, avgCost: 0,
-            });
+            newItems.push({ id: itemId, profileId: scope, sku, name: l.name.trim(), unit: 'unidad', qtyOnHand: 0, avgCost: 0 });
+            if (sku) idBySku.set(sku, itemId);
             return { ...l, itemId };
           }),
         })),
@@ -323,13 +287,6 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             <option value="">— Opcional —</option>
             {orders.map((o) => <option key={o.id} value={o.id}>#{o.number} {o.name || ''}</option>)}
           </select>
-          {head.orderId && (
-            <button type="button" onClick={seedFromOrder} disabled={seeding}
-              className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 min-h-8 coarse:min-h-11"
-              title="Prellenar los artículos del embarque con las líneas del pedido (referencia, nombre y cantidad; el FOB sale de la factura)">
-              {seeding ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} aria-hidden />} Sembrar desde el pedido
-            </button>
-          )}
           </label>
         )}
         <label className="text-xs text-ink-500">Tasa USD→DOP <span className="text-ink-400">(importar PDF)</span><input type="number" step="0.01" min="0" inputMode="decimal" value={head.rate} onChange={(e) => setHead((h) => ({ ...h, rate: e.target.value }))} className={`${field} w-full mt-0.5 text-right tabular-nums`} /></label>
