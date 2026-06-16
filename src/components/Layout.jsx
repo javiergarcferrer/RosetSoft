@@ -1,4 +1,5 @@
 import { Fragment, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, Search, Bot } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -27,13 +28,30 @@ function SidebarLink({ item, sub = false, pathname, waUnread, compact = false })
   // fall back to NavLink's own active state.
   const sectionActive = match ? match.includes(pathname) : null;
   const showBadge = to === '/chats' && waUnread > 0;
+  // Custom hover tooltip — only in the collapsed icon rail, where the label is
+  // hidden. Portaled to <body> so the nav's own overflow can't clip it; it
+  // tracks the row's rect so it floats just to the right of the icon.
+  const linkRef = useRef(null);
+  const [tip, setTip] = useState(null);
+  const openTip = () => {
+    if (!compact) return;
+    const r = linkRef.current?.getBoundingClientRect();
+    if (r) setTip({ top: r.top + r.height / 2, left: r.right + 12 });
+  };
+  const closeTip = () => setTip(null);
   return (
+    <>
     <NavLink
+      ref={linkRef}
       to={to}
       end={end}
-      // `title` is the native tooltip the collapsed icon rail needs; `aria-label`
-      // gives the icon-only row an accessible name when the label is hidden.
-      title={label}
+      onMouseEnter={openTip}
+      onMouseLeave={closeTip}
+      onFocus={openTip}
+      onBlur={closeTip}
+      // `aria-label` names the icon-only row when its label is hidden; the rail's
+      // hover label is the portaled tooltip below (no native `title` — it would
+      // double up with it and can't be styled).
       aria-label={compact ? label : undefined}
       className={({ isActive }) => {
         const on = sectionActive != null ? sectionActive : isActive;
@@ -57,6 +75,19 @@ function SidebarLink({ item, sub = false, pathname, waUnread, compact = false })
         </span>
       ))}
     </NavLink>
+    {tip && createPortal(
+      <div
+        className="theme-chrome fixed z-[90] -translate-y-1/2 pointer-events-none animate-in fade-in slide-in-from-left-1 duration-100"
+        style={{ top: tip.top, left: tip.left }}
+      >
+        <div className="relative rounded-lg bg-ink-800 text-ink-50 text-xs font-medium px-2.5 py-1.5 shadow-pop border border-ink-700 whitespace-nowrap">
+          {label}
+          <span aria-hidden className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-ink-800" />
+        </div>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }
 
@@ -341,29 +372,33 @@ export default function Layout() {
 
         <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {navGroups.map((group, gi) => (
-            <div
-              key={gi}
-              // Top/bottom spacing inside each group; mt-4 between groups
-              // creates a visual gap without needing a divider line.
-              className={`space-y-0.5 ${gi > 0 ? 'mt-4' : ''}`}
-            >
+            // mt-4 between groups creates the visual gap; the gray rounded
+            // bracket on the left visually binds each group's icons together.
+            <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
               {group.label && !showRailIcons && (
-                <div className="px-3 pb-1.5 eyebrow-xs tracking-widest select-none">
+                // pl-5 aligns the eyebrow with the icons (group pl-2 + row px-3).
+                <div className="pl-5 pr-3 pb-1.5 eyebrow-xs tracking-widest select-none">
                   {group.label}
                 </div>
               )}
-              {group.items.map((item) => (
-                <Fragment key={item.to}>
-                  {/* `sub` can come from the item itself (a flat sub-item like
-                      Togo) or be forced on a revealed child below. */}
-                  <SidebarLink item={item} sub={item.sub} pathname={location.pathname} waUnread={waUnread} compact={showRailIcons} />
-                  {/* Children reveal (indented) only while their section is open —
-                      and never in the icon rail, where indented icons read poorly. */}
-                  {!showRailIcons && isSectionOpen(item, location.pathname) && item.children.map((c) => (
-                    <SidebarLink key={c.to} item={c} sub pathname={location.pathname} waUnread={waUnread} />
-                  ))}
-                </Fragment>
-              ))}
+              <div className="relative pl-2 space-y-0.5">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-[3px] top-1 bottom-1 w-[3px] rounded-full bg-ink-700/50"
+                />
+                {group.items.map((item) => (
+                  <Fragment key={item.to}>
+                    {/* `sub` is forced only on a revealed child below (Togo is no
+                        longer a nested sub-item). */}
+                    <SidebarLink item={item} sub={item.sub} pathname={location.pathname} waUnread={waUnread} compact={showRailIcons} />
+                    {/* Children reveal (indented) only while their section is open —
+                        and never in the icon rail, where indented icons read poorly. */}
+                    {!showRailIcons && isSectionOpen(item, location.pathname) && item.children.map((c) => (
+                      <SidebarLink key={c.to} item={c} sub pathname={location.pathname} waUnread={waUnread} />
+                    ))}
+                  </Fragment>
+                ))}
+              </div>
             </div>
           ))}
         </nav>

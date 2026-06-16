@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Sofa, Inbox, Boxes, ExternalLink, Copy, Check } from 'lucide-react';
+import { Inbox, Boxes, ExternalLink, Copy, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { togoEmbedUrl, togoEmbedSnippet } from '../lib/togoEmbed.js';
+import TogoIcon from '../lib/icons/TogoIcon.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import TogoRequests from './TogoRequests.jsx';
 import TogoModels from './admin/TogoCatalog.jsx';
@@ -37,7 +38,7 @@ export default function TogoWorkspace() {
   );
 
   const tabs = useMemo(() => [
-    { key: 'configurador', label: 'Configurador', icon: Sofa },
+    { key: 'configurador', label: 'Configurador', icon: TogoIcon },
     { key: 'solicitudes', label: 'Solicitudes', icon: Inbox, badge: pendingCount },
     ...(isAdmin ? [{ key: 'modelos', label: 'Modelos', icon: Boxes }] : []),
   ], [isAdmin, pendingCount]);

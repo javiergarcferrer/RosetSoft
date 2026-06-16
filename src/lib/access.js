@@ -12,8 +12,11 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  MessageCircle, Landmark, Instagram, Plug, Sofa,
+  Landmark, Plug,
 } from 'lucide-react';
+import TogoIcon from './icons/TogoIcon.jsx';
+import WhatsAppIcon from './icons/WhatsAppIcon.jsx';
+import InstagramIcon from './icons/InstagramIcon.jsx';
 import { accountingSectionNav } from './accountingSections.js';
 
 export const ROLES = ['admin', 'employee', 'accounting', 'team'];
@@ -21,23 +24,30 @@ export const ROLES = ['admin', 'employee', 'accounting', 'team'];
 // ── nav building blocks ──────────────────────────────────────────────────
 const HOME = { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: true }] };
 
-// The CRM "Ventas" group. WhatsApp (the inbox) is in admin-only testing for
-// now, so the inbox link only joins the group for admins; employees get the
-// rest of Ventas without it. Drop the `role` gate on the WhatsApp item once
-// testing ends to bring it back for everyone.
-function crmGroup(role) {
-  return {
-    label: 'Ventas',
-    items: [
-      { to: '/quotes', label: 'Cotizaciones', icon: FileText },
-      { to: '/togo', label: 'Togo', icon: Sofa, sub: true },
-      { to: '/orders', label: 'Pedidos', icon: Package },
-      ...(role === 'admin' ? [{ to: '/chats', label: 'WhatsApp', icon: MessageCircle }] : []),
-      { to: '/customers', label: 'Clientes', icon: Users },
-      { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
-    ],
-  };
-}
+// The CRM "Ventas" group. Togo sits as a peer of Cotizaciones/Pedidos (no longer
+// nested). The customer CHANNELS (WhatsApp + Instagram) live in their own group
+// below, in brand colors.
+const CRM_GROUP = {
+  label: 'Ventas',
+  items: [
+    { to: '/quotes', label: 'Cotizaciones', icon: FileText },
+    { to: '/togo', label: 'Togo', icon: TogoIcon },
+    { to: '/orders', label: 'Pedidos', icon: Package },
+    { to: '/customers', label: 'Clientes', icon: Users },
+    { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
+  ],
+};
+
+// The customer channels — WhatsApp + Instagram — grouped together and shown in
+// their own brand colors/logos. Admin-only for now (WhatsApp inbox is in
+// testing; Instagram Studio is an admin surface).
+const CHANNELS_GROUP = {
+  label: 'Canales',
+  items: [
+    { to: '/chats', label: 'WhatsApp', icon: WhatsAppIcon },
+    { to: '/marketing', label: 'Instagram', icon: InstagramIcon, match: ['/marketing', '/instagram-studio'] },
+  ],
+};
 
 // The bridge surface — commissions sit between a CRM sale and an accounting
 // payout, so every role that earns or pays them can reach it.
@@ -52,7 +62,6 @@ const COMMISSIONS = { items: [{ to: '/comisiones', label: 'Comisiones', icon: Wa
 const ADMIN_GROUP = {
   label: 'Administración',
   items: [
-    { to: '/marketing', label: 'Instagram', icon: Instagram, match: ['/marketing', '/instagram-studio'] },
     {
       to: '/inventario/existencias',
       label: 'Inventario',
@@ -102,12 +111,12 @@ export function navForRole(role, { accountingOpen = true } = {}) {
     // primitive, and GlobalSearch flattens them so every destination stays
     // searchable. Only the Contabilidad workspace nav is route-gated here.
     return [
-      HOME, crmGroup('admin'), COMMISSIONS, ADMIN_GROUP,
+      HOME, CRM_GROUP, CHANNELS_GROUP, COMMISSIONS, ADMIN_GROUP,
       ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
       CONFIG_GROUP,
     ];
   }
-  if (role === 'employee') return [HOME, crmGroup('employee'), COMMISSIONS];
+  if (role === 'employee') return [HOME, CRM_GROUP, COMMISSIONS];
   return [];
 }
 
