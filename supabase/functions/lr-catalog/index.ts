@@ -29,6 +29,9 @@
 // anonymous internet traffic can't drive the expensive sitemap sweep.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { mergeCatalog, type LrPattern, type Material } from './merge.ts';
+
+const TEAM = 'team';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -218,13 +221,31 @@ function greedyCover(codeToPids: Map<string, Set<number>>): string[] {
   return chosen;
 }
 
-async function importCatalog(): Promise<Response> {
+// A full catalog sweep's outcome — provenance the caller surfaces, plus a
+// `partial` flag (we discovered more fabrics than we could fetch this pass).
+interface CatalogSource {
+  mode: 'catalog';
+  productsScanned: number;
+  productsWithFabric: number;
+  anchors: number;
+  fabricsDiscovered: number;
+  fabrics: number;
+  partial: boolean;
+}
+type SweepResult =
+  | { ok: true; patterns: LrPattern[]; source: CatalogSource }
+  | { ok: false; error: string; status: number };
+
+// Sweep the WHOLE US catalog into clean patterns. Shared by the user-facing
+// { all:true } import and the weekly { cron:true } sync — the only difference is
+// what each does downstream (re-serve as JSON vs. merge into `materials`).
+async function sweepCatalog(): Promise<SweepResult> {
   const origin = DEFAULT_ORIGIN;
   const prefix = DEFAULT_PREFIX;
 
   // 1) Every product URL from the sitemap → product code (trailing digits).
   const sm = await fetchText(`${origin}/${prefix}/sitemap-products.xml`);
-  if (!sm.ok) return json({ error: `product sitemap returned ${sm.status || 'error'}` }, 502);
+  if (!sm.ok) return { ok: false, error: `product sitemap returned ${sm.status || 'error'}`, status: 502 };
   const codeToUrl = new Map<string, string>();
   for (const loc of sm.text.match(/<loc>([^<]+)<\/loc>/g) || []) {
     const url = loc.replace(/<\/?loc>/g, '');
@@ -233,7 +254,7 @@ async function importCatalog(): Promise<Response> {
     if (code && !codeToUrl.has(code)) codeToUrl.set(code, url);
   }
   const codes = [...codeToUrl.keys()].slice(0, MAX_PRODUCTS);
-  if (!codes.length) return json({ error: 'no product URLs found in sitemap' }, 502);
+  if (!codes.length) return { ok: false, error: 'no product URLs found in sitemap', status: 502 };
 
   // 2) Sweep the cheap patterns endpoint for every product.
   const codeToPids = new Map<string, Set<number>>();
@@ -243,7 +264,7 @@ async function importCatalog(): Promise<Response> {
       codeToPids.set(code, new Set(ids.map((n) => Number(n)).filter(Number.isFinite)));
     }
   });
-  if (!codeToPids.size) return json({ error: 'no fabrics discovered in catalog sweep' }, 502);
+  if (!codeToPids.size) return { ok: false, error: 'no fabrics discovered in catalog sweep', status: 502 };
 
   // 3) Candidate products per fabric, anchors (the fewest products covering
   //    everything) first, then any other offerer as a fallback. A variant
@@ -291,7 +312,9 @@ async function importCatalog(): Promise<Response> {
   });
 
   const patterns = toPatterns(acc);
-  return json({
+  return {
+    ok: true,
+    patterns,
     source: {
       mode: 'catalog',
       productsScanned: codes.length,
@@ -300,11 +323,80 @@ async function importCatalog(): Promise<Response> {
       fabricsDiscovered: discovered,
       fabrics: patterns.length,
       // We discovered more fabrics than we could fetch — a transient read gap.
-      // The client must NOT flag-missing on a partial sweep.
+      // Callers must NOT flag-missing on a partial sweep (false positives).
       partial: patterns.length < discovered,
     },
-    patterns,
+  };
+}
+
+// { all:true } — re-serve the sweep as JSON for the Materials admin importer
+// (the manual flow then merges it client-side alongside the price-list PDF).
+async function importCatalog(): Promise<Response> {
+  const r = await sweepCatalog();
+  if (!r.ok) return json({ error: r.error }, r.status);
+  return json({ source: r.source, patterns: r.patterns });
+}
+
+// ---- weekly cron: server-side website-only sync ---------------------------
+//
+// pg_cron pings us every Monday (see migration *_lr_catalog_weekly_cron). We
+// re-sweep ligne-roset.com and merge it into `materials` with NO human in the
+// loop — new fabrics, new colors, refreshed care notes — so the catalog stays
+// current between the occasional price-list PDF imports. The merge runs the
+// SAME `mergeCatalog` the manual flow uses (pinned in lrCatalogParity.test.js);
+// discontinuation flagging is gated on a COMPLETE sweep (`!partial`) so a
+// transient read gap can never hide a still-offered fabric from quoting.
+
+const MATERIAL_AT_FIELDS = new Set(['createdAt', 'updatedAt', 'discontinuedAt', 'notInPricelistAt']);
+const toCamel = (k: string) => k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+const toSnake = (k: string) => k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
+
+// DB row (snake_case, ISO timestamps) → the camelCase Material the merge reads.
+// Only the top-level columns are re-cased; the `colors` JSONB is already stored
+// camelCase ({name,code,imageId}) and passes through untouched — matching
+// db/rowMapping.ts so the merge sees exactly what the browser does.
+function materialFromRow(row: Record<string, unknown>): Material {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    const ck = toCamel(k);
+    out[ck] = MATERIAL_AT_FIELDS.has(ck) && typeof v === 'string' ? Date.parse(v) : v;
+  }
+  return out as Material;
+}
+
+// Merge output (camelCase, ms timestamps) → a DB row for upsert.
+function materialToRow(m: Material): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(m)) {
+    out[toSnake(k)] = MATERIAL_AT_FIELDS.has(k) && typeof v === 'number' ? new Date(v).toISOString() : v;
+  }
+  return out;
+}
+
+// deno-lint-ignore no-explicit-any
+async function runWeeklySync(admin: any): Promise<Response> {
+  const swept = await sweepCatalog();
+  if (!swept.ok) return json({ cron: true, ok: false, error: swept.error }, swept.status);
+
+  const { data: existingRows, error: readErr } = await admin
+    .from('materials').select('*').eq('profile_id', TEAM);
+  if (readErr) return json({ cron: true, ok: false, error: readErr.message }, 502);
+
+  const existing = (existingRows ?? []).map(materialFromRow);
+  const { rows, summary } = mergeCatalog(existing, swept.patterns, {
+    profileId: TEAM,
+    now: Date.now(),
+    newId: () => crypto.randomUUID(),
+    // Only flag no-longer-offered fabrics when the sweep saw the whole catalog.
+    complete: !swept.source.partial,
   });
+
+  for (let i = 0; i < rows.length; i += 200) {
+    const { error } = await admin.from('materials').upsert(rows.slice(i, i + 200).map(materialToRow));
+    if (error) return json({ cron: true, ok: false, error: error.message }, 502);
+  }
+
+  return json({ cron: true, ok: true, complete: !swept.source.partial, changed: rows.length, summary });
 }
 
 // ---------------------------------------------------------------------------
@@ -313,30 +405,61 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
 
-  // Require a logged-in dealer so the expensive catalog sweep can't be driven
-  // by anonymous traffic. verify_jwt is off at the gateway (so the CORS
-  // preflight, which carries no Authorization header, passes); we verify the
-  // token here instead — same as bpd-rate / hl-track.
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const authHeader = req.headers.get('Authorization') || '';
   if (!authHeader.startsWith('Bearer ')) {
     return json({ error: 'Authorization header required' }, 401);
   }
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-    const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data, error } = await caller.auth.getUser();
-    if (error || !data?.user) return json({ error: 'Invalid or expired session' }, 401);
-  }
 
-  let body: { url?: string; all?: boolean } = {};
+  let body: { url?: string; all?: boolean; cron?: boolean; ensureCron?: boolean } = {};
   try {
     body = await req.json();
   } catch {
     return json({ error: 'invalid JSON body' }, 400);
+  }
+
+  // ── weekly cron: only the scheduled job (Bearer service key) may run the
+  // unattended sweep + merge into `materials`. Checked BEFORE user auth — the
+  // service key is not a user JWT. ───────────────────────────────────────────
+  if (body?.cron === true) {
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'server not configured' }, 500);
+    if (authHeader !== `Bearer ${SERVICE_ROLE_KEY}`) return json({ error: 'forbidden' }, 403);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    try {
+      return await runWeeklySync(admin);
+    } catch (e) {
+      return json({ cron: true, ok: false, error: String((e as Error)?.message || e) }, 502);
+    }
+  }
+
+  // Everything else requires a real signed-in dealer so the expensive catalog
+  // sweep can't be driven by anonymous traffic. verify_jwt is off at the gateway
+  // (so the CORS preflight, which carries no Authorization header, passes); we
+  // verify the token here instead — same as bpd-rate / hl-track.
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'server not configured' }, 500);
+  const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: userData, error: userErr } = await caller.auth.getUser();
+  if (userErr || !userData?.user) return json({ error: 'Invalid or expired session' }, 401);
+
+  // ── ensureCron: (re)register the weekly cron. Admin-gated; the function knows
+  // its own URL + service key from its env, so no project URL is hardcoded. The
+  // Materials admin page calls it on mount so the schedule self-heals. ─────────
+  if (body?.ensureCron === true) {
+    if (!SERVICE_ROLE_KEY) return json({ ok: false, error: 'server not configured' }, 500);
+    const { data: prof } = await caller.from('profiles').select('role, active').eq('id', userData.user.id).maybeSingle();
+    if (!prof || prof.role !== 'admin' || !prof.active) return json({ ok: false, error: 'Solo un administrador.' }, 403);
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { error } = await admin.rpc('ensure_lr_catalog_cron', {
+      p_url: `${SUPABASE_URL}/functions/v1/lr-catalog`,
+      p_secret: SERVICE_ROLE_KEY,
+    });
+    if (error) return json({ ok: false, error: error.message });
+    return json({ ok: true });
   }
 
   try {

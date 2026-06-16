@@ -1,5 +1,5 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Layers, Plus, Pencil, Trash2, Shield, Check,
   Loader2, X, GripVertical, AlertTriangle, FileText,
@@ -153,6 +153,16 @@ export default function Materials() {
   const {
     tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths,
   } = useColumnWidths(cols, 'rs.materials.widths.v1');
+
+  // Self-heal the weekly catalog-refresh cron (Mondays — pulls new/discontinued
+  // fabrics + colors from ligne-roset.com unattended; see the lr-catalog Edge
+  // Function + its migration). Admin-gated server-side and idempotent, so this
+  // fire-and-forget on mount just guarantees the schedule exists — same pattern
+  // as the Shopify LSG refresh + IG publisher crons.
+  useEffect(() => {
+    if (!isAdmin) return;
+    supabase.functions.invoke('lr-catalog', { body: { ensureCron: true } }).catch(() => {});
+  }, [isAdmin]);
 
   // Category tabs (the primary dimension). Counts ride the full materials
   // list so each tab shows "how many would I see if I tapped this",
