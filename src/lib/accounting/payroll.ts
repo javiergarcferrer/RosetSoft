@@ -23,17 +23,74 @@ import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
 import type { JournalEntry, JournalLine, PayrollItem } from '../../types/domain.ts';
 
-/** TSS + INFOTEP contribution rates (%) and salary topes — DR defaults.
- *  Topes vigentes desde feb-2026 (salario mínimo cotizable RD$23,223). */
-export const DR_PAYROLL = {
+/** TSS + INFOTEP contribution rates (%) — DR, employee + employer split.
+ *  These percentages are date-stable; only the topes move (see SMC_HISTORY). */
+const RATES = {
   sfsEmp: 3.04, sfsPat: 7.09, // Seguro Familiar de Salud
   afpEmp: 2.87, afpPat: 7.10, // AFP (pensiones)
   infotepPat: 1.0,            // INFOTEP patronal (sin tope)
   srlPat: 1.2,                // Seguro de Riesgos Laborales (promedio; patronal)
+};
+
+/** TSS rates + salary topes — DR defaults (topes vigentes desde feb-2026,
+ *  salario mínimo cotizable RD$23,223). Prefer `ratesForPeriod(year, month)` so
+ *  a back-dated run uses the topes that were in force then. */
+export const DR_PAYROLL = {
+  ...RATES,
   sfsSalaryCap: 232_230,      // 10 × salario mínimo cotizable
   afpSalaryCap: 464_460,      // 20 × salario mínimo cotizable
   srlSalaryCap: 92_892,       //  4 × salario mínimo cotizable
 };
+
+/** Salario mínimo cotizable (SMC) history — the TSS topes are SMC × {10,20,4},
+ *  so they step up whenever the SMC does. Each entry is effective from `from`
+ *  (YYYY-MM, inclusive) until the next. Confirm new steps with the asesor. */
+export const SMC_HISTORY = [
+  { from: '2024-01', smc: 19_351.50 },
+  { from: '2025-04', smc: 21_674.80 },
+  { from: '2026-02', smc: 23_223.00 },
+];
+
+/** The TSS rates + topes in force for a pay period (caps move with the SMC). */
+export function ratesForPeriod(year: number, month = 1) {
+  const iso = `${year}-${String(month).padStart(2, '0')}`;
+  let smc = SMC_HISTORY[0].smc;
+  for (const e of SMC_HISTORY) if (iso >= e.from) smc = e.smc;
+  return {
+    ...RATES,
+    smc,
+    sfsSalaryCap: round2(smc * 10),
+    afpSalaryCap: round2(smc * 20),
+    srlSalaryCap: round2(smc * 4),
+  };
+}
+
+/** Monthly→daily / monthly→hourly divisors (DR administrative convention:
+ *  a 44 h week = 5.5 working days × 52 ÷ 12 = 23.83 days/month). */
+export const DAILY_DIVISOR = 23.83;
+export const MONTHLY_HOURS = round2(DAILY_DIVISOR * 8); // ≈190.64
+
+/** Premium MULTIPLIERS applied to (hours × ordinary-hour value) — the resulting
+ *  amount is what's ADDED for those hours (Código de Trabajo):
+ *   - ot35  hours 45–68 / week → 1.35× (Art. 203)
+ *   - ot100 hours > 68 / week  → 2.00× (Art. 203)
+ *   - night jornada nocturna 21:00–07:00 → 0.15× surcharge only (Art. 204)
+ *   - holiday feriado / descanso semanal worked → 1.00× on top (Arts. 164/165) */
+export const PREMIUM_FACTOR = { ot35: 1.35, ot100: 2.0, night: 0.15, holiday: 1.0 };
+
+/** Pay for overtime / premium hours, given a monthly salary and hours by kind. */
+export function overtimePay(
+  monthlySalary: number,
+  hours: { ot35?: number; ot100?: number; night?: number; holiday?: number } = {},
+  divisorHours = MONTHLY_HOURS,
+): number {
+  const hourly = (Number(monthlySalary) || 0) / (divisorHours || MONTHLY_HOURS);
+  let pay = 0;
+  for (const k of ['ot35', 'ot100', 'night', 'holiday'] as const) {
+    pay += (Number(hours[k]) || 0) * hourly * PREMIUM_FACTOR[k];
+  }
+  return round2(pay);
+}
 
 /** DR annual ISR scale (vigente). */
 const ISR_BRACKETS = [
@@ -60,6 +117,24 @@ export function monthlyIsr(monthlyTaxable: number): number {
 export interface PayrollComputed {
   gross: number; sfsEmp: number; afpEmp: number; isr: number; net: number;
   sfsPat: number; afpPat: number; srlPat: number; infotepPat: number;
+  /** Extra accrued earnings folded into gross (overtime, bonus, commission…). */
+  earnings: number;
+  /** Non-statutory amounts withheld from net (loans, advances, garnishment). */
+  otherDeductions: number;
+}
+
+/** One extra earning on a payroll line. `taxable` ⇒ enters the ISR base;
+ *  `cotizable` ⇒ enters the TSS salario cotizable. Overtime/commission are
+ *  both; bonificación is taxable-only; viáticos are neither. */
+export interface PayrollEarning { label?: string; amount: number; taxable?: boolean; cotizable?: boolean; }
+export interface PayrollDeduction { label?: string; amount: number; }
+export interface PayrollOptions {
+  rates?: typeof DR_PAYROLL;
+  earnings?: PayrollEarning[];
+  /** Unpaid absence in days — reduces the ordinary salary actually earned. */
+  absenceDays?: number;
+  absenceDivisor?: number;
+  deductions?: PayrollDeduction[];
 }
 
 /** A salary capped at an insurance's tope (no tope configured ⇒ uncapped). */
@@ -67,26 +142,52 @@ function cotizable(salary: number, cap: number | undefined): number {
   return cap && cap > 0 ? Math.min(salary, cap) : salary;
 }
 
-/** Compute one employee's payroll line from their monthly salary. */
-export function computePayrollItem(salary: number, rates = DR_PAYROLL): PayrollComputed {
-  const s = round2(salary);
-  const sfsBase = cotizable(s, rates.sfsSalaryCap);
-  const afpBase = cotizable(s, rates.afpSalaryCap);
-  const srlBase = cotizable(s, rates.srlSalaryCap);
+const totalOf = (xs: { amount: number }[] | undefined, pred: (x: PayrollEarning) => boolean = () => true) =>
+  round2((xs || []).reduce((a, x) => a + (pred(x as PayrollEarning) ? Number(x.amount) || 0 : 0), 0));
+
+/**
+ * Compute one employee's payroll line. The second arg is OPTIONAL adjustments:
+ * extra earnings (overtime/bonus — each flagged taxable/cotizable), unpaid
+ * absence days, and non-statutory deductions. With no adjustments this is the
+ * plain monthly line (back-compatible: `computePayrollItem(salary)`).
+ *
+ * ISR base = (ordinary + taxable earnings) − employee TSS; salario cotizable =
+ * (ordinary + cotizable earnings), capped per insurance; net = gross − TSS −
+ * ISR − other deductions.
+ */
+export function computePayrollItem(salary: number, opts: PayrollOptions = {}): PayrollComputed {
+  const rates = opts.rates || DR_PAYROLL;
+  const base = round2(salary);
+  const divisor = opts.absenceDivisor && opts.absenceDivisor > 0 ? opts.absenceDivisor : DAILY_DIVISOR;
+  const absence = round2((base / divisor) * Math.max(0, Number(opts.absenceDays) || 0));
+  const earned = round2(base - absence); // ordinary salary actually earned
+
+  const earnings = round2(totalOf(opts.earnings));
+  const cotizableExtra = totalOf(opts.earnings, (e) => !!e.cotizable);
+  const taxableExtra = totalOf(opts.earnings, (e) => !!e.taxable);
+
+  const gross = round2(earned + earnings);        // total accrued ("Sueldos")
+  const cotBase = round2(earned + cotizableExtra); // salario cotizable
+  const sfsBase = cotizable(cotBase, rates.sfsSalaryCap);
+  const afpBase = cotizable(cotBase, rates.afpSalaryCap);
+  const srlBase = cotizable(cotBase, rates.srlSalaryCap);
   const sfsEmp = round2((sfsBase * rates.sfsEmp) / 100);
   const afpEmp = round2((afpBase * rates.afpEmp) / 100);
   const tssEmp = round2(sfsEmp + afpEmp);
-  const isr = monthlyIsr(s - tssEmp);
+  const isr = monthlyIsr(round2(earned + taxableExtra - tssEmp));
+  const otherDeductions = totalOf(opts.deductions);
   return {
-    gross: s,
+    gross,
     sfsEmp,
     afpEmp,
     isr,
-    net: round2(s - tssEmp - isr),
+    earnings,
+    otherDeductions,
+    net: round2(gross - tssEmp - isr - otherDeductions),
     sfsPat: round2((sfsBase * rates.sfsPat) / 100),
     afpPat: round2((afpBase * rates.afpPat) / 100),
     srlPat: round2((srlBase * (rates.srlPat || 0)) / 100),
-    infotepPat: round2((s * rates.infotepPat) / 100),
+    infotepPat: round2((gross * rates.infotepPat) / 100),
   };
 }
 
@@ -108,6 +209,8 @@ export function payrollTotals(items: PayrollItem[]) {
     // and the persisted run row keeps its existing column set.
     employerSs: round2(sfsPat + afpPat + srlPat),
     employerInfotep: sum(items, 'infotepPat'),
+    // Non-statutory withholdings (loans/advances/garnishment); 0 for legacy runs.
+    otherDeductions: sum(items, 'otherDeductions'),
   };
 }
 
@@ -132,6 +235,8 @@ export function buildPayrollEntry({
     { accountCode: requireAccount(config, 'tssPayable'), credit: tssTotal },
     { accountCode: requireAccount(config, 'infotepPayable'), credit: t.employerInfotep },
     { accountCode: requireAccount(config, 'isrWithheld'), credit: t.isr },
+    // Other withholdings (loans/advances/garnishment) — only when present.
+    { accountCode: requireAccount(config, 'payrollDeductions'), credit: t.otherDeductions || 0 },
   ].filter((l) => (l.debit || 0) > 0 || (l.credit || 0) > 0);
 
   return buildJournalEntry({

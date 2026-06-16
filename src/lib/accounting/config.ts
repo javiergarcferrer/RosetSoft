@@ -44,6 +44,7 @@ export const POSTING_ROLES: PostingRole[] = [
   { key: 'isrWithheld', label: 'Retención ISR (IR-17 por pagar)', defaultCode: '2-01-003-07-00-00', group: 'Pasivos' },
   { key: 'customerDeposits', label: 'Cobros anticipados (depósitos)', defaultCode: '2-01-005-00-00-00', group: 'Pasivos' },
   { key: 'payrollPayable', label: 'Nóminas por pagar', defaultCode: '2-01-004-01-00-00', group: 'Pasivos' },
+  { key: 'payrollDeductions', label: 'Otras retenciones / préstamos de nómina', defaultCode: '2-01-004-02-00-00', group: 'Pasivos' },
   { key: 'tssPayable', label: 'TSS por pagar', defaultCode: '2-01-003-04-00-00', group: 'Pasivos' },
   { key: 'infotepPayable', label: 'INFOTEP por pagar', defaultCode: '2-01-003-05-00-00', group: 'Pasivos' },
   // Ingresos

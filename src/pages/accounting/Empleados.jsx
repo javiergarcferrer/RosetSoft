@@ -14,7 +14,17 @@ import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 /** Empleados — payroll master. Self-gates on accounting/admin. */
-function blank() { return { name: '', cedula: '', position: '', monthlySalary: '', active: true }; }
+function blank() { return { name: '', cedula: '', position: '', monthlySalary: '', hireAt: '', companySize: '', active: true }; }
+
+const COMPANY_SIZES = [
+  { v: '', label: 'Tamaño de empresa…' },
+  { v: 'grande', label: 'Grande' },
+  { v: 'mediana', label: 'Mediana' },
+  { v: 'pequena', label: 'Pequeña' },
+  { v: 'micro', label: 'Micro' },
+];
+const toDateInput = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : '');
+const fromDateInput = (s) => { if (!s) return null; const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
 
 // Customizable columns (Shopify-style show/hide, persisted per browser) for the
 // desktop table; each `cell` is a pure render off the per-row ctx. The Editar
@@ -46,7 +56,7 @@ export default function Empleados() {
 
   function openNew() { setForm(blank()); setEditing('new'); }
   function openEdit(e) {
-    setForm({ name: e.name || '', cedula: e.cedula || '', position: e.position || '', monthlySalary: String(e.monthlySalary || ''), active: e.active !== false });
+    setForm({ name: e.name || '', cedula: e.cedula || '', position: e.position || '', monthlySalary: String(e.monthlySalary || ''), hireAt: toDateInput(e.hireAt), companySize: e.companySize || '', active: e.active !== false });
     setEditing(e.id);
   }
 
@@ -56,7 +66,8 @@ export default function Empleados() {
     try {
       const patch = {
         name: form.name.trim(), cedula: form.cedula.trim(), position: form.position.trim(),
-        monthlySalary: Number(form.monthlySalary) || 0, active: !!form.active,
+        monthlySalary: Number(form.monthlySalary) || 0, hireAt: fromDateInput(form.hireAt),
+        companySize: form.companySize || null, active: !!form.active,
       };
       if (editing === 'new') {
         const id = newId();
@@ -88,6 +99,13 @@ export default function Empleados() {
             <input value={form.cedula} onChange={(e) => setForm((f) => ({ ...f, cedula: e.target.value }))} placeholder="Cédula" inputMode="numeric" className={field} />
             <input value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} placeholder="Cargo" className={field} />
             <input type="number" step="0.01" min="0" inputMode="decimal" enterKeyHint="done" value={form.monthlySalary} onChange={(e) => setForm((f) => ({ ...f, monthlySalary: e.target.value }))} placeholder="Salario mensual" className={`${field} text-right tabular-nums`} />
+            <label className="block">
+              <span className="label">Fecha de ingreso</span>
+              <input type="date" value={form.hireAt} onChange={(e) => setForm((f) => ({ ...f, hireAt: e.target.value }))} className={field} />
+            </label>
+            <select value={form.companySize} onChange={(e) => setForm((f) => ({ ...f, companySize: e.target.value }))} className={field}>
+              {COMPANY_SIZES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+            </select>
           </div>
           <div className="flex flex-wrap items-center gap-4 mt-3">
             <label className="inline-flex items-center gap-2 text-sm min-h-9 coarse:min-h-11"><input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="w-4 h-4" /> Activo</label>

@@ -88,10 +88,17 @@ export {
 // ── conciliación bancaria
 export { resolveReconciliation } from './reconciliation.js';
 
-// ── nómina (payroll)
+// ── nómina (payroll): monthly TSS+ISR engine, date-keyed topes, overtime
 export {
-  DR_PAYROLL, annualIsr, monthlyIsr, computePayrollItem, payrollTotals, buildPayrollEntry,
+  DR_PAYROLL, SMC_HISTORY, ratesForPeriod, DAILY_DIVISOR, MONTHLY_HOURS, PREMIUM_FACTOR, overtimePay,
+  annualIsr, monthlyIsr, computePayrollItem, payrollTotals, buildPayrollEntry,
 } from '../../lib/accounting/payroll.js';
+
+// ── prestaciones / derechos adquiridos: regalía, vacaciones, liquidación
+export {
+  dailyWage, vacationDays, vacationProportionalDays, vacationPay, regaliaPascual,
+  monthsOfService, preavisoDays, cesantiaDays, asistenciaEconomicaDays, liquidacion,
+} from '../../lib/accounting/prestaciones.js';
 
 // ── chart-of-accounts Model helpers (structure)
 export {

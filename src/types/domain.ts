@@ -721,6 +721,9 @@ export interface FiscalPeriod {
   updatedAt?: number;
 }
 
+/** Company size band (for minimum-wage tier + the regalía cap). */
+export type CompanySize = 'grande' | 'mediana' | 'pequena' | 'micro';
+
 /** An employee on the payroll. */
 export interface Employee {
   id: string;
@@ -731,10 +734,21 @@ export interface Employee {
   position?: string;
   monthlySalary: number;
   hireAt?: number | null;
+  /** Employer size band — drives the minimum-wage tier and the regalía cap. */
+  companySize?: CompanySize;
   active?: boolean;
   notes?: string;
   createdAt?: number;
   updatedAt?: number;
+}
+
+/** Adjustments applied to one line in a run (overtime, absence, bono, loans). */
+export interface PayrollAdjustments {
+  ot35Hours?: number; ot100Hours?: number; nightHours?: number; holidayHours?: number;
+  absenceDays?: number;
+  bonus?: number;
+  otherEarnings?: number;
+  deductions?: number;
 }
 
 /** One employee's line within a payroll run (DOP). */
@@ -751,6 +765,12 @@ export interface PayrollItem {
   /** SRL patronal. Optional: items saved before the field existed lack it. */
   srlPat?: number;
   infotepPat: number;
+  /** Extra earnings folded into gross + non-statutory deductions (optional;
+   *  absent on items saved before payroll adjustments existed). */
+  earnings?: number;
+  otherDeductions?: number;
+  /** The raw adjustment inputs, kept for the volante / audit trail. */
+  adjustments?: PayrollAdjustments;
 }
 
 /** A monthly payroll run; posting it books one balanced asiento. */
@@ -768,6 +788,10 @@ export interface PayrollRun {
   net: number;
   employerSs: number;
   employerInfotep: number;
+  /** Sum of non-statutory withholdings across the run (loans/advances). */
+  otherDeductions?: number;
+  /** Run kind — monthly nómina (default), regalía, or liquidación. */
+  kind?: 'monthly' | 'regalia' | 'liquidacion';
   status?: string;
   journalEntryId?: string | null;
   createdAt?: number;

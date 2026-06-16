@@ -8,27 +8,65 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
-import { computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig } from '../../core/accounting/index.js';
+import {
+  computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig,
+  ratesForPeriod, overtimePay, regaliaPascual, vacationDays, dailyWage, vacationPay,
+  liquidacion, monthsOfService,
+} from '../../core/accounting/index.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 
 const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const num = (v) => Number(v) || 0;
 
-// Customizable columns (Shopify-style show/hide, persisted per browser) for the
-// two desktop tables. Each `cell` is a pure render off the per-row ctx; the
-// preview's `foot` keeps the totals tfoot column-aligned when columns toggle.
+const TABS = [
+  { v: 'mensual', label: 'Mensual' },
+  { v: 'regalia', label: 'Regalía' },
+  { v: 'vacaciones', label: 'Vacaciones' },
+  { v: 'liquidacion', label: 'Liquidación' },
+];
+const ADJ_KEYS = ['ot35Hours', 'ot100Hours', 'nightHours', 'holidayHours', 'absenceDays', 'bonus', 'otherEarnings', 'deductions'];
+const hasAdj = (a) => !!a && ADJ_KEYS.some((k) => num(a[k]));
+
+const TERMINATION_TYPES = [
+  { v: 'desahucio', label: 'Desahucio' },
+  { v: 'despido_injustificado', label: 'Despido injustificado' },
+  { v: 'despido_justificado', label: 'Despido justificado (Art. 88)' },
+  { v: 'dimision_justificada', label: 'Dimisión justificada' },
+  { v: 'dimision_injustificada', label: 'Dimisión injustificada' },
+  { v: 'no_fault', label: 'Sin culpa — enfermedad/fuerza mayor (Art. 82)' },
+];
+
+/** Build one preview/run line from an employee + their adjustments + the
+ *  period's TSS topes. Overtime is taxable+cotizable, a bono is taxable only. */
+function lineFor(emp, adj, rates) {
+  const a = adj || {};
+  const overtime = overtimePay(emp.monthlySalary, {
+    ot35: num(a.ot35Hours), ot100: num(a.ot100Hours), night: num(a.nightHours), holiday: num(a.holidayHours),
+  });
+  const earnings = [];
+  if (overtime) earnings.push({ label: 'Horas extra', amount: overtime, taxable: true, cotizable: true });
+  if (num(a.bonus)) earnings.push({ label: 'Bono', amount: num(a.bonus), taxable: true, cotizable: false });
+  if (num(a.otherEarnings)) earnings.push({ label: 'Otros ingresos', amount: num(a.otherEarnings), taxable: true, cotizable: true });
+  const deductions = num(a.deductions) ? [{ label: 'Deducciones', amount: num(a.deductions) }] : [];
+  const computed = computePayrollItem(emp.monthlySalary, { rates, earnings, absenceDays: num(a.absenceDays), deductions });
+  return { employeeId: emp.id, name: emp.name, adjustments: a, ...computed };
+}
+
+// Customizable columns for the Mensual preview + the registered-runs table.
 const PREVIEW_COLUMNS = [
-  { key: 'name', label: 'Empleado', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ it }) => it.name, foot: ({ items }) => `${items.length} empleados`, footClass: 'py-2 px-3' },
-  { key: 'gross', label: 'Salario', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ it }) => formatDop(it.gross), foot: ({ totals }) => formatDop(totals.gross), footClass: 'py-2 px-3 text-right tabular-nums' },
+  { key: 'name', label: 'Empleado', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ it }) => <>{it.name}{hasAdj(it.adjustments) && <span title="Con ajustes" className="ml-1 text-brand-600">•</span>}</>, foot: ({ items }) => `${items.length} empleados`, footClass: 'py-2 px-3' },
+  { key: 'gross', label: 'Bruto', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ it }) => formatDop(it.gross), foot: ({ totals }) => formatDop(totals.gross), footClass: 'py-2 px-3 text-right tabular-nums' },
   { key: 'sfs', label: 'SFS', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.sfsEmp), foot: ({ items }) => formatDop(items.reduce((s, it) => s + (it.sfsEmp || 0), 0)), footClass: 'py-2 px-3 text-right tabular-nums' },
   { key: 'afp', label: 'AFP', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.afpEmp), foot: ({ items }) => formatDop(items.reduce((s, it) => s + (it.afpEmp || 0), 0)), footClass: 'py-2 px-3 text-right tabular-nums' },
   { key: 'isr', label: 'ISR', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.isr), foot: ({ totals }) => formatDop(totals.isr), footClass: 'py-2 px-3 text-right tabular-nums' },
+  { key: 'ded', label: 'Otras ded.', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums text-ink-600', cell: ({ it }) => formatDop(it.otherDeductions || 0), foot: ({ totals }) => formatDop(totals.otherDeductions || 0), footClass: 'py-2 px-3 text-right tabular-nums' },
   { key: 'net', label: 'Neto', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums font-medium', cell: ({ it }) => formatDop(it.net), foot: ({ totals }) => formatDop(totals.net), footClass: 'py-2 px-3 text-right tabular-nums' },
 ];
-const PREVIEW_DEFAULT = { gross: true, sfs: true, afp: true, isr: true, net: true };
-const PREVIEW_COLS_KEY = 'rs.nomina.preview.cols.v1';
+const PREVIEW_DEFAULT = { gross: true, sfs: true, afp: true, isr: true, ded: false, net: true };
+const PREVIEW_COLS_KEY = 'rs.nomina.preview.cols.v2';
 
 const RUNS_COLUMNS = [
   { key: 'period', label: 'Período', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ r }) => <>{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</> },
@@ -40,9 +78,20 @@ const RUNS_COLUMNS = [
 const RUNS_DEFAULT = { paid: true, gross: true, isr: true, net: true };
 const RUNS_COLS_KEY = 'rs.nomina.runs.cols.v1';
 
+/** A labelled numeric input used across the calculators. */
+function NumIn({ value, onChange, placeholder, className = '' }) {
+  return (
+    <input type="number" step="0.01" min="0" inputMode="decimal" value={value ?? ''}
+      onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+      className={`input text-right tabular-nums ${className}`} />
+  );
+}
+
 /**
- * Nómina — generate a month's payroll from the active employees (DR TSS + ISR),
- * preview it, and post the asiento. Self-gates on accounting/admin.
+ * Nómina — the payroll workspace. Mensual generates and posts the month's run
+ * (TSS + ISR) with per-employee adjustments (overtime, absences, bono,
+ * deductions); the Regalía, Vacaciones and Liquidación tabs are DR calculators
+ * (Código de Trabajo). Self-gates on accounting/admin.
  */
 export default function Nomina() {
   const { profileId, settings } = useApp();
@@ -53,12 +102,51 @@ export default function Nomina() {
   const runsQ = useLiveQueryStatus(() => db.payrollRuns.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = empQ.loaded && runsQ.loaded;
 
+  const [tab, setTab] = useState('mensual');
+  const activeEmployees = useMemo(
+    () => empQ.data.filter((e) => e.active !== false && (e.monthlySalary || 0) > 0),
+    [empQ.data],
+  );
+
+  return (
+    <AccountingGate title="Nómina">
+      <PageHeader title="Nómina" subtitle="Nómina mensual, regalía, vacaciones y liquidación (DR)" />
+      {!loaded ? <ListLoading /> : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-1.5">
+            {TABS.map((t) => (
+              <button key={t.v} type="button" onClick={() => setTab(t.v)}
+                className={`rounded-lg px-3 min-h-9 coarse:min-h-11 text-sm font-medium transition-colors ${tab === t.v ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {activeEmployees.length === 0 && tab !== 'liquidacion' ? (
+            <EmptyState icon={Wallet} title="Sin empleados activos" description="Agrega empleados con salario en la página de Empleados." />
+          ) : (
+            <>
+              {tab === 'mensual' && <Mensual scope={scope} config={config} employees={activeEmployees} runs={runsQ.data} />}
+              {tab === 'regalia' && <Regalia employees={activeEmployees} />}
+              {tab === 'vacaciones' && <Vacaciones employees={activeEmployees} />}
+              {tab === 'liquidacion' && <Liquidacion employees={empQ.data} />}
+            </>
+          )}
+        </div>
+      )}
+    </AccountingGate>
+  );
+}
+
+// ── Mensual ──────────────────────────────────────────────────────────────────
+
+function Mensual({ scope, config, employees, runs }) {
   const previewCols = useColumns(PREVIEW_COLUMNS, PREVIEW_DEFAULT, PREVIEW_COLS_KEY);
   const runsCols = useColumns(RUNS_COLUMNS, RUNS_DEFAULT, RUNS_COLS_KEY);
   const {
     tableRef: previewTableRef, tableStyle: previewTableStyle, thProps: previewThProps,
     ResizeHandle: PreviewResizeHandle, reset: resetPreviewWidths,
-  } = useColumnWidths(previewCols.cols, 'rs.nomina.preview.widths.v1');
+  } = useColumnWidths(previewCols.cols, 'rs.nomina.preview.widths.v2');
   const {
     tableRef: runsTableRef, tableStyle: runsTableStyle, thProps: runsThProps,
     ResizeHandle: RunsResizeHandle, reset: resetRunsWidths,
@@ -66,31 +154,27 @@ export default function Nomina() {
 
   const today = useMemo(() => new Date(), []);
   const [date, setDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10));
+  const [adjustments, setAdjustments] = useState({}); // employeeId → { ...ADJ_KEYS }
+  const [selId, setSelId] = useState('');
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
 
-  const items = useMemo(() => empQ.data
-    .filter((e) => e.active !== false && (e.monthlySalary || 0) > 0)
-    .map((e) => ({ employeeId: e.id, name: e.name, ...computePayrollItem(e.monthlySalary) })),
-    [empQ.data]);
+  // Parse the YYYY-MM-DD parts directly (a UTC-parsed Date rolls the 1st back a
+  // month in DR/UTC-4), so the run lands in the month the user picked.
+  const period = useMemo(() => { const [year, month] = date.split('-').map(Number); return { year, month }; }, [date]);
+  const rates = useMemo(() => ratesForPeriod(period.year, period.month), [period]);
+
+  const items = useMemo(() => employees.map((e) => lineFor(e, adjustments[e.id], rates)), [employees, adjustments, rates]);
   const totals = useMemo(() => payrollTotals(items), [items]);
 
-  // A payroll run can't be voided/undone, so a posted period is final — guard
-  // against posting the same month twice (a second click, or a return visit
-  // since the form defaults to the current month) which would double-count
-  // salaries/TSS/ISR in the ledger, IT-1 and dashboards.
-  const period = useMemo(() => {
-    // Parse the YYYY-MM-DD parts directly. `new Date(date)` reads the string as
-    // UTC midnight, and getMonth()/getFullYear() then return LOCAL time — in DR
-    // (UTC-4) that rolls the 1st of a month back to the previous month, storing
-    // the run (and the dup-guard) one month behind what the user picked.
-    const [year, month] = date.split('-').map(Number);
-    return { year, month };
-  }, [date]);
+  // A posted month is final (runs can't be voided) — guard the dup post.
   const existingRun = useMemo(
-    () => runsQ.data.find((r) => r.periodYear === period.year && r.periodMonth === period.month),
-    [runsQ.data, period],
+    () => runs.find((r) => r.periodYear === period.year && r.periodMonth === period.month && (r.kind || 'monthly') === 'monthly'),
+    [runs, period],
   );
+
+  const sel = employees.find((e) => e.id === selId) || null;
+  const setAdj = (id, patch) => setAdjustments((m) => ({ ...m, [id]: { ...(m[id] || {}), ...patch } }));
 
   async function post() {
     setErr('');
@@ -100,8 +184,6 @@ export default function Nomina() {
     try {
       const id = newId();
       const postedAt = new Date(date).getTime();
-      // Period label + stored year/month come from `period` (string-parsed), not
-      // from a local-time Date, so the run lands in the month the user chose.
       const built = buildPayrollEntry({ newId, config, items, postedAt, memo: `Nómina ${MONTHS_ES[period.month - 1]} ${period.year}` });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
@@ -109,9 +191,10 @@ export default function Nomina() {
         table: 'payrollRuns', profileId: scope, start: 1,
         build: (n) => ({
           id, profileId: scope, number: n, periodYear: period.year, periodMonth: period.month,
-          paidAt: postedAt, items, ...totals, status: 'posted', journalEntryId: built.entry.id,
+          paidAt: postedAt, items, ...totals, kind: 'monthly', status: 'posted', journalEntryId: built.entry.id,
         }),
       });
+      setAdjustments({});
     } catch (e) {
       setErr(userMessageFor(e));
     } finally {
@@ -119,137 +202,346 @@ export default function Nomina() {
     }
   }
 
-  const runs = runsQ.data.slice().sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0));
+  const sortedRuns = runs.slice().sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0));
 
   return (
-    <AccountingGate title="Nómina">
-      <PageHeader title="Nómina" subtitle="Genera la nómina del mes (TSS + ISR) y se asienta sola" />
-
-      {!loaded ? <ListLoading /> : (
-        <div className="space-y-4">
-          <div className="card p-4">
-            <div className="flex flex-wrap items-end gap-3 mb-3">
-              <div>
-                <div className="label">Fecha de pago</div>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input w-auto" />
-              </div>
-              <button type="button" onClick={post} disabled={posting || items.length === 0 || !!existingRun}
-                className="btn-primary ml-auto">
-                {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                {existingRun ? ' Nómina registrada' : ' Registrar nómina'}
-              </button>
-            </div>
-            {existingRun && !err && (
-              <p className="text-sm text-ink-500 mb-2">
-                La nómina de {MONTHS_ES[period.month - 1]} {period.year} ya fue registrada (#{existingRun.number}).
-              </p>
-            )}
-            {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
-            {items.length === 0 ? (
-              <EmptyState icon={Wallet} title="Sin empleados activos" description="Agrega empleados con salario en la página de Empleados." />
-            ) : (
-              /* Mobile: stacked cards; desktop: table */
-              <>
-                <div className="sm:hidden space-y-3">
-                  {items.map((it) => (
-                    <div key={it.employeeId} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1.5">
-                      <div className="font-medium text-ink-900">{it.name}</div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-ink-600">
-                        <span>Salario <span className="tabular-nums font-medium text-ink-900">{formatDop(it.gross)}</span></span>
-                        <span>Neto <span className="tabular-nums font-semibold text-ink-900">{formatDop(it.net)}</span></span>
-                        <span>SFS <span className="tabular-nums">{formatDop(it.sfsEmp)}</span></span>
-                        <span>AFP <span className="tabular-nums">{formatDop(it.afpEmp)}</span></span>
-                        <span>ISR <span className="tabular-nums">{formatDop(it.isr)}</span></span>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="rounded-lg border border-ink-200 bg-ink-100/60 px-3 py-2 text-xs font-semibold flex justify-between gap-2">
-                    <span>{items.length} empleados</span>
-                    <span>Neto total: <span className="tabular-nums">{formatDop(totals.net)}</span></span>
-                  </div>
-                </div>
-                <div className="hidden sm:block">
-                  <div className="hidden md:flex justify-end mb-2">
-                    <ColumnsMenu columns={previewCols.columns} visible={previewCols.visible} onChange={previewCols.setVisible} onReset={() => { previewCols.reset(); resetPreviewWidths(); }} />
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table ref={previewTableRef} style={previewTableStyle} className="w-full text-sm">
-                      <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                        <tr>{previewCols.cols.map((c) => <th key={c.key} className={c.thClass} {...previewThProps(c.key)}>{c.label}{PreviewResizeHandle(c.key)}</th>)}</tr>
-                      </thead>
-                      <tbody>
-                        {items.map((it) => {
-                          const ctx = { it };
-                          return (
-                            <tr key={it.employeeId} className="border-t border-ink-50">
-                              {previewCols.cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t border-ink-200 font-semibold">
-                          {previewCols.cols.map((c) => <td key={c.key} className={c.footClass}>{c.foot?.({ items, totals })}</td>)}
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
-              </>
-            )}
-            {items.length > 0 && (
-              <p className="text-xs text-ink-400 mt-2">
-                Aportes patronales: SS {formatDop(totals.employerSs)} · INFOTEP {formatDop(totals.employerInfotep)}.
-              </p>
-            )}
+    <>
+      <div className="card p-4">
+        <div className="flex flex-wrap items-end gap-3 mb-2">
+          <div>
+            <div className="label">Fecha de pago</div>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input w-auto" />
           </div>
+          <button type="button" onClick={post} disabled={posting || items.length === 0 || !!existingRun} className="btn-primary ml-auto">
+            {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+            {existingRun ? ' Nómina registrada' : ' Registrar nómina'}
+          </button>
+        </div>
+        <p className="text-xs text-ink-400 mb-3">
+          Topes TSS {MONTHS_ES[period.month - 1]} {period.year}: SFS {formatDop(rates.sfsSalaryCap)} · AFP {formatDop(rates.afpSalaryCap)} · SRL {formatDop(rates.srlSalaryCap)} (salario mínimo cotizable {formatDop(rates.smc)}).
+        </p>
+        {existingRun && !err && (
+          <p className="text-sm text-ink-500 mb-2">La nómina de {MONTHS_ES[period.month - 1]} {period.year} ya fue registrada (#{existingRun.number}).</p>
+        )}
+        {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
 
-          {runs.length > 0 && (
-            <div className="card overflow-hidden">
-              <div className="px-4 pt-3"><h2 className="eyebrow font-semibold text-ink-600">Nóminas registradas</h2></div>
-              {/* Mobile: stacked cards */}
-              <div className="sm:hidden px-3 pb-3 mt-2 space-y-2">
-                {runs.map((r) => (
-                  <div key={r.id} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1">
-                    <div className="flex justify-between items-baseline gap-2 flex-wrap">
-                      <span className="font-medium text-ink-900">{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</span>
-                      <span className="text-xs text-ink-500">{formatDate(r.paidAt)}</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-x-2 text-xs text-ink-600">
-                      <span>Bruto <span className="tabular-nums text-ink-900">{formatDop(r.gross)}</span></span>
-                      <span>ISR <span className="tabular-nums">{formatDop(r.isr)}</span></span>
-                      <span>Neto <span className="tabular-nums font-semibold text-ink-900">{formatDop(r.net)}</span></span>
-                    </div>
-                  </div>
+        {/* Per-employee adjustments */}
+        <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3 mb-3">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="eyebrow font-semibold text-ink-600">Ajustes por empleado</span>
+            <select value={selId} onChange={(e) => setSelId(e.target.value)} className="input w-auto ml-auto max-w-[16rem]">
+              <option value="">Seleccionar empleado…</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{hasAdj(adjustments[e.id]) ? ' •' : ''}</option>)}
+            </select>
+          </div>
+          {sel ? (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  ['ot35Hours', 'Horas extra 35%'], ['ot100Hours', 'Horas extra 100%'],
+                  ['nightHours', 'Horas nocturnas'], ['holidayHours', 'Horas feriado'],
+                  ['absenceDays', 'Días no laborados'], ['bonus', 'Bono (gravable)'],
+                  ['otherEarnings', 'Otros ingresos'], ['deductions', 'Otras deducciones'],
+                ].map(([k, lbl]) => (
+                  <label key={k} className="block">
+                    <span className="label">{lbl}</span>
+                    <NumIn value={(adjustments[selId] || {})[k]} onChange={(v) => setAdj(selId, { [k]: v })} placeholder="0" />
+                  </label>
                 ))}
               </div>
-              {/* Desktop: table */}
-              <div className="hidden sm:block">
-                <div className="hidden md:flex justify-end mb-2 px-3">
-                  <ColumnsMenu columns={runsCols.columns} visible={runsCols.visible} onChange={runsCols.setVisible} onReset={() => { runsCols.reset(); resetRunsWidths(); }} />
-                </div>
-                <div className="overflow-x-auto">
-                  <table ref={runsTableRef} style={runsTableStyle} className="w-full text-sm mt-2">
-                    <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
-                      <tr>{runsCols.cols.map((c) => <th key={c.key} className={c.thClass} {...runsThProps(c.key)}>{c.label}{RunsResizeHandle(c.key)}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {runs.map((r) => {
-                        const ctx = { r };
-                        return (
-                          <tr key={r.id} className="border-t border-ink-50">
-                            {runsCols.cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+              <button type="button" onClick={() => setAdjustments((m) => { const n = { ...m }; delete n[selId]; return n; })}
+                className="text-xs text-ink-500 hover:text-ink-800 mt-2">Limpiar ajustes</button>
+            </>
+          ) : (
+            <p className="text-xs text-ink-400">Elige un empleado para registrar horas extra, ausencias, bonos o deducciones del mes.</p>
           )}
         </div>
+
+        {/* Mobile cards */}
+        <div className="sm:hidden space-y-3">
+          {items.map((it) => (
+            <div key={it.employeeId} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1.5">
+              <div className="font-medium text-ink-900">{it.name}{hasAdj(it.adjustments) && <span className="ml-1 text-brand-600">•</span>}</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-ink-600">
+                <span>Bruto <span className="tabular-nums font-medium text-ink-900">{formatDop(it.gross)}</span></span>
+                <span>Neto <span className="tabular-nums font-semibold text-ink-900">{formatDop(it.net)}</span></span>
+                <span>SFS <span className="tabular-nums">{formatDop(it.sfsEmp)}</span></span>
+                <span>AFP <span className="tabular-nums">{formatDop(it.afpEmp)}</span></span>
+                <span>ISR <span className="tabular-nums">{formatDop(it.isr)}</span></span>
+                {(it.otherDeductions || 0) > 0 && <span>Otras ded. <span className="tabular-nums">{formatDop(it.otherDeductions)}</span></span>}
+              </div>
+            </div>
+          ))}
+          <div className="rounded-lg border border-ink-200 bg-ink-100/60 px-3 py-2 text-xs font-semibold flex justify-between gap-2">
+            <span>{items.length} empleados</span>
+            <span>Neto total: <span className="tabular-nums">{formatDop(totals.net)}</span></span>
+          </div>
+        </div>
+        {/* Desktop table */}
+        <div className="hidden sm:block">
+          <div className="hidden md:flex justify-end mb-2">
+            <ColumnsMenu columns={previewCols.columns} visible={previewCols.visible} onChange={previewCols.setVisible} onReset={() => { previewCols.reset(); resetPreviewWidths(); }} />
+          </div>
+          <div className="overflow-x-auto">
+            <table ref={previewTableRef} style={previewTableStyle} className="w-full text-sm">
+              <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                <tr>{previewCols.cols.map((c) => <th key={c.key} className={c.thClass} {...previewThProps(c.key)}>{c.label}{PreviewResizeHandle(c.key)}</th>)}</tr>
+              </thead>
+              <tbody>
+                {items.map((it) => (
+                  <tr key={it.employeeId} className="border-t border-ink-50">
+                    {previewCols.cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell({ it })}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-ink-200 font-semibold">
+                  {previewCols.cols.map((c) => <td key={c.key} className={c.footClass}>{c.foot?.({ items, totals })}</td>)}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        {items.length > 0 && (
+          <p className="text-xs text-ink-400 mt-2">Aportes patronales: SS {formatDop(totals.employerSs)} · INFOTEP {formatDop(totals.employerInfotep)}.</p>
+        )}
+      </div>
+
+      {sortedRuns.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-4 pt-3"><h2 className="eyebrow font-semibold text-ink-600">Nóminas registradas</h2></div>
+          <div className="sm:hidden px-3 pb-3 mt-2 space-y-2">
+            {sortedRuns.map((r) => (
+              <div key={r.id} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1">
+                <div className="flex justify-between items-baseline gap-2 flex-wrap">
+                  <span className="font-medium text-ink-900">{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</span>
+                  <span className="text-xs text-ink-500">{formatDate(r.paidAt)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-x-2 text-xs text-ink-600">
+                  <span>Bruto <span className="tabular-nums text-ink-900">{formatDop(r.gross)}</span></span>
+                  <span>ISR <span className="tabular-nums">{formatDop(r.isr)}</span></span>
+                  <span>Neto <span className="tabular-nums font-semibold text-ink-900">{formatDop(r.net)}</span></span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block">
+            <div className="hidden md:flex justify-end mb-2 px-3">
+              <ColumnsMenu columns={runsCols.columns} visible={runsCols.visible} onChange={runsCols.setVisible} onReset={() => { runsCols.reset(); resetRunsWidths(); }} />
+            </div>
+            <div className="overflow-x-auto">
+              <table ref={runsTableRef} style={runsTableStyle} className="w-full text-sm mt-2">
+                <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+                  <tr>{runsCols.cols.map((c) => <th key={c.key} className={c.thClass} {...runsThProps(c.key)}>{c.label}{RunsResizeHandle(c.key)}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {sortedRuns.map((r) => (
+                    <tr key={r.id} className="border-t border-ink-50">
+                      {runsCols.cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell({ r })}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
-    </AccountingGate>
+    </>
+  );
+}
+
+// ── Regalía pascual ──────────────────────────────────────────────────────────
+
+function Regalia({ employees }) {
+  // Salario ordinario devengado en el año, por empleado (default = 12 meses).
+  const [ytd, setYtd] = useState({});
+  const rows = employees.map((e) => {
+    const earned = ytd[e.id] != null && ytd[e.id] !== '' ? num(ytd[e.id]) : (e.monthlySalary || 0) * 12;
+    return { e, earned, r: regaliaPascual(earned) };
+  });
+  const total = rows.reduce((s, x) => s + x.r.amount, 0);
+
+  return (
+    <div className="card p-4 space-y-3">
+      <p className="text-xs text-ink-400">
+        Regalía pascual (salario de Navidad) = 1/12 del salario ordinario del año. Exenta de ISR y TSS hasta ese 1/12; pagar a más tardar el 20 de diciembre (Arts. 219–222).
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th className="text-left py-2 px-3">Empleado</th>
+              <th className="text-right py-2 px-3">Salario del año</th>
+              <th className="text-right py-2 px-3">Regalía</th>
+              <th className="text-right py-2 px-3">Exento</th>
+              <th className="text-right py-2 px-3">Gravado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ e, earned, r }) => (
+              <tr key={e.id} className="border-t border-ink-50">
+                <td className="py-1.5 px-3">{e.name}</td>
+                <td className="py-1.5 px-3 text-right"><NumIn value={ytd[e.id] ?? ''} onChange={(v) => setYtd((m) => ({ ...m, [e.id]: v }))} placeholder={String(earned)} className="w-32" /></td>
+                <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(r.amount)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(r.isrExempt)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(r.isrTaxable)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-ink-200 font-semibold">
+              <td className="py-2 px-3">{rows.length} empleados</td>
+              <td></td>
+              <td className="py-2 px-3 text-right tabular-nums">{formatDop(total)}</td>
+              <td colSpan={2}></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Vacaciones ───────────────────────────────────────────────────────────────
+
+function Vacaciones({ employees }) {
+  const [days, setDays] = useState({}); // override días
+  const rows = employees.map((e) => {
+    const years = e.hireAt ? monthsOfService(e.hireAt, Date.now()) / 12 : 0;
+    const defDays = vacationDays(Math.floor(years));
+    const d = days[e.id] != null && days[e.id] !== '' ? num(days[e.id]) : defDays;
+    return { e, years, defDays, d, daily: dailyWage(e.monthlySalary), pay: vacationPay(e.monthlySalary, d) };
+  });
+  const total = rows.reduce((s, x) => s + x.pay, 0);
+
+  return (
+    <div className="card p-4 space-y-3">
+      <p className="text-xs text-ink-400">
+        Vacaciones (Art. 177): 14 días laborables de 1 a 5 años de servicio, 18 días a partir de 5 años. Salario diario = salario ÷ 23.83. La antigüedad se calcula desde la fecha de ingreso del empleado.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th className="text-left py-2 px-3">Empleado</th>
+              <th className="text-right py-2 px-3">Antigüedad</th>
+              <th className="text-right py-2 px-3">Días</th>
+              <th className="text-right py-2 px-3">Salario diario</th>
+              <th className="text-right py-2 px-3">A pagar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ e, years, defDays, daily, pay }) => (
+              <tr key={e.id} className="border-t border-ink-50">
+                <td className="py-1.5 px-3">{e.name}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{e.hireAt ? `${years.toFixed(1)} años` : '—'}</td>
+                <td className="py-1.5 px-3 text-right"><NumIn value={days[e.id] ?? ''} onChange={(v) => setDays((m) => ({ ...m, [e.id]: v }))} placeholder={String(defDays)} className="w-20" /></td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(daily)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(pay)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-ink-200 font-semibold">
+              <td className="py-2 px-3">{rows.length} empleados</td>
+              <td colSpan={3}></td>
+              <td className="py-2 px-3 text-right tabular-nums">{formatDop(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Liquidación (prestaciones laborales) ─────────────────────────────────────
+
+function Liquidacion({ employees }) {
+  const [empId, setEmpId] = useState('');
+  const [type, setType] = useState('desahucio');
+  const [initiatedBy, setInitiatedBy] = useState('employer');
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [vacDays, setVacDays] = useState('');
+  const [ytd, setYtd] = useState('');
+
+  const emp = employees.find((e) => e.id === empId) || null;
+  const endMs = useMemo(() => { const [y, m, d] = endDate.split('-').map(Number); return new Date(y, m - 1, d).getTime(); }, [endDate]);
+  const result = useMemo(() => {
+    if (!emp) return null;
+    return liquidacion({
+      monthlySalary: emp.monthlySalary, startMs: emp.hireAt || endMs, endMs,
+      terminationType: type, initiatedBy,
+      pendingVacationDays: num(vacDays),
+      ...(ytd !== '' ? { ordinaryEarnedYTD: num(ytd) } : {}),
+    });
+  }, [emp, endMs, type, initiatedBy, vacDays, ytd]);
+
+  const Row = ({ label, value, sub, strong }) => (
+    <div className="flex justify-between gap-3 py-1.5 border-t border-ink-50 first:border-0">
+      <span className={strong ? 'font-semibold text-ink-900' : 'text-ink-600'}>{label}{sub && <span className="text-ink-400"> · {sub}</span>}</span>
+      <span className={`tabular-nums ${strong ? 'font-semibold text-ink-900' : ''}`}>{formatDop(value)}</span>
+    </div>
+  );
+
+  return (
+    <div className="card p-4 space-y-4">
+      <p className="text-xs text-ink-400">
+        Liquidación (prestaciones laborales): preaviso (Art. 76) y cesantía (Art. 80) según el tipo de terminación, más los derechos adquiridos (vacaciones proporcionales + regalía proporcional). Preaviso/cesantía/asistencia son exentos de ISR y TSS; las vacaciones son gravables.
+      </p>
+      <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
+        <label className="block">
+          <span className="label">Empleado</span>
+          <select value={empId} onChange={(e) => setEmpId(e.target.value)} className="input">
+            <option value="">Seleccionar…</option>
+            {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="label">Tipo de terminación</span>
+          <select value={type} onChange={(e) => setType(e.target.value)} className="input">
+            {TERMINATION_TYPES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
+          </select>
+        </label>
+        {type === 'desahucio' && (
+          <label className="block">
+            <span className="label">Iniciado por</span>
+            <select value={initiatedBy} onChange={(e) => setInitiatedBy(e.target.value)} className="input">
+              <option value="employer">Empleador (paga cesantía)</option>
+              <option value="worker">Trabajador (sin cesantía)</option>
+            </select>
+          </label>
+        )}
+        <label className="block">
+          <span className="label">Fecha de salida</span>
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="input" />
+        </label>
+        <label className="block">
+          <span className="label">Días de vacaciones pendientes</span>
+          <NumIn value={vacDays} onChange={setVacDays} placeholder="0" />
+        </label>
+        <label className="block">
+          <span className="label">Salario ordinario del año (regalía)</span>
+          <NumIn value={ytd} onChange={setYtd} placeholder={emp ? `auto: ${(emp.monthlySalary || 0) * (new Date(endMs).getMonth() + 1)}` : 'auto'} />
+        </label>
+      </div>
+
+      {!emp ? (
+        <p className="text-sm text-ink-400">Selecciona un empleado para calcular la liquidación.</p>
+      ) : result && (
+        <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-4 max-w-md">
+          <div className="text-sm text-ink-500 mb-2">{emp.name} · {result.months} meses de servicio · salario diario {formatDop(result.daily)}</div>
+          <Row label="Preaviso" sub={`${result.preavisoDays} días`} value={result.preaviso} />
+          <Row label="Cesantía" sub={`${result.cesantiaDays} días`} value={result.cesantia} />
+          {result.asistencia > 0 && <Row label="Asistencia económica" sub={`${result.asistenciaDays} días`} value={result.asistencia} />}
+          <Row label="Vacaciones" value={result.vacaciones} />
+          <Row label="Regalía proporcional" value={result.regalia} />
+          <Row label="Total" value={result.total} strong />
+          <div className="mt-2 pt-2 border-t border-ink-100 text-xs text-ink-500 flex justify-between gap-3">
+            <span>Exento ISR/TSS: <span className="tabular-nums">{formatDop(result.exempt)}</span></span>
+            <span>Gravable: <span className="tabular-nums">{formatDop(result.taxable)}</span></span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
