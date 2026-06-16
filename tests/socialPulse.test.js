@@ -201,6 +201,23 @@ test('campaigns map the campaigns-edge shape (id + status + nested insights)', (
   assert.equal(campaigns[2].spend, 0);
 });
 
+test('campaigns carry their own account currency (multi-account boards never misformat)', () => {
+  // The snapshot concatenates campaigns from every ad account — Instagram
+  // boosts often bill through a DIFFERENT account than the in-app wizard's, in
+  // its own currency. Each row must keep that currency so the View never tags a
+  // DOP boost's spend as the primary account's USD.
+  const adCampaigns = [
+    { id: 'c1', name: 'USD boost', status: 'ACTIVE', currency: 'USD', insights: { data: [{ spend: '10' }] } },
+    { id: 'c2', name: 'DOP boost', status: 'PAUSED', currency: 'DOP', insights: { data: [{ spend: '500' }] } },
+    { id: 'c3', name: 'Untagged', status: 'PAUSED' }, // no currency → null (View falls back to adCurrency)
+  ];
+  const { campaigns } = resolveSocialPulse({ adCampaigns }, { now: NOW });
+  const byName = Object.fromEntries(campaigns.map((c) => [c.name, c.currency]));
+  assert.equal(byName['USD boost'], 'USD');
+  assert.equal(byName['DOP boost'], 'DOP');
+  assert.equal(byName['Untagged'], null);
+});
+
 test('recent IG comments carry the id a reply needs', () => {
   const { recentComments } = resolveSocialPulse({
     igMedia: [{ caption: 'P', comments: { data: [{ id: 'c1', text: 'hola', username: 'ana', timestamp: new Date(NOW - 1000).toISOString() }] } }],

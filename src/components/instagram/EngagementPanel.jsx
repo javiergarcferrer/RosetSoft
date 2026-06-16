@@ -218,12 +218,14 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
             <div className="px-4 py-4 text-sm text-ink-400">Sin campañas activas.</div>
           ) : (
             <div className="max-h-[30rem] lg:max-h-none lg:overflow-visible overflow-y-auto divide-y divide-ink-100">
-              {campaigns.map((c) => (
+              {campaigns.map((c) => {
+                const cur = c.currency || adCurrency; // each campaign bills in its own account's currency
+                return (
                 <div key={c.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
                   <span className={`flex-none h-2 w-2 rounded-full ${c.active ? 'bg-emerald-500' : 'bg-ink-300'}`} title={c.status || ''} />
                   <span className="min-w-0 flex-1 truncate text-ink-800">{c.name}</span>
                   <span className="flex-none text-xs text-ink-400 tabular-nums">
-                    {c.spend != null ? money(c.spend) : '—'}{adCurrency ? ` ${adCurrency}` : ''}{c.results != null ? ` · ${c.results} res.` : ''}
+                    {c.spend != null ? money(c.spend) : '—'}{cur ? ` ${cur}` : ''}{c.results != null ? ` · ${c.results} res.` : ''}
                   </span>
                   <button
                     type="button"
@@ -234,7 +236,8 @@ export default function EngagementPanel({ comments = [], campaigns = [], hasAds,
                     {campBusy === c.id ? '…' : c.active ? 'Pausar' : 'Reanudar'}
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

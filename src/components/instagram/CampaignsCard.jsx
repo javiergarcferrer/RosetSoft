@@ -106,6 +106,7 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
               <div className="divide-y divide-ink-100">
                 {rows.map((c) => {
                   const b = bucketOf(c);
+                  const cur = c.currency || adCurrency; // each campaign bills in its own account's currency
                   return (
                     <div key={c.id} className="flex items-center gap-3 px-2 py-2.5 text-sm">
                       <span
@@ -114,7 +115,7 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
                       />
                       <span className="min-w-0 flex-1 truncate text-ink-800">{c.name}</span>
                       <span className="flex-none text-xs text-ink-400 tabular-nums">
-                        {c.spend != null ? money(c.spend) : '—'}{adCurrency ? ` ${adCurrency}` : ''}{c.results != null ? ` · ${c.results} res.` : ''}
+                        {c.spend != null ? money(c.spend) : '—'}{cur ? ` ${cur}` : ''}{c.results != null ? ` · ${c.results} res.` : ''}
                       </span>
                       {b !== 'inactive' && (
                         <button

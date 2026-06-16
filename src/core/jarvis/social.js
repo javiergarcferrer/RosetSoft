@@ -177,6 +177,10 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
         name: c.name || c.campaign_name || '—',
         status,
         active: status === 'ACTIVE',
+        // The board concatenates campaigns from MULTIPLE ad accounts, which may
+        // bill in different currencies — each row carries its own so the View
+        // never tags a DOP boost's spend with the primary account's USD.
+        currency: c.currency || null,
         spend,
         clicks,
         results,

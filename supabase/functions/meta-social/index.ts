@@ -935,19 +935,41 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Resolve the ad account HERE (the only reader) — discover once via
-    // me/adaccounts and persist; gated so no other meta-social call hits it.
-    let adAccountId = cfg.ad_account_id || '';
-    if (!adAccountId && bizToken) {
+    // ── Instagram ADS via the Marketing API (Business token, graph.facebook.com).
+    // Read EVERY ad account this Business can see — not just one. Instagram
+    // boosts and Business Suite promotions routinely bill through a DIFFERENT
+    // ad account than the in-app wizard creates into, so a single-account read
+    // hid them from this pane (the same reason the full Ads Manager `board` op
+    // fans out). The primary account still drives the header + the 7-day spend
+    // KPI (in its own currency — summing across accounts would mix USD + DOP);
+    // the campaign LIST concatenates every account's campaigns, each TAGGED with
+    // its own account currency so a DOP boost never misformats as the primary's
+    // USD. Discover the accounts once and persist the primary. ──
+    type AdAcct = { id: string; name?: string; currency?: string; account_status?: number };
+    let adAccts: AdAcct[] = [];
+    if (bizToken) {
       try {
-        const accts = await fb('me/adaccounts', bizToken, { fields: 'id,name,account_status', limit: '25' });
-        const active = (accts?.data || []).find((a: { account_status?: number }) => a.account_status === 1) || (accts?.data || [])[0];
-        adAccountId = active?.id || '';
-        if (adAccountId) await admin.from('meta_social_config').update({ ad_account_id: adAccountId, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
-      } catch { adAccountId = ''; }
+        const r = await fb('me/adaccounts', bizToken, { fields: 'id,name,currency,account_status', limit: '50' });
+        adAccts = (r?.data || []) as AdAcct[];
+      } catch { adAccts = []; }
     }
+    // Primary = the pinned account, else first active, else first; persist it so
+    // the create wizard and the other readers keep targeting the same one.
+    const primaryAcct = adAccts.find((a) => a.id === cfg.ad_account_id)
+      || adAccts.find((a) => a.account_status === 1)
+      || adAccts[0]
+      || null;
+    const adAccountId = primaryAcct?.id || '';
+    if (adAccountId && adAccountId !== cfg.ad_account_id) {
+      await admin.from('meta_social_config').update({ ad_account_id: adAccountId, updated_at: new Date().toISOString() }).eq('profile_id', TEAM);
+    }
+    const adAccount = primaryAcct ? { name: primaryAcct.name || null, currency: primaryAcct.currency || null } : null;
+    // Bounded fan-out, primary first; one unreadable account never blanks the rest.
+    const orderedAccts = [...adAccts]
+      .sort((x, y) => (x.id === adAccountId ? -1 : y.id === adAccountId ? 1 : 0))
+      .slice(0, 12);
 
-    const [igProfile, igReach, igAudience, igProfileActions, igMedia, adAccount, adsDaily, adCampaigns] = await Promise.all([
+    const [igProfile, igReach, igAudience, igProfileActions, igMedia, adsDaily, adCampaigns] = await Promise.all([
       safe('ig', () => igGet(igId, token, { fields: 'username,followers_count,media_count' })),
       safe('igReach', () => igGet(`${igId}/insights`, token, {
         metric: 'reach', period: 'day', since: String(since), until: String(until),
@@ -968,24 +990,28 @@ Deno.serve(async (req) => {
         fields: 'caption,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,comments.limit(10){id,text,username,timestamp}',
         limit: '6',
       })),
-      // ── Instagram ADS via the Marketing API (Business token, graph.facebook.com).
-      // Sections fail independently — no ad account/token just omits them. ──
-      adAccountId && bizToken
-        ? safe('adAccount', () => fb(adAccountId, bizToken, { fields: 'name,currency' }))
-        : Promise.resolve(null),
+      // Account-level daily spend (the 7-day KPI) — PRIMARY account only, in its
+      // own currency. Sections fail independently — no account/token just omits it.
       adAccountId && bizToken
         ? safe('ads', () => fb(`${adAccountId}/insights`, bizToken, {
           date_preset: 'last_28d', time_increment: '1', level: 'account',
           fields: 'spend,impressions,clicks,reach,actions,date_start', limit: '40',
         }))
         : Promise.resolve(null),
-      adAccountId && bizToken
-        ? safe('campaigns', () => fb(`${adAccountId}/campaigns`, bizToken, {
-          // No status filter → boosts/promotions from Business Suite show too;
-          // the pane buckets them into Activas / Pausadas / Inactivas.
-          fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
-          limit: '50',
-        }))
+      // Campaign LIST across EVERY account (boosts + Business Suite promotions
+      // included). No status filter → Activas/Pausadas/Inactivas all surface;
+      // each row tagged with its account currency. One bad account → [] (skipped).
+      orderedAccts.length && bizToken
+        ? safe('campaigns', async () => {
+          const lists = await Promise.all(orderedAccts.map((acc) =>
+            fb(`${acc.id}/campaigns`, bizToken, {
+              fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
+              limit: '100',
+            })
+              .then((r) => (r?.data || []).map((c: Record<string, unknown>) => ({ ...c, currency: acc.currency || null })))
+              .catch(() => [] as Record<string, unknown>[])));
+          return { data: lists.flat() };
+        })
         : Promise.resolve(null),
     ]);
 
@@ -994,8 +1020,8 @@ Deno.serve(async (req) => {
       fetchedAt: Date.now(),
       igUsername: cfg.ig_username,
       hasIg: !!igId,
-      // true only when the ad-account read SUCCEEDED — a Business token without
-      // ads_read fails that read, so the panel hides instead of showing empty.
+      // true only when the Business exposed ≥1 ad account — a token without ads
+      // access fails me/adaccounts, so the panel hides instead of showing empty.
       hasAds: !!adAccount,
       page: null,
       ig: igProfile,
