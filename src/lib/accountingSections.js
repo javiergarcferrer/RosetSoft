@@ -27,13 +27,16 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
     { to: '/accounting/importaciones/calculadora', label: 'Calculadora de costos' },
+    // Proveedores lives here, not under Gastos: an importer's suppliers are the
+    // foreign exporter on the factura + the local 606 cost agents on the
+    // expediente, so this is where the dealer reaches for them.
+    { to: '/accounting/suppliers', label: 'Proveedores' },
   ] },
   // Inventario left Contabilidad — it's a standalone section now (see
   // lib/access.js ADMIN_GROUP) while the accounting engine is in testing.
   { key: 'gastos', label: 'Gastos', icon: Receipt, tabs: [
     { to: '/accounting/expenses', label: 'Gastos' },
     { to: '/accounting/compras', label: 'Compras' },
-    { to: '/accounting/suppliers', label: 'Proveedores' },
   ] },
   { key: 'banca', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
