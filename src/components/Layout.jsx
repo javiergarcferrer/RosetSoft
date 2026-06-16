@@ -21,32 +21,40 @@ const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
 // One sidebar row — parent OR an indented child. The single render path for
 // every nav link, so the `children` reveal reuses it instead of duplicating the
 // active/hover/badge styling.
-function SidebarLink({ item, sub = false, pathname, waUnread }) {
+function SidebarLink({ item, sub = false, pathname, waUnread, compact = false }) {
   const { to, label, icon: Icon, end, match } = item;
   // Section links highlight on ANY of their tab routes (`match`); plain links
   // fall back to NavLink's own active state.
   const sectionActive = match ? match.includes(pathname) : null;
+  const showBadge = to === '/chats' && waUnread > 0;
   return (
     <NavLink
       to={to}
       end={end}
+      // `title` doubles as the native tooltip the collapsed icon rail needs; it's
+      // harmless while the label is also on screen.
+      title={label}
       className={({ isActive }) => {
         const on = sectionActive != null ? sectionActive : isActive;
         // A `sub` row is indented + hung off a hairline, reading as a child.
-        return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${sub ? 'ml-4 border-l border-ink-700/60 rounded-l-none' : ''} ${
+        // `compact` is the icon-rail variant: center the glyph, drop the label.
+        return `relative flex items-center gap-2.5 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${compact ? 'px-3 md:justify-center md:gap-0 md:px-0' : 'px-3'} ${sub ? 'ml-4 border-l border-ink-700/60 rounded-l-none' : ''} ${
           on
             ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(168,86,32,0.55)]'
             : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
         }`;
       }}
     >
-      <Icon size={16} />
-      {label}
-      {to === '/chats' && waUnread > 0 && (
+      <Icon size={16} className="shrink-0" />
+      {!compact && label}
+      {showBadge && (compact ? (
+        // Collapsed rail: the count won't fit, so it shrinks to a corner dot.
+        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-ink-900" />
+      ) : (
         <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
           {waUnread > 99 ? '99+' : waUnread}
         </span>
-      )}
+      ))}
     </NavLink>
   );
 }
@@ -91,11 +99,23 @@ export default function Layout() {
     () => typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
   );
   const isMobile = !useMediaQuery('(min-width: 768px)');
+  // Desktop collapse is now a thin ICON RAIL (not a full hide): the rail stays
+  // visible and gently expands to the full panel on hover/focus as an OVERLAY
+  // (peek), so the page never reflows. `collapsed` is the persisted pin state;
+  // `peek` is the transient hover-expand. Both are md:-only (mobile uses the
+  // drawer). `showRailIcons` = render the compact icons-only chrome.
+  const [peek, setPeek] = useState(false);
+  const railMode = collapsed && !isMobile;
+  const showRailIcons = railMode && !peek;
+  // Pinning the rail open clears any stale peek.
+  useEffect(() => { if (!collapsed) setPeek(false); }, [collapsed]);
   const company = settings?.companyName || 'ALCOVER';
   // Global ⌘K search palette — opened from the topbar/sidebar triggers or the
   // keyboard shortcut; the overlay itself owns Escape-to-close.
   const [searchOpen, setSearchOpen] = useState(false);
   useKeyboardShortcut('mod+k', () => setSearchOpen((o) => !o));
+  // ⌘\ / Ctrl+\ toggles the sidebar between pinned-open and the icon rail.
+  useKeyboardShortcut('mod+\\', () => setCollapsed((c) => !c));
 
   // Smart-back scroll memory: <main> is the app's single scroll container, so
   // Back/Forward restores the offset here (the window never scrolls, so the
@@ -129,16 +149,16 @@ export default function Layout() {
   // DOM tree, not the React tree, so a var scoped to the shell div would never
   // reach it (it would silently fall back and wedge the dock at one position).
   //   --rs-dock-left : the dock box's left edge = the sidebar's OCCUPIED width
-  //                    (15rem expanded; 0 when collapsed — the sidebar is hidden,
-  //                    so the dock runs full-bleed to the screen edge with NO dead
-  //                    gutter, and it still never covers the sidebar when shown).
-  //   --rs-dock-pad  : extra left padding that re-insets the dock's CONTENT to sit
-  //                    under the page columns (0 expanded; 3rem collapsed = the
-  //                    md:pl-12 gutter <main> reserves for the floating show-toggle).
-  //                    Surface fills to the edge; the figures stay column-aligned.
+  //                    (15rem pinned-open; 3.5rem = the w-14 icon rail when
+  //                    collapsed — the dock starts just past the rail and never
+  //                    covers it; the rail's hover-peek is a transient overlay we
+  //                    intentionally let float over the dock's left edge).
+  //   --rs-dock-pad  : extra left padding that re-insets the dock's CONTENT under
+  //                    the page columns — now 0 in both states, since <main>'s own
+  //                    md:pl-14 (= the rail width) already keeps content aligned.
   // Consumed only via md:-gated utilities, so the mobile drawer layout ignores them.
-  const dockLeft = collapsed ? '0px' : '15rem';
-  const dockPad = collapsed ? '3rem' : '0px';
+  const dockLeft = collapsed ? '3.5rem' : '15rem';
+  const dockPad = '0px';
   useLayoutEffect(() => {
     const root = document.documentElement.style;
     root.setProperty('--rs-dock-left', dockLeft);
@@ -146,7 +166,7 @@ export default function Layout() {
   }, [dockLeft, dockPad]);
 
   return (
-    <div className="h-full flex flex-col md:flex-row">
+    <div className="h-full flex flex-col md:flex-row relative">
       {/* Mobile topbar — extends behind the status bar on standalone iOS
           via pt-safe-area, so our dark background covers the white status-bar
           text instead of leaving a milky strip above the topbar. */}
@@ -208,92 +228,123 @@ export default function Layout() {
           pb-safe-area / pl-safe-area keep the panel content clear of the
           notch, home indicator, and landscape ear. */}
       <aside
-        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed md:relative inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:w-60 md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-[transform,margin-left] duration-200 md:duration-300 md:ease-[cubic-bezier(0.22,1,0.36,1)] md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
+        onMouseEnter={() => { if (collapsed) setPeek(true); }}
+        onMouseLeave={() => setPeek(false)}
+        onFocusCapture={() => { if (collapsed) setPeek(true); }}
+        onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setPeek(false); }}
+        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-[transform,width] duration-200 md:duration-300 md:ease-[cubic-bezier(0.22,1,0.36,1)] md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
           navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
-        } ${collapsed ? 'md:-ml-60' : 'md:ml-0'}`}
+        } ${collapsed ? `md:absolute ${peek ? 'md:w-60 md:shadow-pop' : 'md:w-14'}` : 'md:relative md:w-60'}`}
         aria-label="Navegación principal"
       >
         {/* Collapse handle — an elongated pill pinned to the sidebar's right
-            edge; the hover gently widens + warms it. (Replaces the old square
-            button; hidden while collapsed, where the left-edge handle reopens.) */}
+            edge; the hover gently widens + warms it. Toggles BOTH ways now: it
+            collapses the panel to the icon rail or pins the rail open (⌘\). */}
         <button
           type="button"
-          onClick={() => setCollapsed(true)}
-          className={`hidden md:block absolute right-0 top-1/2 z-10 h-16 w-1.5 -translate-y-1/2 rounded-l-full bg-ink-700/70 transition-all duration-200 hover:w-2.5 hover:bg-brand-500/80 ${collapsed ? 'md:opacity-0' : ''}`}
-          aria-label="Ocultar menú"
-          title="Ocultar menú"
+          onClick={() => setCollapsed((c) => !c)}
+          className="hidden md:block absolute right-0 top-1/2 z-10 h-16 w-1.5 -translate-y-1/2 rounded-l-full bg-ink-700/70 transition-all duration-200 hover:w-2.5 hover:bg-brand-500/80"
+          aria-label={collapsed ? 'Fijar menú abierto' : 'Ocultar menú'}
+          title={`${collapsed ? 'Fijar menú abierto' : 'Ocultar menú'} (${shortcutLabel('mod+\\')})`}
         />
-        <div className="px-5 py-5 border-b border-ink-800">
+        <div className={`border-b border-ink-800 ${showRailIcons ? 'px-2 py-4' : 'px-5 py-5'}`}>
           {/* JARVIS — the global command center, sitting above the brand and
               highlighted in its own signature color (admin-only, like the
-              /jarvis route's own gate). */}
+              /jarvis route's own gate). Collapses to a single centered glyph. */}
           {isAdmin && (
             <NavLink
               to="/jarvis"
               onClick={() => setNavOpen(false)}
-              className={({ isActive }) => `mb-3 flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold tracking-wide transition-all ${
+              title="JARVIS"
+              className={({ isActive }) => `mb-3 flex w-full items-center justify-center gap-2 rounded-lg border text-sm font-semibold tracking-wide transition-all ${showRailIcons ? 'h-9 px-0' : 'px-3 py-2'} ${
                 isActive
                   ? 'border-[#3600ff] bg-[#3600ff]/30 text-white shadow-[0_0_22px_-4px_#3600ff]'
                   : 'border-[#3600ff]/50 bg-[#3600ff]/12 text-ink-100 hover:border-[#3600ff] hover:bg-[#3600ff]/25 hover:text-white hover:shadow-[0_0_18px_-6px_#3600ff]'
               }`}
             >
-              <Bot size={15} /> JARVIS
+              <Bot size={15} /> {!showRailIcons && 'JARVIS'}
             </NavLink>
           )}
-          <div className="flex items-start justify-between gap-3">
-            {/* Brand block — typographic logo. See the mobile topbar's matching
-                block for the rationale on the white-tint filter and the lack of
-                a background box. */}
-            <div className="min-w-0 flex flex-col items-start gap-1.5">
+          {showRailIcons ? (
+            /* Icon-rail brand — a compact centered mark (logo or monogram). */
+            <div className="flex justify-center">
               {settings?.logoImageId ? (
                 <ImageView
                   id={settings.logoImageId}
                   alt={company + ' logo'}
-                  className="h-9 max-w-[180px] object-contain object-left"
+                  className="h-7 w-7 object-contain"
                   style={{ filter: 'brightness(0) invert(1)' }}
-                  placeholderClassName="h-9 w-32"
+                  placeholderClassName="h-7 w-7"
                 />
               ) : (
-                <div className="font-wordmark text-lg leading-tight truncate" title={company}>
-                  {company}
+                <div className="font-wordmark text-lg leading-none select-none" title={company}>
+                  {(company[0] || 'A').toUpperCase()}
                 </div>
               )}
             </div>
-            {/* Mobile: close the slide-in drawer. */}
-            <button
-              onClick={() => setNavOpen(false)}
-              className="md:hidden -mr-2 -my-2 inline-flex items-center justify-center w-11 h-11 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
-              aria-label="Cerrar menú"
-            >
-              <X size={20} />
-            </button>
-          </div>
+          ) : (
+            <div className="flex items-start justify-between gap-3">
+              {/* Brand block — typographic logo. See the mobile topbar's matching
+                  block for the rationale on the white-tint filter and the lack of
+                  a background box. */}
+              <div className="min-w-0 flex flex-col items-start gap-1.5">
+                {settings?.logoImageId ? (
+                  <ImageView
+                    id={settings.logoImageId}
+                    alt={company + ' logo'}
+                    className="h-9 max-w-[180px] object-contain object-left"
+                    style={{ filter: 'brightness(0) invert(1)' }}
+                    placeholderClassName="h-9 w-32"
+                  />
+                ) : (
+                  <div className="font-wordmark text-lg leading-tight truncate" title={company}>
+                    {company}
+                  </div>
+                )}
+              </div>
+              {/* Mobile: close the slide-in drawer. */}
+              <button
+                onClick={() => setNavOpen(false)}
+                className="md:hidden -mr-2 -my-2 inline-flex items-center justify-center w-11 h-11 rounded text-ink-400 hover:text-ink-100 hover:bg-ink-800 active:bg-ink-700 transition-colors"
+                aria-label="Cerrar menú"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Global search trigger — a quiet "Buscar… ⌘K" pill under the brand.
-            Desktop-only: the mobile topbar already carries the search icon. */}
+        {/* Global search trigger — a quiet "Buscar… ⌘K" pill under the brand;
+            shrinks to a single search glyph in the icon rail. Desktop-only: the
+            mobile topbar already carries the search icon. */}
         <div className="hidden md:block px-3 pt-3">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="flex w-full items-center gap-2 px-3 h-9 rounded-lg bg-ink-800/60 border border-ink-700/60 text-ink-400 hover:bg-ink-800 hover:text-ink-200 text-sm transition-colors"
+            title={showRailIcons ? `Buscar (${shortcutLabel('mod+k')})` : undefined}
+            className={`flex w-full items-center h-9 rounded-lg bg-ink-800/60 border border-ink-700/60 text-ink-400 hover:bg-ink-800 hover:text-ink-200 text-sm transition-colors ${showRailIcons ? 'justify-center px-0' : 'gap-2 px-3'}`}
           >
-            <Search size={14} aria-hidden />
-            <span className="flex-1 text-left">Buscar…</span>
-            <kbd className="rounded border border-ink-700 px-1.5 py-0.5 text-[10px] font-medium text-ink-400">
-              {shortcutLabel('mod+k')}
-            </kbd>
+            <Search size={showRailIcons ? 16 : 14} aria-hidden />
+            {!showRailIcons && (
+              <>
+                <span className="flex-1 text-left">Buscar…</span>
+                <kbd className="rounded border border-ink-700 px-1.5 py-0.5 text-[10px] font-medium text-ink-400">
+                  {shortcutLabel('mod+k')}
+                </kbd>
+              </>
+            )}
           </button>
         </div>
 
         {/* QuickBooks-style "+ Nuevo" quick-create — only where accounting
-            create flows are reachable (accounting users + admins). */}
-        {(isAccounting || isAdmin) && <QuickCreate />}
+            create flows are reachable (accounting users + admins). Hidden in the
+            icon rail; reappears when the rail peeks open. */}
+        {!showRailIcons && (isAccounting || isAdmin) && <QuickCreate />}
 
         {/* Admin-only "Ver como" preview — sits right under the brand mark so
             it's discreet but always at hand. Renders nothing for non-admins
             and is hidden in the mobile drawer (the component owns both). */}
-        <ViewAsToggle />
+        {!showRailIcons && <ViewAsToggle />}
 
         <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {navGroups.map((group, gi) => (
@@ -303,7 +354,7 @@ export default function Layout() {
               // creates a visual gap without needing a divider line.
               className={`space-y-0.5 ${gi > 0 ? 'mt-4' : ''}`}
             >
-              {group.label && (
+              {group.label && !showRailIcons && (
                 <div className="px-3 pb-1.5 eyebrow-xs tracking-widest select-none">
                   {group.label}
                 </div>
@@ -312,9 +363,10 @@ export default function Layout() {
                 <Fragment key={item.to}>
                   {/* `sub` can come from the item itself (a flat sub-item like
                       Configurador Togo) or be forced on a revealed child below. */}
-                  <SidebarLink item={item} sub={item.sub} pathname={location.pathname} waUnread={waUnread} />
-                  {/* Children reveal (indented) only while their section is open. */}
-                  {isSectionOpen(item, location.pathname) && item.children.map((c) => (
+                  <SidebarLink item={item} sub={item.sub} pathname={location.pathname} waUnread={waUnread} compact={showRailIcons} />
+                  {/* Children reveal (indented) only while their section is open —
+                      and never in the icon rail, where indented icons read poorly. */}
+                  {!showRailIcons && isSectionOpen(item, location.pathname) && item.children.map((c) => (
                     <SidebarLink key={c.to} item={c} sub pathname={location.pathname} waUnread={waUnread} />
                   ))}
                 </Fragment>
@@ -323,22 +375,11 @@ export default function Layout() {
           ))}
         </nav>
 
-        <ProfileMenu />
+        <ProfileMenu compact={showRailIcons} />
       </aside>
 
-      {/* Desktop "show sidebar" toggle — only rendered while collapsed. Lives in
-          the gutter the collapsed <main> reserves (md:pl-12 below), so it never
-          overlaps the page's back-link or title. Hidden on mobile, which has its
-          own topbar Menu button. */}
-      {collapsed && (
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          className="hidden md:block fixed left-0 top-1/2 z-30 h-16 w-1.5 -translate-y-1/2 rounded-r-full bg-ink-300 shadow-soft transition-all duration-200 hover:w-2.5 hover:bg-brand-500"
-          aria-label="Mostrar menú"
-          title="Mostrar menú"
-        />
-      )}
+      {/* (The old fixed "show sidebar" toggle is gone: the icon rail is always
+          visible, and the right-edge handle / ⌘\ toggles the pinned state.) */}
 
       {/* Single scroll container for the whole app shell. html/body are
           pinned in index.css so this is where momentum scrolling lives.
@@ -348,7 +389,7 @@ export default function Layout() {
           would otherwise show a 1-pixel bounce flicker). When the sidebar is
           collapsed, a small left gutter (md:pl-12) keeps content clear of the
           floating show-toggle. */}
-      <main ref={mainRef} className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-12' : ''}`}>
+      <main ref={mainRef} className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-14' : ''}`}>
         <MainContent />
       </main>
 
