@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Shield, Ship, FileText, Container } from 'lucide-react';
+import { Shield, Ship, FileText, Container, Calculator } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -210,7 +210,10 @@ export default function Importaciones() {
     <>
       <PageHeader title="Importaciones" subtitle="Expediente aduanal (DGA) → costo en destino al inventario"
         actions={(
-          <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => navigate('/accounting/importaciones/calculadora')} className="btn-secondary"><Calculator size={15} /> <span className="hidden sm:inline">Calculadora</span></button>
+            <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
+          </div>
         )} />
 
       {showExpediente && loaded && (

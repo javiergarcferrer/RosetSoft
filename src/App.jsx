@@ -52,6 +52,7 @@ const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturac
 const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
 const AccountingCompras = lazyPage(() => import('./pages/accounting/Compras.jsx'));
 const AccountingImportaciones = lazyPage(() => import('./pages/accounting/Importaciones.jsx'));
+const AccountingLandedCalculator = lazyPage(() => import('./pages/accounting/LandedCalculator.jsx'));
 const AccountingImportacionDetail = lazyPage(() => import('./pages/accounting/ImportacionDetail.jsx'));
 const AccountingECFSequences = lazyPage(() => import('./pages/accounting/ECFSequences.jsx'));
 const AccountingCuentas = lazyPage(() => import('./pages/accounting/CuentasCobrarPagar.jsx'));
@@ -302,6 +303,7 @@ function ProtectedApp() {
                 to the standalone section. */}
             <Route path="accounting/inventario" element={<Navigate to="/inventario/existencias" replace />} />
             <Route path="accounting/importaciones" element={<AccountingImportaciones />} />
+            <Route path="accounting/importaciones/calculadora" element={<AccountingLandedCalculator />} />
             <Route path="accounting/importaciones/:id" element={<AccountingImportacionDetail />} />
             <Route path="accounting/ecf" element={<AccountingECFSequences />} />
             <Route path="accounting/cuentas" element={<AccountingCuentas />} />

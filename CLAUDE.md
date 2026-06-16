@@ -84,6 +84,13 @@ conversation. Two kinds:
   (WhatsApp caches the card per-URL for weeks).
   `dgiiFormats` pins the OFFICIAL DGII 606/607 TXT layouts (header + 23 pipe
   fields, code tables) — never relax it to match the app; fix the builder.
+  `landedCalc` pins the landed-cost CALCULATOR engine (the interactive
+  simulator, separate from the expediente posting Model): the DGA stack
+  (CIF → gravamen → ITBIS on CIF+gravamen+ISC → 0.4% servicio aduanal), the
+  EPA 0% vs NMF 20% furniture-duty lever (EU origin + EUR.1), per-bucket cost
+  allocation (volume for bulky furniture, value for duty/insurance; drift→last)
+  and the two-way margin back-calc. ITBIS stays OUT of landed cost (recoverable
+  credit), exactly like the posting Model.
   New money/data invariant worth keeping → pin it here so future loops inherit
   it. Don't pin presentational/getters/label maps — write obviously-correct code
   instead.

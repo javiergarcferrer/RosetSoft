@@ -52,6 +52,13 @@ export {
   expedienteLanded, expedienteCreditableItbis, expedienteTaxCheck, buildExpedienteEntry,
 } from '../../lib/accounting/expediente.js';
 
+// ── landed-cost CALCULATOR (interactive simulator): VM + the pure engine/presets
+export { resolveLandedCalculator } from './landedCalculator.js';
+export {
+  computeLanded, allocate, priceForMargin, marginForPrice, incotermFor, bucketDef, regimeDuty,
+  INCOTERMS, COST_BUCKETS, ALLOCATION_METHODS, ORIGIN_REGIMES, FURNITURE_HS, DGA_DEFAULTS,
+} from '../../lib/accounting/landedCalc.js';
+
 // ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload
 export {
   ECF_TYPES, ecfTypeLabel, formatENcf, parseENcf, saleEcfType, isValidFiscalId,

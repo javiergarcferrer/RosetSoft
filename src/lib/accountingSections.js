@@ -26,6 +26,7 @@ export const ACCOUNTING_SECTIONS = [
   ] },
   { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
+    { to: '/accounting/importaciones/calculadora', label: 'Calculadora de costos' },
   ] },
   // Inventario left Contabilidad — it's a standalone section now (see
   // lib/access.js ADMIN_GROUP) while the accounting engine is in testing.
@@ -71,6 +72,7 @@ export const QUICK_CREATE = [
   ] },
   { group: 'Importaciones', items: [
     { label: 'Expediente de importación', to: '/accounting/importaciones?new=1' },
+    { label: 'Calculadora de costo en destino', to: '/accounting/importaciones/calculadora' },
   ] },
   { group: 'Proveedores', items: [
     { label: 'Gasto', to: '/accounting/expenses?new=1' },
