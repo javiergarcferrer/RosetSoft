@@ -22,12 +22,23 @@
 //   read-then-set safe against a concurrent writer (see the batch comment below).
 //
 // WHICH location — the reason a naive push silently does nothing: an item is
-// only adjustable at a location where it is STOCKED, and only reaches the
-// storefront from a location that FULFILLS ONLINE ORDERS. `locations(first:1)`
-// grabs an arbitrary (maybe inactive / non-online / non-stocking) location, so
-// the mutation either errors with `item_not_stocked_at_location` (swallowed as a
-// no-op) or lands somewhere the storefront never reads. We instead resolve the
-// variant's OWN stocked levels and pick its active + online-fulfilling one.
+// only adjustable at a location where it is STOCKED. `locations(first:1)` grabs
+// an arbitrary (maybe non-stocking) location, so the mutation errors with
+// `item_not_stocked_at_location` (swallowed as a no-op). We instead resolve the
+// variant's OWN stocked levels and adjust one that actually holds stock.
+//
+// We deliberately DON'T read `location.isActive`/`fulfillsOnlineOrders` to
+// prefer the online-selling location: those two fields are gated behind the
+// `read_locations` scope, which the client-credentials token does NOT carry on
+// a managed-install app until a NEW app version is released (the token reflects
+// the RELEASED scopes, not the dashboard draft) — so requesting them 403s the
+// whole query with ACCESS_DENIED and the write-back can't run at all. `location
+// { id }` and the on_hand quantities ARE covered by `read_inventory` (which the
+// catalog pull already needs), so resolving from those keeps the push working
+// with zero extra scope. The LSG store is single-location, so "the stocked
+// location holding stock" is exactly the one a sale came off; were it ever
+// multi-location, the gated online-vs-warehouse split simply isn't available to
+// this grant — preferring the held-stock level is the best ungated proxy.
 //
 // An LSG product id is `lsg-<variantId>` (catalogImport.ts), where variantId is
 // the numeric tail of the Shopify ProductVariant GID. Best-effort: a variant we
@@ -72,7 +83,7 @@ function variantGid(raw: string): string | null {
 }
 
 interface InvLevel {
-  location: { id: string; isActive: boolean; fulfillsOnlineOrders: boolean } | null;
+  location: { id: string } | null;
   quantities: { name: string; quantity: number }[] | null;
 }
 interface InvItem {
@@ -82,19 +93,17 @@ interface InvItem {
 }
 
 /**
- * Pick the level to adjust for an item: its ACTIVE, online-order-fulfilling
- * stocked location (what the storefront actually sells from); failing that any
- * active stocked location; failing that the first stocked one. Returns null when
- * the item is stocked nowhere (→ can't be adjusted; skipped with a reason).
+ * Pick the level to adjust for an item: a STOCKED location that actually holds
+ * units (on_hand > 0 — the one a sold-off-the-floor piece came from); failing
+ * that the first stocked location (so a zero-stock item still resolves a valid
+ * location and the floored set is a safe no-op). Returns null when the item is
+ * stocked nowhere (→ can't be adjusted; skipped with a reason). Uses only
+ * `location.id` + on_hand, both covered by `read_inventory` — see the header on
+ * why the `read_locations`-gated active/online fields are intentionally absent.
  */
 function chooseLevel(levels: InvLevel[]): InvLevel | null {
   const stocked = levels.filter((l) => l.location?.id);
-  return (
-    stocked.find((l) => l.location!.isActive && l.location!.fulfillsOnlineOrders) ??
-    stocked.find((l) => l.location!.isActive) ??
-    stocked[0] ??
-    null
-  );
+  return stocked.find((l) => onHandOf(l) > 0) ?? stocked[0] ?? null;
 }
 
 function onHandOf(level: InvLevel): number {
@@ -141,7 +150,7 @@ export async function adjustLsgInventory(
               tracked
               inventoryLevels(first: 20) {
                 nodes {
-                  location { id isActive fulfillsOnlineOrders }
+                  location { id }
                   quantities(names: ["on_hand"]) { name quantity }
                 }
               }

@@ -46,14 +46,19 @@ export function storeForRequest(body: SyncRequest | null | undefined): string {
  * The scopes a store's app installation must carry, per direction. The
  * LifestyleGarden link is TWO-WAY: it PULLS the catalog (read_products,
  * read_inventory) AND pushes inventory decrements back when an LSG product is
- * sold inside ALCOVER (write_inventory + read_locations to resolve the
- * location). The Alcover mirror writes products + quantities. Surfacing the
- * full list makes the Settings connection test flag any re-auth the dealer
- * must do in the Shopify Dev Dashboard for the scopes to work.
+ * sold inside ALCOVER (write_inventory to set on_hand; the target location is
+ * resolved from `location.id` + on_hand, both under read_inventory). It does
+ * NOT need read_locations — the only fields that would require it
+ * (location.isActive/fulfillsOnlineOrders) are gated and, on a managed-install
+ * app, absent from the client-credentials token until a new version ships, so
+ * the write-back deliberately doesn't read them (see lsgInventory.ts). The
+ * Alcover mirror writes products + quantities and still resolves a shop-level
+ * location list (read_locations). Surfacing the list makes the Settings
+ * connection test flag any re-auth the dealer must do for the scopes to work.
  */
 export function requiredScopes(store: string): string[] {
   return store === STORE_LSG
-    ? ['read_products', 'read_inventory', 'read_locations', 'write_inventory']
+    ? ['read_products', 'read_inventory', 'write_inventory']
     : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory'];
 }
 

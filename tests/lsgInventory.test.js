@@ -6,9 +6,13 @@
 //     `available` delta) — on_hand is the correct lever for a piece that left
 //     the floor outside Shopify's order flow; `available` recomputes from it.
 //     We read the current on_hand and SET current+delta (floored at 0).
-//   • we adjust the variant's OWN stocked, active, online-order-fulfilling
-//     location — never a blind locations(first:1) that may not stock the item
-//     (which silently no-ops as `item_not_stocked_at_location`).
+//   • we adjust a STOCKED location that holds units (on_hand > 0) — never a
+//     blind locations(first:1) that may not stock the item (which silently
+//     no-ops as `item_not_stocked_at_location`). We resolve it from
+//     `location.id` + on_hand only (both under read_inventory), NOT the
+//     read_locations-gated isActive/fulfillsOnlineOrders fields — a
+//     managed-install client-credentials token can't read those until a new app
+//     version ships, so requesting them 403s the whole push (ACCESS_DENIED).
 //   • untracked items + items stocked nowhere are SKIPPED with a surfaced
 //     reason — never reported as a phantom decrement.
 //   • the @idempotent(key:) directive is present + the key is threaded — Admin
@@ -34,13 +38,13 @@ import { adjustLsgInventory } from '../supabase/functions/shopify-sync/lsgInvent
 //   • 333 → no inventory item (skipped);
 //   • 444 → tracked:false (skipped, surfaced);
 //   • 555 → stocked at no location (skipped, surfaced);
-//   • 666 → two locations: an inactive/non-online one FIRST, then the real one,
-//           to prove the chooser prefers active + fulfillsOnlineOrders;
-//   • everything else → one active, online-fulfilling location with `onHand`.
+//   • 666 → two locations: an empty (on_hand 0) one FIRST, then a stocked one,
+//           to prove the chooser prefers a location that actually holds units;
+//   • everything else → one stocked location with `onHand`.
 function makeGql({ mutationUserErrors = [], onHand = 10 } = {}) {
   const calls = { mutation: null };
-  const lvl = (id, isActive, fulfillsOnlineOrders, q) => ({
-    location: { id, isActive, fulfillsOnlineOrders },
+  const lvl = (id, q) => ({
+    location: { id },
     quantities: [{ name: 'on_hand', quantity: q }],
   });
   const gql = async (query, variables = {}) => {
@@ -49,13 +53,13 @@ function makeGql({ mutationUserErrors = [], onHand = 10 } = {}) {
       const tail = id.split('/').pop();
       const itemId = `gid://shopify/InventoryItem/${tail}`;
       if (tail === '333') return { productVariant: { inventoryItem: null } };
-      if (tail === '444') return { productVariant: { inventoryItem: { id: itemId, tracked: false, inventoryLevels: { nodes: [lvl('gid://shopify/Location/1', true, true, onHand)] } } } };
+      if (tail === '444') return { productVariant: { inventoryItem: { id: itemId, tracked: false, inventoryLevels: { nodes: [lvl('gid://shopify/Location/1', onHand)] } } } };
       if (tail === '555') return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [] } } } };
       if (tail === '666') return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [
-        lvl('gid://shopify/Location/warehouse', true, false, 99),  // active but not online → skip
-        lvl('gid://shopify/Location/store', true, true, onHand),   // the right one
+        lvl('gid://shopify/Location/empty', 0),       // stocked record but holds nothing → skip
+        lvl('gid://shopify/Location/store', onHand),  // the one that actually holds units
       ] } } } };
-      return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [lvl('gid://shopify/Location/1', true, true, onHand)] } } } };
+      return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [lvl('gid://shopify/Location/1', onHand)] } } } };
     }
     if (query.includes('inventorySetQuantities')) {
       calls.mutation = { query, variables };
@@ -110,12 +114,13 @@ test('a positive delta (restock) raises on_hand; on_hand is floored at 0', async
   ]);
 });
 
-test('adjusts the variant\'s active, online-order-fulfilling location — not just the first', async () => {
+test('adjusts a stocked location that holds units — not just the first', async () => {
   const { gql, calls } = makeGql({ onHand: 4 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-666', delta: -1 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, true);
-  // Picks the online store location (on_hand 4 → 3), NOT the warehouse (99);
-  // changeFromQuantity reflects THAT location's on_hand (4), not the warehouse's.
+  // Picks the store location that holds stock (on_hand 4 → 3), NOT the empty
+  // one (on_hand 0) listed first; changeFromQuantity reflects THAT location's
+  // on_hand (4). No read_locations-gated fields are consulted.
   assert.deepEqual(calls.mutation.variables.input.quantities, [
     { inventoryItemId: 'gid://shopify/InventoryItem/666', locationId: 'gid://shopify/Location/store', quantity: 3, changeFromQuantity: 4 },
   ]);

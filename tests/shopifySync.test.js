@@ -50,14 +50,18 @@ test('storeForRequest: test mode checks whichever store the caller names', () =>
   assert.equal(storeForRequest({ test: true, store: STORE_LSG }), STORE_LSG);
 });
 
-test('requiredScopes: the LSG link is two-way (read + write_inventory); the mirror writes inventory only', () => {
+test('requiredScopes: the LSG link is two-way (read + write_inventory, no read_locations); the mirror writes inventory only', () => {
   // LSG PULLS the catalog AND pushes inventory decrements back when an LSG
-  // product is sold in ALCOVER, so it needs write_inventory + read_locations on
-  // top of the read scopes — this is what makes the connection test flag the
-  // one-time Shopify re-auth.
+  // product is sold in ALCOVER, so it needs write_inventory on top of the read
+  // scopes. It does NOT need read_locations: the write-back resolves the target
+  // location from location.id + on_hand (both under read_inventory) and never
+  // reads the read_locations-gated isActive/fulfillsOnlineOrders fields, which a
+  // managed-install client-credentials token can't see until a new app version
+  // ships (the ACCESS_DENIED the dealer hit). The connection test flags only the
+  // scopes the token must truly carry for the one-time Shopify re-auth.
   assert.deepEqual(
     requiredScopes(STORE_LSG).sort(),
-    ['read_inventory', 'read_locations', 'read_products', 'write_inventory'],
+    ['read_inventory', 'read_products', 'write_inventory'],
   );
   const mirror = requiredScopes(STORE_ALCOVER);
   for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory']) {
