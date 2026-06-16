@@ -705,7 +705,9 @@ function CustomerBlock({ customer, professional, seller }: { customer: Customer 
               {meta ? <Text style={s.custMeta}>{meta}</Text> : null}
             </>
           ) : (
-            <Text style={[s.custName, { fontStyle: 'italic', color: C.inkSoft, fontWeight: 'normal' }]}>Sin cliente asignado</Text>
+            // Lausanne (not custName's Sohne, which ships no italic cut → react-pdf
+            // throws and the whole export dies); matches the muted italic placeholder below.
+            <Text style={[s.custName, { fontFamily: 'Lausanne', fontStyle: 'italic', color: C.inkSoft, fontWeight: 'normal' }]}>Sin cliente asignado</Text>
           )}
         </View>
         <View>
