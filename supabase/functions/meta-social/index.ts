@@ -1130,7 +1130,11 @@ Deno.serve(async (req) => {
   // outbound row in ig_messages so the inbox shows it immediately. ─────────
   if (body.igSendDm) {
     const recipientId = String(body.igSendDm.recipientId || '').trim();
-    const text = String(body.igSendDm.text || '').trim();
+    // NFC-normalize so accented letters send as one precomposed code point.
+    // Decomposed input (e.g. "ñ" as n + combining tilde U+0303, which iOS can
+    // emit) renders a stray "extra tilde" in Instagram's app; NFC collapses it.
+    // Normalizing here fixes BOTH the Graph send and the durable row stored below.
+    const text = String(body.igSendDm.text || '').normalize('NFC').trim();
     if (!recipientId || !text) return json({ ok: false, error: 'recipientId y text requeridos' }, 400);
     try {
       const r = await igPostJson('me/messages', token, { recipient: { id: recipientId }, message: { text } });

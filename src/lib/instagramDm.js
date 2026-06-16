@@ -11,12 +11,24 @@ import { supabase } from '../db/supabaseClient.js';
 import { db } from '../db/database.js';
 
 /**
+ * Normalize outgoing DM text to Unicode NFC so accented letters (ñ, í, á…) ride
+ * the wire as a single precomposed code point. iOS keyboards / dictation / paste
+ * can hand us DECOMPOSED input — e.g. "ñ" as `n` + a combining tilde (U+0303) —
+ * which our browser renders identically to the precomposed form, but Instagram's
+ * native app renders the combining mark as a stray, offset "extra tilde". NFC
+ * collapses `n`+◌̃ back into one `ñ`, so the message reads the same everywhere.
+ */
+export function normalizeDmText(text) {
+  return String(text || '').normalize('NFC').trim();
+}
+
+/**
  * Send a Direct reply to a contact (within Meta's 24h standard-messaging
  * window). The server inserts the durable outbound row; the caller refetches
  * ig_messages after (the inbox polls / re-runs its live query).
  */
 export async function sendInstagramDm(recipientId, text) {
-  const body = String(text || '').trim();
+  const body = normalizeDmText(text);
   if (!recipientId || !body) return { ok: false, error: 'Falta el destinatario o el texto.' };
   const { data, error } = await supabase.functions.invoke('meta-social', {
     body: { igSendDm: { recipientId, text: body } },
