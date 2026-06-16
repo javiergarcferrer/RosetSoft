@@ -51,6 +51,12 @@ export function resolveSales({ quotes, cycle, customerById, profileById, profess
     const earnedCommission = depositIn ? sellerReported : 0;
     const sellerPayable = Boolean(q.depositReceivedAt);
     const sellerPaid = Boolean(q.sellerCommissionPaidAt);
+    // Whether the seller earns ANY commission on this sale. A 0%/no-rate
+    // seller (the owner on their own quotes, non-commissioned staff) earns
+    // nothing, so accounting must not surface a phantom $0 cut. A
+    // historically-paid snapshot keeps the line visible even if the rate was
+    // later zeroed (sellerReported holds the frozen figure of record).
+    const sellerHasCommission = potentialCommission > 0 || sellerReported > 0;
 
     // ── Professional (decorator/architect) settlement ─────────────────
     const mode = professional ? decoratorBilling(q) : null;
@@ -93,6 +99,7 @@ export function resolveSales({ quotes, cycle, customerById, profileById, profess
       earnedCommission,
       sellerPayable,
       sellerPaid,
+      sellerHasCommission,        // gate: don't surface a 0%/no-rate seller cut
       // professional cut
       proPct,
       proAmount,                  // live — passed to the toggle as the snapshot

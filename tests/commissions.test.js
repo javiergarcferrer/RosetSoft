@@ -364,6 +364,38 @@ test('resolveSales: deposit-in-cycle earns the seller; accepted-only does not', 
   assert.equal(r.vendedorRows[0].pending, 50);
 });
 
+test('resolveSales: a 0%/no-rate seller earns no commission → sellerHasCommission=false', () => {
+  const ZERO_SELLER = { id: 'u0', name: 'Dueño', commissionPct: 0 };
+  const NO_RATE_SELLER = { id: 'u9', name: 'Sin tasa' }; // commissionPct undefined → 0
+  const maps = {
+    customerById: new Map(),
+    profileById: new Map([
+      [VS_SELLER.id, VS_SELLER], [ZERO_SELLER.id, ZERO_SELLER], [NO_RATE_SELLER.id, NO_RATE_SELLER],
+    ]),
+    professionalById: new Map(),
+  };
+  const quotes = [
+    // 5% seller, deposit in window → a real commission to surface.
+    { id: 'q1', status: 'accepted', acceptedAt: 1100, depositReceivedAt: 1200, createdByUserId: 'u1' },
+    // 0% seller, deposit in window → an entry, but no commission to surface
+    // (even though the deposit makes sellerPayable true).
+    { id: 'q2', status: 'accepted', acceptedAt: 1100, depositReceivedAt: 1200, createdByUserId: 'u0' },
+    // No-rate seller → same: nothing to surface.
+    { id: 'q3', status: 'accepted', acceptedAt: 1100, depositReceivedAt: 1200, createdByUserId: 'u9' },
+  ];
+  const r = resolveSales({ quotes, cycle: VS_CYCLE, totalsFor: vsTotalsFor, ...maps });
+  const byId = new Map(r.entries.map((e) => [e.quote.id, e]));
+  assert.equal(byId.get('q1').sellerHasCommission, true);
+  assert.equal(byId.get('q2').sellerHasCommission, false);
+  assert.equal(byId.get('q3').sellerHasCommission, false);
+  // The zero-rate sellers are payable (deposit landed) but still earn nothing,
+  // so they never reach the rollup — only the 5% seller does.
+  assert.equal(byId.get('q2').sellerPayable, true);
+  assert.equal(r.entries.length, 3);
+  assert.equal(r.vendedorRows.length, 1);
+  assert.equal(r.vendedorRows[0].user.id, 'u1');
+});
+
 test('resolveCommissionsOverview: totals = seller + professional, paid + pending = commission', () => {
   const quotes = [
     // Seller commission earned (deposit in cycle) AND a floor-order pro

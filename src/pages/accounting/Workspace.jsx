@@ -318,9 +318,10 @@ export default function AccountingWorkspace() {
     ];
     const rows = [header];
     for (const e of derived.entries) {
-      // Only deposit-in-cycle entries actually owe commission — same
-      // rule as the admin payout report.
-      if (!e.depositIn || !e.creator) continue;
+      // Only deposit-in-cycle entries with a real (non-zero) seller commission
+      // owe a payout — a 0%/no-rate seller owes nothing. Same rule as the
+      // on-screen rollup (Resumen por vendedor), so the CSV can't drift from it.
+      if (!e.depositIn || !e.creator || !e.sellerHasCommission) continue;
       rows.push([
         cycleStartIso, cycleEndIso,
         e.creator.name || '',
@@ -584,7 +585,7 @@ export default function AccountingWorkspace() {
 function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid }) {
   const {
     quote, customer, creator, professional, mode, decoratorPct, base, grandTotal, totals,
-    commissionPct, potentialCommission, sellerReported, sellerPayable, sellerPaid,
+    commissionPct, potentialCommission, sellerReported, sellerPayable, sellerPaid, sellerHasCommission,
     proPct, proAmount, proReported, proPayable, proPaid,
   } = entry;
   const [open, setOpen] = useState(false);
@@ -620,13 +621,20 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
         ? `Base ${fmtUsd(base + proCommission.discount)} · ${proPct}% = ${fmtUsd(proCommission.gross)} − desc. ${fmtUsd(proCommission.discount)} = ${fmtUsd(proAmount)}`
         : `Base ${fmtUsd(base)} · ${proPct}% = ${fmtUsd(proAmount)}`;
 
-  const anyPayable = sellerPayable || proPayable;
-  const anyPending = (sellerPayable && !sellerPaid) || (proPayable && !proPaid);
-  const chip = !anyPayable
-    ? { cls: 'text-ink-400', text: 'Comisión tras depósito' }
-    : anyPending
-      ? { cls: 'text-amber-700', text: 'Comisión pendiente' }
-      : { cls: 'text-emerald-700', text: 'Comisiones pagadas' };
+  // A 0%/no-rate seller earns no commission, so its deposit must not light up
+  // a phantom payout state; only a real seller cut counts. A sale with neither
+  // a seller commission nor a professional shows no commission chip at all.
+  const sellerCounts = sellerHasCommission && sellerPayable;
+  const anyPayable = sellerCounts || proPayable;
+  const anyPending = (sellerCounts && !sellerPaid) || (proPayable && !proPaid);
+  const hasCommissions = sellerHasCommission || Boolean(professional);
+  const chip = !hasCommissions
+    ? null
+    : !anyPayable
+      ? { cls: 'text-ink-400', text: 'Comisión tras depósito' }
+      : anyPending
+        ? { cls: 'text-amber-700', text: 'Comisión pendiente' }
+        : { cls: 'text-emerald-700', text: 'Comisiones pagadas' };
 
   return (
     <li className="bg-surface hover:bg-ink-50/40 transition-colors group">
@@ -653,14 +661,14 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
               <span className="tabular-nums font-semibold text-ink-900 text-sm">
                 {formatMoney(grandTotal, currency, rates)}
               </span>
-              <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>
+              {chip && <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>}
             </div>
           </div>
           <div className="hidden sm:block flex-shrink-0 text-right">
             <div className="tabular-nums font-semibold text-ink-900 whitespace-nowrap">
               {formatMoney(grandTotal, currency, rates)}
             </div>
-            <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>
+            {chip && <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>}
           </div>
         </button>
         <PdfButton pdf={pdf} />
@@ -676,11 +684,13 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
             onExportCsv={() => downloadQuoteInvoiceCsv(quote, customer, lines)}
           />
 
+          {(sellerHasCommission || professional) && (
           <div className="space-y-2">
             <h3 className="eyebrow font-semibold tracking-wide text-ink-600">
               Comisiones de esta venta
             </h3>
 
+            {sellerHasCommission && (
             <CommissionLine
               role="Vendedor"
               who={creatorDisplay(creator) || '—'}
@@ -706,6 +716,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
                 <span className="text-[11px] text-ink-400 italic whitespace-nowrap">Tras depósito</span>
               )}
             />
+            )}
 
             {professional && (
               <CommissionLine
@@ -736,6 +747,7 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
               />
             )}
           </div>
+          )}
         </div>
       )}
     </li>

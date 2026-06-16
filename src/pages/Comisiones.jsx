@@ -182,7 +182,7 @@ const DETALLE_COLUMNS = [
   {
     key: 'sellerCommission', label: 'Com. vendedor',
     thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
-    cell: ({ e, usd }) => (e.creator ? (
+    cell: ({ e, usd }) => (e.creator && e.sellerHasCommission ? (
       <>
         <span className="font-medium text-ink-900">{usd(e.sellerReported)}</span>
         <SellerStatus e={e} className="ml-2" />
@@ -261,7 +261,7 @@ export default function Comisiones() {
   const overview = useMemo(() => resolveCommissionsOverview(sales), [sales]);
 
   const myEntries = useMemo(
-    () => sales.entries.filter((e) => e.creator?.id === currentProfile?.id),
+    () => sales.entries.filter((e) => e.creator?.id === currentProfile?.id && e.sellerHasCommission),
     [sales.entries, currentProfile],
   );
   const myRow = useMemo(
@@ -562,7 +562,7 @@ export default function Comisiones() {
                     <span className="text-xs text-ink-500 tabular-nums">Base {usd(e.base)}</span>
                   </div>
                   <div className="text-sm text-ink-700 truncate">{e.customer?.name || '—'}</div>
-                  {e.creator && (
+                  {e.creator && e.sellerHasCommission && (
                     <div className="flex items-center justify-between gap-2 text-sm">
                       <span className="text-ink-500 truncate">Vend. {e.creator.name}</span>
                       <span className="whitespace-nowrap tabular-nums">
