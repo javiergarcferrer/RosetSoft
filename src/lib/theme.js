@@ -31,6 +31,7 @@ const VALUES = new Set(['light', 'dark', 'system']);
 export function isPublicRoute(hash = (typeof location !== 'undefined' ? location.hash : '')) {
   return hash.indexOf('#/q/') === 0
     || hash.indexOf('#/tienda') === 0
+    || hash.indexOf('#/embed') === 0
     || hash.indexOf('#/eliminar-datos') === 0;
 }
 

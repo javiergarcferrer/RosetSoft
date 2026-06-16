@@ -24,7 +24,7 @@
       (function () {
         try {
           var hash = location.hash || '';
-          var isPublic = hash.indexOf('#/q/') === 0 || hash.indexOf('#/tienda') === 0 || hash.indexOf('#/eliminar-datos') === 0;
+          var isPublic = hash.indexOf('#/q/') === 0 || hash.indexOf('#/tienda') === 0 || hash.indexOf('#/embed') === 0 || hash.indexOf('#/eliminar-datos') === 0;
           var pref = null;
           try { pref = localStorage.getItem('rs.theme'); } catch (e) {}
           var dark =

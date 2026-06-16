@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { Sofa, Upload, Loader2, Trash2, Check, AlertCircle, Shield, Plus, Sparkles } from 'lucide-react';
+import { Sofa, Upload, Loader2, Trash2, Check, AlertCircle, Shield, Plus, Sparkles, Code2, Copy, ExternalLink } from 'lucide-react';
+import { togoEmbedSnippet, togoEmbedUrl } from '../../lib/togoEmbed.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -74,6 +75,8 @@ export default function TogoCatalog() {
       <PageHeader title="Catálogo Togo" subtitle="Modelos del configurador · sube el DWG de cada pieza" />
 
       <AddModelCard families={families} profileId={profileId} nextSort={sorted.length ? Math.max(...sorted.map((m) => m.sortOrder || 0)) + 1 : 0} />
+
+      {sorted.length > 0 && <EmbedCard />}
 
       <div className="mt-5">
         {sorted.length === 0 ? (
@@ -198,6 +201,26 @@ function AddModelCard({ families, profileId, nextSort }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The website embed snippet + a link to the public widget. */
+function EmbedCard() {
+  const [copied, setCopied] = useState(false);
+  const snippet = togoEmbedSnippet();
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
+  };
+  return (
+    <div className="card card-pad mt-4 space-y-2.5">
+      <h2 className="font-display font-semibold text-sm flex items-center gap-2"><Code2 size={15} className="text-brand-500" /> Embeber en tu web</h2>
+      <p className="text-[11px] text-ink-500">Pega este código en tu sitio: los clientes arman su Togo y te llega como cotización borrador para dar seguimiento.</p>
+      <div className="rounded-lg bg-ink-900 text-ink-100 text-[11px] font-mono p-3 overflow-x-auto whitespace-pre-wrap break-all">{snippet}</div>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={copy} className="btn-ghost text-xs">{copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />} {copied ? 'Copiado' : 'Copiar código'}</button>
+        <a href={togoEmbedUrl()} target="_blank" rel="noreferrer" className="btn-ghost text-xs"><ExternalLink size={14} /> Abrir vista pública</a>
+      </div>
     </div>
   );
 }

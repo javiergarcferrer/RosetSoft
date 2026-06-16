@@ -1,0 +1,277 @@
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle } from 'lucide-react';
+import { formatMoney } from '../../lib/format.js';
+import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
+import {
+  resolveConfigurator, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
+} from '../../core/quote/index.js';
+
+const SCALE = PX_PER_CM;
+
+/**
+ * PUBLIC, no-login Togo configurator — embedded in the dealer's website via an
+ * <iframe>. A visitor drags Togo pieces into a top-down plan, sees the live retail
+ * total (DOP), and requests a quote; the request becomes a DRAFT quote in the
+ * dealer's pipeline (POST → togo-embed). Reuses the SAME pure ViewModel as the
+ * internal configurator; it just feeds it data from the public Edge Function
+ * instead of the DB. Renders OUTSIDE the app shell (no AppContext/session) and is
+ * pinned light (isPublicRoute), so it sits cleanly inside any page.
+ */
+export default function TogoEmbed() {
+  const [cat, setCat] = useState({ status: 'loading', data: null, error: null });
+  const [placed, setPlaced] = useState([]);
+  const [selectedUid, setSelectedUid] = useState(null);
+  const [step, setStep] = useState('build'); // 'build' | 'form' | 'done'
+
+  useEffect(() => {
+    let active = true;
+    fetchTogoCatalog()
+      .then((d) => { if (active) setCat({ status: 'ready', data: d, error: null }); })
+      .catch((e) => { if (active) setCat({ status: 'error', data: null, error: e?.message || 'Error' }); });
+    return () => { active = false; };
+  }, []);
+
+  const data = cat.data;
+  const rates = data?.rates || { USD: 1, DOP: 60 };
+  const models = useMemo(() => (data?.models || []).filter((m) => m.svg), [data]);
+  const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m.svg])), [models]);
+  const resolvedById = useMemo(() => {
+    const o = {};
+    for (const m of models) {
+      o[m.id] = { id: m.id, label: m.name, widthCm: m.widthCm, depthCm: m.depthCm, unitPrice: m.priceUsd };
+    }
+    return o;
+  }, [models]);
+
+  const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
+
+  const addPiece = useCallback((modelId) => {
+    const r = resolvedById[modelId]; if (!r) return;
+    const fp = footprintOf(r, 0);
+    const baseN = 40 + (placed.length % 6) * 26;
+    const start = clampToPlan(baseN, baseN, fp.w, fp.h);
+    const others = placed.map((p) => { const f = footprintOf(resolvedById[p.pieceId], p.rot); return { x: p.x, y: p.y, w: f.w, h: f.h }; });
+    const snapped = snapPlacement({ x: start.x, y: start.y, w: fp.w, h: fp.h }, others);
+    const c = clampToPlan(snapped.x, snapped.y, fp.w, fp.h);
+    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setPlaced((prev) => [...prev, { uid, pieceId: modelId, x: c.x, y: c.y, rot: 0 }]);
+    setSelectedUid(uid);
+  }, [resolvedById, placed]);
+
+  const rotateSel = useCallback(() => {
+    setPlaced((prev) => prev.map((p) => {
+      if (p.uid !== selectedUid) return p;
+      const rot = (p.rot + 90) % 360; const fp = footprintOf(resolvedById[p.pieceId], rot);
+      return { ...p, rot, ...clampToPlan(p.x, p.y, fp.w, fp.h) };
+    }));
+  }, [selectedUid, resolvedById]);
+  const deleteSel = useCallback(() => { setPlaced((prev) => prev.filter((p) => p.uid !== selectedUid)); setSelectedUid(null); }, [selectedUid]);
+
+  const dragRef = useRef(null);
+  const onTileDown = useCallback((e, p) => {
+    e.stopPropagation(); setSelectedUid(p.uid);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { uid: p.uid, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y };
+  }, []);
+  const onTileMove = useCallback((e) => {
+    const d = dragRef.current; if (!d) return;
+    const r = resolvedById[placed.find((p) => p.uid === d.uid)?.pieceId]; if (!r) return;
+    setPlaced((prev) => {
+      const me = prev.find((p) => p.uid === d.uid); if (!me) return prev;
+      const fp = footprintOf(r, me.rot);
+      const nx = d.ox + (e.clientX - d.sx) / SCALE, ny = d.oy + (e.clientY - d.sy) / SCALE;
+      const others = prev.filter((p) => p.uid !== d.uid).map((p) => { const f = footprintOf(resolvedById[p.pieceId], p.rot); return { x: p.x, y: p.y, w: f.w, h: f.h }; });
+      const snapped = snapPlacement({ x: nx, y: ny, w: fp.w, h: fp.h }, others);
+      const c = clampToPlan(snapped.x, snapped.y, fp.w, fp.h);
+      return prev.map((p) => (p.uid === d.uid ? { ...p, x: c.x, y: c.y } : p));
+    });
+  }, [placed, resolvedById]);
+  const onTileUp = useCallback((e) => { dragRef.current = null; e.currentTarget.releasePointerCapture?.(e.pointerId); }, []);
+
+  if (cat.status === 'loading') {
+    return <Centered><Loader2 size={20} className="animate-spin text-ink-400" /></Centered>;
+  }
+  if (cat.status === 'error' || !data?.configured) {
+    return (
+      <Centered>
+        <div className="text-center text-ink-500 text-sm flex flex-col items-center gap-2">
+          <Sofa size={24} className="text-ink-300" />
+          {cat.status === 'error' ? 'No se pudo cargar el configurador.' : 'El configurador aún no está disponible.'}
+        </div>
+      </Centered>
+    );
+  }
+
+  if (step === 'done') return <DoneScreen storeName={data.storeName} onReset={() => { setPlaced([]); setSelectedUid(null); setStep('build'); }} />;
+  if (step === 'form') {
+    return (
+      <RequestForm
+        storeName={data.storeName}
+        items={placed.map((p) => ({ modelId: p.pieceId, x: p.x, y: p.y, rot: p.rot }))}
+        totalDop={formatMoney(vm.subtotalUsd, 'DOP', rates)}
+        onBack={() => setStep('build')}
+        onDone={() => setStep('done')}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-full bg-surface text-ink-900 p-3 sm:p-4">
+      <header className="flex items-center gap-2.5 mb-3">
+        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 text-brand-600"><Sofa size={16} /></span>
+        <div className="min-w-0">
+          <h1 className="font-display font-semibold text-base leading-tight truncate">Configura tu Togo</h1>
+          <p className="text-[11px] text-ink-500">Arrastra las piezas y arma tu sofá · {data.storeName}</p>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)] gap-3 items-start">
+        <aside className="rounded-xl border border-ink-200 bg-surface p-2.5 space-y-2">
+          <h2 className="text-xs font-display font-semibold text-ink-700">Piezas</h2>
+          <ul className="grid grid-cols-2 lg:grid-cols-1 gap-2">
+            {models.map((m) => (
+              <li key={m.id}>
+                <button type="button" onClick={() => addPiece(m.id)} className="w-full flex items-center gap-2.5 text-left rounded-lg border border-ink-100 hover:bg-ink-50 p-2 transition-colors">
+                  <span className="shrink-0 w-12 h-12 rounded-md bg-ink-50 text-ink-700 p-1 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-medium truncate">{m.name}</span>
+                    <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
+                    {m.priceUsd != null && <span className="block text-[11px] font-medium text-brand-700 tabular-nums">{formatMoney(m.priceUsd, 'DOP', rates)}</span>}
+                  </span>
+                  <Plus size={15} className="shrink-0 text-ink-400" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        <section className="space-y-3 min-w-0">
+          <div className="rounded-xl border border-ink-200 bg-surface p-2.5">
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <span className="text-[11px] text-ink-500">{vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla'}</span>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={rotateSel} disabled={!selectedUid} className="btn-ghost text-xs disabled:opacity-40" title="Rotar"><RotateCw size={14} /></button>
+                <button type="button" onClick={deleteSel} disabled={!selectedUid} className="btn-ghost text-xs text-red-600 disabled:opacity-40" title="Quitar"><Trash2 size={14} /></button>
+                <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
+              </div>
+            </div>
+            <div className="overflow-auto rounded-lg border border-ink-200 bg-ink-50/40">
+              <div
+                className="relative mx-auto"
+                style={{
+                  width: vm.canvas.wPx, height: vm.canvas.hPx,
+                  backgroundSize: `${50 * SCALE}px ${50 * SCALE}px`,
+                  backgroundImage:
+                    'linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),'
+                    + 'linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)',
+                }}
+                onPointerDown={() => setSelectedUid(null)}
+              >
+                {vm.tiles.map((t) => {
+                  const sel = t.uid === selectedUid;
+                  return (
+                    <div
+                      key={t.uid}
+                      onPointerDown={(e) => onTileDown(e, placed.find((p) => p.uid === t.uid))}
+                      onPointerMove={onTileMove}
+                      onPointerUp={onTileUp}
+                      className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10'].join(' ')}
+                      style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
+                    >
+                      <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
+                      <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: svgById[t.pieceId] }} />
+                      <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">{t.dimsLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-ink-200 bg-surface p-3 flex flex-wrap items-center justify-between gap-3 sticky bottom-2">
+            <div>
+              <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
+              <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+            </div>
+            <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50">
+              Solicitar cotización <ArrowRight size={15} />
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Centered({ children }) {
+  return <div className="min-h-full bg-surface grid place-items-center p-6">{children}</div>;
+}
+
+function RequestForm({ storeName, items, totalDop, onBack, onDone }) {
+  const [form, setForm] = useState({ name: '', phone: '', email: '', note: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const valid = form.name.trim() && (form.phone.trim() || form.email.trim());
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!valid || busy) return;
+    setBusy(true); setError(null);
+    try {
+      await submitTogoRequest({ contact: { name: form.name, phone: form.phone, email: form.email }, items, note: form.note });
+      onDone();
+    } catch (err) {
+      setError(err?.message || 'No se pudo enviar. Intenta de nuevo.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-full bg-surface text-ink-900 p-4 grid place-items-center">
+      <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-ink-200 bg-surface p-5 space-y-3.5">
+        <button type="button" onClick={onBack} className="btn-ghost text-xs text-ink-500"><ArrowLeft size={14} /> Volver al diseño</button>
+        <div>
+          <h2 className="font-display font-semibold text-lg">Solicita tu cotización</h2>
+          <p className="text-xs text-ink-500 mt-0.5">{storeName} te contactará con el precio final y las telas disponibles. Estimado: <b className="text-ink-700 tabular-nums">{totalDop}</b></p>
+        </div>
+        <div>
+          <label className="label">Nombre *</label>
+          <input className="input" value={form.name} onChange={set('name')} placeholder="Tu nombre" autoFocus />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">WhatsApp / Teléfono</label>
+            <input className="input" value={form.phone} onChange={set('phone')} placeholder="809…" inputMode="tel" />
+          </div>
+          <div>
+            <label className="label">Correo</label>
+            <input className="input" value={form.email} onChange={set('email')} placeholder="tu@correo.com" inputMode="email" />
+          </div>
+        </div>
+        <div>
+          <label className="label">Nota (opcional)</label>
+          <textarea className="input min-h-[72px]" value={form.note} onChange={set('note')} placeholder="Color preferido, dudas, dirección de entrega…" />
+        </div>
+        {error && <div role="alert" className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2"><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /> {error}</div>}
+        <p className="text-[11px] text-ink-400">* Indica al menos un teléfono o correo para que podamos contactarte.</p>
+        <button type="submit" disabled={!valid || busy} className="btn-primary w-full justify-center disabled:opacity-50">
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Enviar solicitud
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function DoneScreen({ storeName, onReset }) {
+  return (
+    <div className="min-h-full bg-surface text-ink-900 p-6 grid place-items-center">
+      <div className="text-center max-w-sm space-y-3">
+        <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center justify-center"><Check size={26} /></div>
+        <h2 className="font-display font-semibold text-lg">¡Solicitud enviada!</h2>
+        <p className="text-sm text-ink-500">{storeName} recibió tu diseño y te contactará pronto con el precio final y las telas disponibles.</p>
+        <button type="button" onClick={onReset} className="btn-ghost text-sm">Diseñar otro</button>
+      </div>
+    </div>
+  );
+}

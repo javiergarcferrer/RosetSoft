@@ -34,6 +34,7 @@ import NotFound from './pages/NotFound.jsx';
 // safeDynamicImport wrapper recovers stale-deploy chunk misses with a reload.
 const lazyPage = (loader) => lazy(() => safeDynamicImport(loader));
 const TogoConfigurator = lazyPage(() => import('./pages/TogoConfigurator.jsx'));
+const TogoEmbed = lazyPage(() => import('./pages/embed/TogoEmbed.jsx'));
 const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
 const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
@@ -354,6 +355,17 @@ export default function App() {
               lives OUTSIDE RequireAuth so a customer never hits the login wall;
               the `store` Edge Function serves a public-safe, margin-free catalog. */}
           <Route path="/tienda" element={<PublicStore />} />
+          {/* Public, logged-out Togo configurator — embeddable in the dealer's
+              website via an iframe. Pinned light (isPublicRoute) so it sits
+              cleanly in any page; its data + lead capture go through togo-embed. */}
+          <Route
+            path="/embed/togo"
+            element={(
+              <Suspense fallback={<div style={{ height: '100%', background: '#fff' }} />}>
+                <TogoEmbed />
+              </Suspense>
+            )}
+          />
           {/* Public, logged-out data-deletion instructions. Lives OUTSIDE
               RequireAuth (a Meta reviewer / a member of the public must reach
               it without a login) and is pinned light by isPublicRoute. This is

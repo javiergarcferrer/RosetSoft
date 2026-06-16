@@ -71,6 +71,13 @@ verify_jwt = false
 [functions.rnc-lookup]
 verify_jwt = false
 
+# togo-embed backs the public, no-login Togo configurator widget (embedded in the
+# dealer's website via an iframe). Used logged-out, so the gateway must not require
+# a JWT; it runs with the service role and exposes only public-safe data (retail
+# prices, margin baked) on GET, and writes a DRAFT quote (a lead) on POST.
+[functions.togo-embed]
+verify_jwt = false
+
 # store backs the public, no-login storefront ("Tienda"). Used logged-out, so
 # the gateway must not require a JWT; it runs with the service role and returns
 # only public-safe catalog data (product names, photos, retail prices) for the
