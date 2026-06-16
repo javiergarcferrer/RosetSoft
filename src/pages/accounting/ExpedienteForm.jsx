@@ -381,9 +381,10 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                               onFreeText={(txt) => patchLine(emb.id, fac.id, l.id, { itemId: '', name: txt })}
                               inputProps={{ 'data-line-focus': l.id }}
                             />
-                            {!l.itemId && (l.name || '').trim() !== '' && (
-                              <div className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-amber-700">
-                                <Plus size={11} /> Nuevo en inventario{l.reference ? <span className="font-mono text-amber-600">({l.reference})</span> : null}
+                            {(l.name || '').trim() !== '' && (!l.itemId || l.reference) && (
+                              <div className="mt-0.5 inline-flex items-center gap-1.5 text-[11px] text-amber-700">
+                                {!l.itemId && <span className="inline-flex items-center gap-1"><Plus size={11} /> Nuevo en inventario</span>}
+                                {l.reference && <span className="font-mono text-amber-600">{l.reference}</span>}
                               </div>
                             )}
                           </td>
