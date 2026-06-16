@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X, Search, Bot } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -18,6 +18,49 @@ import { db } from '../db/database.js';
 // Persisted preference for the desktop "hide sidebar" toggle (see Layout).
 const SIDEBAR_COLLAPSED_KEY = 'rs.sidebarCollapsed';
 
+// One sidebar row — parent OR an indented child. The single render path for
+// every nav link, so the `children` reveal reuses it instead of duplicating the
+// active/hover/badge styling.
+function SidebarLink({ item, sub = false, pathname, waUnread }) {
+  const { to, label, icon: Icon, end, match } = item;
+  // Section links highlight on ANY of their tab routes (`match`); plain links
+  // fall back to NavLink's own active state.
+  const sectionActive = match ? match.includes(pathname) : null;
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) => {
+        const on = sectionActive != null ? sectionActive : isActive;
+        // A `sub` row is indented + hung off a hairline, reading as a child.
+        return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${sub ? 'ml-4 border-l border-ink-700/60 rounded-l-none' : ''} ${
+          on
+            ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(168,86,32,0.55)]'
+            : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
+        }`;
+      }}
+    >
+      <Icon size={16} />
+      {label}
+      {to === '/chats' && waUnread > 0 && (
+        <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
+          {waUnread > 99 ? '99+' : waUnread}
+        </span>
+      )}
+    </NavLink>
+  );
+}
+
+// A parent's section is "open" (its children shown) when the route sits on the
+// parent or any child — the one rule behind every contextual reveal.
+function isSectionOpen(item, pathname) {
+  if (!item.children?.length) return false;
+  const onPath = (to) => pathname === to || pathname.startsWith(`${to}/`);
+  return onPath(item.to)
+    || (item.match && item.match.includes(pathname))
+    || item.children.some((c) => onPath(c.to));
+}
+
 // The unified, role-gated sidebar — ONE system across both cores — is defined
 // by the "limbic" access layer (lib/access.js: navForRole). The role reveals
 // its slice; admins see both cores in one place.
@@ -30,7 +73,6 @@ export default function Layout() {
   // the single entry link).
   const navGroups = navForRole(currentProfile?.role, {
     accountingOpen: location.pathname.startsWith('/accounting'),
-    configOpen: location.pathname.startsWith('/settings') || location.pathname.startsWith('/admin/users'),
   });
   // Unread WhatsApp badge on the nav entry — inbound messages not yet opened
   // in the inbox. Rides the same live-query invalidation as the rest of the
@@ -182,6 +224,22 @@ export default function Layout() {
           title="Ocultar menú"
         />
         <div className="px-5 py-5 border-b border-ink-800">
+          {/* JARVIS — the global command center, sitting above the brand and
+              highlighted in its own signature color (admin-only, like the
+              /jarvis route's own gate). */}
+          {isAdmin && (
+            <NavLink
+              to="/jarvis"
+              onClick={() => setNavOpen(false)}
+              className={({ isActive }) => `mb-3 flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold tracking-wide transition-all ${
+                isActive
+                  ? 'border-[#3600ff] bg-[#3600ff]/30 text-white shadow-[0_0_22px_-4px_#3600ff]'
+                  : 'border-[#3600ff]/50 bg-[#3600ff]/12 text-ink-100 hover:border-[#3600ff] hover:bg-[#3600ff]/25 hover:text-white hover:shadow-[0_0_18px_-6px_#3600ff]'
+              }`}
+            >
+              <Bot size={15} /> JARVIS
+            </NavLink>
+          )}
           <div className="flex items-start justify-between gap-3">
             {/* Brand block — typographic logo. See the mobile topbar's matching
                 block for the rationale on the white-tint filter and the lack of
@@ -210,21 +268,6 @@ export default function Layout() {
               <X size={20} />
             </button>
           </div>
-          {/* JARVIS — the global command center, one tap beneath the brand
-              (admin-only, like the /jarvis route's own gate). */}
-          {isAdmin && (
-            <NavLink
-              to="/jarvis"
-              onClick={() => setNavOpen(false)}
-              className={({ isActive }) => `mt-3 flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'border-brand-500/60 bg-brand-600/20 text-white shadow-[0_0_18px_-6px_rgba(168,86,32,0.7)]'
-                  : 'border-ink-700/70 bg-ink-800/40 text-ink-200 hover:border-ink-600 hover:bg-ink-800 hover:text-white'
-              }`}
-            >
-              <Bot size={15} /> JARVIS
-            </NavLink>
-          )}
         </div>
 
         {/* Global search trigger — a quiet "Buscar… ⌘K" pill under the brand.
@@ -265,36 +308,15 @@ export default function Layout() {
                   {group.label}
                 </div>
               )}
-              {group.items.map(({ to, label, icon: Icon, end, match, sub }) => {
-                // Section links highlight on ANY of their tab routes (`match`);
-                // plain links fall back to NavLink's own active state.
-                const sectionActive = match ? match.includes(location.pathname) : null;
-                return (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    end={end}
-                    className={({ isActive }) => {
-                      const on = sectionActive != null ? sectionActive : isActive;
-                      // A `sub` item (Usuarios beneath Configuración) is indented
-                      // and a touch quieter, reading as a child of the row above.
-                      return `flex items-center gap-2.5 px-3 min-h-11 md:min-h-9 rounded-md text-sm transition-all active:scale-[0.99] ${sub ? 'ml-4 border-l border-ink-700/60 rounded-l-none' : ''} ${
-                        on
-                          ? 'bg-brand-grad text-white font-medium shadow-[0_4px_14px_-3px_rgba(168,86,32,0.55)]'
-                          : 'text-ink-300 hover:bg-ink-800 hover:text-ink-100'
-                      }`;
-                    }}
-                  >
-                    <Icon size={16} />
-                    {label}
-                    {to === '/chats' && waUnread > 0 && (
-                      <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
-                        {waUnread > 99 ? '99+' : waUnread}
-                      </span>
-                    )}
-                  </NavLink>
-                );
-              })}
+              {group.items.map((item) => (
+                <Fragment key={item.to}>
+                  <SidebarLink item={item} pathname={location.pathname} waUnread={waUnread} />
+                  {/* Children reveal (indented) only while their section is open. */}
+                  {isSectionOpen(item, location.pathname) && item.children.map((c) => (
+                    <SidebarLink key={c.to} item={c} sub pathname={location.pathname} waUnread={waUnread} />
+                  ))}
+                </Fragment>
+              ))}
             </div>
           ))}
         </nav>

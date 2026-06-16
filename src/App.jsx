@@ -24,6 +24,7 @@ import Instagram from './pages/Instagram.jsx';
 import PublicStore from './pages/PublicStore.jsx';
 import DataDeletion from './pages/DataDeletion.jsx';
 import Settings from './pages/Settings.jsx';
+import Integrations from './pages/Integrations.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -258,6 +259,7 @@ function ProtectedApp() {
             <Route path="containers" element={<Navigate to="/orders" replace />} />
             <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="integraciones" element={<Integrations />} />
             {/* Admin-only — the components themselves render a friendly
                 "Acceso restringido" empty state when an employee navigates
                 here, so we don't have to redirect at the route level. */}

@@ -5,7 +5,7 @@ import { Search, FilePlus2, Moon, Sun } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import { db, searchProducts } from '../db/database.js';
-import { navForRole } from '../lib/access.js';
+import { navForRole, flattenNavItems } from '../lib/access.js';
 import { resolveIsDark, setThemePreference } from '../lib/theme.js';
 import { resolveGlobalSearch } from '../core/search/index.js';
 import { quoteStagePill, orderStatusPill } from '../lib/statusPill.js';
@@ -110,8 +110,11 @@ function SearchOverlay({ onClose }) {
   // Page shortcuts — exactly the routes this role's sidebar exposes.
   const pages = useMemo(() => {
     const groups = navForRole(currentProfile?.role) || [];
+    // Flatten each group's items AND their nested children so every destination
+    // (Materiales, Integraciones, Usuarios) stays searchable regardless of the
+    // sidebar's contextual reveal.
     return groups.flatMap((g) =>
-      g.items.map(({ to, label, icon }) => ({ to, label, icon, group: g.label || '' })),
+      flattenNavItems([g]).map(({ to, label, icon }) => ({ to, label, icon, group: g.label || '' })),
     );
   }, [currentProfile?.role]);
 

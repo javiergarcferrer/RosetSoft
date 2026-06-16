@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  MessageCircle, Landmark, Instagram,
+  MessageCircle, Landmark, Instagram, Plug,
 } from 'lucide-react';
 import { accountingSectionNav } from './accountingSections.js';
 
@@ -36,6 +36,12 @@ const CRM_GROUP = {
 // payout, so every role that earns or pays them can reach it.
 const COMMISSIONS = { items: [{ to: '/comisiones', label: 'Comisiones', icon: Wallet }] };
 
+// The `children` primitive: a parent item carries sub-items that the sidebar
+// reveals (indented) ONLY while that parent's section is open — Layout's
+// `isSectionOpen` decides from the route, so the same code path drives
+// Catálogos→Materiales and Configuración→Integraciones/Usuarios. No per-section
+// open flags. (The Contabilidad expansion stays a labeled group below — it's a
+// full workspace nav, not a couple of sub-links.)
 const ADMIN_GROUP = {
   label: 'Administración',
   items: [
@@ -46,24 +52,31 @@ const ADMIN_GROUP = {
       icon: Boxes,
       match: ['/inventario/existencias', '/inventario/lifestylegarden'],
     },
-    { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
-    // Materiales is part of the catalog domain → nested beneath Catálogos.
-    { to: '/admin/materials', label: 'Materiales', icon: Layers, sub: true },
-    // Single entry point — the full accounting section nav only joins the
-    // sidebar while the admin is INSIDE /accounting/* (see navForRole).
+    {
+      to: '/admin/catalog',
+      label: 'Catálogos',
+      icon: PackageSearch,
+      children: [{ to: '/admin/materials', label: 'Materiales', icon: Layers }],
+    },
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
   ],
 };
 
 const ACCOUNTING_GROUP = { label: 'Contabilidad', items: accountingSectionNav };
-// Configuración, with Usuarios revealed beneath it only while that section is
-// open (on /settings or /admin/users) — same contextual pattern as accounting.
-const configGroup = (configOpen) => ({
+
+const CONFIG_GROUP = {
   items: [
-    { to: '/settings', label: 'Configuración', icon: SettingsIcon },
-    ...(configOpen ? [{ to: '/admin/users', label: 'Usuarios', icon: Shield, sub: true }] : []),
+    {
+      to: '/settings',
+      label: 'Configuración',
+      icon: SettingsIcon,
+      children: [
+        { to: '/integraciones', label: 'Integraciones', icon: Plug },
+        { to: '/admin/users', label: 'Usuarios', icon: Shield },
+      ],
+    },
   ],
-});
+};
 
 /**
  * The unified sidebar for a role. ONE structure; the role reveals its slice:
@@ -72,22 +85,27 @@ const configGroup = (configOpen) => ({
  *   • admin      — everything, both cores, in one place.
  * `team` is the shared settings row, not a human, so it gets nothing.
  */
-export function navForRole(role, { accountingOpen = true, configOpen = true } = {}) {
+export function navForRole(role, { accountingOpen = true } = {}) {
   if (role === 'accounting') return [{ items: accountingSectionNav }];
   if (role === 'admin') {
-    // The admin's sidebar stays lean: the Contabilidad section list only
-    // appears while they're inside /accounting/*, and Usuarios only while
-    // inside Configuración (Layout passes the route context). Callers that
-    // need the full map regardless — GlobalSearch indexing destinations — get
-    // it by default (both flags default true).
+    // Nested children (Materiales, Integraciones, Usuarios) always live in the
+    // structure — the sidebar reveals them per-route via the `children`
+    // primitive, and GlobalSearch flattens them so every destination stays
+    // searchable. Only the Contabilidad workspace nav is route-gated here.
     return [
       HOME, CRM_GROUP, COMMISSIONS, ADMIN_GROUP,
       ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
-      configGroup(configOpen),
+      CONFIG_GROUP,
     ];
   }
   if (role === 'employee') return [HOME, CRM_GROUP, COMMISSIONS];
   return [];
+}
+
+/** Flatten a nav group's items + their `children` — for indexing/search where
+ *  the contextual reveal doesn't apply (every destination should be findable). */
+export function flattenNavItems(groups) {
+  return (groups || []).flatMap((g) => (g.items || []).flatMap((it) => [it, ...(it.children || [])]));
 }
 
 /** Whether a role participates in each core (for page-level gates + docs). */
