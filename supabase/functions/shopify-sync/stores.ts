@@ -46,19 +46,20 @@ export function storeForRequest(body: SyncRequest | null | undefined): string {
  * The scopes a store's app installation must carry, per direction. The
  * LifestyleGarden link is TWO-WAY: it PULLS the catalog (read_products,
  * read_inventory) AND pushes inventory decrements back when an LSG product is
- * sold inside ALCOVER (write_inventory to set on_hand; the target location is
- * resolved from `location.id` + on_hand, both under read_inventory). It does
- * NOT need read_locations — the only fields that would require it
- * (location.isActive/fulfillsOnlineOrders) are gated and, on a managed-install
- * app, absent from the client-credentials token until a new version ships, so
- * the write-back deliberately doesn't read them (see lsgInventory.ts). The
- * Alcover mirror writes products + quantities and still resolves a shop-level
- * location list (read_locations). Surfacing the list makes the Settings
- * connection test flag any re-auth the dealer must do for the scopes to work.
+ * sold inside ALCOVER (write_inventory to set on_hand; read_locations to TARGET
+ * the storefront's active, online-fulfilling location accurately). The Alcover
+ * mirror writes products + quantities and also resolves a shop-level location
+ * list (read_locations). Surfacing the list makes the Settings connection test
+ * flag any re-auth the dealer must do for the scopes to work.
+ *
+ * read_locations is REQUIRED for correct targeting, but NOT load-bearing: the
+ * write-back degrades gracefully if it's ever absent (a managed-install token
+ * lags a freshly-released scope) — it falls back to a location that holds the
+ * stock rather than hard-failing the push. See lsgInventory.ts.
  */
 export function requiredScopes(store: string): string[] {
   return store === STORE_LSG
-    ? ['read_products', 'read_inventory', 'write_inventory']
+    ? ['read_products', 'read_inventory', 'read_locations', 'write_inventory']
     : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory'];
 }
 
@@ -159,6 +160,24 @@ export function accessDeniedField(errors: unknown): string | null {
 export function accessDeniedMessage(domain: string, field: string): string {
   const f = field || 'este recurso';
   return `La app de Shopify para ${domain} no tiene permiso para «${f}» (ACCESS_DENIED). En el Dev Dashboard de Shopify, en la configuración de la app, habilita el scope que falta. Una vez concedido, el siguiente intento renueva el token y toma el permiso automáticamente.`;
+}
+
+/**
+ * A scope-denied GraphQL failure that survived the token re-mint, raised as a
+ * TYPED error (not a bare `Error`) so a caller can react PROGRAMMATICALLY —
+ * e.g. the LSG write-back drops a `read_locations`-gated field and degrades
+ * gracefully rather than hard-failing — without sniffing the localized message
+ * string. `field` is the denied GraphQL path (`accessDeniedField`'s output).
+ * Carries the same dealer-facing `accessDeniedMessage` so an UNHANDLED one
+ * still surfaces the actionable explanation.
+ */
+export class ShopifyAccessDeniedError extends Error {
+  readonly field: string;
+  constructor(domain: string, field: string) {
+    super(accessDeniedMessage(domain, field));
+    this.name = 'ShopifyAccessDeniedError';
+    this.field = field;
+  }
 }
 
 /** Stable Shopify handle for an inventory item — the idempotent upsert key.

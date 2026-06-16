@@ -8,7 +8,7 @@
 //   • a 401/403 on a cached token gets ONE re-mint + retry — the cache may
 //     simply be a token revoked by a secret rotation.
 
-import { accessDeniedField, accessDeniedMessage, isTokenCacheValid, parseGrantResponse, tokenCacheExpiryIso } from './stores.ts';
+import { accessDeniedField, isTokenCacheValid, parseGrantResponse, ShopifyAccessDeniedError, tokenCacheExpiryIso } from './stores.ts';
 
 // Latest stable Admin API version (2026-04 GA'd April 2026).
 const API_VERSION = '2026-04';
@@ -151,9 +151,11 @@ export async function connectShopify(admin: any, team: string, store: string): P
         token = await mintToken();
         return call(query, variables, true);
       }
-      // Re-mint didn't help → the scope genuinely isn't on the app. Say exactly
-      // what to enable instead of leaking the raw GraphQL array.
-      if (denied !== null) throw new Error(accessDeniedMessage(domain, denied));
+      // Re-mint didn't help → the scope genuinely isn't on the app. Raise a
+      // TYPED error (carries the dealer-facing message) so a caller can react to
+      // the specific denied field — e.g. the LSG write-back drops a gated
+      // location field and degrades — without leaking the raw GraphQL array.
+      if (denied !== null) throw new ShopifyAccessDeniedError(domain, denied);
       throw new Error(JSON.stringify(b.errors));
     }
     return b.data as T;

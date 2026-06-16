@@ -32,34 +32,49 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { adjustLsgInventory } from '../supabase/functions/shopify-sync/lsgInventory.ts';
+import { ShopifyAccessDeniedError } from '../supabase/functions/shopify-sync/stores.ts';
 
 // A fake Shopify gql: resolves variant → inventory item with its stocked levels,
 // then records the on_hand set mutation. Knobs let a test shape the variant.
 //   • 333 → no inventory item (skipped);
 //   • 444 → tracked:false (skipped, surfaced);
 //   • 555 → stocked at no location (skipped, surfaced);
-//   • 666 → two locations: an empty (on_hand 0) one FIRST, then a stocked one,
-//           to prove the chooser prefers a location that actually holds units;
-//   • everything else → one stocked location with `onHand`.
-function makeGql({ mutationUserErrors = [], onHand = 10 } = {}) {
-  const calls = { mutation: null };
-  const lvl = (id, q) => ({
-    location: { id },
-    quantities: [{ name: 'on_hand', quantity: q }],
+//   • 666 → two locations: a warehouse (active, NOT online; holds 99) FIRST,
+//           then the online store (active + online; holds `onHand`) — proves the
+//           chooser prefers the active + online-fulfilling location with the
+//           rich query, and (under denyLocationFields) the held-stock proxy.
+//   • everything else → one active, online, stocked location with `onHand`.
+//
+// The response is SHAPED to the query's selection set: the rich query (asks for
+// isActive/fulfillsOnlineOrders) gets them; the lean fallback gets `location
+// { id }` only. `denyLocationFields` makes the rich query raise the typed
+// ShopifyAccessDeniedError on a location field (simulating a token without
+// read_locations), so we can pin the graceful degradation to the lean query.
+function makeGql({ mutationUserErrors = [], onHand = 10, denyLocationFields = false } = {}) {
+  const calls = { mutation: null, denied: 0 };
+  const L = (id, isActive, online, q) => ({ id, isActive, online, q });
+  const shape = (rich, l) => ({
+    location: rich ? { id: l.id, isActive: l.isActive, fulfillsOnlineOrders: l.online } : { id: l.id },
+    quantities: [{ name: 'on_hand', quantity: l.q }],
+  });
+  const levelsFor = (tail) => tail === '666'
+    ? [L('gid://shopify/Location/warehouse', true, false, 99), L('gid://shopify/Location/store', true, true, onHand)]
+    : [L('gid://shopify/Location/1', true, true, onHand)];
+  const item = (rich, tail, tracked, levels) => ({
+    productVariant: { inventoryItem: { id: `gid://shopify/InventoryItem/${tail}`, tracked, inventoryLevels: { nodes: levels.map((l) => shape(rich, l)) } } },
   });
   const gql = async (query, variables = {}) => {
     if (query.includes('productVariant(id:')) {
-      const id = String(variables.id || '');
-      const tail = id.split('/').pop();
-      const itemId = `gid://shopify/InventoryItem/${tail}`;
+      const rich = query.includes('isActive');
+      if (rich && denyLocationFields) {
+        calls.denied++;
+        throw new ShopifyAccessDeniedError('alcoversrl.myshopify.com', 'productVariant.inventoryItem.inventoryLevels.nodes.0.location.isActive');
+      }
+      const tail = String(variables.id || '').split('/').pop();
       if (tail === '333') return { productVariant: { inventoryItem: null } };
-      if (tail === '444') return { productVariant: { inventoryItem: { id: itemId, tracked: false, inventoryLevels: { nodes: [lvl('gid://shopify/Location/1', onHand)] } } } };
-      if (tail === '555') return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [] } } } };
-      if (tail === '666') return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [
-        lvl('gid://shopify/Location/empty', 0),       // stocked record but holds nothing → skip
-        lvl('gid://shopify/Location/store', onHand),  // the one that actually holds units
-      ] } } } };
-      return { productVariant: { inventoryItem: { id: itemId, tracked: true, inventoryLevels: { nodes: [lvl('gid://shopify/Location/1', onHand)] } } } };
+      if (tail === '444') return item(rich, tail, false, levelsFor(tail));
+      if (tail === '555') return item(rich, tail, true, []);
+      return item(rich, tail, true, levelsFor(tail));
     }
     if (query.includes('inventorySetQuantities')) {
       calls.mutation = { query, variables };
@@ -114,15 +129,40 @@ test('a positive delta (restock) raises on_hand; on_hand is floored at 0', async
   ]);
 });
 
-test('adjusts a stocked location that holds units — not just the first', async () => {
+test('adjusts the active, online-order-fulfilling location (rich query) — not just the first', async () => {
   const { gql, calls } = makeGql({ onHand: 4 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-666', delta: -1 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, true);
-  // Picks the store location that holds stock (on_hand 4 → 3), NOT the empty
-  // one (on_hand 0) listed first; changeFromQuantity reflects THAT location's
-  // on_hand (4). No read_locations-gated fields are consulted.
+  // Picks the online store location (on_hand 4 → 3), NOT the warehouse (active
+  // but not online; holds 99); changeFromQuantity reflects THAT location's
+  // on_hand (4), not the warehouse's.
   assert.deepEqual(calls.mutation.variables.input.quantities, [
     { inventoryItemId: 'gid://shopify/InventoryItem/666', locationId: 'gid://shopify/Location/store', quantity: 3, changeFromQuantity: 4 },
+  ]);
+});
+
+test('degrades gracefully when read_locations is missing: rich query ACCESS_DENIED → lean fallback, push still lands', async () => {
+  const { gql, calls } = makeGql({ onHand: 5, denyLocationFields: true });
+  const res = await adjustLsgInventory(
+    gql,
+    [
+      { productId: 'lsg-111', delta: -2 }, // 5 - 2 = 3
+      { productId: 'lsg-222', delta: -1 }, // 5 - 1 = 4
+    ],
+    { idempotencyKey: 'k' },
+  );
+  // The missing scope NEVER hard-fails the push — it succeeds on the lean query.
+  assert.equal(res.ok, true);
+  assert.equal(res.adjusted, 2);
+  assert.deepEqual(res.errors, []);
+  // The rich query is attempted ONCE, denied, then the degrade is STICKY: the
+  // second item goes straight to lean, so only a single denial is ever incurred.
+  assert.equal(calls.denied, 1);
+  // Lean fallback can't read active/online → targets a stocked location holding
+  // units (here the single Location/1), with the read on_hand as changeFromQuantity.
+  assert.deepEqual(calls.mutation.variables.input.quantities, [
+    { inventoryItemId: 'gid://shopify/InventoryItem/111', locationId: 'gid://shopify/Location/1', quantity: 3, changeFromQuantity: 5 },
+    { inventoryItemId: 'gid://shopify/InventoryItem/222', locationId: 'gid://shopify/Location/1', quantity: 4, changeFromQuantity: 5 },
   ]);
 });
 

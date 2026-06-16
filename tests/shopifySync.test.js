@@ -26,6 +26,7 @@ import {
   parseScopeList,
   accessDeniedField,
   accessDeniedMessage,
+  ShopifyAccessDeniedError,
   TOKEN_EXPIRY_SKEW_MS,
   pieceHandle as denoPieceHandle,
 } from '../supabase/functions/shopify-sync/stores.ts';
@@ -50,18 +51,15 @@ test('storeForRequest: test mode checks whichever store the caller names', () =>
   assert.equal(storeForRequest({ test: true, store: STORE_LSG }), STORE_LSG);
 });
 
-test('requiredScopes: the LSG link is two-way (read + write_inventory, no read_locations); the mirror writes inventory only', () => {
+test('requiredScopes: the LSG link is two-way (read + write_inventory + read_locations); the mirror writes inventory only', () => {
   // LSG PULLS the catalog AND pushes inventory decrements back when an LSG
-  // product is sold in ALCOVER, so it needs write_inventory on top of the read
-  // scopes. It does NOT need read_locations: the write-back resolves the target
-  // location from location.id + on_hand (both under read_inventory) and never
-  // reads the read_locations-gated isActive/fulfillsOnlineOrders fields, which a
-  // managed-install client-credentials token can't see until a new app version
-  // ships (the ACCESS_DENIED the dealer hit). The connection test flags only the
-  // scopes the token must truly carry for the one-time Shopify re-auth.
+  // product is sold in ALCOVER, so it needs write_inventory + read_locations on
+  // top of the read scopes — read_locations is REQUIRED for accurate location
+  // targeting (the write-back degrades gracefully if it's ever absent, but the
+  // connection test still flags it so the dealer keeps it granted).
   assert.deepEqual(
     requiredScopes(STORE_LSG).sort(),
-    ['read_inventory', 'read_products', 'write_inventory'],
+    ['read_inventory', 'read_locations', 'read_products', 'write_inventory'],
   );
   const mirror = requiredScopes(STORE_ALCOVER);
   for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory']) {
@@ -167,6 +165,18 @@ test('accessDeniedMessage: names the domain + denied field and points to the Dev
   assert.ok(/ACCESS_DENIED/.test(m));
   // Empty field still yields a sensible, non-broken sentence.
   assert.ok(accessDeniedMessage('x.myshopify.com', '').includes('este recurso'));
+});
+
+test('ShopifyAccessDeniedError: typed, carries the denied field + the dealer message', () => {
+  const e = new ShopifyAccessDeniedError('alcoversrl.myshopify.com', 'productVariant.inventoryItem.inventoryLevels.nodes.0.location.isActive');
+  // It IS an Error (so an unhandled one still surfaces) but also distinguishable
+  // by type, and exposes the field a caller branches on (e.g. the LSG write-back
+  // dropping the read_locations-gated location fields to degrade gracefully).
+  assert.ok(e instanceof Error);
+  assert.ok(e instanceof ShopifyAccessDeniedError);
+  assert.equal(e.name, 'ShopifyAccessDeniedError');
+  assert.ok(e.field.includes('location'));
+  assert.equal(e.message, accessDeniedMessage('alcoversrl.myshopify.com', e.field));
 });
 
 test('pieceHandle: Deno and Vite copies cannot drift (cross-wall parity)', () => {

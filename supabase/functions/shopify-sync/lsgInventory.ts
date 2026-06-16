@@ -22,23 +22,26 @@
 //   read-then-set safe against a concurrent writer (see the batch comment below).
 //
 // WHICH location — the reason a naive push silently does nothing: an item is
-// only adjustable at a location where it is STOCKED. `locations(first:1)` grabs
-// an arbitrary (maybe non-stocking) location, so the mutation errors with
-// `item_not_stocked_at_location` (swallowed as a no-op). We instead resolve the
-// variant's OWN stocked levels and adjust one that actually holds stock.
+// only adjustable at a location where it is STOCKED, and only reaches the
+// storefront from a location that FULFILLS ONLINE ORDERS. `locations(first:1)`
+// grabs an arbitrary (maybe inactive / non-online / non-stocking) location, so
+// the mutation either errors with `item_not_stocked_at_location` (swallowed as a
+// no-op) or lands somewhere the storefront never reads. We resolve the variant's
+// OWN stocked levels and pick its ACTIVE + online-fulfilling one (best practice).
 //
-// We deliberately DON'T read `location.isActive`/`fulfillsOnlineOrders` to
-// prefer the online-selling location: those two fields are gated behind the
-// `read_locations` scope, which the client-credentials token does NOT carry on
-// a managed-install app until a NEW app version is released (the token reflects
-// the RELEASED scopes, not the dashboard draft) — so requesting them 403s the
-// whole query with ACCESS_DENIED and the write-back can't run at all. `location
-// { id }` and the on_hand quantities ARE covered by `read_inventory` (which the
-// catalog pull already needs), so resolving from those keeps the push working
-// with zero extra scope. The LSG store is single-location, so "the stocked
-// location holding stock" is exactly the one a sale came off; were it ever
-// multi-location, the gated online-vs-warehouse split simply isn't available to
-// this grant — preferring the held-stock level is the best ungated proxy.
+// `location.isActive`/`fulfillsOnlineOrders` are gated behind `read_locations`.
+// That scope is REQUIRED for accurate targeting and is normally present — but a
+// managed-install client-credentials token can LAG a freshly-released scope (the
+// token reflects the released app version, not the dashboard draft), and until
+// it catches up, requesting those fields 403s the WHOLE query with ACCESS_DENIED.
+// Rather than hard-fail the dealer's stock sync on that transient gap, we DEGRADE
+// GRACEFULLY: the query is tried with the rich location fields first; on a
+// location-scoped ACCESS_DENIED we fall back — sticky, for the rest of the push —
+// to a lean `location { id }` query (covered by `read_inventory`, which the
+// catalog pull already needs) and target the stocked location that actually
+// HOLDS units (the best proxy when active/online can't be read). LSG is
+// single-location, so the proxy lands on the same place; a multi-location store
+// gets exact targeting as soon as read_locations is on the token.
 //
 // An LSG product id is `lsg-<variantId>` (catalogImport.ts), where variantId is
 // the numeric tail of the Shopify ProductVariant GID. Best-effort: a variant we
@@ -47,6 +50,7 @@
 // multi-line sale, and a real failure is visible instead of a silent no-op.
 
 import type { Gql } from './client.ts';
+import { ShopifyAccessDeniedError } from './stores.ts';
 
 export interface LsgAdjustment {
   /** `lsg-<variantId>` product id, or a raw variant id/GID. */
@@ -83,7 +87,9 @@ function variantGid(raw: string): string | null {
 }
 
 interface InvLevel {
-  location: { id: string } | null;
+  // isActive/fulfillsOnlineOrders are read_locations-gated → present only on the
+  // rich query; absent (undefined) on the lean fallback (see chooseLevel).
+  location: { id: string; isActive?: boolean; fulfillsOnlineOrders?: boolean } | null;
   quantities: { name: string; quantity: number }[] | null;
 }
 interface InvItem {
@@ -92,18 +98,52 @@ interface InvItem {
   inventoryLevels: { nodes: InvLevel[] } | null;
 }
 
+/** The variant→inventory-item query. `rich` selects the read_locations-gated
+ *  location fields used for accurate targeting; the lean form omits them so the
+ *  push survives on read_inventory alone when read_locations isn't on the token. */
+function variantQuery(rich: boolean): string {
+  const locationFields = rich ? 'location { id isActive fulfillsOnlineOrders }' : 'location { id }';
+  return `query($id: ID!) {
+    productVariant(id: $id) {
+      inventoryItem {
+        id
+        tracked
+        inventoryLevels(first: 20) {
+          nodes {
+            ${locationFields}
+            quantities(names: ["on_hand"]) { name quantity }
+          }
+        }
+      }
+    }
+  }`;
+}
+
+/** Did this access-denial concern a location field (→ we can degrade by dropping
+ *  the read_locations-gated fields), as opposed to some other denied resource? */
+function isLocationFieldDenied(e: unknown): boolean {
+  return e instanceof ShopifyAccessDeniedError && e.field.includes('location');
+}
+
 /**
- * Pick the level to adjust for an item: a STOCKED location that actually holds
- * units (on_hand > 0 — the one a sold-off-the-floor piece came from); failing
- * that the first stocked location (so a zero-stock item still resolves a valid
- * location and the floored set is a safe no-op). Returns null when the item is
- * stocked nowhere (→ can't be adjusted; skipped with a reason). Uses only
- * `location.id` + on_hand, both covered by `read_inventory` — see the header on
- * why the `read_locations`-gated active/online fields are intentionally absent.
+ * Pick the level to adjust for an item. When read_locations made the gated
+ * fields available (the rich query), prefer the storefront's selling location:
+ * ACTIVE + online-order-fulfilling, then any active. When those fields are
+ * absent (the lean fallback — see header), prefer a stocked location that
+ * actually HOLDS units (the one a sold-off-the-floor piece came from), then the
+ * first stocked one (so a zero-stock item still resolves a valid location and
+ * the floored set is a safe no-op). Returns null when the item is stocked
+ * nowhere (→ can't be adjusted; skipped with a reason).
  */
 function chooseLevel(levels: InvLevel[]): InvLevel | null {
   const stocked = levels.filter((l) => l.location?.id);
-  return stocked.find((l) => onHandOf(l) > 0) ?? stocked[0] ?? null;
+  if (!stocked.length) return null;
+  return (
+    stocked.find((l) => l.location!.isActive === true && l.location!.fulfillsOnlineOrders === true) ??
+    stocked.find((l) => l.location!.isActive === true) ??
+    stocked.find((l) => onHandOf(l) > 0) ??
+    stocked[0]
+  );
 }
 
 function onHandOf(level: InvLevel): number {
@@ -137,28 +177,31 @@ export async function adjustLsgInventory(
   // self-corrects rather than silently overselling.
   const setQuantities: Array<{ inventoryItemId: string; locationId: string; quantity: number; changeFromQuantity: number }> = [];
   const applied: LsgAdjustment[] = [];
+
+  // Start with the rich (read_locations) query for accurate targeting; the
+  // FIRST location-scoped ACCESS_DENIED flips this STICKY false so the rest of
+  // the batch goes straight to the lean query — we degrade once, never per item.
+  let richLocations = true;
+  async function fetchInventoryItem(gid: string): Promise<InvItem | null> {
+    const run = (rich: boolean) =>
+      gql<{ productVariant: { inventoryItem: InvItem | null } | null }>(variantQuery(rich), { id: gid })
+        .then((r) => r.productVariant?.inventoryItem ?? null);
+    if (!richLocations) return run(false);
+    try {
+      return await run(true);
+    } catch (e) {
+      if (!isLocationFieldDenied(e)) throw e;
+      richLocations = false; // read_locations not on the token → degrade for the push
+      return run(false);
+    }
+  }
+
   for (const a of items) {
     const gid = variantGid(a.variantId || a.productId || '');
     if (!gid) { out.skipped++; continue; }
     const ref = a.variantId || a.productId;
     try {
-      const inv = (await gql<{ productVariant: { inventoryItem: InvItem | null } | null }>(
-        `query($id: ID!) {
-          productVariant(id: $id) {
-            inventoryItem {
-              id
-              tracked
-              inventoryLevels(first: 20) {
-                nodes {
-                  location { id }
-                  quantities(names: ["on_hand"]) { name quantity }
-                }
-              }
-            }
-          }
-        }`,
-        { id: gid },
-      )).productVariant?.inventoryItem ?? null;
+      const inv = await fetchInventoryItem(gid);
 
       if (!inv?.id) { out.skipped++; continue; }
       // An UNTRACKED item accepts a set and reports success but never moves the
