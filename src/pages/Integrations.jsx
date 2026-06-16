@@ -1,11 +1,16 @@
-// Integraciones — the hub for every external tool Alcover connects to. Lives
-// under Configuración. Each tile shows live connection status (read from
-// settings) and where to open / configure it; Gmail + Drive are shown as
-// "coming soon" placeholders so the roadmap is visible.
-import { Link } from 'react-router-dom';
-import { MessageCircle, Instagram, ShoppingBag, Mail, HardDrive } from 'lucide-react';
+// Integraciones — the hub for every external tool Alcover connects to (under
+// Configuración). Each row shows live status and EXPANDS IN PLACE to its real
+// connection/config screen — the same components Settings uses (WhatsAppCard,
+// InstagramCard, ShopifyCard), so configuring happens here, not on a link-out.
+// Gmail + Drive are shown as "coming soon" placeholders so the roadmap is clear.
+import { useState } from 'react';
+import { MessageCircle, Instagram as InstagramIcon, ShoppingBag, Mail, HardDrive, ChevronDown } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
+import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
+import InstagramCard from '../components/settings/InstagramCard.jsx';
+import ShopifyCard from '../components/settings/ShopifyCard.jsx';
+import { SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 
 function StatusPill({ connected, comingSoon }) {
   const cls = comingSoon
@@ -22,67 +27,76 @@ function StatusPill({ connected, comingSoon }) {
   );
 }
 
-function IntegrationCard({ icon: Icon, name, desc, connected, comingSoon, actions = [] }) {
-  return (
-    <div className={`card card-pad flex flex-col ${comingSoon ? 'opacity-75' : ''}`}>
-      <div className="flex items-start gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-600">
-          <Icon size={22} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-medium text-ink-900">{name}</h3>
-            <StatusPill connected={connected} comingSoon={comingSoon} />
-          </div>
-          <p className="mt-0.5 text-sm text-ink-500">{desc}</p>
-        </div>
-      </div>
-      <div className="mt-4">
-        {comingSoon ? (
-          <span className="text-xs text-ink-400">Disponible pronto.</span>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {actions.map((a) => (
-              <Link key={a.to + a.label} to={a.to} className={`${a.primary ? 'btn-brand' : 'btn-secondary'} text-sm`}>
-                {a.label}
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function Integrations() {
-  const { settings } = useApp();
-  const cards = [
+  const { settings, saveSettings } = useApp();
+  const [open, setOpen] = useState(null);
+
+  const items = [
     {
-      icon: MessageCircle, name: 'WhatsApp',
+      id: 'whatsapp', icon: MessageCircle, name: 'WhatsApp',
       desc: 'Bandeja, plantillas y difusión por WhatsApp Cloud API.',
       connected: !!settings?.whatsappConnectedAt,
-      actions: [{ label: 'Abrir bandeja', to: '/chats', primary: true }, { label: 'Configurar', to: '/settings' }],
+      config: <WhatsAppCard settings={settings} saveSettings={saveSettings} />,
     },
     {
-      icon: Instagram, name: 'Instagram',
+      id: 'instagram', icon: InstagramIcon, name: 'Instagram',
       desc: 'Publicaciones, historias, comentarios y anuncios.',
       connected: !!settings?.metaSocialConnectedAt,
-      actions: [{ label: 'Abrir', to: '/marketing', primary: true }, { label: 'Configurar', to: '/settings' }],
+      config: <InstagramCard />,
     },
     {
-      icon: ShoppingBag, name: 'Shopify',
-      desc: 'Sincroniza catálogo e inventario con tu tienda.',
+      id: 'shopify', icon: ShoppingBag, name: 'Shopify',
+      desc: 'Sincroniza catálogo e inventario con tus tiendas.',
       connected: !!settings?.shopifyConnectedAt,
-      actions: [{ label: 'Configurar', to: '/settings', primary: true }],
+      config: (
+        <div className="space-y-4">
+          <ShopifyCard settings={settings} store={SHOPIFY_STORE_ALCOVER} />
+          <ShopifyCard settings={settings} store={SHOPIFY_STORE_LSG} />
+        </div>
+      ),
     },
-    { icon: Mail, name: 'Gmail', desc: 'Correo y seguimiento de conversaciones con clientes.', comingSoon: true },
-    { icon: HardDrive, name: 'Google Drive', desc: 'Documentos, archivos y respaldos en la nube.', comingSoon: true },
+    { id: 'gmail', icon: Mail, name: 'Gmail', desc: 'Correo y seguimiento de conversaciones con clientes.', comingSoon: true },
+    { id: 'drive', icon: HardDrive, name: 'Google Drive', desc: 'Documentos, archivos y respaldos en la nube.', comingSoon: true },
   ];
+
   return (
     <>
-      <PageHeader title="Integraciones" subtitle="Conecta tus herramientas a Alcover." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((c) => <IntegrationCard key={c.name} {...c} />)}
+      <PageHeader title="Integraciones" subtitle="Conecta y configura tus herramientas — todo aquí." />
+      <div className="max-w-3xl space-y-3">
+        {items.map((it) => {
+          const Icon = it.icon;
+          const isOpen = open === it.id;
+          return (
+            <div key={it.id} className={`overflow-hidden rounded-xl border border-ink-200 bg-surface ${it.comingSoon ? 'opacity-75' : ''}`}>
+              <button
+                type="button"
+                disabled={it.comingSoon}
+                aria-expanded={isOpen}
+                onClick={() => setOpen(isOpen ? null : it.id)}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-ink-50 disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-600">
+                  <Icon size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-ink-900">{it.name}</span>
+                    <StatusPill connected={it.connected} comingSoon={it.comingSoon} />
+                  </div>
+                  <p className="truncate text-sm text-ink-500">{it.desc}</p>
+                </div>
+                {!it.comingSoon && (
+                  <ChevronDown size={18} className={`shrink-0 text-ink-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                )}
+              </button>
+              {isOpen && !it.comingSoon && (
+                <div className="border-t border-ink-100 bg-ink-50/40 p-3 sm:p-4">
+                  {it.config}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </>
   );
