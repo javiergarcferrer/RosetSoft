@@ -114,9 +114,18 @@ async function applyLocalMirror(applied) {
  * Idempotent and reversible: safe to call after any transition (accept, revert,
  * attach, detach, decline/archive, order cancel/uncancel, delete). Fire-and-
  * forget — never throws.
+ *
+ * Returns a status the caller can SURFACE so a failed push isn't silent:
+ *   { status: 'in-sync' | 'synced' | 'not-connected' | 'no-change' | 'error',
+ *     errors: string[] }
+ *   • 'error' (with errors) ⇒ Shopify IS connected but the push failed/partially
+ *     failed (a scope/location problem, a transport error, a compare-and-swap
+ *     mismatch) — the quote pane warns the dealer the storefront wasn't updated.
+ *   • 'not-connected' ⇒ no Shopify connection (expected on a store that never
+ *     linked LSG — not an error to nag about).
  */
 export async function reconcileQuoteStock(quoteId) {
-  if (!quoteId) return;
+  if (!quoteId) return { status: 'no-change', errors: [] };
 
   let quote = null;
   try { quote = await db.quotes.get(quoteId); } catch { quote = null; }
@@ -141,26 +150,43 @@ export async function reconcileQuoteStock(quoteId) {
   }
 
   const deltas = lsgCommitmentDeltas(committed, desired);
-  if (!deltas.length) return; // already in sync — nothing to push
+  if (!deltas.length) return { status: 'in-sync', errors: [] }; // already in sync
 
   let res;
   try {
     res = await pushLsgInventoryAdjust(deltas, { reference: `alcoversoft://quote/${quoteId}` });
-  } catch {
-    return; // transport failure — leave the ledger; the next transition retries
+  } catch (e) {
+    // Transport failure — leave the ledger so the next transition retries, but
+    // tell the caller so it isn't silent.
+    return { status: 'error', errors: [e?.message || 'No se pudo contactar Shopify.'] };
   }
-  if (!res || res.configured === false) return; // Shopify not connected
+  if (!res || res.configured === false) return { status: 'not-connected', errors: [] };
+
   const applied = Array.isArray(res.applied) ? res.applied : [];
-  if (!applied.length) return; // nothing actually landed (skips / user errors)
+  const errors = Array.isArray(res.errors) ? res.errors : [];
 
   // Advance the ledger ONLY for the products that actually changed on Shopify
-  // (an applied delta moves committed[id] to desired[id] exactly).
-  const next = { ...committed };
-  for (const a of applied) {
-    if (a?.productId) next[a.productId] = Number(desired[a.productId]) || 0;
+  // (an applied delta moves committed[id] to desired[id] exactly), and mirror
+  // those same deltas locally. Anything Shopify rejected stays uncommitted and
+  // is retried on the next transition.
+  if (applied.length) {
+    const next = { ...committed };
+    for (const a of applied) {
+      if (a?.productId) next[a.productId] = Number(desired[a.productId]) || 0;
+    }
+    await writeCommitted(quoteId, next);
+    await applyLocalMirror(applied);
   }
-  await writeCommitted(quoteId, next);
-  await applyLocalMirror(applied);
+
+  // Connected + something failed (a skip with a surfaced reason, a userError, or
+  // a partial push) ⇒ report it so the dealer knows the storefront may be stale.
+  if (errors.length || (!applied.length && deltas.length)) {
+    return {
+      status: 'error',
+      errors: errors.length ? errors : ['Shopify no aplicó el ajuste de inventario.'],
+    };
+  }
+  return { status: 'synced', errors: [] };
 }
 
 /**
@@ -169,10 +195,15 @@ export async function reconcileQuoteStock(quoteId) {
  * restock the freed quotes). Fire-and-forget.
  */
 export async function reconcileOrderStock(orderId) {
-  if (!orderId) return;
+  if (!orderId) return { status: 'no-change', errors: [] };
   let quotes = [];
-  try { quotes = await db.quotes.where('orderId').equals(orderId).toArray(); } catch { return; }
+  try { quotes = await db.quotes.where('orderId').equals(orderId).toArray(); } catch { return { status: 'no-change', errors: [] }; }
   // Independent per-quote reconciles (disjoint ledger rows) — run them
   // concurrently, each guarded so one failure can't abort the others.
-  await Promise.all(quotes.map((q) => reconcileQuoteStock(q.id).catch(() => {})));
+  const results = await Promise.all(
+    quotes.map((q) => reconcileQuoteStock(q.id).catch((e) => ({ status: 'error', errors: [e?.message || 'error'] }))),
+  );
+  // Aggregate so an order-level caller can surface a single warning.
+  const errors = results.flatMap((r) => r?.errors || []);
+  return { status: errors.length ? 'error' : 'synced', errors };
 }

@@ -13,6 +13,38 @@ import { accessDeniedField, accessDeniedMessage, isTokenCacheValid, parseGrantRe
 // Latest stable Admin API version (2026-04 GA'd April 2026).
 const API_VERSION = '2026-04';
 
+// GraphQL Admin uses a calculated-cost leaky bucket; an over-budget call comes
+// back as an HTTP-200 body carrying `errors:[{extensions:{code:'THROTTLED'}}]`
+// plus `extensions.cost.throttleStatus`. A big catalog pull / inventory mirror
+// would otherwise throw raw THROTTLED and abort mid-sweep — so we wait for the
+// bucket to refill (deficit ÷ restoreRate, per shopify.dev) and retry, bounded.
+const MAX_THROTTLE_RETRIES = 5;
+const THROTTLE_WAIT_CAP_MS = 10_000;
+
+interface ThrottleStatus { maximumAvailable?: number; currentlyAvailable?: number; restoreRate?: number }
+interface GqlCost { requestedQueryCost?: number; throttleStatus?: ThrottleStatus }
+
+/** True when a GraphQL error array carries a THROTTLED code. */
+function isThrottled(errors: unknown): boolean {
+  return Array.isArray(errors) && errors.some((e) => {
+    const code = (e as { extensions?: { code?: string } })?.extensions?.code;
+    return code === 'THROTTLED';
+  });
+}
+
+/** How long to wait before retrying a throttled call: the cost deficit divided
+ *  by the bucket's restore rate (capped), falling back to a fixed step. */
+function throttleWaitMs(cost: GqlCost | undefined, attempt: number): number {
+  const ts = cost?.throttleStatus;
+  const need = Number(cost?.requestedQueryCost) || 0;
+  const have = Number(ts?.currentlyAvailable) || 0;
+  const rate = Number(ts?.restoreRate) || 0;
+  const ms = rate > 0 ? ((Math.max(need, 1) - have) / rate) * 1000 : (attempt + 1) * 1000;
+  return Math.min(THROTTLE_WAIT_CAP_MS, Math.max(250, Math.ceil(ms)));
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 interface ConfigRow {
   domain?: string;
   access_token?: string | null;
@@ -79,7 +111,7 @@ export async function connectShopify(admin: any, team: string, store: string): P
   // Setup mistakes become their OWN messages instead of a generic failure: a
   // wrong domain (404/HTML — credentials may be fine) vs rejected auth
   // (401/403 on the right store, after the one re-mint).
-  async function call<T>(query: string, variables: Record<string, unknown>, retried: boolean): Promise<T> {
+  async function call<T>(query: string, variables: Record<string, unknown>, retried: boolean, throttleTry = 0): Promise<T> {
     if (!token) token = await mintToken();
     const r = await fetch(`https://${domain}/admin/api/${API_VERSION}/graphql.json`, {
       method: 'POST',
@@ -98,11 +130,18 @@ export async function connectShopify(admin: any, team: string, store: string): P
       await r.body?.cancel();
       throw new Error(`no existe una tienda Shopify en ${domain}. Usa el dominio .myshopify.com exacto (Shopify → Configuración → Dominios).`);
     }
-    let b: { errors?: unknown; data?: T };
+    let b: { errors?: unknown; data?: T; extensions?: { cost?: GqlCost } };
     try { b = await r.json(); } catch {
       throw new Error(`respuesta inesperada de ${domain} (HTTP ${r.status}) — ¿es el dominio .myshopify.com correcto?`);
     }
     if (b.errors) {
+      // THROTTLED rides an HTTP-200 body. Wait for the leaky bucket to refill
+      // and retry (bounded) instead of aborting the whole sync — a large
+      // catalog pull / inventory mirror routinely drains the bucket.
+      if (isThrottled(b.errors) && throttleTry < MAX_THROTTLE_RETRIES) {
+        await sleep(throttleWaitMs(b.extensions?.cost, throttleTry));
+        return call(query, variables, retried, throttleTry + 1);
+      }
       // ACCESS_DENIED rides an HTTP-200 body, so the 401/403 re-mint above
       // never fires for it. A token cached BEFORE the dealer granted the scope
       // can't see it — re-mint ONCE so a freshly-granted scope/approval takes

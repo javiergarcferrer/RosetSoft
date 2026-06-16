@@ -290,7 +290,10 @@ export default function Facturacion() {
   function bookFor(quote) {
     const lines = linesByQuote.get(quote.id) || [];
     const rate = displayRatesFor(quote, settings)?.DOP || 0;
-    const { usdTotal, base, itbis, total, deposit } = quoteToSale({ quote, lines, rate, hasFiscalId: false });
+    // A company-account (house-stock) quote suppresses ITBIS on screen and in the
+    // PDF — the bridge books it the same way (from settings) so the asiento/e-CF
+    // match what the dealer saw.
+    const { usdTotal, base, itbis, total, deposit } = quoteToSale({ quote, lines, rate, hasFiscalId: false, settings });
     return { rate, usdTotal, base, itbis, total, deposit };
   }
 

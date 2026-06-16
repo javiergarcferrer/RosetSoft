@@ -30,9 +30,21 @@ export interface CatalogPullResult {
 export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<CatalogPullResult> {
   const syncStartIso = new Date().toISOString();
 
+  // Page EVERY active product. We keep the PROVEN page sizes (products 50,
+  // variants 100) so the calculated query cost stays where it works — raising
+  // either multiplies the cost and risks MAX_COST rejection. Instead we lift the
+  // PAGE-COUNT budget (with throttle backoff now in client.ts, more sequential
+  // pages are cheap) and, crucially, track whether the read was COMPLETE.
+  // `complete` flips true only when we exit on no-next-page; `variantTruncated`
+  // flags any product with more than 100 variants (essentially never for
+  // furniture). On an incomplete read the destructive stale-sweep below MUST NOT
+  // run — deleting the unread tail makes it flap back on the next full sync.
+  const MAX_PAGES = 400; // 400 × 50 = 20k SKUs of headroom
   const products: ShopifyCatalogProduct[] = [];
   let after: string | null = null;
-  for (let page = 0; page < 60; page++) {
+  let complete = false;
+  let variantTruncated = false;
+  for (let page = 0; page < MAX_PAGES; page++) {
     const r = await gql<{ products: {
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
       nodes: ShopifyCatalogProduct[];
@@ -46,6 +58,7 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
             media(first: 10) { nodes { preview { image { url } } } }
             collections(first: 10) { nodes { title } }
             variants(first: 100) {
+              pageInfo { hasNextPage }
               nodes {
                 id title sku price inventoryQuantity
                 media(first: 1) { nodes { preview { image { url } } } }
@@ -58,9 +71,15 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
       { after },
     );
     products.push(...r.products.nodes);
-    if (!r.products.pageInfo.hasNextPage) break;
+    if (r.products.nodes.some((n) => (n.variants as { pageInfo?: { hasNextPage?: boolean } } | null)?.pageInfo?.hasNextPage)) {
+      variantTruncated = true;
+    }
+    if (!r.products.pageInfo.hasNextPage) { complete = true; break; }
     after = r.products.pageInfo.endCursor;
   }
+  // Incomplete read (catalog beyond the page budget, or a >100-variant product)
+  // → skip the delete sweep and report not-ok rather than silently lose rows.
+  const fullRead = complete && !variantTruncated;
 
   const { rows, summary } = mapShopifyCatalog(products, { profileId: team, nowIso: new Date().toISOString() });
 
@@ -71,7 +90,7 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
   }
 
   let removed = 0;
-  if (!errors.length) {
+  if (!errors.length && fullRead) {
     const { data: stale } = await admin
       .from('products')
       .delete()
@@ -95,13 +114,22 @@ export async function pullCatalog(admin: any, team: string, gql: Gql): Promise<C
     } catch (_) { /* next sync retries */ }
   }
 
+  // An incomplete read isn't a hard failure (the rows we DID fetch are upserted
+  // and fresh), but it's not-ok so the caller can warn and re-run, and we never
+  // claim a clean sweep we didn't do.
+  const incompleteMsg = fullRead ? null
+    : (variantTruncated
+        ? 'Lectura incompleta: un producto tiene más de 100 variantes; no se eliminaron filas obsoletas.'
+        : 'Lectura incompleta: el catálogo excede el límite de páginas; no se eliminaron filas obsoletas.');
+  const allErrors = [...errors, ...(incompleteMsg ? [incompleteMsg] : [])];
+
   return {
-    ok: errors.length === 0,
+    ok: errors.length === 0 && fullRead,
     products: summary.products,
     skus: rows.length,
     removed,
     images,
-    ...(errors.length ? { error: errors.join('; ') } : {}),
+    ...(allErrors.length ? { error: allErrors.join('; ') } : {}),
   };
 }
 

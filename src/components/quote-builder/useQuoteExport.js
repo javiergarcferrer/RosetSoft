@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
+  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import { resolveWarehouseOrder } from '../../core/quote/index.js';
@@ -27,9 +27,10 @@ import { safeDynamicImport } from '../../lib/dynamicImport.js';
  * @param {Array}    deps.profiles       user profiles (resolve the seller)
  * @param {Array}    deps.groups         quote groups (Conjuntos/Alternativas)
  * @param {Map}      deps.families       catalog families by SKU root
+ * @param {boolean}  deps.isAdmin        gates the company-account dealer-cost view
  */
 export function useQuoteExport({
-  quote, settings, lines, customers, professionals, profiles, groups, families,
+  quote, settings, lines, customers, professionals, profiles, groups, families, isAdmin = false,
 }) {
   // PDF export UI state — disables the export button while a generation is in
   // flight, and surfaces failures (a malformed line, a refusal from the
@@ -66,14 +67,19 @@ export function useQuoteExport({
     const seller = quote.createdByUserId
       ? (profiles || []).find((p) => p.id === quote.createdByUserId)
       : null;
-    // Company-account quote → the PDF order document is priced at dealer cost
-    // (every product price scaled), so the per-line figures and the totals
-    // match the on-screen client preview. A normal quote: pct 0, lines untouched.
-    const companyPct = companyDiscountPctFor(quote, settings);
+    // Match the on-screen totals EXACTLY (the "screen/paper/list never drift"
+    // invariant): a company-account quote suppresses ITBIS (taxExempt) and, FOR
+    // AN ADMIN, prices at dealer cost (companyDiscountPct). The discount is gated
+    // on isAdmin just like QuoteBuilder — an employee's screen shows list price,
+    // so their PDF must too (and must never leak dealer cost). A normal quote:
+    // pct 0, not exempt, lines untouched.
+    const isCompanyQuote = isCompanyAccountQuote(quote, settings);
+    const companyPct = isAdmin ? companyDiscountPctFor(quote, settings) : 0;
     const orderLines = companyPct ? applyCompanyDiscount(lines, companyPct) : lines;
     const totals = computeTotals(
       orderLines.filter(isPricedLine).map(lineForTotals),
       { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping },
+      { taxExempt: isCompanyQuote },
     );
     const mod = await safeDynamicImport(() => import('../../pdf/react/index.js'));
     const blob = await mod.generateQuotePdf({ quote, settings, lines: orderLines, totals, customer, professional, seller, quoteGroups: groups, families });

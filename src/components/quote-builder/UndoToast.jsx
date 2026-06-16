@@ -6,10 +6,12 @@ import { Undo2 } from 'lucide-react';
  *
  * Returns:
  *   - a render element to drop into the layout (renders nothing when idle)
- *   - a `show(message, undoFn)` function to flash a toast
+ *   - a `show(message, undoFn)` function to flash a toast. `undoFn` is OPTIONAL:
+ *     omit it for a plain message toast (e.g. a stock-sync warning) and no
+ *     "Deshacer" button renders.
  *
  * Tied into the parent's lifetime via the returned element; the toast lives
- * for ~6s, dismissable on undo or X.
+ * for ~6s, dismissable on undo or timeout.
  */
 export function useUndoToast() {
   const [state, setState] = useState(null); // { message, undo }
@@ -34,15 +36,26 @@ export function useUndoToast() {
       role="status"
     >
       <span className="min-w-0 break-words">{state.message}</span>
-      <button
-        type="button"
-        onClick={async () => {
-          try { await state.undo(); } finally { dismiss(); }
-        }}
-        className="inline-flex items-center gap-1 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/25 text-xs font-medium transition-colors"
-      >
-        <Undo2 size={12} /> Deshacer
-      </button>
+      {typeof state.undo === 'function' ? (
+        <button
+          type="button"
+          onClick={async () => {
+            try { await state.undo(); } finally { dismiss(); }
+          }}
+          className="inline-flex items-center gap-1 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/25 text-xs font-medium transition-colors"
+        >
+          <Undo2 size={12} /> Deshacer
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Cerrar"
+          className="inline-flex items-center justify-center px-2 py-1 min-h-8 coarse:min-h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/25 text-xs font-medium transition-colors"
+        >
+          ✕
+        </button>
+      )}
     </div>
   ) : null;
 

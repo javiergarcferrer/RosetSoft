@@ -14,10 +14,12 @@
 //   flow, so the correct lever is `on_hand` — `available` then recomputes for
 //   free. Writing `available` directly would leave `on_hand` inflated and the
 //   books would double-count the piece if a storefront order ever fulfilled it
-//   (and an app can't touch the `committed` bucket at all). on_hand has no delta
-//   mutation (inventoryAdjustQuantities rejects it), so we read the current
+//   (and an app can't touch the `committed` bucket at all). We read the current
 //   on_hand and SET current+delta via inventorySetQuantities (the non-deprecated
-//   replacement for inventorySetOnHandQuantities).
+//   replacement for inventorySetOnHandQuantities), passing the read value as
+//   `changeFromQuantity` — REQUIRED by Admin API 2026-04 (compareQuantity/
+//   ignoreCompareQuantity were removed) and the compare-and-swap that makes the
+//   read-then-set safe against a concurrent writer (see the batch comment below).
 //
 // WHICH location — the reason a naive push silently does nothing: an item is
 // only adjustable at a location where it is STOCKED, and only reaches the
@@ -113,7 +115,18 @@ export async function adjustLsgInventory(
   // we'll set, and compute the new ABSOLUTE on_hand (current + signed delta,
   // floored at 0 so a sale can never push Shopify negative). Track the input
   // items that make it into the batch so we echo back exactly what landed.
-  const setQuantities: Array<{ inventoryItemId: string; locationId: string; quantity: number }> = [];
+  //
+  // `changeFromQuantity` = the on_hand we just read. As of Admin API 2026-04 it
+  // is REQUIRED on inventorySetQuantities (the old compareQuantity/
+  // ignoreCompareQuantity fields were removed) — and it's the compare-and-swap
+  // that makes the read-then-set safe: if anyone else (a storefront order, the
+  // catalog cron, a concurrent sale) changed on_hand between our read and our
+  // write, Shopify REJECTS the set with a userError instead of clobbering it
+  // with our stale base (which would resurrect a sold unit → oversell). We fail
+  // closed on that mismatch; the desired-state reconciler (lsgStock.js) re-reads
+  // and re-applies on the next quote transition / lazy heal, so a rejected push
+  // self-corrects rather than silently overselling.
+  const setQuantities: Array<{ inventoryItemId: string; locationId: string; quantity: number; changeFromQuantity: number }> = [];
   const applied: LsgAdjustment[] = [];
   for (const a of items) {
     const gid = variantGid(a.variantId || a.productId || '');
@@ -152,8 +165,9 @@ export async function adjustLsgInventory(
         out.errors.push(`${ref}: el artículo no está almacenado en ninguna ubicación de la tienda.`);
         continue;
       }
-      const next = Math.max(0, onHandOf(level) + Math.trunc(a.delta));
-      setQuantities.push({ inventoryItemId: inv.id, locationId: level.location!.id, quantity: next });
+      const current = onHandOf(level);
+      const next = Math.max(0, current + Math.trunc(a.delta));
+      setQuantities.push({ inventoryItemId: inv.id, locationId: level.location!.id, quantity: next, changeFromQuantity: current });
       applied.push({ productId: a.productId, variantId: a.variantId, delta: Math.trunc(a.delta) });
     } catch (e) {
       out.errors.push(`${ref}: ${(e as Error).message}`);
@@ -162,9 +176,10 @@ export async function adjustLsgInventory(
   if (!setQuantities.length) { out.ok = out.errors.length === 0; return out; }
 
   // Set the new on_hand for every resolved item in ONE batched mutation. As of
-  // Admin API 2026-04 @idempotent(key:) is REQUIRED; referenceDocumentUri is the
-  // app's stamp in Shopify's inventory history (audit trail). `available`
-  // recomputes from the new on_hand automatically.
+  // Admin API 2026-04 @idempotent(key:) is REQUIRED (a retried push can't
+  // double-apply) and each row's `changeFromQuantity` is REQUIRED (compare-and-
+  // swap, set above). referenceDocumentUri is the app's stamp in Shopify's
+  // inventory history (audit trail). `available` recomputes from on_hand.
   const input: Record<string, unknown> = { name: 'on_hand', reason: 'correction', quantities: setQuantities };
   if (opts.reference) input.referenceDocumentUri = opts.reference;
   const idempotencyKey = opts.idempotencyKey || crypto.randomUUID();

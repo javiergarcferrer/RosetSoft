@@ -556,7 +556,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     exporting, printing, warehousing, exportError, setExportError, exportErrorRef,
     exportPdf, printPdf, exportWarehouseOrder, generatePdf,
     printDoc, closePrint,
-  } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families });
+  } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families, isAdmin });
 
   // The ONE place the quote is sent to the client: the WhatsApp Business API
   // send modal (enlace or PDF). It is opened from the single dock action and

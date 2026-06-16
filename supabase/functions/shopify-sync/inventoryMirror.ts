@@ -60,7 +60,17 @@ export async function mirrorInventory(
   // instead of being published to the Online Store.
   let locationId: string | null = null;
   let collectionId: string | null = null;
-  locationId = (await gql<{ locations: { nodes: { id: string }[] } }>(`{ locations(first: 1) { nodes { id } } }`)).locations.nodes[0]?.id ?? null;
+  // Pick a location the storefront can actually read from: ACTIVE and
+  // online-order-fulfilling, falling back to any active one. A blind
+  // locations(first:1) can land on an inactive / non-online / non-stocking
+  // location, where inventorySetQuantities fails `item_not_stocked_at_location`
+  // (swallowed below) and the catalog shows in-stock pieces as quantity 0.
+  const locs = (await gql<{ locations: { nodes: { id: string; isActive: boolean; fulfillsOnlineOrders: boolean }[] } }>(
+    `{ locations(first: 25) { nodes { id isActive fulfillsOnlineOrders } } }`,
+  )).locations.nodes ?? [];
+  locationId = (locs.find((l) => l.isActive && l.fulfillsOnlineOrders)
+    || locs.find((l) => l.isActive)
+    || locs[0])?.id ?? null;
   const found = (await gql<{ collections: { nodes: { id: string }[] } }>(
     `query($q: String!) { collections(first: 1, query: $q) { nodes { id } } }`,
     { q: `handle:${COLLECTION_HANDLE}` },
@@ -137,15 +147,19 @@ export async function mirrorInventory(
         pid = res.productSet.product!.id;
         const invItemId = res.productSet.product!.variants.nodes[0]?.inventoryItem?.id ?? null;
 
-        // On-hand quantity (best-effort — a quantity hiccup must not block listing).
+        // Quantity (best-effort — a quantity hiccup must not block listing).
+        // This is the sync's OWN product (not a contended SKU), so we ignore the
+        // compare-and-swap by passing `changeFromQuantity: null` — REQUIRED as of
+        // Admin API 2026-04, which removed `ignoreCompareQuantity` (omitting it
+        // entirely now errors at runtime).
         if (invItemId && locationId) {
           try {
             await gql(
               `mutation($input: InventorySetQuantitiesInput!) {
                 inventorySetQuantities(input: $input) { userErrors { field message } }
               }`,
-              { input: { name: 'available', reason: 'correction', ignoreCompareQuantity: true,
-                quantities: [{ inventoryItemId: invItemId, locationId, quantity: Math.floor(qty) }] } },
+              { input: { name: 'available', reason: 'correction',
+                quantities: [{ inventoryItemId: invItemId, locationId, quantity: Math.floor(qty), changeFromQuantity: null }] } },
             );
           } catch (_) { /* leave qty for a later sync */ }
         }

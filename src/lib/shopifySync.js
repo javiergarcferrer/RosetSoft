@@ -116,7 +116,7 @@ export async function ensureShopifyRefreshCron() {
 }
 
 /** A per-push idempotency key. Admin API 2026-04 REQUIRES one on
- *  inventoryAdjustQuantities (@idempotent directive) so a retried request can't
+ *  inventorySetQuantities (@idempotent directive) so a retried request can't
  *  double-apply a signed delta; randomUUID with a non-crypto fallback. */
 function newIdempotencyKey() {
   try { return crypto.randomUUID(); } catch { /* older/insecure context */ }
@@ -126,7 +126,7 @@ function newIdempotencyKey() {
 /**
  * Push LSG inventory deltas to the LifestyleGarden Shopify store — the PUSH half
  * of the two-way sync: when an LSG product is committed to a sale inside ALCOVER
- * lower its available count (delta NEGATIVE) so the storefront can't oversell;
+ * lower its physical on_hand (delta NEGATIVE) so the storefront can't oversell;
  * when the sale is reverted, add it back (delta POSITIVE). `items` =
  * [{ productId | variantId, delta }]. `opts.reference` is stored as the Shopify
  * adjustment's referenceDocumentUri (audit trail); `opts.idempotencyKey` lets a

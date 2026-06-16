@@ -10,7 +10,7 @@
 // boundary auditable: to see everything that passes between sales and the
 // books, you read this file.
 import {
-  computeTotals, lineForTotals, isCompoundLine, lineTotal, applyLineAdjustments,
+  computeTotals, lineForTotals, isCompoundLine, lineTotal, applyLineAdjustments, isCompanyAccountQuote,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import { fabricDisplay } from '../../lib/subtype.js';
@@ -22,14 +22,20 @@ import { saleEcfType } from '../../lib/accounting/ecf.js';
  * sale, converted to DOP at `rate`. The accounting core consumes this shape
  * (sale posting + e-CF); it never sees the quote itself. Pure.
  *
+ * A company-account (house-stock) quote suppresses ITBIS, matching the on-screen
+ * and PDF total — without it the books would charge 18% the quote showed as 0
+ * (screen ≠ books). The bridge owns this CRM→books determination (it already
+ * prices via lib/pricing); the caller just passes `settings`.
+ *
  * @returns {{ quoteId, customerId, rate, usdTotal, base, itbis, total,
  *   deposit, ecfType, items }}
  */
-export function quoteToSale({ quote, lines, rate, hasFiscalId }) {
+export function quoteToSale({ quote, lines, rate, hasFiscalId, settings = null }) {
   const r = Number(rate) || 0;
   const priced = (lines || []).filter(isPricedLine);
   const rows = priced.map(lineForTotals);
-  const t = computeTotals(rows, quote);
+  const taxExempt = isCompanyAccountQuote(quote, settings);
+  const t = computeTotals(rows, quote, { taxExempt });
   // Consolidated single line (the accounting sale books at the base); itemized
   // detail can be expanded later without changing the barrier's shape.
   const items = [{ name: `Venta #${quote?.number ?? ''}`.trim(), qty: 1, usd: t.taxableBase }];

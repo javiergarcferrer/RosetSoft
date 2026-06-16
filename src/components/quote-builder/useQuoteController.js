@@ -196,8 +196,19 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
       // + order (or, for a floor sale with no order, the deposit) deducts; a
       // revert / detach / un-marked deposit restocks. The deposit is a milestone
       // patch (no status/orderId), so it must be watched explicitly or a floor
-      // sale would never push. Reconcile (idempotent, best-effort).
-      if ('status' in patch || 'orderId' in patch || 'depositReceivedAt' in patch) reconcileQuoteStock(quoteId).catch(() => {});
+      // sale would never push. Reconcile (idempotent, best-effort) — and SURFACE
+      // a Shopify failure as a toast so a missed stock update isn't silent (the
+      // dealer used to get a green "Saved" regardless of whether the storefront
+      // actually moved). 'not-connected' is expected when LSG isn't linked → quiet.
+      if ('status' in patch || 'orderId' in patch || 'depositReceivedAt' in patch) {
+        reconcileQuoteStock(quoteId)
+          .then((r) => {
+            if (r?.status === 'error') {
+              showUndo(`No se pudo actualizar el stock en Shopify: ${(r.errors || []).join(' · ') || 'inténtalo de nuevo.'}`);
+            }
+          })
+          .catch(() => {});
+      }
     } finally {
       markSaved();
     }

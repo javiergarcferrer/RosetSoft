@@ -13,6 +13,10 @@
 //     reason — never reported as a phantom decrement.
 //   • the @idempotent(key:) directive is present + the key is threaded — Admin
 //     API 2026-04 REQUIRES it (a retried push can't double-apply).
+//   • each quantity row carries `changeFromQuantity` = the on_hand we read —
+//     REQUIRED by Admin API 2026-04 (compareQuantity/ignoreCompareQuantity were
+//     removed) and the compare-and-swap that stops a concurrent writer from
+//     being clobbered (the set is rejected, not overwritten with a stale base).
 //   • the audit-trail referenceDocumentUri is forwarded;
 //   • the result echoes back EXACTLY the items that landed (`applied`), so the
 //     caller's commitment ledger advances only for real changes;
@@ -80,9 +84,10 @@ test('SETS on_hand (current + delta) via inventorySetQuantities, with @idempoten
   assert.equal(calls.mutation.variables.input.referenceDocumentUri, 'alcoversoft://quote/q1');
   assert.equal(calls.mutation.variables.input.reason, 'correction');
   assert.equal(calls.mutation.variables.input.name, 'on_hand');
-  // One resolved item: on_hand SET to 10 + (-2) = 8, at the active online location.
+  // One resolved item: on_hand SET to 10 + (-2) = 8, at the active online
+  // location, with changeFromQuantity = the read on_hand (10) for compare-and-swap.
   assert.deepEqual(calls.mutation.variables.input.quantities, [
-    { inventoryItemId: 'gid://shopify/InventoryItem/111', locationId: 'gid://shopify/Location/1', quantity: 8 },
+    { inventoryItemId: 'gid://shopify/InventoryItem/111', locationId: 'gid://shopify/Location/1', quantity: 8, changeFromQuantity: 10 },
   ]);
   assert.equal(res.ok, true);
   assert.deepEqual(res.applied, [{ productId: 'lsg-111', variantId: undefined, delta: -2 }]);
@@ -100,8 +105,8 @@ test('a positive delta (restock) raises on_hand; on_hand is floored at 0', async
   );
   assert.equal(res.adjusted, 2);
   assert.deepEqual(calls.mutation.variables.input.quantities, [
-    { inventoryItemId: 'gid://shopify/InventoryItem/111', locationId: 'gid://shopify/Location/1', quantity: 4 },
-    { inventoryItemId: 'gid://shopify/InventoryItem/222', locationId: 'gid://shopify/Location/1', quantity: 0 },
+    { inventoryItemId: 'gid://shopify/InventoryItem/111', locationId: 'gid://shopify/Location/1', quantity: 4, changeFromQuantity: 1 },
+    { inventoryItemId: 'gid://shopify/InventoryItem/222', locationId: 'gid://shopify/Location/1', quantity: 0, changeFromQuantity: 1 },
   ]);
 });
 
@@ -109,9 +114,10 @@ test('adjusts the variant\'s active, online-order-fulfilling location — not ju
   const { gql, calls } = makeGql({ onHand: 4 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-666', delta: -1 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, true);
-  // Picks the online store location (on_hand 4 → 3), NOT the warehouse (99).
+  // Picks the online store location (on_hand 4 → 3), NOT the warehouse (99);
+  // changeFromQuantity reflects THAT location's on_hand (4), not the warehouse's.
   assert.deepEqual(calls.mutation.variables.input.quantities, [
-    { inventoryItemId: 'gid://shopify/InventoryItem/666', locationId: 'gid://shopify/Location/store', quantity: 3 },
+    { inventoryItemId: 'gid://shopify/InventoryItem/666', locationId: 'gid://shopify/Location/store', quantity: 3, changeFromQuantity: 4 },
   ]);
 });
 
