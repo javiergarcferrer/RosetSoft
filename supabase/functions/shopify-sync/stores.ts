@@ -47,19 +47,21 @@ export function storeForRequest(body: SyncRequest | null | undefined): string {
  * LifestyleGarden link is TWO-WAY: it PULLS the catalog (read_products,
  * read_inventory) AND pushes inventory decrements back when an LSG product is
  * sold inside ALCOVER (write_inventory to set on_hand; read_locations to TARGET
- * the storefront's active, online-fulfilling location accurately). The Alcover
- * mirror writes products + quantities and also resolves a shop-level location
- * list (read_locations). Surfacing the list makes the Settings connection test
- * flag any re-auth the dealer must do for the scopes to work.
+ * the storefront's active, online-fulfilling location accurately; write_products
+ * to flip a sold-out piece to DRAFT — and back to ACTIVE on a restock — so the
+ * storefront stops offering stock that physically left). The Alcover mirror
+ * writes products + quantities and also resolves a shop-level location list
+ * (read_locations). Surfacing the list makes the Settings connection test flag
+ * any re-auth the dealer must do for the scopes to work.
  *
- * read_locations is REQUIRED for correct targeting, but NOT load-bearing: the
- * write-back degrades gracefully if it's ever absent (a managed-install token
- * lags a freshly-released scope) — it falls back to a location that holds the
- * stock rather than hard-failing the push. See lsgInventory.ts.
+ * read_locations + write_products are REQUIRED but NOT load-bearing: the
+ * write-back degrades gracefully if either is absent (a managed-install token
+ * lags a freshly-released scope) — it falls back to a stock-holding location and
+ * skips the visibility flip rather than hard-failing the push. See lsgInventory.ts.
  */
 export function requiredScopes(store: string): string[] {
   return store === STORE_LSG
-    ? ['read_products', 'read_inventory', 'read_locations', 'write_inventory']
+    ? ['read_products', 'write_products', 'read_inventory', 'read_locations', 'write_inventory']
     : ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory'];
 }
 

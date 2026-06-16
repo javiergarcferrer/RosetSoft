@@ -51,15 +51,16 @@ test('storeForRequest: test mode checks whichever store the caller names', () =>
   assert.equal(storeForRequest({ test: true, store: STORE_LSG }), STORE_LSG);
 });
 
-test('requiredScopes: the LSG link is two-way (read + write_inventory + read_locations); the mirror writes inventory only', () => {
+test('requiredScopes: the LSG link is two-way (read + write_inventory + read_locations + write_products); the mirror writes inventory only', () => {
   // LSG PULLS the catalog AND pushes inventory decrements back when an LSG
-  // product is sold in ALCOVER, so it needs write_inventory + read_locations on
-  // top of the read scopes — read_locations is REQUIRED for accurate location
-  // targeting (the write-back degrades gracefully if it's ever absent, but the
-  // connection test still flags it so the dealer keeps it granted).
+  // product is sold in ALCOVER, so on top of the read scopes it needs
+  // write_inventory (set on_hand), read_locations (accurate location targeting),
+  // and write_products (flip a sold-out piece to DRAFT, back to ACTIVE on a
+  // restock). read_locations + write_products are flagged by the connection test
+  // but the write-back degrades gracefully if either is briefly absent.
   assert.deepEqual(
     requiredScopes(STORE_LSG).sort(),
-    ['read_inventory', 'read_locations', 'read_products', 'write_inventory'],
+    ['read_inventory', 'read_locations', 'read_products', 'write_inventory', 'write_products'],
   );
   const mirror = requiredScopes(STORE_ALCOVER);
   for (const s of ['read_products', 'write_products', 'read_locations', 'read_inventory', 'write_inventory']) {

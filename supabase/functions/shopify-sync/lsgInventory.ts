@@ -43,6 +43,16 @@
 // single-location, so the proxy lands on the same place; a multi-location store
 // gets exact targeting as soon as read_locations is on the token.
 //
+// STOREFRONT VISIBILITY — after the stock change lands, reconcile each touched
+// product's status to its on-hand reality: a product left with nothing sellable
+// (totalInventory <= 0) is switched to DRAFT so the storefront stops offering a
+// piece that physically left the floor; a product a restock (revert/cancel)
+// brought back above zero is re-published to ACTIVE. STRICTLY along the
+// ACTIVE↔DRAFT axis — an ARCHIVED or UNLISTED product is left exactly as the
+// dealer set it. Idempotent (reads status, writes only on a real transition) and
+// best-effort (a missing write_products scope or a transport error is surfaced
+// but never rolls back the stock change that already landed).
+//
 // An LSG product id is `lsg-<variantId>` (catalogImport.ts), where variantId is
 // the numeric tail of the Shopify ProductVariant GID. Best-effort: a variant we
 // can't resolve (no inventory item, untracked, or stocked nowhere usable) is
@@ -69,6 +79,12 @@ export interface LsgAdjustResult {
    *  caller's commitment ledger advances for exactly these and a partial push
    *  is simply retried next time, never lost or double-counted. */
   applied: LsgAdjustment[];
+  /** Storefront-visibility flips this push made as a result of the stock change:
+   *  products hidden (set DRAFT because they went out of stock) and re-published
+   *  (set ACTIVE because a restock brought them back). Observability only — the
+   *  flip is a best-effort secondary safeguard (see reconcileProductStatus). */
+  drafted: number;
+  republished: number;
 }
 
 export interface LsgAdjustOptions {
@@ -97,14 +113,21 @@ interface InvItem {
   tracked: boolean;
   inventoryLevels: { nodes: InvLevel[] } | null;
 }
+interface ResolvedVariant {
+  /** The parent product — its id drives the post-set storefront-visibility flip. */
+  product: { id: string } | null;
+  inventoryItem: InvItem | null;
+}
 
 /** The variant→inventory-item query. `rich` selects the read_locations-gated
  *  location fields used for accurate targeting; the lean form omits them so the
- *  push survives on read_inventory alone when read_locations isn't on the token. */
+ *  push survives on read_inventory alone when read_locations isn't on the token.
+ *  Both forms pull the parent product id for the visibility reconcile. */
 function variantQuery(rich: boolean): string {
   const locationFields = rich ? 'location { id isActive fulfillsOnlineOrders }' : 'location { id }';
   return `query($id: ID!) {
     productVariant(id: $id) {
+      product { id }
       inventoryItem {
         id
         tracked
@@ -117,6 +140,62 @@ function variantQuery(rich: boolean): string {
       }
     }
   }`;
+}
+
+/**
+ * After the stock change lands, reconcile each touched product's storefront
+ * visibility to its on-hand reality — the "out of stock → draft" safeguard.
+ * Hide a product with nothing sellable (totalInventory <= 0) by switching it to
+ * DRAFT; re-publish (ACTIVE) one a restock brought back above zero. STRICTLY on
+ * the ACTIVE↔DRAFT axis: an ARCHIVED or UNLISTED product is left as the dealer
+ * set it (we never un-archive or override a deliberate listing choice).
+ * Idempotent — reads the current status and writes only on a real transition, so
+ * it doesn't churn updated_at (which the catalog cron syncs on). Best-effort and
+ * NON-fatal: a transport error or a missing write_products scope is returned as a
+ * note but never undoes the stock change that already landed (the reservation
+ * ledger has advanced; this flip is a secondary safeguard, retried on the next
+ * stock transition). Returns counts + any surfaced notes; never throws.
+ */
+async function reconcileProductStatus(
+  gql: Gql,
+  productGids: string[],
+): Promise<{ drafted: number; republished: number; errors: string[] }> {
+  const out = { drafted: 0, republished: 0, errors: [] as string[] };
+  let scopeDenied = false; // sticky: write_products absent → stop trying, note once
+  for (const id of productGids) {
+    if (scopeDenied) break;
+    try {
+      const p = (await gql<{ product: { status: string; totalInventory: number | null } | null }>(
+        `query($id: ID!) { product(id: $id) { status totalInventory } }`,
+        { id },
+      )).product;
+      // totalInventory null ⇒ inventory not tracked → leave visibility alone.
+      if (!p || p.totalInventory == null) continue;
+      const sellable = Number(p.totalInventory) || 0;
+      let target: 'DRAFT' | 'ACTIVE' | null = null;
+      if (sellable <= 0 && p.status === 'ACTIVE') target = 'DRAFT';
+      else if (sellable > 0 && p.status === 'DRAFT') target = 'ACTIVE';
+      if (!target) continue; // already correct, or ARCHIVED/UNLISTED → untouched
+
+      const res = await gql<{ productUpdate: { userErrors: { field: string[]; message: string }[] } }>(
+        `mutation($product: ProductUpdateInput!) {
+          productUpdate(product: $product) { userErrors { field message } }
+        }`,
+        { product: { id, status: target } },
+      );
+      const ue = res.productUpdate.userErrors;
+      if (ue.length) { out.errors.push(...ue.map((e) => e.message)); continue; }
+      if (target === 'DRAFT') out.drafted++; else out.republished++;
+    } catch (e) {
+      if (e instanceof ShopifyAccessDeniedError) {
+        scopeDenied = true; // one note for the whole push, not per product
+        out.errors.push('No se pudo ocultar/mostrar el producto en la tienda: falta el permiso write_products en la app de Shopify.');
+      } else {
+        out.errors.push(`No se pudo actualizar la visibilidad del producto en la tienda: ${(e as Error).message}`);
+      }
+    }
+  }
+  return out;
 }
 
 /** Did this access-denial concern a location field (→ we can degrade by dropping
@@ -156,7 +235,7 @@ export async function adjustLsgInventory(
   adjustments: LsgAdjustment[],
   opts: LsgAdjustOptions = {},
 ): Promise<LsgAdjustResult> {
-  const out: LsgAdjustResult = { ok: true, adjusted: 0, skipped: 0, errors: [], applied: [] };
+  const out: LsgAdjustResult = { ok: true, adjusted: 0, skipped: 0, errors: [], applied: [], drafted: 0, republished: 0 };
   const items = (adjustments || []).filter((a) => a && Number.isFinite(a.delta) && Math.trunc(a.delta) !== 0);
   if (!items.length) return out;
 
@@ -177,15 +256,18 @@ export async function adjustLsgInventory(
   // self-corrects rather than silently overselling.
   const setQuantities: Array<{ inventoryItemId: string; locationId: string; quantity: number; changeFromQuantity: number }> = [];
   const applied: LsgAdjustment[] = [];
+  // Parent product GIDs whose stock this push moves — the storefront-visibility
+  // reconcile runs over exactly these once the set lands (deduped).
+  const touchedProducts = new Set<string>();
 
   // Start with the rich (read_locations) query for accurate targeting; the
   // FIRST location-scoped ACCESS_DENIED flips this STICKY false so the rest of
   // the batch goes straight to the lean query — we degrade once, never per item.
   let richLocations = true;
-  async function fetchInventoryItem(gid: string): Promise<InvItem | null> {
+  async function fetchVariant(gid: string): Promise<ResolvedVariant | null> {
     const run = (rich: boolean) =>
-      gql<{ productVariant: { inventoryItem: InvItem | null } | null }>(variantQuery(rich), { id: gid })
-        .then((r) => r.productVariant?.inventoryItem ?? null);
+      gql<{ productVariant: ResolvedVariant | null }>(variantQuery(rich), { id: gid })
+        .then((r) => r.productVariant ?? null);
     if (!richLocations) return run(false);
     try {
       return await run(true);
@@ -201,7 +283,8 @@ export async function adjustLsgInventory(
     if (!gid) { out.skipped++; continue; }
     const ref = a.variantId || a.productId;
     try {
-      const inv = await fetchInventoryItem(gid);
+      const variant = await fetchVariant(gid);
+      const inv = variant?.inventoryItem ?? null;
 
       if (!inv?.id) { out.skipped++; continue; }
       // An UNTRACKED item accepts a set and reports success but never moves the
@@ -221,6 +304,7 @@ export async function adjustLsgInventory(
       const next = Math.max(0, current + Math.trunc(a.delta));
       setQuantities.push({ inventoryItemId: inv.id, locationId: level.location!.id, quantity: next, changeFromQuantity: current });
       applied.push({ productId: a.productId, variantId: a.variantId, delta: Math.trunc(a.delta) });
+      if (variant?.product?.id) touchedProducts.add(variant.product.id);
     } catch (e) {
       out.errors.push(`${ref}: ${(e as Error).message}`);
     }
@@ -250,6 +334,17 @@ export async function adjustLsgInventory(
     else { out.adjusted = setQuantities.length; out.applied = applied; }
   } catch (e) {
     out.ok = false; out.errors.push((e as Error).message);
+  }
+
+  // Stock landed → reconcile the storefront visibility of every product it moved
+  // (out of stock → DRAFT; restocked → ACTIVE). Secondary safeguard: its notes
+  // surface to the dealer but never flip `ok`/`applied`, so the reservation
+  // ledger advances on the stock change regardless of the visibility outcome.
+  if (out.adjusted > 0 && touchedProducts.size) {
+    const status = await reconcileProductStatus(gql, [...touchedProducts]);
+    out.drafted = status.drafted;
+    out.republished = status.republished;
+    if (status.errors.length) out.errors.push(...status.errors);
   }
   return out;
 }
