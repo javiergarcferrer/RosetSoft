@@ -1,8 +1,13 @@
 // LSG stock reconciler — the effectful half of the two-way LifestyleGarden
 // sync, on the Vite side. Owns the closed loop the user asked for:
 //
-//   accept + order  → the quote's LSG pieces are deducted from Shopify
-//   revert / cancel → the same pieces are added back
+//   accept + order, OR a floor sale's deposit → the quote's LSG pieces are
+//                                               deducted from Shopify
+//   revert / cancel / un-marked deposit       → the same pieces are added back
+//
+// (LSG is our own warehouse stock, so a sale is usually a FLOOR sale with no
+// order — committed at the deposit; quoteHoldsLsgStock in lib/lsgSale owns that
+// rule.)
 //
 // HOW it stays robust (best practice, not a fire-once decrement):
 //   • Desired-state reconciliation. Each call recomputes the units a quote

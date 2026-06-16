@@ -100,14 +100,24 @@ export function lsgCommitmentDeltas(committed, desired) {
 
 /**
  * Does this quote currently HOLD LSG stock — i.e. should its LifestyleGarden
- * pieces be deducted from the Shopify storefront right now? True iff the quote
- * is ACCEPTED and committed to a live (non-cancelled) order. Reverting the
- * acceptance, detaching from the order, declining/archiving the quote, or
- * cancelling the order all flip this to false → the reconciler restocks. A
- * missing order (deleted) reads as not-held too.
+ * pieces be deducted from the Shopify storefront right now? An ACCEPTED quote
+ * holds when it is a committed sale, by either path:
+ *
+ *   • Order-attached (an import / special order) → held while the order is LIVE.
+ *     Detaching, deleting the order (orderId → null), cancelling it, or a
+ *     missing order row (deleted) all release the hold → the reconciler restocks.
+ *   • Floor sale (NO order — the usual path for LSG, our own warehouse stock) →
+ *     the piece leaves the floor at the deposit, so it's committed the moment
+ *     `depositReceivedAt` is set. This is the SAME committed-sale signal the rest
+ *     of the app uses for a floor sale (readyToInvoice / quoteOutstanding /
+ *     commissions). Without it an LSG sale — which almost never gets an order —
+ *     would never deduct from Shopify.
+ *
+ * Un-accepting, un-marking the deposit, or declining/archiving the quote all
+ * flip this to false → the reconciler restocks exactly what was taken.
  */
 export function quoteHoldsLsgStock(quote, order) {
-  if (!quote || quote.status !== 'accepted' || !quote.orderId) return false;
-  if (!order || order.status === 'cancelled') return false;
-  return true;
+  if (!quote || quote.status !== 'accepted') return false;
+  if (quote.orderId) return !!order && order.status !== 'cancelled';
+  return !!quote.depositReceivedAt;
 }

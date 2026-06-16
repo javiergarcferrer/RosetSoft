@@ -191,10 +191,13 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         number: persisted?.number ?? quote.number,
         updatedAt: Date.now(),
       });
-      // A status or order-attachment change is exactly what flips whether this
-      // quote's LSG pieces should be deducted from Shopify — accept + order
-      // deducts, revert / detach restocks. Reconcile (idempotent, best-effort).
-      if ('status' in patch || 'orderId' in patch) reconcileQuoteStock(quoteId).catch(() => {});
+      // A status, order-attachment, or deposit change is exactly what flips
+      // whether this quote's LSG pieces should be deducted from Shopify — accept
+      // + order (or, for a floor sale with no order, the deposit) deducts; a
+      // revert / detach / un-marked deposit restocks. The deposit is a milestone
+      // patch (no status/orderId), so it must be watched explicitly or a floor
+      // sale would never push. Reconcile (idempotent, best-effort).
+      if ('status' in patch || 'orderId' in patch || 'depositReceivedAt' in patch) reconcileQuoteStock(quoteId).catch(() => {});
     } finally {
       markSaved();
     }

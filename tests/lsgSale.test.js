@@ -133,6 +133,21 @@ test('quoteHoldsLsgStock: accepted + live order holds stock', () => {
   assert.equal(quoteHoldsLsgStock({ status: 'accepted', orderId: 'o1' }, { status: 'received' }), true);
 });
 
+test('quoteHoldsLsgStock: a floor sale (no order) holds once the deposit is received', () => {
+  // The usual LSG path — warehouse stock sold off the floor, never attached to
+  // an order. Accepted alone is not yet a commitment; the deposit is (same
+  // signal as readyToInvoice / quoteOutstanding).
+  assert.equal(quoteHoldsLsgStock({ status: 'accepted', orderId: null, depositReceivedAt: 1700000000000 }, null), true);
+  assert.equal(quoteHoldsLsgStock({ status: 'accepted', orderId: null, depositReceivedAt: null }, null), false);
+  // Un-marking the deposit releases the hold (→ restock).
+  assert.equal(quoteHoldsLsgStock({ status: 'accepted', orderId: null }, null), false);
+});
+
+test('quoteHoldsLsgStock: a deposit on a non-accepted floor-sale quote never holds', () => {
+  assert.equal(quoteHoldsLsgStock({ status: 'declined', orderId: null, depositReceivedAt: 1700000000000 }, null), false);
+  assert.equal(quoteHoldsLsgStock({ status: 'archived', orderId: null, depositReceivedAt: 1700000000000 }, null), false);
+});
+
 test('quoteHoldsLsgStock: not held when un-accepted, unattached, declined, or order cancelled/missing', () => {
   assert.equal(quoteHoldsLsgStock({ status: 'sent', orderId: 'o1' }, { status: 'draft' }), false);
   assert.equal(quoteHoldsLsgStock({ status: 'declined', orderId: 'o1' }, { status: 'draft' }), false);
