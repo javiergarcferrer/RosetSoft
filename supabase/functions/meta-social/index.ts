@@ -85,7 +85,7 @@ type Body = {
   finishPublish?: { creationId?: string };
   replyComment?: { commentId?: string; message?: string };
   igStudio?: boolean;
-  mediaInsights?: { mediaId?: string; productType?: string };
+  mediaInsights?: { mediaId?: string; productType?: string; story?: boolean };
   mediaComments?: { mediaId?: string };
   setCommentVisibility?: { commentId?: string; hide?: boolean };
   deleteComment?: { commentId?: string };
@@ -944,8 +944,10 @@ Deno.serve(async (req) => {
         : Promise.resolve(null),
       adAccountId && bizToken
         ? safe('campaigns', () => fb(`${adAccountId}/campaigns`, bizToken, {
+          // No status filter → boosts/promotions from Business Suite show too;
+          // the pane buckets them into Activas / Pausadas / Inactivas.
           fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
-          limit: '15',
+          limit: '50',
         }))
         : Promise.resolve(null),
     ]);
@@ -1054,9 +1056,12 @@ Deno.serve(async (req) => {
     const mediaId = String(body.mediaInsights.mediaId || '').trim();
     if (!mediaId) return json({ ok: false, error: 'mediaId requerido' }, 400);
     const isReel = String(body.mediaInsights.productType || '').toUpperCase() === 'REELS';
-    const sets = isReel
-      ? ['reach,views,total_interactions,saved,shares,ig_reels_avg_watch_time', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions']
-      : ['reach,views,total_interactions,saved,shares,profile_visits,follows', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions'];
+    const isStory = !!body.mediaInsights.story;
+    const sets = isStory
+      ? ['reach,views,replies,total_interactions', 'reach,replies,total_interactions', 'reach,total_interactions', 'reach']
+      : isReel
+        ? ['reach,views,total_interactions,saved,shares,ig_reels_avg_watch_time', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions']
+        : ['reach,views,total_interactions,saved,shares,profile_visits,follows', 'reach,views,total_interactions,saved,shares', 'reach,total_interactions'];
     try {
       const metrics = await mediaInsightValues(mediaId, token, sets);
       return json({ ok: true, metrics });

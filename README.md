@@ -1,4 +1,4 @@
-# Roset Soft
+# Alcover Soft
 
 Cloud quoting app for Ligne Roset dealers. Vite + React + Supabase.
 

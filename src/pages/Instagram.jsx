@@ -15,7 +15,7 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram as InstagramIcon, Megaphone, Plus, RefreshCw } from 'lucide-react';
+import { Instagram as InstagramIcon, RefreshCw } from 'lucide-react';
 import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -28,6 +28,7 @@ import BestTimeCard from '../components/instagram/BestTimeCard.jsx';
 import ContentGrid from '../components/instagram/ContentGrid.jsx';
 import EngagementPanel from '../components/instagram/EngagementPanel.jsx';
 import ComposerCard from '../components/instagram/ComposerCard.jsx';
+import CampaignsCard from '../components/instagram/CampaignsCard.jsx';
 import AdsManager from '../components/instagram/AdsManager.jsx';
 
 // Settle one meta-social result into { raw } or { error }. okGuard flags a 200
@@ -104,10 +105,11 @@ export default function Instagram() {
   const sections = useMemo(() => {
     const list = [{ id: 'resumen', label: 'Resumen' }];
     if (st) list.push({ id: 'contenido', label: 'Contenido' });
+    if (sp) list.push({ id: 'anuncios', label: 'Anuncios' });
     if (st) list.push({ id: 'audiencia', label: 'Audiencia' });
     list.push({ id: 'interaccion', label: 'Interacción' });
     return list;
-  }, [st]);
+  }, [st, sp]);
 
   // ── the swipe/tap board deck ─────────────────────────────────────────
   const deckRef = useRef(null);
@@ -225,12 +227,6 @@ export default function Instagram() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <LivePill loading={loading} hasData={anyData} error={error} sinceLabel={freshLabel(loadedAt, nowTick)} onRefresh={load} />
-            <button type="button" className="btn-secondary" onClick={() => setAdsOpen(true)}>
-              <Megaphone size={15} /> <span className="hidden sm:inline">Anuncios</span>
-            </button>
-            <button type="button" className="btn-brand" onClick={() => setComposerOpen(true)}>
-              <Plus size={15} /> Publicar
-            </button>
           </div>
         </header>
 
@@ -284,7 +280,20 @@ export default function Instagram() {
                 )}
                 {sec.id === 'contenido' && st && (
                   <div className="h-full">
-                    <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} />
+                    <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} />
+                  </div>
+                )}
+                {sec.id === 'anuncios' && (
+                  <div className="mx-auto h-full max-w-3xl lg:max-w-none">
+                    <CampaignsCard
+                      campaigns={sp?.campaigns || []}
+                      adCurrency={sp?.adCurrency}
+                      spend7={sp?.kpis?.spend7}
+                      hasAds={!!sp?.hasAds}
+                      onChanged={load}
+                      onPublish={() => setComposerOpen(true)}
+                      onCreateAd={() => setAdsOpen(true)}
+                    />
                   </div>
                 )}
                 {sec.id === 'audiencia' && st && (

@@ -46,7 +46,7 @@ import type {
 } from '../types/domain.ts';
 
 /**
- * Roset Soft cloud data layer.
+ * Alcover Soft cloud data layer.
  *
  * Exposes a Dexie-shaped API (`db.<table>.where().equals().toArray()`, etc.)
  * backed by Supabase Postgres + Storage. The React pages continue to import

@@ -2,7 +2,7 @@
  * e-CF payload builder — assembles the e-CF JSON (camelCase, DGII 1.0) that the
  * sign/send layer (`dgii-ecf`'s `json2xml` → XAdES) turns into the signed XML.
  *
- * Targets the two types RosetSoft issues — 31 (crédito fiscal, buyer has RNC)
+ * Targets the two types AlcoverSoft issues — 31 (crédito fiscal, buyer has RNC)
  * and 32 (consumo) — at the 18% rate (no exempt operations). The exact field
  * set is validated against DGII's TesteCF environment when the cert lands; this
  * is the structurally-complete starting point. Pure: no React, no Supabase.

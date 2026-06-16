@@ -1,4 +1,4 @@
-# Plan: convertir RosetSoft en ERP contable (RD)
+# Plan: convertir AlcoverSoft en ERP contable (RD)
 
 Estado: **en implementación.** Fases 1, 2a y 2b construidas y verificadas
 (typecheck + build + tests). Rama: `claude/intelligent-planck-A1SbE`.
@@ -80,7 +80,7 @@ El **libro mayor es la única fuente de verdad**. Todo lo demás —Balance Gene
 Estado de Resultados, 606, 607, IT‑1, IR‑2— se *deriva* del mayor. No se captura
 dos veces.
 
-Ventaja estructural: RosetSoft es **mono‑empresa** (un solo perfil `team`), así
+Ventaja estructural: AlcoverSoft es **mono‑empresa** (un solo perfil `team`), así
 que no hay complejidad multi‑compañía. Un catálogo, un mayor.
 
 ---
@@ -184,7 +184,7 @@ Y el **costo** de lo vendido (sale del inventario al costo promedio):
 **entrega**? En venta de mueble importado lo normal es a la entrega.
 
 ### 4.2 Depósito / anticipo del cliente (antes de entregar)
-RosetSoft ya registra `depositReceivedAt` + `depositAmount`. Como la mercancía
+AlcoverSoft ya registra `depositReceivedAt` + `depositAmount`. Como la mercancía
 se importa (plazo largo), el depósito es un **pasivo**, no un ingreso, hasta la
 entrega:
 
@@ -334,7 +334,7 @@ Todos `resolveX(journalLines, periodo)`:
 
 ---
 
-## §8 — Encaje con la arquitectura de RosetSoft
+## §8 — Encaje con la arquitectura de AlcoverSoft
 
 | Capa | Qué se agrega |
 |---|---|

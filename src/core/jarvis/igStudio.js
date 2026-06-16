@@ -252,13 +252,14 @@ const INSIGHT_LABELS = {
   reach: 'Alcance',
   views: 'Visualizaciones',
   total_interactions: 'Interacciones',
+  replies: 'Respuestas',
   saved: 'Guardados',
   shares: 'Compartidos',
   profile_visits: 'Visitas al perfil',
   follows: 'Seguidores ganados',
   ig_reels_avg_watch_time: 'Tiempo medio visto',
 };
-const INSIGHT_ORDER = ['reach', 'views', 'total_interactions', 'saved', 'shares', 'profile_visits', 'follows', 'ig_reels_avg_watch_time'];
+const INSIGHT_ORDER = ['reach', 'views', 'total_interactions', 'replies', 'saved', 'shares', 'profile_visits', 'follows', 'ig_reels_avg_watch_time'];
 const MS_METRICS = new Set(['ig_reels_avg_watch_time']); // values arrive in milliseconds
 
 /** Per-post insight map → an ordered, labeled list for the drill-down panel.

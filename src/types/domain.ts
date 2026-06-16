@@ -1,5 +1,5 @@
 /**
- * Central domain types for the Roset Soft app.
+ * Central domain types for the Alcover Soft app.
  *
  * Every shape here is the CAMEL-CASED, JS-side projection — what the
  * code actually sees AFTER `db/rowMapping.ts:fromRow` converts a

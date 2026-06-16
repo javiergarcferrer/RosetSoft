@@ -9,6 +9,7 @@ import {
   Sparkles, ExternalLink, RefreshCw, Send,
 } from 'lucide-react';
 import ImageView from '../ImageView.tsx';
+import StoryViewer from './StoryViewer.jsx';
 import { supabase } from '../../db/supabaseClient.js';
 import { resolveMediaInsights, resolveMediaComments } from '../../core/jarvis/index.js';
 import { fmt } from './chrome.jsx';
@@ -32,8 +33,10 @@ function MediaTile({ item, onClick }) {
   );
 }
 
-export default function ContentGrid({ grid = [], mentions = [], stories = [] }) {
+export default function ContentGrid({ grid = [], mentions = [], stories = [], profile = null }) {
   const [view, setView] = useState('posts'); // 'posts' | 'mentions'
+  // Index of the story the full-screen viewer is open on (null = closed).
+  const [storyAt, setStoryAt] = useState(null);
   // Guard a dead state: if a refresh empties mentions while that tab is active,
   // fall back to posts (the toggle hides itself when there are no mentions).
   const showMentions = view === 'mentions' && mentions.length > 0;
@@ -145,15 +148,15 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
       <div className="card-pad space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
         {stories.length > 0 && !showMentions && (
           <div className="flex gap-3 overflow-x-auto pb-1">
-            {stories.map((s) => (
-              <a key={s.id} href={s.permalink || '#'} target="_blank" rel="noreferrer" className="shrink-0 text-center" title={s.ago}>
+            {stories.map((s, i) => (
+              <button key={s.id} type="button" onClick={() => setStoryAt(i)} className="shrink-0 text-center" title="Ver historia">
                 <div className="h-14 w-14 overflow-hidden rounded-full p-[2px] bg-gradient-to-tr from-brand-400 to-brand-700">
                   <div className="h-full w-full overflow-hidden rounded-full bg-surface">
                     <ImageView id={null} fallbackUrl={s.thumb} alt="" className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
                   </div>
                 </div>
                 <div className="mt-1 text-[10px] text-ink-400">{s.ago}</div>
-              </a>
+              </button>
             ))}
           </div>
         )}
@@ -238,6 +241,15 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [] }) 
             </div>
           </div>
         </div>
+      )}
+
+      {storyAt != null && (
+        <StoryViewer
+          stories={stories}
+          startIndex={storyAt}
+          profile={profile}
+          onClose={() => setStoryAt(null)}
+        />
       )}
     </div>
   );

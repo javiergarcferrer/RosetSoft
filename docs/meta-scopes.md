@@ -1,6 +1,6 @@
 # Meta permission scopes — WhatsApp + Instagram
 
-RosetSoft's Meta surface is now **two independent integrations**:
+AlcoverSoft's Meta surface is now **two independent integrations**:
 
 - **WhatsApp Business** — unchanged. Sends/receives messages (CRM inbox +
   campaigns) via `wa-send` / `wa-webhook`, on the token the dealer onboarded

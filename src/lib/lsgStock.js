@@ -140,7 +140,7 @@ export async function reconcileQuoteStock(quoteId) {
 
   let res;
   try {
-    res = await pushLsgInventoryAdjust(deltas, { reference: `rosetsoft://quote/${quoteId}` });
+    res = await pushLsgInventoryAdjust(deltas, { reference: `alcoversoft://quote/${quoteId}` });
   } catch {
     return; // transport failure — leave the ledger; the next transition retries
   }

@@ -1,4 +1,4 @@
-# RosetSoft architecture — two cores, one brain
+# AlcoverSoft architecture — two cores, one brain
 
 The app is **one system** with two distinct cores that meet through a single,
 defined membrane. The mental model (the owner's):

@@ -242,7 +242,7 @@
      Native interactive elements, themed to the design system.
      Generic on purpose — any component can reach for a bare
      <details>/<summary>, <progress> or <meter> and get the
-     RosetSoft look without bespoke wrapper classes. This is the
+     AlcoverSoft look without bespoke wrapper classes. This is the
      "use the platform" play: native disclosure state, native
      determinate/measure bars, no JS open/close bookkeeping.
      =========================================================== */

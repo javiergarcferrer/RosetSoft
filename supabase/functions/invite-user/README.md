@@ -84,4 +84,4 @@ var is needed in the frontend.
 Supabase's "Invite User" email template (Auth → Email Templates) is what
 the invitee sees. It includes the magic link to your site's confirm page.
 Customize the subject line and body in the dashboard if you want the
-copy to match Roset Soft's voice.
+copy to match Alcover Soft's voice.

@@ -164,7 +164,7 @@ function Card({ model, images }: { model: BookModel; images?: CatalogImageMap })
 
 export function CatalogDocument({ book, images, generatedAt }: CatalogDocumentProps) {
   return (
-    <Document title="Catálogo LifestyleGarden" creator="RosetSoft" producer="RosetSoft">
+    <Document title="Catálogo LifestyleGarden" creator="AlcoverSoft" producer="AlcoverSoft">
       <Page size="LETTER" style={st.page}>
         <View>
           <Text style={st.eyebrow}>Catálogo · piezas en existencia</Text>

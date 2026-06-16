@@ -11,7 +11,7 @@ import type { ECFSequence } from '../../types/domain.ts';
 
 export interface ECFType { code: string; label: string; }
 
-/** The e-CF types DGII defines. RosetSoft issues 31 (crédito fiscal) and 32
+/** The e-CF types DGII defines. AlcoverSoft issues 31 (crédito fiscal) and 32
  *  (consumo); the rest are listed for completeness / sequence management. */
 export const ECF_TYPES: ECFType[] = [
   { code: '31', label: 'Factura de Crédito Fiscal' },

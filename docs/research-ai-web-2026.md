@@ -1,4 +1,4 @@
-# RosetSoft — best-practice roadmap (2025–2026 research)
+# AlcoverSoft — best-practice roadmap (2025–2026 research)
 
 Synthesis of a five-angle deep-research sweep (in-app AI, front-end performance,
 UX/accessibility, Supabase security, and PWA/testing/dev-workflow) mapped onto

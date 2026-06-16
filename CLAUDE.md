@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# RosetSoft — agent bootstrap
+# AlcoverSoft — agent bootstrap
 
 React/Vite back-office for a Ligne Roset dealer (Dominican Republic): quoting,
 orders + container tracking, full accounting (ledger, DGII 606/607, e-CF,

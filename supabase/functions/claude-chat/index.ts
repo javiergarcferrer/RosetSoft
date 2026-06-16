@@ -32,7 +32,7 @@ const DEFAULT_MODEL = 'claude-opus-4-8';
 const HISTORY_TURNS = 20;
 const MAX_MESSAGE_CHARS = 4000;
 
-const SYSTEM_PROMPT = `You are JARVIS, the operations AI of RosetSoft — the quoting and back-office
+const SYSTEM_PROMPT = `You are JARVIS, the operations AI of AlcoverSoft — the quoting and back-office
 app of Alcover (Ligne Roset dealer, Dominican Republic). You live inside the
 JARVIS dashboard's uplink console.
 
