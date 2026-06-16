@@ -52,3 +52,9 @@ export { resolveDashboard } from './views/dashboard.js';
 export { resolveQuotesList, resolveOrdersList, resolveProfessionalsList, resolveCustomersList } from './views/lists.js';
 export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } from './views/detail.js';
 export { resolveOrderRegistration } from './views/registration.js';
+// Togo plan configurator VM (drag-and-drop top-down → a modular quote line).
+export {
+  resolveConfigurator, snapPlacement, footprintOf, clampToPlan,
+  buildTogoComponents, buildTogoModularSeed,
+  PLAN_W_CM, PLAN_H_CM, PX_PER_CM, SNAP_GRID_CM, EDGE_SNAP_CM,
+} from './views/configuratorView.js';

@@ -1119,6 +1119,22 @@ export interface LineComponent {
    */
   moduleAlternativeGroup?: string | null;
   moduleSelected?: boolean;
+  /**
+   * Top-down PLAN geometry for a piece placed in the Togo configurator
+   * (`src/pages/TogoConfigurator.jsx`). Each placed Togo piece is one module of a
+   * modular line; its position rides inline on the JSONB component so a configured
+   * layout round-trips with the quote — no `layout` column, no migration. Absent
+   * on a normally-added component. Centimetres; `rot` ∈ {0, 90, 180, 270}. Built
+   * by `core/quote/views/configuratorView.js` (buildTogoComponents).
+   */
+  plan?: {
+    pieceId: string;
+    x: number;
+    y: number;
+    rot: number;
+    widthCm: number;
+    depthCm: number;
+  } | null;
 }
 
 /**
