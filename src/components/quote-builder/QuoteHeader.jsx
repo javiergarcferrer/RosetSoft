@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Briefcase, Check, Undo2, Redo2, UserX, Pencil } from 'lucide-react';
+import { ArrowLeft, Briefcase, Check, Undo2, Redo2, UserX } from 'lucide-react';
 import { useGoBack } from '../../context/NavMemory.jsx';
 import Dropdown, { DropdownItem } from '../primitives/Dropdown.jsx';
 import CustomerChip from './CustomerChip.jsx';
@@ -130,21 +130,13 @@ export default function QuoteHeader({
         role="group"
         aria-label="Datos de la cotización"
       >
-        <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
-        {/* Small pencil — edit the assigned customer (address, RNC, contact…)
-            in place. Only shown once a customer is assigned; assigning a new one
-            is the chip's own job (it opens the picker). */}
-        {customer && (
-          <button
-            type="button"
-            onClick={() => setEditingCustomer(true)}
-            title="Editar datos del cliente (dirección, RNC, contacto…)"
-            aria-label="Editar datos del cliente"
-            className="inline-flex items-center justify-center rounded-full border border-ink-200 bg-surface text-ink-400 hover:text-brand-700 hover:border-brand-400 hover:bg-brand-50/50 transition-all active:scale-[0.95] min-h-6 coarse:min-h-9 w-6 coarse:w-9 ring-1 ring-inset ring-black/5"
-          >
-            <Pencil size={11} aria-hidden />
-          </button>
-        )}
+        {/* Name half picks/changes the customer; the glued pencil half edits the
+            assigned one in place (the modal below). Pencil only when assigned. */}
+        <CustomerChip
+          customer={customer}
+          onOpen={() => setPickerOpen(true)}
+          onEdit={customer ? () => setEditingCustomer(true) : undefined}
+        />
         <WhatsAppChip customer={customer} />
         <ProfessionalChip
           quote={quote}
