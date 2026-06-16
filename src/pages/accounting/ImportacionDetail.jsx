@@ -259,7 +259,8 @@ export default function ImportacionDetail() {
   /** Delete this expediente and undo everything its save posted: the asiento
    *  (entry + lines), the kardex IN movements it created, and — since movements
    *  are the source of truth — each touched item's on-hand/avg recomputed from
-   *  its REMAINING movements. Lets the team re-register a file cleanly while the
+   *  its REMAINING movements (and items the import minted, now movement-less,
+   *  removed). Lets the team re-register a file cleanly while the
    *  import engine is in testing. The expediente row goes last so a mid-way
    *  failure leaves it in place to retry; the steps are idempotent. */
   async function deleteExpediente() {
@@ -283,9 +284,16 @@ export default function ImportacionDetail() {
       // 2. This expediente's kardex movements.
       await db.inventoryMovements.bulkDelete(expMoves.map((m) => m.id));
       // 3. Recompute each touched item from what's LEFT (self-heals the
-      //    denormalized qty/avg the weighted-average IN had advanced).
+      //    denormalized qty/avg the weighted-average IN had advanced). If an
+      //    item has NO movements left, this expediente was its sole source —
+      //    it was minted by the import, so remove the orphaned product too
+      //    instead of leaving a phantom zero-stock SKU in inventario.
       for (const itemId of touched) {
         const remaining = await db.inventoryMovements.where('itemId').equals(itemId).toArray();
+        if (!remaining.length) {
+          await db.inventoryItems.delete(itemId);
+          continue;
+        }
         const k = resolveKardex(remaining);
         await db.inventoryItems.update(itemId, { qtyOnHand: k.qty, avgCost: k.avgCost });
       }
