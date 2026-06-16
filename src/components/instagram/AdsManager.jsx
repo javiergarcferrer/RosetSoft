@@ -255,9 +255,46 @@ const LEVEL_META = {
   ad: { icon: ImageIcon, child: null, childLabel: null },
 };
 
+// The full 4-tile financial strip — the single-account header (unchanged look).
+function AccountStrip({ account }) {
+  const cur = account.currency;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {[
+        ['Cuenta', account.name || '—'],
+        ['Gastado', formatAdMoney(account.amountSpent, cur)],
+        ['Saldo', account.balance != null ? formatAdMoney(account.balance, cur) : '—'],
+        ['Límite de gasto', account.spendCap != null ? formatAdMoney(account.spendCap, cur) : 'Sin límite'],
+      ].map(([k, v]) => (
+        <div key={k} className="rounded-lg border border-ink-100 bg-ink-50 px-3 py-2">
+          <div className="text-[10px] uppercase tracking-wide text-ink-400">{k}</div>
+          <div className="truncate text-sm font-semibold text-ink-900" title={String(v)}>{v}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Compact per-account banner above each account's campaigns when several
+// accounts are aggregated (name + currency + spent/balance at a glance).
+function AccountBanner({ account }) {
+  const cur = account.currency;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-ink-100 bg-ink-50 px-3 py-2">
+      <span className="text-sm font-semibold text-ink-900">{account.name || 'Cuenta publicitaria'}</span>
+      {cur && <span className="rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] font-medium text-ink-500">{cur}</span>}
+      {account.disabled && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Inactiva</span>}
+      <span className="ml-auto flex flex-wrap items-center gap-x-3 text-xs text-ink-500 tabular-nums">
+        <span><span className="text-ink-400">Gastado</span> {formatAdMoney(account.amountSpent, cur)}</span>
+        {account.balance != null && <span><span className="text-ink-400">Saldo</span> {formatAdMoney(account.balance, cur)}</span>}
+      </span>
+    </div>
+  );
+}
+
 export default function AdsManager({ onChanged }) {
   const [preset, setPreset] = useState('last_28d');
-  const [board, setBoard] = useState({ loading: true, error: null, account: null, currency: null, campaigns: [] });
+  const [board, setBoard] = useState({ loading: true, error: null, accounts: [], account: null, currency: null, campaigns: [] });
   const [expanded, setExpanded] = useState({}); // id → bool
   const [kids, setKids] = useState({});          // parentId → { loading, error, level, rows }
   const [showInsights, setShowInsights] = useState({}); // id → bool
@@ -279,7 +316,7 @@ export default function AdsManager({ onChanged }) {
       const data = await call({ op: 'board', datePreset: p });
       setBoard({ loading: false, error: null, ...resolveAdsBoard(data) });
     } catch (e) {
-      setBoard({ loading: false, error: e.message || 'No se pudieron leer los anuncios', account: null, currency: null, campaigns: [] });
+      setBoard({ loading: false, error: e.message || 'No se pudieron leer los anuncios', accounts: [], account: null, currency: null, campaigns: [] });
     }
   }, [call, preset]);
 
@@ -291,7 +328,9 @@ export default function AdsManager({ onChanged }) {
     setKids((k) => ({ ...k, [node.id]: { ...(k[node.id] || {}), loading: true, error: null } }));
     try {
       const data = await call({ op: 'children', level: childLevel, parentId: node.id, datePreset: preset });
-      setKids((k) => ({ ...k, [node.id]: { loading: false, error: null, ...resolveAdChildren(data, board.currency) } }));
+      // Children inherit their campaign's account currency (the board mixes
+      // accounts that may bill in different currencies).
+      setKids((k) => ({ ...k, [node.id]: { loading: false, error: null, ...resolveAdChildren(data, node.currency || board.currency) } }));
     } catch (e) {
       setKids((k) => ({ ...k, [node.id]: { loading: false, error: e.message || 'Error', level: childLevel, rows: [] } }));
     }
@@ -310,7 +349,7 @@ export default function AdsManager({ onChanged }) {
   const refreshScope = useCallback((node) => {
     if (node.level === 'campaign') return loadBoard();
     const parentId = node.level === 'adset' ? node.campaignId : node.adsetId;
-    if (parentId && expanded[parentId]) return loadChildren({ id: parentId, level: node.level === 'adset' ? 'campaign' : 'adset' });
+    if (parentId && expanded[parentId]) return loadChildren({ id: parentId, level: node.level === 'adset' ? 'campaign' : 'adset', currency: node.currency });
     return loadBoard();
   }, [loadBoard, loadChildren, expanded]);
 
@@ -370,15 +409,15 @@ export default function AdsManager({ onChanged }) {
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-400">
               {node.level === 'campaign' && node.objective && <span>{objectiveLabel(node.objective)}</span>}
-              {node.dailyBudget != null && <span>{formatAdMoney(node.dailyBudget, board.currency)}/día</span>}
-              {node.lifetimeBudget != null && <span>{formatAdMoney(node.lifetimeBudget, board.currency)} total</span>}
+              {node.dailyBudget != null && <span>{formatAdMoney(node.dailyBudget, node.currency)}/día</span>}
+              {node.lifetimeBudget != null && <span>{formatAdMoney(node.lifetimeBudget, node.currency)} total</span>}
               {node.targetingSummary && <span className="truncate">{node.targetingSummary}</span>}
             </div>
-            <div className="mt-1"><MetricStrip ins={node.insights} currency={board.currency} /></div>
-            {showInsights[node.id] && <div className="mt-2">{insightsGrid(node.insights, board.currency)}</div>}
+            <div className="mt-1"><MetricStrip ins={node.insights} currency={node.currency} /></div>
+            {showInsights[node.id] && <div className="mt-2">{insightsGrid(node.insights, node.currency)}</div>}
             {editing === node.id && (
               <NodeEditor
-                node={node} currency={board.currency} busy={isBusy}
+                node={node} currency={node.currency} busy={isBusy}
                 onSave={(ads) => runMutation(node, ads)}
                 onDelete={() => del(node)}
                 onDuplicate={() => dup(node)}
@@ -420,7 +459,8 @@ export default function AdsManager({ onChanged }) {
     return <CreateWizard currency={board.currency} onBack={() => setView('tree')} onCreated={() => { setView('tree'); loadBoard(); onChanged?.(); }} call={call} />;
   }
 
-  const acc = board.account;
+  const accounts = board.accounts || [];
+  const multiAccount = accounts.length > 1;
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -437,26 +477,13 @@ export default function AdsManager({ onChanged }) {
         <button type="button" className="btn-brand ml-auto" onClick={() => setView('create')}><Plus size={15} /> Crear anuncio</button>
       </div>
 
-      {/* Account strip */}
-      {acc && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {[
-            ['Cuenta', acc.name || '—'],
-            ['Gastado', formatAdMoney(acc.amountSpent, acc.currency)],
-            ['Saldo', acc.balance != null ? formatAdMoney(acc.balance, acc.currency) : '—'],
-            ['Límite de gasto', acc.spendCap != null ? formatAdMoney(acc.spendCap, acc.currency) : 'Sin límite'],
-          ].map(([k, v]) => (
-            <div key={k} className="rounded-lg border border-ink-100 bg-ink-50 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wide text-ink-400">{k}</div>
-              <div className="truncate text-sm font-semibold text-ink-900" title={String(v)}>{v}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Single account: the full financial strip (unchanged). */}
+      {!multiAccount && accounts[0] && <AccountStrip account={accounts[0]} />}
 
       {note && <div className={`text-sm ${note.ok ? 'text-emerald-700' : 'text-red-600'}`}>{note.text}</div>}
 
-      {/* Campaign tree */}
+      {/* Campaign tree — grouped by ad account so EVERY ad shows (Instagram
+          boosts + Business Suite promotions included, across every account). */}
       {board.loading && board.campaigns.length === 0 ? (
         <div className="py-8 text-center text-sm text-ink-400">Leyendo anuncios…</div>
       ) : board.error ? (
@@ -467,12 +494,25 @@ export default function AdsManager({ onChanged }) {
       ) : board.campaigns.length === 0 ? (
         <div className="rounded-xl border border-dashed border-ink-200 p-8 text-center">
           <Megaphone size={22} className="mx-auto text-ink-300" />
-          <div className="mt-2 text-sm text-ink-500">Aún no hay campañas en esta cuenta.</div>
+          <div className="mt-2 text-sm text-ink-500">Aún no hay campañas en {multiAccount ? 'estas cuentas' : 'esta cuenta'}.</div>
           <button type="button" className="btn-brand mt-3" onClick={() => setView('create')}><Plus size={15} /> Crear tu primer anuncio</button>
+        </div>
+      ) : multiAccount ? (
+        <div className="space-y-5">
+          {accounts.map((account) => (
+            <section key={account.id} className="space-y-2">
+              <AccountBanner account={account} />
+              {account.campaigns.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-ink-200 px-3 py-3 text-xs text-ink-400">
+                  {account.unreadable ? 'No se pudo leer esta cuenta (revisa permisos).' : 'Sin campañas en esta cuenta.'}
+                </div>
+              ) : account.campaigns.map((c) => <NodeRow key={c.id} node={c} depth={0} />)}
+            </section>
+          ))}
         </div>
       ) : (
         <div className="space-y-2">
-          {board.campaigns.map((c) => <NodeRow key={c.id} node={c} depth={0} />)}
+          {(accounts[0]?.campaigns || []).map((c) => <NodeRow key={c.id} node={c} depth={0} />)}
         </div>
       )}
     </div>

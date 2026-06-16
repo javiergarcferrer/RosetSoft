@@ -690,7 +690,9 @@ Deno.serve(async (req) => {
     const op = String(a.op || '').trim();
     if (!bizToken) return json({ ok: false, error: 'Sin token de anuncios — conecta WhatsApp o asigna el token de Meta Business al sistema.' });
     const adAccountId = await resolveAdAccount(admin, cfg, bizToken);
-    if (!adAccountId && op !== 'promotable') return json({ ok: false, error: 'No se encontró una cuenta publicitaria en este Business.' });
+    // `board` resolves the FULL account list itself; `promotable` needs only the
+    // IG account — neither is blocked by a missing single primary account.
+    if (!adAccountId && op !== 'promotable' && op !== 'board') return json({ ok: false, error: 'No se encontró una cuenta publicitaria en este Business.' });
     const preset = String(a.datePreset || 'last_28d');
     const INS = 'spend,impressions,clicks,reach,frequency,ctr,cpc,cpm,actions,cost_per_action_type';
     // Run one op, normalizing success to { ok:true, ...payload } and any Graph
@@ -702,12 +704,47 @@ Deno.serve(async (req) => {
 
     if (op === 'board') {
       return wrap(async () => {
-        const account = await fb(adAccountId, bizToken, { fields: 'id,name,currency,account_status,amount_spent,balance,spend_cap' });
-        const campaigns = await fb(`${adAccountId}/campaigns`, bizToken, {
-          fields: `id,name,status,effective_status,objective,daily_budget,lifetime_budget,budget_remaining,start_time,stop_time,insights.date_preset(${preset}){${INS}}`,
-          limit: '50',
+        // Read EVERY ad account this Business token can see — not just one.
+        // Instagram boosted posts and Business Suite promotions routinely bill
+        // through a DIFFERENT ad account than the one ads are created into here,
+        // so a single-account read hid them. No platform or status filter is
+        // applied, so Facebook + Instagram + boosts all surface ("all my ads").
+        const acctRes = await fb('me/adaccounts', bizToken, {
+          fields: 'id,name,currency,account_status,amount_spent,balance,spend_cap',
+          limit: '100',
         });
-        return { account, currency: account?.currency || null, campaigns: campaigns?.data || [] };
+        type AdAcctRow = { id: string; name?: string; currency?: string; account_status?: number; amount_spent?: string; balance?: string; spend_cap?: string };
+        const all = (acctRes?.data || []) as AdAcctRow[];
+        if (!all.length) throw new Error('No se encontró una cuenta publicitaria en este Business.');
+        // Primary = the pinned/created-into account, else first active, else
+        // first; it leads the list and feeds the create wizard.
+        const primaryId = String(
+          cfg.ad_account_id
+          || (all.find((x) => x.account_status === 1) || all[0])?.id
+          || '',
+        );
+        if (primaryId && !cfg.ad_account_id) {
+          await admin.from('meta_social_config')
+            .update({ ad_account_id: primaryId, updated_at: new Date().toISOString() })
+            .eq('profile_id', TEAM);
+        }
+        // Primary first, then the rest; cap so the fan-out stays bounded.
+        const ordered = [...all]
+          .sort((x, y) => (String(x.id) === primaryId ? -1 : String(y.id) === primaryId ? 1 : 0))
+          .slice(0, 12);
+        const accounts = await Promise.all(ordered.map(async (acc) => {
+          try {
+            const camps = await fb(`${acc.id}/campaigns`, bizToken, {
+              fields: `id,name,status,effective_status,objective,daily_budget,lifetime_budget,budget_remaining,start_time,stop_time,insights.date_preset(${preset}){${INS}}`,
+              limit: '100',
+            });
+            return { ...acc, campaigns: camps?.data || [] };
+          } catch {
+            // One unreadable account (e.g. disabled) must not blank the rest.
+            return { ...acc, campaigns: [], unreadable: true };
+          }
+        }));
+        return { accounts, primaryAccountId: primaryId };
       });
     }
 

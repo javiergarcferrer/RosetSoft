@@ -184,6 +184,10 @@ export function parseCampaign(c, currency) {
     level: 'campaign',
     id: c.id || null,
     name: c.name || '—',
+    // Each node carries its own account currency: the board aggregates ads
+    // across MULTIPLE ad accounts, which may bill in different currencies, so a
+    // single board-wide currency would misformat money for the others.
+    currency: currency || null,
     status: c.status || null,
     effectiveStatus: c.effective_status || c.status || null,
     objective: c.objective || null,
@@ -201,6 +205,7 @@ export function parseAdSet(a, currency) {
     level: 'adset',
     id: a.id || null,
     name: a.name || '—',
+    currency: currency || null,
     campaignId: a.campaign_id || null,
     status: a.status || null,
     effectiveStatus: a.effective_status || a.status || null,
@@ -224,6 +229,7 @@ export function parseAd(a, currency) {
     level: 'ad',
     id: a.id || null,
     name: a.name || '—',
+    currency: currency || null,
     adsetId: a.adset_id || null,
     status: a.status || null,
     effectiveStatus: a.effective_status || a.status || null,

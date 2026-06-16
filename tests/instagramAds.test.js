@@ -96,6 +96,9 @@ test('parseCampaign: daily/lifetime budgets convert cents→major; insights nest
   assert.equal(c.insights.spend, 6);
   assert.equal(c.insights.cpc, 0.5);
   assert.equal(c.objective, 'OUTCOME_ENGAGEMENT');
+  // The node carries its own account currency — the board aggregates ads from
+  // several accounts, which may bill in different currencies.
+  assert.equal(c.currency, 'USD');
 });
 
 test('parseAdSet: lifetime budget + targeting summary', () => {
