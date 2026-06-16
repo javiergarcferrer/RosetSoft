@@ -160,15 +160,17 @@ export default function TogoConfigurator() {
 
   // Material pick for the selected piece → reprice by grade + stamp swatch.
   const onPickMaterial = useCallback((pick) => {
-    if (!selected || !selectedFamily) return;
-    const p = productForGrade(selectedFamily, pick.grade);
+    if (!selected) return;
+    // Reprice by grade when the model is bound to a graded product; otherwise the
+    // fabric/swatch is cosmetic and the (model) price is left untouched.
+    const p = selectedFamily ? productForGrade(selectedFamily, pick.grade) : null;
     setPlaced((prev) => prev.map((row) => (row.uid === selected.uid ? {
       ...row,
       material: {
         grade: pick.grade, fabric: pick.fabric, swatchImageId: pick.swatchImageId ?? null,
         subtype: composeSubtype(pick.grade, pick.fabric),
         reference: p?.reference || '',
-        unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) || 0 : (resolvedById[row.pieceId]?.unitPrice ?? 0),
+        unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) || 0 : (resolvedById[row.pieceId]?.unitPrice ?? null),
       },
     } : row)));
   }, [selected, selectedFamily, resolvedById]);
@@ -274,10 +276,16 @@ export default function TogoConfigurator() {
             <div className="card card-pad">
               <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <span className="text-[11px] text-ink-500">
-                  {vm.count ? `${vm.count} pieza(s) · clic para seleccionar, arrastra para mover` : 'Agrega piezas desde la izquierda'}
+                  {!vm.count
+                    ? 'Agrega piezas desde la izquierda'
+                    : (selected && !selectedFamily)
+                      ? <span className="text-amber-600">Pieza sin producto vinculado — la tela no cambiará el precio. Vincúlala en el catálogo Togo.</span>
+                      : selected
+                        ? 'Elige «Tela» para vestir la pieza · R rota · Supr quita'
+                        : `${vm.count} pieza(s) · clic para seleccionar, arrastra para mover`}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <button type="button" onClick={() => setMatOpen(true)} disabled={!selected || !selectedFamily} className="btn-ghost text-xs disabled:opacity-40" title={selectedFamily ? 'Elegir tela' : 'Vincula un producto para elegir tela'}>
+                  <button type="button" onClick={() => setMatOpen(true)} disabled={!selectedUid} className="btn-ghost text-xs disabled:opacity-40" title={selectedUid ? 'Elegir tela' : 'Selecciona una pieza primero'}>
                     <Palette size={14} /> Tela
                   </button>
                   <button type="button" onClick={rotateSel} disabled={!selectedUid} className="btn-ghost text-xs disabled:opacity-40" title="Rotar 90° (R)">

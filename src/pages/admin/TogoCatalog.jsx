@@ -46,6 +46,16 @@ export default function TogoCatalog() {
 
   const sorted = [...(models || [])].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.name || '').localeCompare(b.name || ''));
 
+  // Best-effort: bind a seed to a "Togo …" catalog family by its keywords, so the
+  // imported pieces are priced + fabric-enabled out of the box when the dealer
+  // has Togo products. Unmatched seeds stay unbound (bind them by hand below).
+  const togoFamilies = useMemo(() => families.filter((f) => /togo/i.test(f.name)), [families]);
+  const autoRoot = (seed) => {
+    const keys = (seed.match || []).filter((k) => k !== 'togo');
+    const hit = togoFamilies.find((f) => { const n = (f.name || '').toLowerCase(); return keys.some((k) => k && n.includes(k)); });
+    return hit ? hit.root : null;
+  };
+
   const importSeeds = async () => {
     const existing = new Set((models || []).map((m) => (m.name || '').toLowerCase()));
     const base = models?.length ? Math.max(...models.map((m) => m.sortOrder || 0)) + 1 : 0;
@@ -53,7 +63,7 @@ export default function TogoCatalog() {
     for (const s of TOGO_SEEDS) {
       if (existing.has(s.name.toLowerCase())) continue;
       await db.togoModels.put({
-        id: newId(), profileId, name: s.name, productRoot: null, productReference: null,
+        id: newId(), profileId, name: s.name, productRoot: autoRoot(s), productReference: null,
         widthCm: s.widthCm, depthCm: s.depthCm, svg: s.svg, sortOrder: base + i++,
         active: true, createdAt: Date.now(), updatedAt: Date.now(),
       });
