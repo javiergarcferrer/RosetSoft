@@ -15,7 +15,10 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram as InstagramIcon, RefreshCw } from 'lucide-react';
+import {
+  Instagram as InstagramIcon, RefreshCw,
+  Gauge, LayoutGrid, Megaphone, Users, MessageCircle,
+} from 'lucide-react';
 import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -103,11 +106,11 @@ export default function Instagram() {
   // ── sections — Contenido + Audiencia need igStudio; the rest fall back to
   // socialPulse, so the deck only offers boards it can actually fill. ──────
   const sections = useMemo(() => {
-    const list = [{ id: 'resumen', label: 'Resumen' }];
-    if (st) list.push({ id: 'contenido', label: 'Contenido' });
-    if (sp) list.push({ id: 'anuncios', label: 'Anuncios' });
-    if (st) list.push({ id: 'audiencia', label: 'Audiencia' });
-    list.push({ id: 'interaccion', label: 'Interacción' });
+    const list = [{ id: 'resumen', label: 'Resumen', icon: Gauge }];
+    if (st) list.push({ id: 'contenido', label: 'Contenido', icon: LayoutGrid });
+    if (sp) list.push({ id: 'anuncios', label: 'Anuncios', icon: Megaphone });
+    if (st) list.push({ id: 'audiencia', label: 'Audiencia', icon: Users });
+    list.push({ id: 'interaccion', label: 'Interacción', icon: MessageCircle });
     return list;
   }, [st, sp]);
 
@@ -230,10 +233,12 @@ export default function Instagram() {
           </div>
         </header>
 
-        {/* Section navigator — the primary, always-visible control (the deck's
-            indicator + jump). Tap to go, or swipe the boards below. */}
+        {/* Section navigator — the primary control on desktop (the deck's
+            indicator + jump). Tap to go, or swipe the boards below. On phones
+            this top control gives way to the bottom bar (see below), which is
+            the thumb-reachable switcher. */}
         {anyData && (
-          <nav className="mb-3 shrink-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Secciones de Instagram">
+          <nav className="mb-3 hidden shrink-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:block" aria-label="Secciones de Instagram">
             <div className="inline-flex min-w-full rounded-full border border-ink-200 bg-ink-100 p-1 text-sm" role="tablist">
               {sections.map((sec, i) => {
                 const on = active === i;
@@ -325,6 +330,39 @@ export default function Instagram() {
           <div className="shrink-0 pt-1 text-xs text-amber-700">
             Secciones sin respuesta: {Object.keys(st.errors).join(', ')} — el resto es dato real.
           </div>
+        )}
+
+        {/* Mobile bottom bar — the thumb-reachable section switcher. Lives at
+            the foot of the height-locked shell (which already ends above the
+            home indicator, since <main>'s bottom inset is excluded from the
+            measured height), so it reads as a native bottom tab bar without
+            covering content. Desktop uses the top segmented navigator instead. */}
+        {anyData && (
+          <nav
+            className="mt-2 grid shrink-0 grid-flow-col auto-cols-fr gap-1 rounded-2xl border border-ink-200 bg-surface p-1 shadow-sm md:hidden"
+            role="tablist"
+            aria-label="Secciones de Instagram"
+          >
+            {sections.map((sec, i) => {
+              const on = active === i;
+              const Icon = sec.icon;
+              return (
+                <button
+                  key={sec.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => goToSection(i)}
+                  className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-medium transition-colors ${
+                    on ? 'bg-brand-50 text-brand-700' : 'text-ink-400 hover:text-ink-700'
+                  }`}
+                >
+                  <Icon size={18} className="shrink-0" />
+                  <span className="max-w-full truncate leading-none">{sec.label}</span>
+                </button>
+              );
+            })}
+          </nav>
         )}
       </div>
 
