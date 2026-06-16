@@ -52,6 +52,7 @@ export { resolveDashboard } from './views/dashboard.js';
 export { resolveQuotesList, resolveOrdersList, resolveProfessionalsList, resolveCustomersList } from './views/lists.js';
 export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } from './views/detail.js';
 export { resolveOrderRegistration } from './views/registration.js';
+export { resolveWarehouseOrder } from './views/warehouseOrder.js';
 // Togo plan configurator VM (drag-and-drop top-down → a modular quote line).
 export {
   resolveConfigurator, resolveTogoModels, resolveTogoModelCards, togoPickerFamilies,

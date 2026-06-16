@@ -553,8 +553,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // PDF export logic lives in its own hook so the export UI (TotalsDock, the
   // banners below) stays thin.
   const {
-    exporting, printing, exportError, setExportError, exportErrorRef,
-    exportPdf, printPdf, generatePdf,
+    exporting, printing, warehousing, exportError, setExportError, exportErrorRef,
+    exportPdf, printPdf, exportWarehouseOrder, generatePdf,
     printDoc, closePrint,
   } = useQuoteExport({ quote, settings, lines, customers, professionals, profiles, groups, families });
 
@@ -952,6 +952,8 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           exporting={exporting}
           onPrint={printPdf}
           printing={printing}
+          onWarehouse={exportWarehouseOrder}
+          warehousing={warehousing}
           onShare={handleShare}
           shareLabel={isAdmin ? 'Enviar' : 'Compartir'}
           shareAriaLabel={isAdmin ? 'Enviar la cotización por WhatsApp' : 'Compartir el enlace de la cotización'}

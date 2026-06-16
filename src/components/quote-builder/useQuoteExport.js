@@ -3,6 +3,7 @@ import {
   computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
+import { resolveWarehouseOrder } from '../../core/quote/index.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
 /**
@@ -35,6 +36,7 @@ export function useQuoteExport({
   // browser to deliver the blob) instead of swallowing them.
   const [exporting, setExporting] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [warehousing, setWarehousing] = useState(false);
   const [exportError, setExportError] = useState(null);
   // On mobile the only export trigger is the bottom sticky bar, but the error
   // banner renders at the top of the page — so a failed export would stop the
@@ -121,9 +123,55 @@ export function useQuoteExport({
   }
   const closePrint = () => setPrintDoc(null);
 
+  // The warehouse-order (orden de almacén) PDF — the picking list the dealer
+  // sends the warehouse to pull and prepare this quote's furniture: product
+  // photo · reference · name · qty. Price-free by design (a fulfilment doc, not
+  // an invoice). Content is the pure VM projection; the renderer resolves the
+  // cover photos itself. Delivered through the same blob pipeline as the quote
+  // PDF, so it shares on touch (send to the warehouse) and downloads elsewhere.
+  async function exportWarehouseOrder() {
+    if (exporting || printing || warehousing) return;
+    setExportError(null);
+    setWarehousing(true);
+    try {
+      const customer = quote.customerId
+        ? customers.find((c) => c.id === quote.customerId)
+        : null;
+      const professional = quote.professionalId
+        ? professionals.find((p) => p.id === quote.professionalId)
+        : null;
+      const seller = quote.createdByUserId
+        ? (profiles || []).find((p) => p.id === quote.createdByUserId)
+        : null;
+      const content = resolveWarehouseOrder({ quote, lines, customer, professional, seller });
+      if (content.rowCount === 0) {
+        throw new Error('No hay artículos para preparar — la cotización no tiene líneas con precio.');
+      }
+      const mod = await safeDynamicImport(() => import('../../pdf/order/index.js'));
+      const blob = await mod.generateWarehouseOrderPdf({
+        content,
+        settings,
+        lines,
+        families,
+        currency: quote.currencyCode || 'USD',
+        companyName: settings?.companyName || '',
+      });
+      if (!blob || !blob.size) {
+        throw new Error('El PDF generado está vacío; revisa que la cotización tenga datos.');
+      }
+      const num = quote.number ? `#${quote.number}` : '';
+      await mod.downloadBlob(blob, `Orden de almacén ${num}`.trim() + '.pdf');
+    } catch (err) {
+      console.error('[QuoteBuilder] exportWarehouseOrder failed:', err);
+      setExportError(err?.message || 'No se pudo generar la orden de almacén.');
+    } finally {
+      setWarehousing(false);
+    }
+  }
+
   return {
-    exporting, printing, exportError, setExportError, exportErrorRef,
-    exportPdf, printPdf,
+    exporting, printing, warehousing, exportError, setExportError, exportErrorRef,
+    exportPdf, printPdf, exportWarehouseOrder,
     // The raw blob builder, for callers that deliver the PDF themselves
     // (the WhatsApp send modal ships it as a document via wa-send).
     generatePdf,

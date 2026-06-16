@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, Download, Printer, Loader2, Share2,
+  SlidersHorizontal, Download, Printer, Loader2, Share2, Warehouse,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -46,7 +46,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
-  onExport, exporting, onPrint, printing, onShare,
+  onExport, exporting, onPrint, printing, onWarehouse, warehousing, onShare,
   shareLabel = 'Enviar', shareTitle, shareAriaLabel, shareBusy = false,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
@@ -408,6 +408,22 @@ export default function TotalsDock({
                 ariaLabel="Imprimir PDF"
                 title="Imprimir directamente (sin descargar)"
               />
+
+              {/* Orden de almacén — the picking list (foto · referencia ·
+                  producto · cantidad) the dealer sends the warehouse to prepare
+                  this quote. A price-free fulfilment PDF; shares on touch,
+                  downloads elsewhere. Shown only when the handler is wired. */}
+              {onWarehouse && (
+                <DockAction
+                  icon={Warehouse}
+                  label="Almacén"
+                  onClick={onWarehouse}
+                  disabled={exporting || printing || warehousing}
+                  busy={warehousing}
+                  ariaLabel="Orden de almacén"
+                  title="Generar la orden de almacén (foto · referencia · cantidad)"
+                />
+              )}
 
               {/* Export / preview the PDF — the primary action, pinned at every
                   width. Carries the terracotta brand gradient as the bar's one
