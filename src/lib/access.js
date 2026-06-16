@@ -47,7 +47,8 @@ const ADMIN_GROUP = {
       match: ['/inventario/existencias', '/inventario/lifestylegarden'],
     },
     { to: '/admin/catalog', label: 'Catálogos', icon: PackageSearch },
-    { to: '/admin/materials', label: 'Materiales', icon: Layers },
+    // Materiales is part of the catalog domain → nested beneath Catálogos.
+    { to: '/admin/materials', label: 'Materiales', icon: Layers, sub: true },
     // Single entry point — the full accounting section nav only joins the
     // sidebar while the admin is INSIDE /accounting/* (see navForRole).
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
