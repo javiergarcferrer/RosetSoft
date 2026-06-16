@@ -244,3 +244,71 @@ export function buildPayrollEntry({
     refTable: 'payroll_runs', lines,
   });
 }
+
+interface EntryArgs { newId: () => string; config: ResolvedAccountingConfig; postedAt?: number; memo?: string; }
+
+/**
+ * Regalía pascual asiento: the regalía is a salary expense, exempt from TSS and
+ * (up to its 1/12) from ISR — so no employer/TSS lines, only an ISR withholding
+ * if a voluntary excess was paid.
+ *   Debit  Sueldos           Σ regalía
+ *   Credit Nóminas por pagar Σ neto
+ *   Credit Retención ISR     Σ isr (excess only; usually 0)
+ */
+export function buildRegaliaEntry({ newId, config, gross, isr = 0, postedAt, memo }: EntryArgs & { gross: number; isr?: number }) {
+  const g = round2(gross);
+  if (g <= 0) throw new Error('La regalía no tiene montos.');
+  const withheld = round2(isr);
+  const lines: DraftLine[] = [
+    { accountCode: requireAccount(config, 'salaries'), debit: g },
+    { accountCode: requireAccount(config, 'payrollPayable'), credit: round2(g - withheld) },
+    { accountCode: requireAccount(config, 'isrWithheld'), credit: withheld },
+  ].filter((l) => (l.debit || 0) > 0 || (l.credit || 0) > 0);
+  return buildJournalEntry({ newId, postedAt, source: 'payroll', memo: memo || 'Regalía pascual', refTable: 'payroll_runs', lines });
+}
+
+/**
+ * Liquidación (prestaciones) asiento: preaviso/cesantía/asistencia book to the
+ * indemnities expense (ISR/TSS-exempt); vacaciones + regalía to salaries.
+ *   Debit  Prestaciones laborales  indemnities
+ *   Debit  Sueldos                 salaryItems
+ *   Credit Nóminas por pagar       neto
+ *   Credit Retención ISR           isr (on the taxable part, if any)
+ */
+export function buildLiquidacionEntry({ newId, config, indemnities, salaryItems, isr = 0, postedAt, memo }: EntryArgs & { indemnities: number; salaryItems: number; isr?: number }) {
+  const ind = round2(indemnities);
+  const sal = round2(salaryItems);
+  const gross = round2(ind + sal);
+  if (gross <= 0) throw new Error('La liquidación no tiene montos.');
+  const withheld = round2(isr);
+  const lines: DraftLine[] = [
+    { accountCode: requireAccount(config, 'laborIndemnities'), debit: ind },
+    { accountCode: requireAccount(config, 'salaries'), debit: sal },
+    { accountCode: requireAccount(config, 'payrollPayable'), credit: round2(gross - withheld) },
+    { accountCode: requireAccount(config, 'isrWithheld'), credit: withheld },
+  ].filter((l) => (l.debit || 0) > 0 || (l.credit || 0) > 0);
+  return buildJournalEntry({ newId, postedAt, source: 'payroll', memo: memo || 'Liquidación', refTable: 'payroll_runs', lines });
+}
+
+/**
+ * Bonificación (participación en los beneficios) asiento: a salary expense,
+ * TAXABLE for ISR (unlike the regalía) and out of the TSS base; the employee's
+ * 0.5% INFOTEP on bonuses is withheld here.
+ *   Debit  Sueldos           Σ bonificación
+ *   Credit Nóminas por pagar Σ neto
+ *   Credit Retención ISR     Σ isr
+ *   Credit INFOTEP por pagar Σ infotep (0.5% employee)
+ */
+export function buildBonificacionEntry({ newId, config, gross, isr = 0, infotep = 0, postedAt, memo }: EntryArgs & { gross: number; isr?: number; infotep?: number }) {
+  const g = round2(gross);
+  if (g <= 0) throw new Error('La bonificación no tiene montos.');
+  const isrW = round2(isr);
+  const infW = round2(infotep);
+  const lines: DraftLine[] = [
+    { accountCode: requireAccount(config, 'salaries'), debit: g },
+    { accountCode: requireAccount(config, 'payrollPayable'), credit: round2(g - isrW - infW) },
+    { accountCode: requireAccount(config, 'isrWithheld'), credit: isrW },
+    { accountCode: requireAccount(config, 'infotepPayable'), credit: infW },
+  ].filter((l) => (l.debit || 0) > 0 || (l.credit || 0) > 0);
+  return buildJournalEntry({ newId, postedAt, source: 'payroll', memo: memo || 'Bonificación anual', refTable: 'payroll_runs', lines });
+}

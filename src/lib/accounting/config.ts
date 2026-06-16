@@ -58,6 +58,7 @@ export const POSTING_ROLES: PostingRole[] = [
   { key: 'cardCommissions', label: 'Comisiones de tarjetas (pasarela)', defaultCode: '6-07-010-02-01-00', group: 'Gastos' },
   { key: 'fxLoss', label: 'Diferencia cambiaria (pérdida)', defaultCode: '6-08-005-00-00-00', group: 'Gastos' },
   { key: 'salaries', label: 'Salarios y comisiones', defaultCode: '6-01-001-01-00-00', group: 'Gastos' },
+  { key: 'laborIndemnities', label: 'Prestaciones / indemnizaciones laborales', defaultCode: '6-01-002-00-00-00', group: 'Gastos' },
   { key: 'employerSS', label: 'Aportes patronales a la seguridad social', defaultCode: '6-01-005-00-00-00', group: 'Gastos' },
   { key: 'employerInfotep', label: 'Aporte patronal al INFOTEP', defaultCode: '6-01-006-00-00-00', group: 'Gastos' },
 ];

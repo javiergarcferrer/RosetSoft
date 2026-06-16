@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import {
   dailyWage, vacationDays, vacationProportionalDays, vacationPay, regaliaPascual,
   monthsOfService, preavisoDays, cesantiaDays, asistenciaEconomicaDays, liquidacion,
+  BONIFICACION_RATE, bonificacionCapDays, bonificacionRun,
 } from '../src/lib/accounting/prestaciones.js';
 import { DAILY_DIVISOR } from '../src/lib/accounting/payroll.js';
 
@@ -148,6 +149,32 @@ test('liquidacion: no-fault termination pays asistencia económica, not cesantí
   assert.equal(l.cesantia, 0);
   assert.equal(l.asistenciaDays, 30); // 24 months → 15 × 2
   assert.equal(l.asistencia, round2(dailyWage(30000) * 30));
+});
+
+test('bonificacionCapDays: 45 days under 3 yrs, 60 at 3+ (Art. 223)', () => {
+  assert.equal(bonificacionCapDays(2), 45);
+  assert.equal(bonificacionCapDays(3), 60);
+  assert.equal(BONIFICACION_RATE, 0.10);
+});
+
+test('bonificacionRun: 10% pool split by salary, capped per worker', () => {
+  // Pool well under the caps → each gets its proportional share.
+  const r = bonificacionRun(1_000_000, [
+    { id: 'a', salary: 50000, years: 5 },
+    { id: 'b', salary: 50000, years: 5 },
+  ]);
+  assert.equal(r.pool, 100000);
+  assert.equal(r.items[0].share, 50000);
+  assert.equal(r.total, 100000);
+
+  // Huge pool → each share is clamped to its 60-day cap (not redistributed).
+  const big = bonificacionRun(100_000_000, [
+    { id: 'a', salary: 50000, years: 5 },
+    { id: 'b', salary: 50000, years: 5 },
+  ]);
+  const cap = round2(dailyWage(50000) * 60);
+  assert.equal(big.items[0].share, cap);
+  assert.equal(big.total, round2(cap * 2));
 });
 
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }

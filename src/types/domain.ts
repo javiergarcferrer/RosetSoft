@@ -790,8 +790,8 @@ export interface PayrollRun {
   employerInfotep: number;
   /** Sum of non-statutory withholdings across the run (loans/advances). */
   otherDeductions?: number;
-  /** Run kind — monthly nómina (default), regalía, or liquidación. */
-  kind?: 'monthly' | 'regalia' | 'liquidacion';
+  /** Run kind — monthly nómina (default), regalía, liquidación, bonificación. */
+  kind?: 'monthly' | 'regalia' | 'liquidacion' | 'bonificacion';
   status?: string;
   journalEntryId?: string | null;
   createdAt?: number;

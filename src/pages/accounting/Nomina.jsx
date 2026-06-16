@@ -11,7 +11,8 @@ import { formatDop, formatDate } from '../../lib/format.js';
 import {
   computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig,
   ratesForPeriod, overtimePay, regaliaPascual, vacationDays, dailyWage, vacationPay,
-  liquidacion, monthsOfService,
+  liquidacion, monthsOfService, bonificacionRun, bonificacionCapDays,
+  buildRegaliaEntry, buildLiquidacionEntry, buildBonificacionEntry, round2,
 } from '../../core/accounting/index.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import useColumns from '../../components/search/useColumns.js';
@@ -24,9 +25,22 @@ const num = (v) => Number(v) || 0;
 const TABS = [
   { v: 'mensual', label: 'Mensual' },
   { v: 'regalia', label: 'Regalía' },
+  { v: 'bonificacion', label: 'Bonificación' },
   { v: 'vacaciones', label: 'Vacaciones' },
   { v: 'liquidacion', label: 'Liquidación' },
 ];
+const KIND_LABEL = { regalia: 'Regalía', liquidacion: 'Liquidación', bonificacion: 'Bonificación' };
+
+/** Post a run's asiento + persist the payroll_runs row (shared by all kinds). */
+async function postPayrollRun({ scope, built, run }) {
+  await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+  await db.journalLines.bulkPut(built.lines);
+  const id = newId();
+  await assignSequenceNumber({
+    table: 'payrollRuns', profileId: scope, start: 1,
+    build: (n) => ({ id, profileId: scope, number: n, status: 'posted', journalEntryId: built.entry.id, ...run }),
+  });
+}
 const ADJ_KEYS = ['ot35Hours', 'ot100Hours', 'nightHours', 'holidayHours', 'absenceDays', 'bonus', 'otherEarnings', 'deductions'];
 const hasAdj = (a) => !!a && ADJ_KEYS.some((k) => num(a[k]));
 
@@ -69,7 +83,7 @@ const PREVIEW_DEFAULT = { gross: true, sfs: true, afp: true, isr: true, ded: fal
 const PREVIEW_COLS_KEY = 'rs.nomina.preview.cols.v2';
 
 const RUNS_COLUMNS = [
-  { key: 'period', label: 'Período', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ r }) => <>{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}</> },
+  { key: 'period', label: 'Período', canHide: false, thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3', cell: ({ r }) => <>{MONTHS_ES[(r.periodMonth || 1) - 1]} {r.periodYear}{KIND_LABEL[r.kind] && <span className="ml-1.5 text-[10px] uppercase tracking-wide rounded bg-ink-100 text-ink-500 px-1.5 py-0.5">{KIND_LABEL[r.kind]}</span>}</>, },
   { key: 'paid', label: 'Pagada', thClass: 'text-left py-2 px-3', tdClass: 'py-1.5 px-3 text-ink-500', cell: ({ r }) => formatDate(r.paidAt) },
   { key: 'gross', label: 'Bruto', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ r }) => formatDop(r.gross) },
   { key: 'isr', label: 'ISR', thClass: 'text-right py-2 px-3', tdClass: 'py-1.5 px-3 text-right tabular-nums', cell: ({ r }) => formatDop(r.isr) },
@@ -127,9 +141,10 @@ export default function Nomina() {
           ) : (
             <>
               {tab === 'mensual' && <Mensual scope={scope} config={config} employees={activeEmployees} runs={runsQ.data} />}
-              {tab === 'regalia' && <Regalia employees={activeEmployees} />}
+              {tab === 'regalia' && <Regalia scope={scope} config={config} employees={activeEmployees} runs={runsQ.data} />}
+              {tab === 'bonificacion' && <Bonificacion scope={scope} config={config} employees={activeEmployees} runs={runsQ.data} />}
               {tab === 'vacaciones' && <Vacaciones employees={activeEmployees} />}
-              {tab === 'liquidacion' && <Liquidacion employees={empQ.data} />}
+              {tab === 'liquidacion' && <Liquidacion scope={scope} config={config} employees={empQ.data} />}
             </>
           )}
         </div>
@@ -352,20 +367,50 @@ function Mensual({ scope, config, employees, runs }) {
 
 // ── Regalía pascual ──────────────────────────────────────────────────────────
 
-function Regalia({ employees }) {
+function Regalia({ scope, config, employees, runs }) {
+  const [year, setYear] = useState(() => new Date().getFullYear());
   // Salario ordinario devengado en el año, por empleado (default = 12 meses).
   const [ytd, setYtd] = useState({});
+  const [posting, setPosting] = useState(false);
+  const [err, setErr] = useState('');
+
   const rows = employees.map((e) => {
     const earned = ytd[e.id] != null && ytd[e.id] !== '' ? num(ytd[e.id]) : (e.monthlySalary || 0) * 12;
     return { e, earned, r: regaliaPascual(earned) };
   });
-  const total = rows.reduce((s, x) => s + x.r.amount, 0);
+  const total = round2(rows.reduce((s, x) => s + x.r.amount, 0));
+  const existing = runs.find((r) => r.kind === 'regalia' && r.periodYear === Number(year));
+
+  async function post() {
+    setErr('');
+    if (total <= 0) { setErr('No hay montos de regalía.'); return; }
+    if (existing) { setErr(`La regalía de ${year} ya fue registrada (#${existing.number}).`); return; }
+    setPosting(true);
+    try {
+      const postedAt = new Date(Number(year), 11, 20).getTime(); // 20 de diciembre
+      const built = buildRegaliaEntry({ newId, config, gross: total, isr: 0, postedAt, memo: `Regalía pascual ${year}` });
+      const items = rows.map(({ e, r }) => ({ employeeId: e.id, name: e.name, gross: r.amount, isr: 0, net: r.amount }));
+      await postPayrollRun({ scope, built, run: { periodYear: Number(year), periodMonth: 12, paidAt: postedAt, items, gross: total, tssEmp: 0, isr: 0, net: total, employerSs: 0, employerInfotep: 0, otherDeductions: 0, kind: 'regalia' } });
+    } catch (e) { setErr(userMessageFor(e)); } finally { setPosting(false); }
+  }
 
   return (
     <div className="card p-4 space-y-3">
       <p className="text-xs text-ink-400">
         Regalía pascual (salario de Navidad) = 1/12 del salario ordinario del año. Exenta de ISR y TSS hasta ese 1/12; pagar a más tardar el 20 de diciembre (Arts. 219–222).
       </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="label">Año</span>
+          <input type="number" value={year} onChange={(e) => setYear(e.target.value)} className="input w-28 tabular-nums" />
+        </label>
+        <button type="button" onClick={post} disabled={posting || total <= 0 || !!existing} className="btn-primary ml-auto">
+          {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+          {existing ? ' Regalía registrada' : ' Registrar regalía'}
+        </button>
+      </div>
+      {existing && !err && <p className="text-sm text-ink-500">La regalía de {year} ya fue registrada (#{existing.number}).</p>}
+      {err && <p className="text-sm text-rose-600">{err}</p>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
@@ -456,13 +501,17 @@ function Vacaciones({ employees }) {
 
 // ── Liquidación (prestaciones laborales) ─────────────────────────────────────
 
-function Liquidacion({ employees }) {
+function Liquidacion({ scope, config, employees }) {
   const [empId, setEmpId] = useState('');
   const [type, setType] = useState('desahucio');
   const [initiatedBy, setInitiatedBy] = useState('employer');
   const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [vacDays, setVacDays] = useState('');
   const [ytd, setYtd] = useState('');
+  const [isr, setIsr] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(false);
 
   const emp = employees.find((e) => e.id === empId) || null;
   const endMs = useMemo(() => { const [y, m, d] = endDate.split('-').map(Number); return new Date(y, m - 1, d).getTime(); }, [endDate]);
@@ -475,6 +524,21 @@ function Liquidacion({ employees }) {
       ...(ytd !== '' ? { ordinaryEarnedYTD: num(ytd) } : {}),
     });
   }, [emp, endMs, type, initiatedBy, vacDays, ytd]);
+
+  async function post() {
+    setErr(''); setDone(false);
+    if (!emp || !result || result.total <= 0) { setErr('La liquidación no tiene montos.'); return; }
+    setPosting(true);
+    try {
+      const indemnities = round2(result.preaviso + result.cesantia + result.asistencia);
+      const salaryItems = round2(result.vacaciones + result.regalia);
+      const built = buildLiquidacionEntry({ newId, config, indemnities, salaryItems, isr: num(isr), postedAt: endMs, memo: `Liquidación ${emp.name}` });
+      const [y, m] = endDate.split('-').map(Number);
+      const items = [{ employeeId: emp.id, name: emp.name, gross: result.total, isr: num(isr), net: round2(result.total - num(isr)), ...result }];
+      await postPayrollRun({ scope, built, run: { periodYear: y, periodMonth: m, paidAt: endMs, items, gross: result.total, tssEmp: 0, isr: num(isr), net: round2(result.total - num(isr)), employerSs: 0, employerInfotep: 0, otherDeductions: 0, kind: 'liquidacion' } });
+      setDone(true);
+    } catch (e) { setErr(userMessageFor(e)); } finally { setPosting(false); }
+  }
 
   const Row = ({ label, value, sub, strong }) => (
     <div className="flex justify-between gap-3 py-1.5 border-t border-ink-50 first:border-0">
@@ -540,8 +604,115 @@ function Liquidacion({ employees }) {
             <span>Exento ISR/TSS: <span className="tabular-nums">{formatDop(result.exempt)}</span></span>
             <span>Gravable: <span className="tabular-nums">{formatDop(result.taxable)}</span></span>
           </div>
+          <div className="mt-3 pt-3 border-t border-ink-100 flex items-end gap-3">
+            <label className="block">
+              <span className="label">Retención ISR (opcional)</span>
+              <NumIn value={isr} onChange={setIsr} placeholder="0" className="w-32" />
+            </label>
+            <button type="button" onClick={post} disabled={posting} className="btn-primary ml-auto">
+              {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar liquidación
+            </button>
+          </div>
+          {done && !err && <p className="text-sm text-emerald-600 mt-2">Liquidación registrada.</p>}
+          {err && <p className="text-sm text-rose-600 mt-2">{err}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Bonificación / participación en los beneficios ───────────────────────────
+
+function Bonificacion({ scope, config, employees, runs }) {
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [profits, setProfits] = useState('');
+  const [isr, setIsr] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [err, setErr] = useState('');
+
+  const workers = employees.map((e) => ({
+    id: e.id, name: e.name, salary: e.monthlySalary,
+    years: e.hireAt ? monthsOfService(e.hireAt, Date.now()) / 12 : 0,
+  }));
+  const run = useMemo(() => bonificacionRun(num(profits), workers), [profits, workers]);
+  const infotep = round2(run.total * 0.005); // 0.5% INFOTEP empleado sobre bonos
+  const net = round2(run.total - num(isr) - infotep);
+  const existing = runs.find((r) => r.kind === 'bonificacion' && r.periodYear === Number(year));
+
+  async function post() {
+    setErr('');
+    if (run.total <= 0) { setErr('No hay bonificación que repartir (indica los beneficios netos).'); return; }
+    if (existing) { setErr(`La bonificación de ${year} ya fue registrada (#${existing.number}).`); return; }
+    setPosting(true);
+    try {
+      const postedAt = new Date(Number(year), 11, 31).getTime();
+      const built = buildBonificacionEntry({ newId, config, gross: run.total, isr: num(isr), infotep, postedAt, memo: `Bonificación ${year}` });
+      const items = run.items.map((i) => ({ employeeId: i.id, name: i.name, gross: i.share, isr: 0, net: i.share }));
+      await postPayrollRun({ scope, built, run: { periodYear: Number(year), periodMonth: 12, paidAt: postedAt, items, gross: run.total, tssEmp: 0, isr: num(isr), net, employerSs: 0, employerInfotep: 0, otherDeductions: infotep, kind: 'bonificacion' } });
+    } catch (e) { setErr(userMessageFor(e)); } finally { setPosting(false); }
+  }
+
+  return (
+    <div className="card p-4 space-y-3">
+      <p className="text-xs text-ink-400">
+        Bonificación (participación en los beneficios, Art. 223): 10% de los beneficios netos, repartido por salario y topado a 45 días (&lt;3 años) o 60 días (3+ años). Gravable de ISR (a diferencia de la regalía), fuera del TSS; INFOTEP empleado 0.5%. Pagar entre 90 y 120 días tras el cierre.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="label">Año</span>
+          <input type="number" value={year} onChange={(e) => setYear(e.target.value)} className="input w-28 tabular-nums" />
+        </label>
+        <label className="block">
+          <span className="label">Beneficios netos del año</span>
+          <NumIn value={profits} onChange={setProfits} placeholder="0" className="w-44" />
+        </label>
+        <div className="text-sm text-ink-500">Masa a repartir (10%): <span className="tabular-nums font-medium text-ink-800">{formatDop(run.pool)}</span></div>
+        <button type="button" onClick={post} disabled={posting || run.total <= 0 || !!existing} className="btn-primary ml-auto">
+          {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+          {existing ? ' Bonificación registrada' : ' Registrar bonificación'}
+        </button>
+      </div>
+      {existing && !err && <p className="text-sm text-ink-500">La bonificación de {year} ya fue registrada (#{existing.number}).</p>}
+      {err && <p className="text-sm text-rose-600">{err}</p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th className="text-left py-2 px-3">Empleado</th>
+              <th className="text-right py-2 px-3">Salario</th>
+              <th className="text-right py-2 px-3">Años</th>
+              <th className="text-right py-2 px-3">Tope</th>
+              <th className="text-right py-2 px-3">Bonificación</th>
+            </tr>
+          </thead>
+          <tbody>
+            {run.items.map((i) => (
+              <tr key={i.id} className="border-t border-ink-50">
+                <td className="py-1.5 px-3">{i.name}{i.share < i.raw && <span title="Topado" className="ml-1 text-amber-600">▲</span>}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{formatDop(i.salary)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-600">{(i.years || 0).toFixed(1)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-ink-500">{bonificacionCapDays(i.years)} días</td>
+                <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatDop(i.share)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-ink-200 font-semibold">
+              <td className="py-2 px-3">{run.items.length} empleados</td>
+              <td colSpan={3}></td>
+              <td className="py-2 px-3 text-right tabular-nums">{formatDop(run.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-end gap-4 text-sm">
+        <label className="block">
+          <span className="label">Retención ISR (opcional)</span>
+          <NumIn value={isr} onChange={setIsr} placeholder="0" className="w-32" />
+        </label>
+        <div className="text-ink-500">INFOTEP 0.5%: <span className="tabular-nums">{formatDop(infotep)}</span></div>
+        <div className="text-ink-700 font-medium">Neto a pagar: <span className="tabular-nums">{formatDop(net)}</span></div>
+      </div>
     </div>
   );
 }

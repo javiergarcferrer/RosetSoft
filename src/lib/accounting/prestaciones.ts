@@ -62,6 +62,36 @@ export function regaliaPascual(ordinaryEarnedYTD: number, paid?: number): Regali
   return { legal, amount, isrExempt, isrTaxable: round2(Math.max(0, amount - isrExempt)) };
 }
 
+// ── Bonificación / participación en los beneficios (Arts. 223–227) ───────────
+
+/** Profit-sharing pool = 10% of annual net profits. */
+export const BONIFICACION_RATE = 0.10;
+
+/** Per-worker cap in days of ordinary salary: 60 days at 3+ years, else 45. */
+export function bonificacionCapDays(years: number): number {
+  return (Number(years) || 0) >= 3 ? 60 : 45;
+}
+
+export interface BonificacionWorker { id?: string; name?: string; salary: number; years?: number; }
+export interface BonificacionItem extends BonificacionWorker { raw: number; cap: number; share: number; }
+
+/**
+ * Distribute the 10% pool across workers in proportion to salary, each capped at
+ * 45/60 days of their ordinary salary (the over-cap excess stays with the
+ * employer — not redistributed). Bonificación is ISR-taxable and out of the TSS
+ * base; the employee's 0.5% INFOTEP is withheld separately at payment.
+ */
+export function bonificacionRun(profits: number, workers: BonificacionWorker[], divisor = DAILY_DIVISOR) {
+  const pool = round2((Number(profits) || 0) * BONIFICACION_RATE);
+  const totalSalary = (workers || []).reduce((a, w) => a + (Number(w.salary) || 0), 0) || 1;
+  const items: BonificacionItem[] = (workers || []).map((w) => {
+    const raw = round2(pool * ((Number(w.salary) || 0) / totalSalary));
+    const cap = round2(dailyWage(w.salary, divisor) * bonificacionCapDays(w.years || 0));
+    return { ...w, raw, cap, share: round2(Math.min(raw, cap)) };
+  });
+  return { pool, items, total: round2(items.reduce((a, i) => a + i.share, 0)) };
+}
+
 // ── Prestaciones laborales: day schedules ────────────────────────────────────
 
 /** Completed months of service between hire and termination. */

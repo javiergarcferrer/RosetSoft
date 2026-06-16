@@ -9,6 +9,7 @@ import { resolveAccountingConfig } from '../src/lib/accounting/config.js';
 import {
   annualIsr, monthlyIsr, computePayrollItem, payrollTotals, buildPayrollEntry, DR_PAYROLL,
   ratesForPeriod, overtimePay, MONTHLY_HOURS, PREMIUM_FACTOR, DAILY_DIVISOR,
+  buildRegaliaEntry, buildLiquidacionEntry, buildBonificacionEntry,
 } from '../src/lib/accounting/payroll.js';
 import { debitTotal, creditTotal } from '../src/lib/accounting/ledger.js';
 
@@ -157,6 +158,34 @@ test('other deductions reduce net and the asiento still balances', () => {
   assert.equal(debitTotal(lines), creditTotal(lines));
   // The withholding books to the payroll-deductions account.
   assert.equal(lines.find((l) => l.accountCode === M.payrollDeductions).credit, 3000);
+});
+
+test('buildRegaliaEntry balances (exempt: no TSS, ISR only on excess)', () => {
+  const { lines } = buildRegaliaEntry({ newId: ids(), config, gross: 30000 });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  assert.equal(lines.find((l) => l.accountCode === M.salaries).debit, 30000);
+  assert.equal(lines.find((l) => l.accountCode === M.payrollPayable).credit, 30000);
+  // With a voluntary excess taxed, the ISR is withheld from the net.
+  const big = buildRegaliaEntry({ newId: ids(), config, gross: 30000, isr: 2000 });
+  assert.equal(debitTotal(big.lines), creditTotal(big.lines));
+  assert.equal(big.lines.find((l) => l.accountCode === M.payrollPayable).credit, 28000);
+  assert.throws(() => buildRegaliaEntry({ newId: ids(), config, gross: 0 }), /no tiene montos/);
+});
+
+test('buildLiquidacionEntry splits indemnities vs salaries and balances', () => {
+  const { lines } = buildLiquidacionEntry({ newId: ids(), config, indemnities: 50000, salaryItems: 10000 });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  assert.equal(lines.find((l) => l.accountCode === M.laborIndemnities).debit, 50000);
+  assert.equal(lines.find((l) => l.accountCode === M.salaries).debit, 10000);
+  assert.equal(lines.find((l) => l.accountCode === M.payrollPayable).credit, 60000);
+});
+
+test('buildBonificacionEntry withholds ISR + 0.5% INFOTEP and balances', () => {
+  const { lines } = buildBonificacionEntry({ newId: ids(), config, gross: 20000, isr: 1000, infotep: 100 });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  assert.equal(lines.find((l) => l.accountCode === M.salaries).debit, 20000);
+  assert.equal(lines.find((l) => l.accountCode === M.payrollPayable).credit, 18900);
+  assert.equal(lines.find((l) => l.accountCode === M.infotepPayable).credit, 100);
 });
 
 // local helper mirroring round2 for expected values
