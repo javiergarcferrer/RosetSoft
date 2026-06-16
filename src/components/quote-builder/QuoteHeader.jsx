@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeft, Briefcase, Check, Undo2, Redo2, UserX } from 'lucide-react';
+import { ArrowLeft, Briefcase, Check, Undo2, Redo2, UserX, Pencil } from 'lucide-react';
 import { useGoBack } from '../../context/NavMemory.jsx';
 import Dropdown, { DropdownItem } from '../primitives/Dropdown.jsx';
 import CustomerChip from './CustomerChip.jsx';
 import WhatsAppChip from './WhatsAppChip.jsx';
 import CustomerPicker from './CustomerPicker.jsx';
+import CustomerModal from '../CustomerModal.jsx';
 import SpecialOrderWarning from './SpecialOrderWarning.jsx';
 import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
@@ -71,6 +72,10 @@ export default function QuoteHeader({
     ? professionals.find((p) => p.id === quote.professionalId)
     : null;
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Inline edit of the assigned customer — the same modal the Customers list /
+  // detail page use, opened from a small pencil beside the chip. Saves a trip
+  // to the Clientes panel just to add a missing address or RNC while quoting.
+  const [editingCustomer, setEditingCustomer] = useState(false);
 
   // Flipping the order type (Piso ⇄ Especial) re-points the terms to the
   // matching preset — but only when the dealer hadn't hand-edited them
@@ -126,6 +131,20 @@ export default function QuoteHeader({
         aria-label="Datos de la cotización"
       >
         <CustomerChip customer={customer} onOpen={() => setPickerOpen(true)} />
+        {/* Small pencil — edit the assigned customer (address, RNC, contact…)
+            in place. Only shown once a customer is assigned; assigning a new one
+            is the chip's own job (it opens the picker). */}
+        {customer && (
+          <button
+            type="button"
+            onClick={() => setEditingCustomer(true)}
+            title="Editar datos del cliente (dirección, RNC, contacto…)"
+            aria-label="Editar datos del cliente"
+            className="inline-flex items-center justify-center rounded-full border border-ink-200 bg-surface text-ink-400 hover:text-brand-700 hover:border-brand-400 hover:bg-brand-50/50 transition-all active:scale-[0.95] min-h-6 coarse:min-h-9 w-6 coarse:w-9 ring-1 ring-inset ring-black/5"
+          >
+            <Pencil size={11} aria-hidden />
+          </button>
+        )}
         <WhatsAppChip customer={customer} />
         <ProfessionalChip
           quote={quote}
@@ -152,6 +171,17 @@ export default function QuoteHeader({
         customers={customers}
         profileId={profileId}
         currentId={quote.customerId}
+      />
+
+      {/* Edit-the-customer modal (the shared CustomerModal). The builder's live
+          `customers` query repaints the chip with the new values on save. If the
+          row is deleted from here, clear the now-dangling assignment so the chip
+          falls back to "Asignar cliente" instead of pointing at a ghost. */}
+      <CustomerModal
+        customer={editingCustomer && customer ? customer : null}
+        onClose={() => setEditingCustomer(false)}
+        onAfterDelete={() => { onUpdateQuote({ customerId: null }); setEditingCustomer(false); }}
+        profileId={profileId}
       />
     </div>
   );
