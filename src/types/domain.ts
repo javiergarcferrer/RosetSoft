@@ -1351,6 +1351,33 @@ export interface Product {
 }
 
 /**
+ * A Togo configurator model — one dealer-managed entry in the picture catalog
+ * (`/admin/catalog/togo`). The dealer uploads the model's DWG (converted IN the
+ * browser to a top-down plan `svg` + measured cm footprint) and binds it to a
+ * Ligne Roset family (`productRoot`) so the configurator prices it by grade. The
+ * configurator's palette is the set of these rows — no more name-matching.
+ */
+export interface TogoModel {
+  id: string;
+  profileId: string;
+  /** Dealer label, e.g. "Sillón Togo". */
+  name: string;
+  /** Bound Ligne Roset family root (8-digit SKU prefix) → pricing + grade list. */
+  productRoot?: string | null;
+  /** Optional specific SKU within the family. */
+  productReference?: string | null;
+  /** Measured top-down footprint (centimetres). */
+  widthCm: number;
+  depthCm: number;
+  /** Converted top-down plan markup (stroke=currentColor), rendered inline. */
+  svg: string;
+  sortOrder?: number;
+  active?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * Per-model fabric availability, keyed by the family root (`splitSkuGrade`).
  * Captured from a Ligne Roset product page (`lr-catalog` single-product mode):
  * `patternNames` are the fabrics that model actually offers, stored normalized

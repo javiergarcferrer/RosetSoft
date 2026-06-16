@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, ChevronRight, Shield } from 'lucide-react';
+import { BookOpen, ChevronRight, Shield, Sofa } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { catalogCategories } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -44,6 +44,17 @@ export default function Catalogs() {
         {BRANDS.map((b) => (
           <BrandCard key={b.brand} {...b} />
         ))}
+        {/* The Togo configurator's picture catalog — dealer uploads a DWG per model. */}
+        <Link to="/admin/catalog/togo" className="card flex items-center gap-3 px-4 sm:px-5 py-4 hover:bg-ink-50 active:bg-ink-100 transition-colors">
+          <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700 border border-brand-100">
+            <Sofa size={18} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display font-semibold text-sm text-ink-900 truncate">Togo (configurador)</span>
+            <span className="block text-xs text-ink-500 truncate">Sube el DWG de cada pieza para el configurador en planta</span>
+          </span>
+          <ChevronRight size={16} className="text-ink-400 flex-shrink-0" aria-hidden />
+        </Link>
       </div>
     </>
   );

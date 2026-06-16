@@ -82,9 +82,15 @@ export function clampToPlan(x, y, w, h, planW = PLAN_W_CM, planH = PLAN_H_CM) {
  * `resolved` is the piece merged with its catalog binding: { label, name,
  * reference, subtype, dimensions, unitPrice, widthCm, depthCm }.
  */
+// A placement's facts = its model's defaults overlaid with the per-placement
+// material pick (a chosen fabric reprices the unit + restamps subtype/swatch).
+export function resolvePlacement(p, resolvedById) {
+  return { ...(resolvedById[p.pieceId] || {}), ...(p.material || {}) };
+}
+
 export function buildTogoComponents(placed, resolvedById, newId) {
   return (placed || []).map((p) => {
-    const r = resolvedById[p.pieceId] || {};
+    const r = resolvePlacement(p, resolvedById);
     const wCm = Number(r.widthCm) || 0;
     const dCm = Number(r.depthCm) || 0;
     return {
@@ -95,6 +101,7 @@ export function buildTogoComponents(placed, resolvedById, newId) {
       dimensions: r.dimensions || (wCm && dCm ? `${wCm}×${dCm} cm` : ''),
       qty: 1,
       unitPrice: Number(r.unitPrice) || 0,
+      swatchImageId: r.swatchImageId ?? null,
       moduleGroup: newId(),
       moduleName: r.label || r.name || 'Togo',
       plan: { pieceId: p.pieceId, x: p.x, y: p.y, rot: norm360(p.rot), widthCm: wCm, depthCm: dCm },
@@ -125,14 +132,21 @@ export function resolveConfigurator(placed, resolvedById, opts = {}) {
   const components = buildTogoComponents(placed, resolvedById, idOf);
 
   const tiles = (placed || []).map((p, i) => {
-    const r = resolvedById[p.pieceId] || {};
+    const r = resolvePlacement(p, resolvedById);
     const rot = norm360(p.rot);
     const fp = footprintOf(r, rot);
+    const wCm = Number(r.widthCm) || 0;
+    const dCm = Number(r.depthCm) || 0;
     return {
       uid: p.uid,
       pieceId: p.pieceId,
       rot,
       label: r.label || r.name || 'Togo',
+      widthCm: wCm,
+      depthCm: dCm,
+      dimsLabel: wCm && dCm ? `${wCm}×${dCm}` : '',
+      swatchImageId: r.swatchImageId ?? null,
+      fabric: r.fabric || '',
       priceUsd: Number(r.unitPrice) || 0,
       hasPrice: r.unitPrice != null && Number.isFinite(Number(r.unitPrice)) && Number(r.unitPrice) > 0,
       leftPx: p.x * scale,

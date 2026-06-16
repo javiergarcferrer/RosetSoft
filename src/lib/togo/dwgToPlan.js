@@ -1,24 +1,22 @@
 /**
  * In-browser DWG → top-down plan converter for the Togo catalog uploader.
  *
- * Loads the libredwg WASM (served from /public/libredwg, NOT bundled), parses an
- * uploaded .dwg, and reuses the SAME pure geometry as the build script
- * (planGeometry.js) — so a dealer-uploaded model lands identical to the seeded
- * ones. The 6 MB wasm downloads ONCE, lazily, only when a dealer actually drops a
- * file (the admin page code-splits this module via safeDynamicImport). It prefers
- * Ligne Roset's "Mobilier 2D" plan layer, then any "2D" layer, then everything.
+ * Loads the libredwg WASM, parses an uploaded .dwg, and reuses the SAME pure
+ * geometry as the build script (planGeometry.js) — so a dealer-uploaded model
+ * lands identical to the seeded ones. The package inlines the wasm as a base64
+ * data URL, so `create()` needs no path and there's no separate asset to host;
+ * the ~8 MB module downloads ONCE, lazily, only when a dealer actually drops a
+ * file (the admin page code-splits this via safeDynamicImport). It prefers Ligne
+ * Roset's "Mobilier 2D" plan layer, then any "2D" layer, then everything.
  */
 import { LibreDwg, Dwg_File_Type } from '@mlightcad/libredwg-web';
 import { planFromDb, PLAN_LAYER } from './planGeometry.js';
 
 let _instance = null;
 function instance() {
-  if (!_instance) {
-    // locateFile resolves `${dir}/libredwg-web.wasm`; the wasm is a committed
-    // public asset so there's no bundler wasm-emit magic to get wrong.
-    const dir = `${import.meta.env.BASE_URL || '/'}libredwg`.replace(/\/{2,}/g, '/');
-    _instance = LibreDwg.create(dir);
-  }
+  // No path: the package's dist embeds the wasm (base64 data URL), so the
+  // emscripten module instantiates from the inlined binary with no fetch.
+  if (!_instance) _instance = LibreDwg.create();
   return _instance;
 }
 

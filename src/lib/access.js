@@ -57,7 +57,10 @@ const ADMIN_GROUP = {
       to: '/admin/catalog',
       label: 'Catálogos',
       icon: PackageSearch,
-      children: [{ to: '/admin/materials', label: 'Materiales', icon: Layers }],
+      children: [
+        { to: '/admin/materials', label: 'Materiales', icon: Layers },
+        { to: '/admin/catalog/togo', label: 'Togo', icon: Sofa },
+      ],
     },
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
   ],

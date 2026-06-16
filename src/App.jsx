@@ -39,6 +39,7 @@ const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
 const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
 const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
+const AdminTogoCatalog = lazyPage(() => import('./pages/admin/TogoCatalog.jsx'));
 const InventoryExistencias = lazyPage(() => import('./pages/inventory/Existencias.jsx'));
 const InventoryLifestyleGarden = lazyPage(() => import('./pages/inventory/LifestyleGarden.jsx'));
 const AccountingWorkspace = lazyPage(() => import('./pages/accounting/Workspace.jsx'));
@@ -275,6 +276,8 @@ function ProtectedApp() {
                 from the Roset page. */}
             <Route path="admin/catalog" element={<AdminCatalogs />} />
             <Route path="admin/catalog/roset" element={<AdminCatalog />} />
+            {/* Togo configurator catalog — dealer uploads a DWG per model. */}
+            <Route path="admin/catalog/togo" element={<AdminTogoCatalog />} />
             {/* LifestyleGarden moved out of Catálogos into the standalone
                 Inventario section — old bookmarks redirect there. */}
             <Route path="admin/catalog/lifestylegarden" element={<Navigate to="/inventario/lifestylegarden" replace />} />

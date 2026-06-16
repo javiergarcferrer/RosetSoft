@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  footprintOf, snapPlacement, clampToPlan,
+  footprintOf, snapPlacement, clampToPlan, resolvePlacement,
   buildTogoComponents, buildTogoModularSeed, resolveConfigurator,
 } from '../src/core/quote/views/configuratorView.js';
 import { compoundSubtotal } from '../src/lib/pricing.js';
@@ -94,6 +94,26 @@ test('placed pieces build a MODULAR line whose subtotal === compoundSubtotal', (
   // The engine the editor/PDF/bridge use agrees with our sum, to the cent.
   const expected = 1200 + 2600 + 1200;
   assert.equal(compoundSubtotal(line), expected);
+});
+
+test('a per-placement material overrides price/subtype/swatch and flows into the total', () => {
+  const r = { a: { id: 'a', label: 'A', widthCm: 102, depthCm: 102, unitPrice: 1000, subtype: 'A', reference: '15420000A' } };
+  const withMat = [
+    { uid: 'u1', pieceId: 'a', x: 0, y: 0, rot: 0 },
+    { uid: 'u2', pieceId: 'a', x: 0, y: 110, rot: 0, material: { unitPrice: 1500, subtype: 'G · ALCANTARA', swatchImageId: 'img-9', reference: '15420000G', fabric: 'ALCANTARA', grade: 'G' } },
+  ];
+  // resolvePlacement overlays the material onto the model defaults.
+  assert.equal(resolvePlacement(withMat[0], r).unitPrice, 1000);
+  assert.equal(resolvePlacement(withMat[1], r).unitPrice, 1500);
+
+  const comps = buildTogoComponents(withMat, r, ids());
+  assert.equal(comps[0].unitPrice, 1000);
+  assert.equal(comps[1].unitPrice, 1500);
+  assert.equal(comps[1].subtype, 'G · ALCANTARA');
+  assert.equal(comps[1].swatchImageId, 'img-9');
+  assert.equal(comps[1].reference, '15420000G');
+  // The repriced fabric lands in the engine's compound total.
+  assert.equal(compoundSubtotal({ components: comps }), 2500);
 });
 
 test('module groups are unique per piece, and rotation rides on the plan', () => {
