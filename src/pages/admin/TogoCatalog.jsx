@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { Sofa, Upload, Loader2, Trash2, Check, AlertCircle, Shield, Plus, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
@@ -33,7 +33,6 @@ export default function TogoCatalog() {
     return [...all.filter(isTogo), ...all.filter((f) => !isTogo(f))]
       .sort((a, b) => (isTogo(b) - isTogo(a)) || (a.name || '').localeCompare(b.name || ''));
   }, [products]);
-  const familyByRoot = useMemo(() => new Map(families.map((f) => [f.root, f])), [families]);
 
   if (!isAdmin) {
     return (
@@ -87,7 +86,7 @@ export default function TogoCatalog() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sorted.map((m) => (
-              <ModelCard key={m.id} model={m} families={families} family={familyByRoot.get(m.productRoot)} />
+              <ModelCard key={m.id} model={m} families={families} />
             ))}
           </div>
         )}
@@ -204,8 +203,21 @@ function AddModelCard({ families, profileId, nextSort }) {
 }
 
 /** One saved model — thumbnail, footprint, editable name + product binding, delete. */
-function ModelCard({ model, families, family }) {
-  const save = (patch) => db.togoModels.update(model.id, { ...patch, updatedAt: Date.now() });
+function ModelCard({ model, families }) {
+  // Optimistic binding: the global invalidate refetches the whole (huge) products
+  // catalog, so a live refetch can lag ~seconds. Show the dealer's choice INSTANTLY
+  // and clear the optimistic value only once the persisted row catches up.
+  const [pending, setPending] = useState(null);
+  const value = pending != null ? pending : (model.productRoot || '');
+  useEffect(() => {
+    if (pending != null && (model.productRoot || '') === pending) setPending(null);
+  }, [model.productRoot, pending]);
+  const bind = async (val) => {
+    setPending(val);
+    try { await db.togoModels.update(model.id, { productRoot: val || null, updatedAt: Date.now() }); }
+    catch { setPending(null); }
+  };
+  const boundFamily = families.find((f) => f.root === value) || null;
   return (
     <div className="card card-pad space-y-2.5">
       <div className="flex items-start gap-3">
@@ -214,7 +226,7 @@ function ModelCard({ model, families, family }) {
           <input
             className="input h-8 py-0 text-[13px] font-medium"
             defaultValue={model.name}
-            onBlur={(e) => e.target.value.trim() && e.target.value !== model.name && save({ name: e.target.value.trim() })}
+            onBlur={(e) => e.target.value.trim() && e.target.value !== model.name && db.togoModels.update(model.id, { name: e.target.value.trim(), updatedAt: Date.now() })}
           />
           <div className="text-[11px] text-ink-500 tabular-nums mt-1">{model.widthCm}×{model.depthCm} cm</div>
         </div>
@@ -222,17 +234,15 @@ function ModelCard({ model, families, family }) {
           <Trash2 size={15} />
         </button>
       </div>
-      <select
-        className="input h-8 py-0 text-[11px]"
-        value={model.productRoot || ''}
-        onChange={(e) => save({ productRoot: e.target.value || null })}
-      >
+      <select className="input h-8 py-0 text-[11px]" value={value} onChange={(e) => bind(e.target.value)}>
         <option value="">Sin vincular (precio manual)</option>
         {families.map((f) => (
           <option key={f.root} value={f.root}>{f.name}{f.graded ? ` · ${f.grades.length} grados` : ''}</option>
         ))}
       </select>
-      {!family && model.productRoot && <div className="text-[10px] text-amber-600">El producto vinculado ya no está en el catálogo.</div>}
+      {value
+        ? <div className="text-[10px] text-emerald-600 inline-flex items-center gap-1"><Check size={11} /> Vinculado{boundFamily?.graded ? ` · precio por grado (${boundFamily.grades.length})` : ''}{pending != null ? ' · guardando…' : ''}</div>
+        : <div className="text-[10px] text-ink-400">Sin vincular · el configurador no podrá poner precio por tela</div>}
     </div>
   );
 }

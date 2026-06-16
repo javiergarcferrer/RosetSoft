@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, Palette } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, Palette, Layers, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
@@ -10,7 +10,7 @@ import { formatMoney } from '../lib/format.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import {
   effectiveRates, initialQuoteTerms,
-  resolveConfigurator, snapPlacement, footprintOf, clampToPlan, buildTogoModularSeed,
+  resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, buildTogoModularSeed,
   PLAN_W_CM, PLAN_H_CM, PX_PER_CM,
 } from '../core/quote/index.js';
 import SwatchPicker from '../components/quote-builder/SwatchPicker.jsx';
@@ -78,6 +78,7 @@ export default function TogoConfigurator() {
   const [selectedUid, setSelectedUid] = useState(null);
   const [hoveredId, setHoveredId] = useState(null); // model id, links palette ⇄ canvas
   const [matOpen, setMatOpen] = useState(false);
+  const [matMode, setMatMode] = useState('one'); // 'one' (selected piece) | 'all'
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
   const rates = useMemo(() => effectiveRates(settings), [settings]);
@@ -174,6 +175,48 @@ export default function TogoConfigurator() {
       },
     } : row)));
   }, [selected, selectedFamily, resolvedById]);
+
+  // Apply ONE fabric to EVERY placed piece, repricing each by its OWN bound model.
+  const applyFabricToAll = useCallback((pick) => {
+    setPlaced((prev) => prev.map((row) => {
+      const fam = families.get(resolvedById[row.pieceId]?.root);
+      const p = fam ? productForGrade(fam, pick.grade) : null;
+      return {
+        ...row,
+        material: {
+          grade: pick.grade, fabric: pick.fabric, swatchImageId: pick.swatchImageId ?? null,
+          subtype: composeSubtype(pick.grade, pick.fabric),
+          reference: p?.reference || '',
+          unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) || 0 : (resolvedById[row.pieceId]?.unitPrice ?? null),
+        },
+      };
+    }));
+  }, [families, resolvedById]);
+
+  const clearFabric = useCallback(() => {
+    if (!selectedUid) return;
+    setPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
+  }, [selectedUid]);
+
+  const openMaterial = useCallback((mode) => {
+    if (mode === 'one' && !selectedUid) return;
+    if (mode === 'all' && !placed.length) return;
+    setMatMode(mode);
+    setMatOpen(true);
+  }, [selectedUid, placed.length]);
+
+  // Overall assembled footprint (cm) — the bounding box of every placed piece.
+  const overall = useMemo(() => {
+    if (!placed.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of placed) {
+      const f = footprintOf(resolvedById[p.pieceId], p.rot);
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + f.w); maxY = Math.max(maxY, p.y + f.h);
+    }
+    return { w: Math.round(maxX - minX), h: Math.round(maxY - minY) };
+  }, [placed, resolvedById]);
+  const selResolved = selected ? resolvePlacement(selected, resolvedById) : null;
 
   const [creating, setCreating] = useState(false);
   const createQuote = useCallback(async () => {
@@ -277,28 +320,45 @@ export default function TogoConfigurator() {
               <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                 <span className="text-[11px] text-ink-500">
                   {!vm.count
-                    ? 'Agrega piezas desde la izquierda'
-                    : (selected && !selectedFamily)
-                      ? <span className="text-amber-600">Pieza sin producto vinculado — la tela no cambiará el precio. Vincúlala en el catálogo Togo.</span>
-                      : selected
-                        ? 'Elige «Tela» para vestir la pieza · R rota · Supr quita'
-                        : `${vm.count} pieza(s) · clic para seleccionar, arrastra para mover`}
+                    ? 'Haz clic en una pieza de la izquierda para agregarla'
+                    : 'Clic para seleccionar · arrastra para mover · R rota · Supr quita'}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <button type="button" onClick={() => setMatOpen(true)} disabled={!selectedUid} className="btn-ghost text-xs disabled:opacity-40" title={selectedUid ? 'Elegir tela' : 'Selecciona una pieza primero'}>
-                    <Palette size={14} /> Tela
-                  </button>
-                  <button type="button" onClick={rotateSel} disabled={!selectedUid} className="btn-ghost text-xs disabled:opacity-40" title="Rotar 90° (R)">
-                    <RotateCw size={14} /> Rotar
-                  </button>
-                  <button type="button" onClick={deleteSel} disabled={!selectedUid} className="btn-ghost text-xs text-red-600 disabled:opacity-40" title="Eliminar (Supr)">
-                    <Trash2 size={14} /> Quitar
+                  <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas">
+                    <Layers size={14} /> Tela a todas
                   </button>
                   <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar la planta">
                     <Eraser size={14} /> Vaciar
                   </button>
                 </div>
               </div>
+
+              {/* Selected-piece panel — name, fabric, price, size + per-piece actions. */}
+              {selected && selResolved && (
+                <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2">
+                  <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[selected.pieceId] }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-medium truncate">{selResolved.label}</div>
+                    <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
+                      {selected.material?.swatchImageId && <ImageView id={selected.material.swatchImageId} alt="" className="w-3 h-3 rounded-sm object-cover" />}
+                      <span>{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin producto vinculado')}</span>
+                      <span className="text-ink-300">·</span>
+                      <span className="tabular-nums font-medium text-ink-700">{selResolved.unitPrice != null ? formatMoney(selResolved.unitPrice, 'USD', rates) : 'sin precio'}</span>
+                      <span className="text-ink-400 tabular-nums">· {selResolved.widthCm}×{selResolved.depthCm} cm</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" onClick={() => openMaterial('one')} className="btn-ghost text-xs" title={selectedFamily ? 'Elegir tela' : 'Tela (cosmética — vincula un producto para precio)'}>
+                      <Palette size={14} /> Tela
+                    </button>
+                    {selected.material && (
+                      <button type="button" onClick={clearFabric} className="btn-ghost text-xs text-ink-500" title="Quitar tela"><X size={14} /></button>
+                    )}
+                    <button type="button" onClick={rotateSel} className="btn-ghost text-xs" title="Rotar 90° (R)"><RotateCw size={14} /></button>
+                    <button type="button" onClick={deleteSel} className="btn-ghost text-xs text-red-600" title="Quitar (Supr)"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              )}
 
               <div className="overflow-auto rounded-xl border border-ink-200 bg-ink-50/40">
                 <div
@@ -351,8 +411,9 @@ export default function TogoConfigurator() {
                 <div className="text-[11px] text-ink-500 uppercase tracking-wide">Subtotal ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
                 <div className="text-xl font-display font-semibold tabular-nums">{formatMoney(vm.subtotalUsd, 'USD', rates)}</div>
                 <div className="text-xs text-ink-500 tabular-nums">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+                {overall && <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto · {overall.w}×{overall.h} cm</div>}
                 {!vm.priced && vm.count > 0 && (
-                  <div className="text-[11px] text-amber-600 mt-0.5">Vincula o asigna tela a cada pieza para un total completo.</div>
+                  <div className="text-[11px] text-amber-600 mt-0.5">Vincula un producto o asigna tela a cada pieza para un total completo.</div>
                 )}
               </div>
               <button type="button" onClick={createQuote} disabled={!vm.count || creating} className="btn-primary text-sm disabled:opacity-50">
@@ -367,10 +428,10 @@ export default function TogoConfigurator() {
       <SwatchPicker
         open={matOpen}
         onClose={() => setMatOpen(false)}
-        onSelect={onPickMaterial}
-        family={selectedFamily}
-        currentGrade={selected?.material?.grade}
-        currentFabric={selected?.material?.fabric}
+        onSelect={matMode === 'all' ? applyFabricToAll : onPickMaterial}
+        family={matMode === 'all' ? null : selectedFamily}
+        currentGrade={matMode === 'all' ? undefined : selected?.material?.grade}
+        currentFabric={matMode === 'all' ? undefined : selected?.material?.fabric}
         showPalette={false}
       />
     </div>
