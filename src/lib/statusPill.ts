@@ -27,7 +27,7 @@ export const QUOTE_STAGE_LABEL: Record<string, string> = {
   draft: 'Borrador',
   sent: 'Enviada',
   accepted: 'Aceptada',
-  deposito_recibido: 'Depósito recibido',
+  deposito_recibido: 'Depósito',
   declined: 'Rechazada',
   archived: 'Archivada',
 };
