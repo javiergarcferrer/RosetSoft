@@ -7,13 +7,14 @@ import { syncShopify } from '../../lib/shopifySync.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { parseInvoicePdf } from '../../lib/loadRosetInvoice.js';
 import SearchPicker from '../../components/SearchPicker.jsx';
+import { groupFamilies, catalogSellingPrice } from '../../lib/catalog.js';
 import {
   resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
 } from '../../core/accounting/index.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty: '', fob: '', selectivo: '' });
+const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty: '', fob: '', selectivo: '', fabric: '' });
 const blankFactura = () => ({ id: newId(), supplierId: '', invoiceRef: '', ncf: '', lines: [blankLine()] });
 const blankEmbarque = () => ({ id: newId(), bl: '', containerId: '', customsRef: '', flete: '', seguro: '', facturas: [blankFactura()] });
 
@@ -63,7 +64,11 @@ function Stat({ label, value, accent }) {
  * and focuses it; the half-entered form autosaves as a draft and a saved
  * expediente can seed a new one as a template.
  */
-export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, onClose }) {
+export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, onClose }) {
+  // Catalog families (by SKU root) → the list price an imported piece is sold at.
+  // A newly-minted inventory item is priced from the catalog, by reference +
+  // the fabric (grade) it shipped in; cost still comes from the landed liquidation.
+  const families = useMemo(() => new Map(groupFamilies(products || []).map((f) => [f.root, f])), [products]);
   const defaults = useMemo(() => ({
     date: new Date().toISOString().slice(0, 10), orderId: '', paymentMethod: 'bank',
     rate: String(effectiveDopRate(settings) || ''), duaTotal: '',
@@ -137,6 +142,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         return {
           id: newId(), itemId: match?.id || '', name: match?.name || l.description, reference: l.reference,
           qty: l.quantity, fob: rate > 0 ? r2(l.unitCostUsd * l.quantity * rate) : '', selectivo: '',
+          fabric: l.fabric || '', // the material → its grade → the catalog price on save
         };
       });
       if (!seeded.length) { setErr('No se encontraron muebles en el PDF.'); return; }
@@ -192,6 +198,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       // instead of duplicated. Mirrors inventory_items_sku_name_uq; this is what
       // removes the false "Ya existe un registro con esos datos".
       const newItems = [];
+      const priceByItem = new Map(); // itemId → catalog list price (USD), when resolvable
       const variantKey = (sku, name) => JSON.stringify([(sku || '').trim(), (name || '').trim()]);
       const idByVariant = new Map(items.map((i) => [variantKey(i.sku, i.name), i.id]));
       const embsPatched = embs.map((e) => ({
@@ -202,11 +209,22 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             if (l.itemId || !(l.name || '').trim() || !(Number(l.qty) > 0)) return l;
             const sku = (l.reference || '').trim();
             const name = l.name.trim();
+            // The catalog list price for this piece — by reference + the fabric's
+            // grade. The product + material come off the invoice; the PRICE comes
+            // off the catalog (the landed cost still drives avgCost).
+            const price = catalogSellingPrice(families, materials, sku, l.fabric);
             const k = variantKey(sku, name);
             const reuse = idByVariant.get(k);
-            if (reuse) return { ...l, itemId: reuse };
+            if (reuse) {
+              if (price != null) priceByItem.set(reuse, price);
+              return { ...l, itemId: reuse };
+            }
             const itemId = newId();
-            newItems.push({ id: itemId, profileId: scope, sku, name, unit: 'unidad', qtyOnHand: 0, avgCost: 0 });
+            newItems.push({
+              id: itemId, profileId: scope, sku, name, unit: 'unidad', qtyOnHand: 0, avgCost: 0,
+              ...(price != null ? { sellingPrice: price } : {}),
+            });
+            if (price != null) priceByItem.set(itemId, price);
             idByVariant.set(k, itemId);
             return { ...l, itemId };
           }),
@@ -245,7 +263,12 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         const it = itemById.get(l.itemId);
         if (it) {
           const avg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, l.landedUnitCost);
-          await db.inventoryItems.update(l.itemId, { qtyOnHand: (it.qtyOnHand || 0) + l.qty, avgCost: avg });
+          const patch = { qtyOnHand: (it.qtyOnHand || 0) + l.qty, avgCost: avg };
+          // Backfill the catalog price onto an existing item that never carried
+          // one (newly-minted items already have it). A dealer-set price wins.
+          const price = priceByItem.get(l.itemId);
+          if (price != null && it.sellingPrice == null) patch.sellingPrice = price;
+          await db.inventoryItems.update(l.itemId, patch);
         }
         touched.push(l.itemId);
       }

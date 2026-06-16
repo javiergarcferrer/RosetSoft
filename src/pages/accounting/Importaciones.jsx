@@ -165,6 +165,10 @@ export default function Importaciones() {
 
   const [params] = useSearchParams();
   const [showExpediente, setShowExpediente] = useState(!!params.get('new'));
+  // Catalog + materials drive the imported pieces' selling price (reference +
+  // fabric → grade → list price). Loaded only while the expediente form is open.
+  const productsQ = useLiveQueryStatus(() => (showExpediente ? db.products.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, showExpediente], []);
+  const materialsQ = useLiveQueryStatus(() => (showExpediente ? db.materials.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, showExpediente], []);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('expedientes');
   const [filters, setFilters] = useState({});
@@ -218,7 +222,8 @@ export default function Importaciones() {
 
       {showExpediente && loaded && (
         <ExpedienteForm scope={scope} config={config} settings={settings} suppliers={suppliersQ.data} items={itemsQ.data}
-          orders={ordersQ.data || []} containers={containersQ.data || []} onClose={() => setShowExpediente(false)} />
+          orders={ordersQ.data || []} containers={containersQ.data || []}
+          products={productsQ.data || []} materials={materialsQ.data || []} onClose={() => setShowExpediente(false)} />
       )}
 
       {!loaded ? <ListLoading /> : empty ? (

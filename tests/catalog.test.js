@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock, repriceComponentsAtGrade } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock, repriceComponentsAtGrade, gradeForFabric, catalogSellingPrice } from '../src/lib/catalog.js';
 import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
@@ -218,6 +218,51 @@ test('skuFillPatch resolves a non-graded SKU to its single product', () => {
 test('skuFillPatch leaves an unknown SKU (or null catalog) as just the reference', () => {
   assert.deepEqual(skuFillPatch(skuFams(), '99999999Z'), { reference: '99999999Z' });
   assert.deepEqual(skuFillPatch(null, '15420000G'), { reference: '15420000G' });
+});
+
+/* --------------------- gradeForFabric / catalogSellingPrice --------------------- */
+// An inventory item minted from an import invoice is PRICED from the catalog:
+// the invoice supplies the model reference + the fabric it shipped in, and the
+// catalog prices upholstery by grade — so reference + fabric → grade → list price.
+
+// The materials roster maps a fabric name to its grade (price tier).
+const ROSTER = [
+  { name: 'ALPAGA', grade: 'A' },
+  { name: 'DIVA', grade: 'G' },
+  { name: 'NABUK', grade: 'M' },
+  { name: 'ALCANTARA — A', grade: 'A' }, // label carries its own grade suffix
+  { name: 'COM SUPPLIED', grade: null }, // ungraded roster entry → no tier
+];
+const priceFams = () => new Map(groupFamilies([...TOGO, ...TABLE]).map((f) => [f.root, f]));
+
+test('gradeForFabric: maps a fabric name to its grade off the roster', () => {
+  assert.equal(gradeForFabric(ROSTER, 'DIVA'), 'G');
+  assert.equal(gradeForFabric(ROSTER, 'diva'), 'G');            // case-insensitive
+  assert.equal(gradeForFabric(ROSTER, 'ALCANTARA'), 'A');       // strips the label's grade suffix
+  assert.equal(gradeForFabric(ROSTER, 'PHLOX · ECRU (#12)'), ''); // not on the roster
+  assert.equal(gradeForFabric(ROSTER, 'COM SUPPLIED'), '');     // roster entry carries no grade
+  assert.equal(gradeForFabric(ROSTER, ''), '');
+  assert.equal(gradeForFabric(null, 'DIVA'), '');
+});
+
+test('catalogSellingPrice: a full SKU (or non-graded model) prices directly', () => {
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '15420000G'), 4450); // SKU pins grade G
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '0050W49N'), 1500);  // non-graded table
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '0050W49N', 'whatever'), 1500); // fabric ignored
+});
+
+test('catalogSellingPrice: a graded model resolves its price via the fabric grade', () => {
+  // TOGO grades by price: A 3420 < U 4145 < G 4450 < S 4760 < M 5140.
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '15420000', 'DIVA'), 4450);  // → G
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '15420000', 'NABUK'), 5140); // → M
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '15420000', 'alcantara'), 3420); // → A
+});
+
+test('catalogSellingPrice: null (leave unset) when nothing resolves', () => {
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '15420000'), null);            // graded, no fabric
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '15420000', 'UNKNOWN'), null); // fabric not on roster
+  assert.equal(catalogSellingPrice(priceFams(), ROSTER, '99999999', 'DIVA'), null);    // unknown model
+  assert.equal(catalogSellingPrice(null, ROSTER, '15420000G'), null);                  // no catalog
 });
 
 /* ------------------------------- stock gate ------------------------------- */

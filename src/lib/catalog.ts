@@ -397,6 +397,82 @@ export function skuFillPatch(
 }
 
 /**
+ * Normalize a fabric / material name for name-matching: uppercased, the embedded
+ * "(#code)" and the "· COLOR" tail dropped, a trailing " — A" grade suffix
+ * removed (some roster names carry their grade in the label), whitespace
+ * collapsed. So "Phlox", "PHLOX (#12)", "PHLOX · ECRU" and "PHLOX — G" all key
+ * to "PHLOX".
+ */
+function normFabricName(s: string | null | undefined): string {
+  return String(s ?? '')
+    .replace(/\(#[^)]*\)/g, ' ')             // drop the embedded colour code
+    .split('·')[0]                            // drop the "· COLOR" tail
+    .replace(/\s*[—–-]\s*[A-Za-z]\s*$/, '')   // drop a trailing " — A" grade suffix
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+}
+
+/** A material as seen by the grade resolver — just its name + grade tier. */
+export interface GradedMaterial {
+  name?: string | null;
+  grade?: string | null;
+}
+
+/**
+ * The GRADE (price tier) a fabric belongs to, resolved off the materials roster
+ * by name. An invoice names a fabric (PHLOX, DIVA) but the catalog prices
+ * upholstery by grade (A, G, …), so this is the bridge between them. Matches on
+ * the normalized name (so a roster's "(#code)"/grade-suffixed label still hits)
+ * and returns the material's grade, or '' when the fabric isn't on the roster or
+ * carries no grade. Pure.
+ */
+export function gradeForFabric(
+  materials: readonly GradedMaterial[] | null | undefined,
+  fabric: string | null | undefined,
+): string {
+  const key = normFabricName(fabric);
+  if (!key) return '';
+  for (const m of materials || []) {
+    if (m?.grade && normFabricName(m.name) === key) return String(m.grade).trim().toUpperCase();
+  }
+  return '';
+}
+
+/**
+ * The catalog SELLING price (USD list price) an inventory item minted from an
+ * import invoice line should carry — "use the catalog price for the product".
+ * The invoice supplies a bare model REFERENCE and the FABRIC it shipped in,
+ * while the catalog prices upholstery by GRADE, so:
+ *   • a full SKU (root+grade) or a NON-graded model resolves its price directly;
+ *   • a GRADED model resolves the fabric's grade (via the materials roster) and
+ *     reads that grade's SKU price.
+ * Returns null when nothing resolves — an unknown model, or a graded model whose
+ * fabric can't be graded — so the caller leaves the price unset rather than
+ * stamping a wrong one. Pure.
+ */
+export function catalogSellingPrice(
+  families: ReadonlyMap<string, CatalogFamily> | null | undefined,
+  materials: readonly GradedMaterial[] | null | undefined,
+  reference: string | null | undefined,
+  fabric?: string | null,
+): number | null {
+  const { root, grade } = splitSkuGrade((reference || '').trim());
+  const fam = families ? families.get(root) : null;
+  if (!fam) return null;
+  // The grade to price at: an explicit SKU grade wins; a graded model otherwise
+  // needs the fabric's grade; a non-graded model ignores the grade entirely.
+  let g = grade;
+  if (!g && fam.graded) {
+    g = gradeForFabric(materials, fabric);
+    if (!g) return null; // a graded model can't be priced without its grade
+  }
+  const p = productForGrade(fam, g);
+  if (!p || p.priceUsd == null) return null;
+  return Number(p.priceUsd) || 0;
+}
+
+/**
  * The catalog's "Description 2" (the model's finish/variant text, e.g. "STANDARD
  * HEADBOARD") for a SKU, pulled live from the price-list families — i.e. what
  * the product itself carries. This is the read-only secondary descriptor a quote
