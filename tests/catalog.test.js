@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock, repriceComponentsAtGrade, gradeForFabric, catalogSellingPrice } from '../src/lib/catalog.js';
+import { splitSkuGrade, groupFamilies, availableGrades, productForGrade, switchLineProduct, materiallessRangePatch, skuFillPatch, productStock, isOutOfStock, familyStock, familyHeldUnits, repriceComponentsAtGrade, gradeForFabric, catalogSellingPrice } from '../src/lib/catalog.js';
 import { composeSubtype } from '../src/lib/subtype.js';
 
 /* ------------------------------ splitSkuGrade ------------------------------ */
@@ -303,6 +303,24 @@ test('familyStock: graded LR models are untracked (special order, never gated)',
   const togo = groupFamilies(TOGO).find((f) => f.root === '15420000');
   assert.deepEqual(familyStock(togo), { tracked: false, qty: 0 });
   assert.deepEqual(familyStock(null), { tracked: false, qty: 0 });
+});
+
+test('familyHeldUnits: a quote adds back its OWN committed units (no false out-of-stock on its pieces)', () => {
+  const [fam] = groupFamilies([{ id: 'lsg-1', reference: 'LSG-1', name: 'Nassau Side Table', stockQty: 1 }]);
+  // This quote already deducted 2 of this piece (deposit received), so the
+  // store's live stockQty (1) is NET of them — add them back for this quote.
+  assert.equal(familyHeldUnits(fam, { 'lsg-1': 2 }), 2);
+  // Another product's reservation never bleeds in; absent/blank/missing → 0.
+  assert.equal(familyHeldUnits(fam, { 'lsg-other': 5 }), 0);
+  assert.equal(familyHeldUnits(fam, {}), 0);
+  assert.equal(familyHeldUnits(fam, null), 0);
+  assert.equal(familyHeldUnits(null, { 'lsg-1': 2 }), 0);
+  // The bug this fixes: store shows 1 (it deducted 2), the line quotes 2.
+  // available = live stock + held = 1 + 2 = 3 ≥ 2 → the gate stays silent on the
+  // quote that CAUSED the deduction, while a fresh quote (held 0) still warns.
+  const stock = familyStock(fam);
+  assert.equal(stock.qty + familyHeldUnits(fam, { 'lsg-1': 2 }), 3);
+  assert.equal(stock.qty + familyHeldUnits(fam, {}), 1);
 });
 
 /* ----------------------- repriceComponentsAtGrade ----------------------- */

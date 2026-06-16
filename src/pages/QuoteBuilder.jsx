@@ -25,6 +25,7 @@ import QuoteHeader from '../components/quote-builder/QuoteHeader.jsx';
 import QuoteStatusStepper from '../components/quote-builder/QuoteStatusStepper.jsx';
 import LineItemList from '../components/quote-builder/LineItemList.jsx';
 import { FamiliesContext } from '../components/quote-builder/FamiliesContext.js';
+import { HeldStockContext } from '../components/quote-builder/HeldStockContext.js';
 import { MaterialsContext } from '../components/quote-builder/MaterialsContext.js';
 import { ProjectPaletteContext } from '../components/quote-builder/ProjectPaletteContext.js';
 import { CompanyDiscountContext } from '../components/quote-builder/CompanyDiscountContext.js';
@@ -291,6 +292,19 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     for (const fam of groupFamilies(products)) map.set(fam.root, fam);
     return map;
   }, [products]);
+
+  // LSG units THIS quote already reserved on the store (committed ledger). The
+  // store's live stockQty is net of them, so the line stock gate adds them back
+  // for this quote — a quote whose deposit deducted its pieces must not warn
+  // against the figure it itself lowered. Empty for a draft / un-committed quote
+  // (or before the ledger migration lands → tolerated by the catch).
+  const heldStock = useLiveQuery(
+    () => db.lsgStockCommitments.get(quoteId)
+      .then((r) => (r && r.committed && typeof r.committed === 'object' ? r.committed : {}))
+      .catch(() => ({})),
+    [quoteId],
+    {},
+  );
 
   // The fabric catalog + per-model offered-fabric allowlists, so the in-app
   // "Vista cliente" preview drives the SAME full picker the public link does
@@ -921,18 +935,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
             },
           }}>
             <FamiliesContext.Provider value={families}>
-              <MaterialsContext.Provider value={materials}>
-                {/* Company (house) account → each line/component total in the
-                    editor reads at dealer cost (−companyDiscountPct%). */}
-                <CompanyDiscountContext.Provider value={companyDiscountPct}>
-                  <LineItemsCard
-                    lines={lines}
-                    groups={groups}
-                    quote={quote}
-                    focusLineId={focusLineId}
-                  />
-                </CompanyDiscountContext.Provider>
-              </MaterialsContext.Provider>
+              <HeldStockContext.Provider value={heldStock}>
+                <MaterialsContext.Provider value={materials}>
+                  {/* Company (house) account → each line/component total in the
+                      editor reads at dealer cost (−companyDiscountPct%). */}
+                  <CompanyDiscountContext.Provider value={companyDiscountPct}>
+                    <LineItemsCard
+                      lines={lines}
+                      groups={groups}
+                      quote={quote}
+                      focusLineId={focusLineId}
+                    />
+                  </CompanyDiscountContext.Provider>
+                </MaterialsContext.Provider>
+              </HeldStockContext.Provider>
             </FamiliesContext.Provider>
           </QuoteActionsContext.Provider>
           <ProjectPaletteCard />

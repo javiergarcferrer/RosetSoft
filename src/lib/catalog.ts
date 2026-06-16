@@ -134,6 +134,27 @@ export function familyStock(family: CatalogFamily | null | undefined): StockStat
 }
 
 /**
+ * Units of a family's products that ONE quote already holds on the brand store
+ * (its committed LSG reservation, keyed by product id — see lib/lsgStock). The
+ * store's live `stockQty` is NET of these, so that quote's OWN stock gate must
+ * ADD them back: otherwise the quote whose deposit deducted its pieces reads as
+ * "insufficient stock" against the very figure it lowered. Summed over the
+ * family's members; a draft / un-committed quote holds 0 → no adjustment.
+ */
+export function familyHeldUnits(
+  family: CatalogFamily | null | undefined,
+  held: Record<string, number> | null | undefined,
+): number {
+  if (!family || !held) return 0;
+  let sum = 0;
+  for (const p of family.byGrade.values()) {
+    const n = Math.trunc(Number(held[p.id])) || 0;
+    if (n > 0) sum += n;
+  }
+  return sum;
+}
+
+/**
  * Resolve a model + chosen grade to its specific SKU/product (price + cost).
  * For a non-graded standalone family, returns its sole member regardless of
  * the grade argument.

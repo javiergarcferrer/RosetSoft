@@ -18,6 +18,7 @@ import ModelLinkBar from './ModelLinkBar.jsx';
 import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
 import { applyCompanyDiscount } from '../../lib/pricing.js';
 import { FamiliesContext } from './FamiliesContext.js';
+import { HeldStockContext } from './HeldStockContext.js';
 import { MaterialsContext } from './MaterialsContext.js';
 import { CompanyDiscountContext } from './CompanyDiscountContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
@@ -25,7 +26,7 @@ import { colorCodeFromSubtype, locateColor } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { shouldAutoFocusInput } from '../../lib/autofocus.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
-import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription, familyStock, repriceComponentsAtGrade } from '../../lib/catalog.js';
+import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch, catalogProductDescription, familyStock, familyHeldUnits, repriceComponentsAtGrade } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine, healComponentAlternatives } from '../../lib/modules.js';
 import { formatMoney } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
@@ -869,13 +870,21 @@ function IdentityBand({ line, compound, onChange, refInputRef, currency, rates, 
 // an existing line: sold out since it was quoted, or fewer units left than the
 // line quotes. Advisory only (mirrors SpecialOrderWarning) — the dealer may be
 // re-sending an old quote; blocking the editor would help nobody.
+//
+// The store's live stockQty is NET of what THIS quote already committed (a
+// deposit-received quote deducted its pieces), so we add those held units back:
+// the quote that CAUSED the deduction must gate against the original figure, not
+// the one it lowered — otherwise it falsely warns "insufficient stock" on its
+// own pieces. A draft / un-committed quote holds 0, so the gate is unchanged.
 function LineStockNotice({ line }) {
   const families = useContext(FamiliesContext);
+  const heldStock = useContext(HeldStockContext);
   const fam = families?.get(splitSkuGrade(line.reference || '').root) || null;
   const stock = familyStock(fam);
   if (!stock.tracked) return null;
   const qty = Number(line.qty) || 0;
-  if (stock.qty > 0 && stock.qty >= qty) return null;
+  const available = stock.qty + familyHeldUnits(fam, heldStock);
+  if (available > 0 && available >= qty) return null;
   return (
     <div
       className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
@@ -883,12 +892,12 @@ function LineStockNotice({ line }) {
     >
       <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" aria-hidden />
       <span>
-        {stock.qty <= 0 ? (
+        {available <= 0 ? (
           <><span className="font-semibold">Agotado en LifestyleGarden.</span>{' '}
           La tienda ya no tiene existencia de esta pieza — verifica antes de enviar la cotización.</>
         ) : (
           <><span className="font-semibold">Existencia insuficiente.</span>{' '}
-          Cotizas {qty} y la tienda solo tiene {stock.qty} en existencia.</>
+          Cotizas {qty} y solo hay {available} disponible{available === 1 ? '' : 's'}.</>
         )}
       </span>
     </div>
