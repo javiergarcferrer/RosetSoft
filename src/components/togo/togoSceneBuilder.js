@@ -36,29 +36,37 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
 }
 
 /**
- * Drop a loaded REAL model (GLB scene) into a piece group: clone it, upholster
- * every mesh in the piece's fabric material, then recentre on XZ and sit it on
- * the floor — so the GLB's own origin/scale offset doesn't matter (set the
- * cm scale on the object before passing it in). Casts/receives shadow.
+ * Drop a loaded REAL model (a pCon export — GLB/OBJ/FBX/DAE/3DS, already
+ * tessellated) into a piece group: clone it, upholster every mesh in the piece's
+ * fabric material (so "drag a fabric" works exactly like in pCon), apply the
+ * descriptor's unit scale + axis/facing fixups, then recentre on XZ and sit it
+ * on the floor — so the export's own origin/scale/up-axis don't matter.
  */
-function placeRealModel(THREE, object, material, pieceGroup) {
+function placeRealModel(THREE, object, material, desc, pieceGroup) {
   const clone = object.clone(true);
   clone.traverse((o) => {
     if (o.isMesh) { o.material = material; o.castShadow = true; o.receiveShadow = true; }
   });
-  const box = new THREE.Box3().setFromObject(clone);
+  if (desc?.upAxis === 'z') clone.rotation.x = -Math.PI / 2;       // CAD Z-up → three Y-up
+  if (desc?.rotateY) clone.rotation.y += (desc.rotateY * Math.PI) / 180;
+  clone.scale.setScalar(desc?.scale || 1);                          // drawing units → cm
+
+  const wrap = new THREE.Group();
+  wrap.add(clone);
+  wrap.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(wrap);
   const c = box.getCenter(new THREE.Vector3());
-  clone.position.x -= c.x;
-  clone.position.z -= c.z;
-  clone.position.y -= box.min.y;
-  pieceGroup.add(clone);
+  wrap.position.x -= c.x;
+  wrap.position.z -= c.z;
+  wrap.position.y -= box.min.y;
+  pieceGroup.add(wrap);
 }
 
 /**
  * Build the furniture group from a scene spec. `textureFor(fabricCode)` returns
  * a THREE.Texture or null (the caller owns loading/caching). `modelFor(piece)`
- * returns a loaded GLB scene (THREE.Object3D) for a piece, or null to fall back
- * to procedural geometry — so the SAME scene shows real Togo models the moment
+ * returns `{ object, desc }` for a real loaded model (or null to fall back to
+ * procedural geometry) — so the SAME scene shows real Togo models the moment
  * they're wired and generated cushions until then. Pieces share one material
  * each (one per piece), so a fabric swap is a single `.map` change.
  */
@@ -72,8 +80,8 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
     const pieceGroup = new THREE.Group();
     const material = makeFabricMaterial(THREE, textureFor(piece.fabricCode), opts);
     const real = modelFor(piece);
-    if (real) {
-      placeRealModel(THREE, real, material, pieceGroup);
+    if (real && real.object) {
+      placeRealModel(THREE, real.object, material, real.desc, pieceGroup);
     } else {
       for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
         const seg = Math.max(2, Math.round(part.r / 4));

@@ -4,6 +4,23 @@ import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { glbFor } from '../../assets/togo/togoModels3d.js';
 import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup } from './togoSceneBuilder.js';
 
+// Pick the three.js loader for a model URL by extension, loaded on demand (so a
+// scene with no real models pulls in no loader at all). pCon exports OBJ/FBX/
+// 3DS/DAE; GLB/glTF for anything authored web-side.
+const extOf = (url) => String(url || '').split('?')[0].split('.').pop().toLowerCase();
+async function loaderFor(ext) {
+  switch (ext) {
+    case 'glb': case 'gltf': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/GLTFLoader.js')); return new m.GLTFLoader(); }
+    case 'obj': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/OBJLoader.js')); return new m.OBJLoader(); }
+    case 'fbx': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/FBXLoader.js')); return new m.FBXLoader(); }
+    case 'dae': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/ColladaLoader.js')); return new m.ColladaLoader(); }
+    case '3ds': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/TDSLoader.js')); return new m.TDSLoader(); }
+    default: return null;
+  }
+}
+// glTF/Collada return a wrapper with `.scene`; OBJ/FBX/3DS return the Object3D.
+const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
+
 /**
  * The Togo 3D preview — a real-time three.js view of the SAME placed layout the
  * 2D plan edits, with each piece upholstered in its chosen fabric (the swatch
@@ -42,10 +59,12 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
       ...kinds.map(async (kind) => {
         if (l.modelCache.has(kind)) return;
         const desc = glbFor(kind);
+        const ext = extOf(desc.url);
         try {
-          const gltf = await new l.GLTFLoader().loadAsync(desc.url);
-          gltf.scene.scale.setScalar(desc.scale || 1);
-          l.modelCache.set(kind, gltf.scene);
+          const loader = await loaderFor(ext);
+          if (!loader) return;
+          const object = normalizeLoaded(ext, await loader.loadAsync(desc.url));
+          if (object) l.modelCache.set(kind, { object, desc });
         } catch { /* missing/unreadable → procedural */ }
       }),
     ]);
@@ -81,12 +100,11 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
           safeDynamicImport(() => import('three/examples/jsm/controls/OrbitControls.js')),
           safeDynamicImport(() => import('three/examples/jsm/environments/RoomEnvironment.js')),
           safeDynamicImport(() => import('three/examples/jsm/geometries/RoundedBoxGeometry.js')),
-          safeDynamicImport(() => import('three/examples/jsm/loaders/GLTFLoader.js')),
         ]);
       } catch { return; }
       const mount = mountRef.current;
       if (!alive || !mount) return;
-      const [THREE, { OrbitControls }, { RoomEnvironment }, { RoundedBoxGeometry }, { GLTFLoader }] = mods;
+      const [THREE, { OrbitControls }, { RoomEnvironment }, { RoundedBoxGeometry }] = mods;
       const deps = { THREE, RoomEnvironment, RoundedBoxGeometry };
       const w = mount.clientWidth || 640, h = mount.clientHeight || 440;
 
@@ -117,7 +135,7 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
       renderer.domElement.addEventListener('pointerdown', stopAuto, { once: true });
 
       const disposeStage = setupTogoStage(deps, renderer, scene, 300);
-      api.current = { THREE, deps, GLTFLoader, renderer, scene, camera, controls, disposeStage, stopAuto, group: null, texCache: new Map(), modelCache: new Map(), framed: false };
+      api.current = { THREE, deps, renderer, scene, camera, controls, disposeStage, stopAuto, group: null, texCache: new Map(), modelCache: new Map(), framed: false };
 
       await rebuild();
       if (!alive) return;
@@ -143,7 +161,7 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
         disposeGroup(l.group);
         l.disposeStage?.();
         l.texCache?.forEach((t) => t.dispose());
-        l.modelCache?.forEach((o) => disposeGroup(o));
+        l.modelCache?.forEach((m) => disposeGroup(m.object || m));
         l.renderer?.dispose?.();
         l.renderer?.domElement?.remove?.();
       }
