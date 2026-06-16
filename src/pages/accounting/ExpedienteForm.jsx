@@ -185,14 +185,15 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     try {
       // Free-text lines first become real inventory items, so the kardex IN and
       // the stored expediente both point at them — entry never blocks on
-      // pre-creating artículos. A non-empty SKU is UNIQUE per profile
-      // (inventory_items_sku_uq), so reuse an item that already carries that SKU
-      // — an existing one, or one just minted earlier in THIS save — instead of
-      // inserting a duplicate. That collision (a SKU repeated across lines, or an
-      // item orphaned by a previous failed save) is what raised the false "Ya
-      // existe un registro con esos datos".
+      // pre-creating artículos. Identity is MODEL + VARIANT: a Ligne Roset
+      // reference (e.g. 14100100 = Mini Togo) is a model code SHARED across
+      // covers, so match/dedupe by (sku + name) — four covers stay four items,
+      // while the same variant (existing, or just minted in THIS save) is reused
+      // instead of duplicated. Mirrors inventory_items_sku_name_uq; this is what
+      // removes the false "Ya existe un registro con esos datos".
       const newItems = [];
-      const idBySku = new Map(items.filter((i) => (i.sku || '').trim()).map((i) => [(i.sku || '').trim(), i.id]));
+      const variantKey = (sku, name) => JSON.stringify([(sku || '').trim(), (name || '').trim()]);
+      const idByVariant = new Map(items.map((i) => [variantKey(i.sku, i.name), i.id]));
       const embsPatched = embs.map((e) => ({
         ...e,
         facturas: e.facturas.map((f) => ({
@@ -200,11 +201,13 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           lines: f.lines.map((l) => {
             if (l.itemId || !(l.name || '').trim() || !(Number(l.qty) > 0)) return l;
             const sku = (l.reference || '').trim();
-            const reuse = sku ? idBySku.get(sku) : null;
+            const name = l.name.trim();
+            const k = variantKey(sku, name);
+            const reuse = idByVariant.get(k);
             if (reuse) return { ...l, itemId: reuse };
             const itemId = newId();
-            newItems.push({ id: itemId, profileId: scope, sku, name: l.name.trim(), unit: 'unidad', qtyOnHand: 0, avgCost: 0 });
-            if (sku) idBySku.set(sku, itemId);
+            newItems.push({ id: itemId, profileId: scope, sku, name, unit: 'unidad', qtyOnHand: 0, avgCost: 0 });
+            idByVariant.set(k, itemId);
             return { ...l, itemId };
           }),
         })),
