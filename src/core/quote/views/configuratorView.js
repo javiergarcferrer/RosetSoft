@@ -14,6 +14,7 @@
 import { compoundSubtotal } from '../../../lib/pricing.js';
 import { groupFamilies, productForGrade } from '../../../lib/catalog.js';
 import { composeSubtype } from '../../../lib/subtype.js';
+import { planToDxf } from '../../../lib/togo/planToDxf.js';
 
 // Plan canvas extent (cm) and the cm→px scale the View renders at. A Togo "room"
 // of ~7.6 × 5.4 m comfortably holds an L- or U-shaped sectional.
@@ -250,12 +251,73 @@ export function resolveConfigurator(placed, resolvedById, opts = {}) {
     };
   });
 
+  // Overall assembled footprint (cm) — the union of every piece's footprint box.
+  // A top configurator win (and what the DXF frame labels): the customer reads
+  // the real size of what they've built, the dealer quotes it without guessing.
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of (placed || [])) {
+    const fp = footprintOf(resolvePlacement(p, resolvedById), norm360(p.rot));
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + fp.w); maxY = Math.max(maxY, p.y + fp.h);
+  }
+  const overallCm = Number.isFinite(minX)
+    ? { widthCm: Math.round(maxX - minX), depthCm: Math.round(maxY - minY) }
+    : { widthCm: 0, depthCm: 0 };
+
   return {
     scale,
     canvas: { wPx: planW * scale, hPx: planH * scale },
     tiles,
     count: tiles.length,
+    overallCm,
     subtotalUsd: compoundSubtotal({ components }),
     priced: tiles.every((t) => t.hasPrice),
+  };
+}
+
+// ── DXF export — a configured plan → a downloadable CAD file ────────────────
+// The headline feature: a placed layout handed back OUT as the open ASCII CAD
+// interchange (DXF) every DWG tool reads — the inverse of the DWG→SVG catalog
+// import. Pure projections (no DOM); the View wraps `dxf` in a Blob.
+
+const sanitizeName = (s) => (s || '').toString().replace(/[\\/:*?"<>|\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Configurator `placed` + resolved palette + model svg map → DXF placements. */
+export function placementsFromPlaced(placed, resolvedById, svgById = {}) {
+  return (placed || []).map((p) => {
+    const r = resolvePlacement(p, resolvedById);
+    return {
+      pieceId: p.pieceId, x: p.x, y: p.y, rot: p.rot,
+      widthCm: Number(r.widthCm) || 0, depthCm: Number(r.depthCm) || 0,
+      label: r.label || r.name || 'Togo', svg: svgById[p.pieceId] || '',
+    };
+  });
+}
+
+/** A quote line's modular components (each carries `plan`) + svg map → placements,
+ *  so a promoted quote exports the SAME plan the request inbox can. */
+export function placementsFromComponents(components, svgById = {}) {
+  return (components || [])
+    .filter((c) => c && c.plan && Number.isFinite(Number(c.plan.x)) && Number.isFinite(Number(c.plan.y)))
+    .map((c) => ({
+      pieceId: c.plan.pieceId, x: Number(c.plan.x), y: Number(c.plan.y), rot: c.plan.rot,
+      widthCm: Number(c.plan.widthCm) || 0, depthCm: Number(c.plan.depthCm) || 0,
+      label: c.moduleName || c.name || 'Togo', svg: svgById[c.plan.pieceId] || '',
+    }));
+}
+
+/** Whether a quote line carries a Togo plan (so the View shows the DXF action). */
+export function lineHasTogoPlan(line) {
+  return !!(line?.components || []).some((c) => c?.plan && Number.isFinite(Number(c.plan.x)));
+}
+
+/** Project placements → a downloadable DXF + a tidy filename. Pure (no DOM). */
+export function resolveTogoDxf(placements, opts = {}) {
+  const list = placements || [];
+  const name = sanitizeName(opts.name);
+  return {
+    dxf: planToDxf(list, { label: name || 'Togo' }),
+    filename: `Plano Togo${name ? ` - ${name}` : ''}.dxf`,
+    count: list.length,
   };
 }

@@ -1,10 +1,11 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Inbox, MessageCircle, Mail, ArrowRight, Trash2, Loader2 } from 'lucide-react';
+import { Inbox, MessageCircle, Mail, ArrowRight, Trash2, Loader2, FileDown } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { formatMoney, formatDateTime } from '../lib/format.js';
+import { downloadText } from '../lib/csv.js';
 import { LINE_KIND_ITEM } from '../lib/constants.js';
 import { productForGrade } from '../lib/catalog.js';
 import { composeSubtype } from '../lib/subtype.js';
@@ -12,6 +13,7 @@ import { swatchUrl } from '../lib/swatchImage.js';
 import {
   effectiveRates, initialQuoteTerms,
   resolveConfigurator, resolveTogoModels, buildTogoModularSeed,
+  resolveTogoDxf, placementsFromPlaced,
 } from '../core/quote/index.js';
 import EmptyState from '../components/EmptyState.jsx';
 
@@ -168,6 +170,15 @@ function RequestCard({ req, rates, resolvedById, svgById, busy, onPromote, onDis
   );
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: THUMB_SCALE }), [placed, resolvedById]);
   const phoneDigits = (c.phone || '').replace(/\D/g, '');
+
+  // Download the visitor's layout as a CAD plan (DXF) — the inverse of the
+  // DWG→SVG model import: the placed pieces handed back OUT as drawing geometry
+  // (real cm, layered, the actual Togo outlines) an architect drops into AutoCAD.
+  const downloadDxf = useCallback(() => {
+    const placements = placementsFromPlaced(placed, resolvedById, svgById);
+    const { dxf, filename } = resolveTogoDxf(placements, { name: c.name || 'solicitud' });
+    downloadText(filename, dxf);
+  }, [placed, resolvedById, svgById, c.name]);
   // Distinct fabrics the visitor chose, with swatches.
   const fabrics = useMemo(() => {
     const seen = new Map();
@@ -189,6 +200,9 @@ function RequestCard({ req, rates, resolvedById, svgById, busy, onPromote, onDis
           <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado</div>
           <div className="text-sm font-semibold tabular-nums">{formatMoney(req.estimateUsd || 0, 'DOP', rates)}</div>
           <div className="text-[11px] text-ink-500 tabular-nums">{vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
+          {vm.count > 0 && vm.overallCm.widthCm > 0 && (
+            <div className="text-[10px] text-ink-400 tabular-nums">{vm.overallCm.widthCm}×{vm.overallCm.depthCm} cm</div>
+          )}
         </div>
       </div>
 
@@ -236,13 +250,20 @@ function RequestCard({ req, rates, resolvedById, svgById, busy, onPromote, onDis
 
       {req.note && <p className="text-[12px] text-ink-600 bg-ink-50 rounded-md px-2.5 py-1.5 whitespace-pre-wrap">{req.note}</p>}
 
-      <div className="flex items-center justify-end gap-1.5 pt-0.5">
-        <button type="button" onClick={onDismiss} disabled={busy} className="btn-ghost text-xs text-ink-500 disabled:opacity-40">
-          <Trash2 size={14} /> Descartar
-        </button>
-        <button type="button" onClick={onPromote} disabled={busy} className="btn-primary text-xs disabled:opacity-50">
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />} Pasar a cotización
-        </button>
+      <div className="flex items-center justify-between gap-1.5 pt-0.5">
+        {vm.count > 0 ? (
+          <button type="button" onClick={downloadDxf} className="btn-ghost text-xs text-ink-600" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos">
+            <FileDown size={14} /> Plano DXF
+          </button>
+        ) : <span />}
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={onDismiss} disabled={busy} className="btn-ghost text-xs text-ink-500 disabled:opacity-40">
+            <Trash2 size={14} /> Descartar
+          </button>
+          <button type="button" onClick={onPromote} disabled={busy} className="btn-primary text-xs disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />} Pasar a cotización
+          </button>
+        </div>
       </div>
     </div>
   );

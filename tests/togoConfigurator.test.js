@@ -9,6 +9,7 @@ import {
   footprintOf, snapPlacement, clampToPlan, resolvePlacement,
   buildTogoComponents, buildTogoModularSeed, resolveConfigurator, resolveTogoModels,
   resolveTogoModelCards, togoPickerFamilies,
+  placementsFromPlaced, placementsFromComponents, resolveTogoDxf, lineHasTogoPlan,
 } from '../src/core/quote/views/configuratorView.js';
 import { compoundSubtotal } from '../src/lib/pricing.js';
 import { modulesOf, isModularLine } from '../src/lib/modules.js';
@@ -221,4 +222,42 @@ test('resolveConfigurator mirrors compoundSubtotal and lays tiles out in px', ()
   );
   assert.equal(vm2.priced, false);
   assert.equal(vm2.subtotalUsd, 0);
+});
+
+// ---- assembled dimensions: the union footprint of every placed piece ----
+test('resolveConfigurator reports the overall assembled footprint (cm)', () => {
+  // a@(0,0) → 102×102; gb@(0,110) rot90 → 102×174 (swapped); a@(110,0) → 102×102.
+  const vm = resolveConfigurator(placed, resolved, { scale: 1 });
+  assert.deepEqual(vm.overallCm, { widthCm: 212, depthCm: 284 });
+  // Empty plan → zeroed, never NaN/Infinity.
+  assert.deepEqual(resolveConfigurator([], resolved).overallCm, { widthCm: 0, depthCm: 0 });
+});
+
+// ---- DXF export: a placed plan → a downloadable CAD file ----
+test('resolveTogoDxf builds a named DXF from the configurator placements', () => {
+  const placements = placementsFromPlaced(placed, resolved, { a: '<svg viewBox="0 0 102 102"><path d="M0 0L102 0"/></svg>' });
+  assert.equal(placements.length, 3);
+  assert.equal(placements[0].widthCm, 102);
+  assert.equal(placements[1].rot, 90);
+
+  const { dxf, filename, count } = resolveTogoDxf(placements, { name: 'María / López' });
+  assert.equal(count, 3);
+  // Filename is filesystem-safe (slashes stripped) and carries the contact.
+  assert.equal(filename, 'Plano Togo - María López.dxf');
+  assert.ok(dxf.startsWith('0\r\nSECTION'));
+  assert.ok(/\r\n0\r\nEOF\r\n$/.test(dxf));
+});
+
+test('placementsFromComponents replays a promoted quote line, lineHasTogoPlan detects it', () => {
+  const seed = buildTogoModularSeed(placed, resolved, ids());
+  const line = { components: seed.components };
+  assert.equal(lineHasTogoPlan(line), true);
+  assert.equal(lineHasTogoPlan({ components: [{ name: 'Sofá' }] }), false);
+
+  const placements = placementsFromComponents(seed.components, {});
+  assert.equal(placements.length, 3);
+  // The geometry + module label rode on the component plan → exported placement.
+  assert.equal(placements[1].rot, 90);
+  assert.equal(placements[1].widthCm, 174);
+  assert.equal(placements[0].label, 'Sillón'); // moduleName survives the round-trip
 });

@@ -10,7 +10,9 @@ import {
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
   companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote,
   initialQuoteTerms, resolveTermsPresetPicker,
+  lineHasTogoPlan, placementsFromComponents, resolveTogoDxf,
 } from '../core/quote/index.js';
+import { downloadText } from '../lib/csv.js';
 import { groupFamilies, productForGrade, splitSkuGrade, materiallessRangePatch } from '../lib/catalog.js';
 import { resolveQuoteInvoiceStatus } from '../core/bridge/index.js';
 import { parseOrderRefs } from '../core/crm/index.js';
@@ -308,6 +310,26 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
     for (const r of modelFabricRows || []) if (r?.id && r.patternNames?.length) out[r.id] = r.patternNames;
     return out;
   }, [modelFabricRows]);
+
+  // A quote promoted from a Togo web request carries the plan inline on its
+  // modular line's components, so it stays exportable as a CAD drawing (DXF)
+  // long after the originating request left the Solicitudes inbox. Load the
+  // model svgs ONLY when the quote actually holds a Togo plan (a tiny table),
+  // and join them to the placements so the DXF draws the real piece outlines.
+  const hasTogoPlan = useMemo(() => (lines || []).some(lineHasTogoPlan), [lines]);
+  const togoModels = useLiveQuery(
+    () => (profileId && hasTogoPlan ? db.togoModels.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
+    [profileId, hasTogoPlan],
+    [],
+  );
+  const togoSvgById = useMemo(() => Object.fromEntries((togoModels || []).map((m) => [m.id, m.svg])), [togoModels]);
+  const exportTogoDxf = useCallback(() => {
+    const placements = (lines || []).filter(lineHasTogoPlan)
+      .flatMap((l) => placementsFromComponents(l.components, togoSvgById));
+    if (!placements.length) return;
+    const { dxf, filename } = resolveTogoDxf(placements, { name: quote?.number ? `#${quote.number}` : '' });
+    downloadText(filename, dxf);
+  }, [lines, togoSvgById, quote?.number]);
 
   const ensurePersisted = useCallback(async () => {
     if (materialize) await materialize();
@@ -954,6 +976,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           printing={printing}
           onWarehouse={exportWarehouseOrder}
           warehousing={warehousing}
+          onTogoPlan={hasTogoPlan ? exportTogoDxf : undefined}
           onShare={handleShare}
           shareLabel={isAdmin ? 'Enviar' : 'Compartir'}
           shareAriaLabel={isAdmin ? 'Enviar la cotización por WhatsApp' : 'Compartir el enlace de la cotización'}

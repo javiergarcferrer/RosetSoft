@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   ChevronUp, Info, Lock, RefreshCw, AlertTriangle,
-  SlidersHorizontal, Download, Printer, Loader2, Share2, Warehouse,
+  SlidersHorizontal, Download, Printer, Loader2, Share2, Warehouse, FileDown,
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
@@ -46,7 +46,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  */
 export default function TotalsDock({
   quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
-  onExport, exporting, onPrint, printing, onWarehouse, warehousing, onShare,
+  onExport, exporting, onPrint, printing, onWarehouse, warehousing, onTogoPlan, onShare,
   shareLabel = 'Enviar', shareTitle, shareAriaLabel, shareBusy = false,
 }) {
   const [panel, setPanel] = useState('closed'); // 'closed' | 'breakdown'
@@ -422,6 +422,20 @@ export default function TotalsDock({
                   busy={warehousing}
                   ariaLabel="Orden de almacén"
                   title="Generar la orden de almacén (foto · referencia · cantidad)"
+                />
+              )}
+
+              {/* Plano DXF — the Togo configuration as a CAD drawing (real cm,
+                  layered, the actual piece outlines) an architect opens in
+                  AutoCAD. Shown only when the quote carries a Togo plan line. */}
+              {onTogoPlan && (
+                <DockAction
+                  icon={FileDown}
+                  label="Plano DXF"
+                  onClick={onTogoPlan}
+                  disabled={exporting || printing}
+                  ariaLabel="Descargar el plano Togo en CAD (DXF)"
+                  title="Descargar el plano de la configuración Togo en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"
                 />
               )}
 

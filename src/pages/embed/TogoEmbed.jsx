@@ -1,12 +1,14 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
+import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
+  resolveTogoDxf, placementsFromPlaced,
 } from '../../core/quote/index.js';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
@@ -158,6 +160,16 @@ export default function TogoEmbed() {
     setPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
   }, [selectedUid]);
 
+  // Download the plan as CAD (DXF) — opens in AutoCAD and every plan tool. A
+  // genuine differentiator: consumer sofa configurators stop at PDF/image, so a
+  // designer-grade, real-cm layout handed straight to the customer's architect.
+  const downloadDxf = useCallback(() => {
+    if (!placed.length) return;
+    const placements = placementsFromPlaced(placed, resolvedById, svgById);
+    const { dxf, filename } = resolveTogoDxf(placements, { name: data?.storeName || 'Togo' });
+    downloadText(filename, dxf);
+  }, [placed, resolvedById, svgById, data?.storeName]);
+
   const openMaterial = useCallback((mode) => {
     if (mode === 'one' && !selectedUid) return;
     if (mode === 'all' && !placed.length) return;
@@ -253,6 +265,7 @@ export default function TogoEmbed() {
               <span className="text-[11px] text-ink-500">{vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla'}</span>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
+                <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
                 <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
               </div>
             </div>
@@ -325,6 +338,9 @@ export default function TogoEmbed() {
             <div>
               <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
               <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+              {vm.count > 0 && vm.overallCm.widthCm > 0 && (
+                <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
+              )}
             </div>
             <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50">
               Solicitar cotización <ArrowRight size={15} />

@@ -53,10 +53,12 @@ export { resolveQuotesList, resolveOrdersList, resolveProfessionalsList, resolve
 export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } from './views/detail.js';
 export { resolveOrderRegistration } from './views/registration.js';
 export { resolveWarehouseOrder } from './views/warehouseOrder.js';
-// Togo plan configurator VM (drag-and-drop top-down → a modular quote line).
+// Togo plan configurator VM (drag-and-drop top-down → a modular quote line),
+// plus the DXF export (a placed plan → a downloadable CAD file).
 export {
   resolveConfigurator, resolveTogoModels, resolveTogoModelCards, togoPickerFamilies,
   snapPlacement, footprintOf, clampToPlan, resolvePlacement,
   buildTogoComponents, buildTogoModularSeed,
+  resolveTogoDxf, placementsFromPlaced, placementsFromComponents, lineHasTogoPlan,
   PLAN_W_CM, PLAN_H_CM, PX_PER_CM, SNAP_GRID_CM, EDGE_SNAP_CM,
 } from './views/configuratorView.js';
