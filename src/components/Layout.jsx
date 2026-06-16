@@ -31,9 +31,10 @@ function SidebarLink({ item, sub = false, pathname, waUnread, compact = false })
     <NavLink
       to={to}
       end={end}
-      // `title` doubles as the native tooltip the collapsed icon rail needs; it's
-      // harmless while the label is also on screen.
+      // `title` is the native tooltip the collapsed icon rail needs; `aria-label`
+      // gives the icon-only row an accessible name when the label is hidden.
       title={label}
+      aria-label={compact ? label : undefined}
       className={({ isActive }) => {
         const on = sectionActive != null ? sectionActive : isActive;
         // A `sub` row is indented + hung off a hairline, reading as a child.
@@ -101,16 +102,11 @@ export default function Layout() {
     () => typeof window !== 'undefined' && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
   );
   const isMobile = !useMediaQuery('(min-width: 768px)');
-  // Desktop collapse is now a thin ICON RAIL (not a full hide): the rail stays
-  // visible and gently expands to the full panel on hover/focus as an OVERLAY
-  // (peek), so the page never reflows. `collapsed` is the persisted pin state;
-  // `peek` is the transient hover-expand. Both are md:-only (mobile uses the
-  // drawer). `showRailIcons` = render the compact icons-only chrome.
-  const [peek, setPeek] = useState(false);
-  const railMode = collapsed && !isMobile;
-  const showRailIcons = railMode && !peek;
-  // Pinning the rail open clears any stale peek.
-  useEffect(() => { if (!collapsed) setPeek(false); }, [collapsed]);
+  // Desktop collapse is a thin, STATIC icon rail (not a full hide): the rail
+  // stays at w-14 showing only icons and does NOT expand on hover. Discovery is
+  // via per-icon tooltips; the toggle (⌘\ or the edge handle) restores the full
+  // labeled panel. md:-only (mobile uses the drawer instead).
+  const showRailIcons = collapsed && !isMobile;
   const company = settings?.companyName || 'ALCOVER';
   // Global ⌘K search palette — opened from the topbar/sidebar triggers or the
   // keyboard shortcut; the overlay itself owns Escape-to-close.
@@ -152,12 +148,11 @@ export default function Layout() {
   // reach it (it would silently fall back and wedge the dock at one position).
   //   --rs-dock-left : the dock box's left edge = the sidebar's OCCUPIED width
   //                    (15rem pinned-open; 3.5rem = the w-14 icon rail when
-  //                    collapsed — the dock starts just past the rail and never
-  //                    covers it; the rail's hover-peek is a transient overlay we
-  //                    intentionally let float over the dock's left edge).
+  //                    collapsed — the rail sits in-flow, so the dock starts just
+  //                    past it and never covers it).
   //   --rs-dock-pad  : extra left padding that re-insets the dock's CONTENT under
-  //                    the page columns — now 0 in both states, since <main>'s own
-  //                    md:pl-14 (= the rail width) already keeps content aligned.
+  //                    the page columns — 0 in both states, since the in-flow rail
+  //                    already reserves its own width.
   // Consumed only via md:-gated utilities, so the mobile drawer layout ignores them.
   const dockLeft = collapsed ? '3.5rem' : '15rem';
   const dockPad = '0px';
@@ -168,7 +163,7 @@ export default function Layout() {
   }, [dockLeft, dockPad]);
 
   return (
-    <div className="h-full flex flex-col md:flex-row relative">
+    <div className="h-full flex flex-col md:flex-row">
       {/* Mobile topbar — extends behind the status bar on standalone iOS
           via pt-safe-area, so our dark background covers the white status-bar
           text instead of leaving a milky strip above the topbar. */}
@@ -230,13 +225,9 @@ export default function Layout() {
           pb-safe-area / pl-safe-area keep the panel content clear of the
           notch, home indicator, and landscape ear. */}
       <aside
-        onMouseEnter={() => { if (collapsed) setPeek(true); }}
-        onMouseLeave={() => setPeek(false)}
-        onFocusCapture={() => { if (collapsed) setPeek(true); }}
-        onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setPeek(false); }}
-        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-[transform,width] duration-200 md:duration-300 md:ease-[cubic-bezier(0.22,1,0.36,1)] md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
+        className={`theme-chrome bg-gradient-to-b from-ink-800 via-ink-900 to-ink-900 text-ink-100 flex-shrink-0 flex flex-col fixed inset-y-0 left-0 z-50 w-[min(16rem,85vw)] md:relative md:border-r md:border-ink-800/60 pt-safe-area pb-safe-area pl-safe-area transform transition-[transform,width] duration-200 md:duration-300 md:ease-[cubic-bezier(0.22,1,0.36,1)] md:transform-none md:pt-0 md:pb-0 md:pl-0 ${
           navOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full md:translate-x-0'
-        } ${collapsed ? `md:absolute ${peek ? 'md:w-60 md:shadow-pop' : 'md:w-14'}` : 'md:relative md:w-60'}`}
+        } ${collapsed ? 'md:w-14' : 'md:w-60'}`}
         aria-label="Navegación principal"
       >
         {/* Collapse handle — an elongated pill pinned to the sidebar's right
@@ -340,7 +331,7 @@ export default function Layout() {
 
         {/* QuickBooks-style "+ Nuevo" quick-create — only where accounting
             create flows are reachable (accounting users + admins). Hidden in the
-            icon rail; reappears when the rail peeks open. */}
+            icon rail; shown only in the full (expanded) sidebar. */}
         {!showRailIcons && (isAccounting || isAdmin) && <QuickCreate />}
 
         {/* Admin-only "Ver como" preview — sits right under the brand mark so
@@ -391,7 +382,7 @@ export default function Layout() {
           would otherwise show a 1-pixel bounce flicker). When the sidebar is
           collapsed, a small left gutter (md:pl-12) keeps content clear of the
           floating show-toggle. */}
-      <main ref={mainRef} className={`flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad ${collapsed ? 'md:pl-14' : ''}`}>
+      <main ref={mainRef} className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain kb-scroll-pad">
         <MainContent />
       </main>
 
