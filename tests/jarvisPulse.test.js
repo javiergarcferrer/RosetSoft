@@ -74,8 +74,8 @@ test('outstanding receivable follows the milestone rules per accepted quote', ()
   const quotes = [
     // nothing paid → owes the full total
     { id: 'a1', status: 'accepted', acceptedAt: NOW },
-    // deposit landed → owes total − deposit
-    { id: 'a2', status: 'accepted', acceptedAt: NOW, depositReceivedAt: NOW, depositAmount: 100 },
+    // order in flight, deposit landed → owes total − deposit
+    { id: 'a2', status: 'accepted', orderId: 'o2', acceptedAt: NOW, depositReceivedAt: NOW, depositAmount: 100 },
     // balance paid → owes nothing
     { id: 'a3', status: 'accepted', acceptedAt: NOW, balancePaidAt: NOW },
   ];

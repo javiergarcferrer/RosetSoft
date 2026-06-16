@@ -88,10 +88,14 @@ const NOW = Date.parse('2026-06-10T12:00:00Z');
 const SELLER_QUOTES = [
   { id: 'qd', profileId: 't', status: 'draft', createdByUserId: 'me', updatedAt: NOW - 1 },
   { id: 'qs', profileId: 't', status: 'sent', createdByUserId: 'me', sentAt: NOW - 10 * 86400000 },
-  // Accepted this month, deposit received → the balance is what's owed.
-  { id: 'qa', profileId: 't', status: 'accepted', createdByUserId: 'me', acceptedAt: NOW - 86400000, depositReceivedAt: NOW - 86400000, depositAmount: 500 },
+  // Accepted this month, order in flight, deposit received → the balance is
+  // what's owed (a special order collects its balance on landing).
+  { id: 'qa', profileId: 't', status: 'accepted', createdByUserId: 'me', orderId: 'o-a', acceptedAt: NOW - 86400000, depositReceivedAt: NOW - 86400000, depositAmount: 500 },
   // Accepted LAST month, nothing paid → the full total is owed.
   { id: 'qb', profileId: 't', status: 'accepted', createdByUserId: 'me', acceptedAt: NOW - 40 * 86400000 },
+  // Floor (stock) sale — no order, deposit received → collected in full at the
+  // deposit, so nothing is owed and the next step reads "Completada".
+  { id: 'qf', profileId: 't', status: 'accepted', createdByUserId: 'me', acceptedAt: NOW - 2 * 86400000, depositReceivedAt: NOW - 2 * 86400000, depositAmount: 300 },
 ];
 const SELLER_LINES = SELLER_QUOTES.map((q) => ({
   id: `l-${q.id}`, quoteId: q.id, kind: 'item', qty: 1, unitPrice: 1000,
@@ -118,13 +122,32 @@ test('resolveDashboard "por cobrar" = balance after deposit + untouched totals',
   });
   const total = (id) => d.totalByQuote.get(id);
 
-  // Per-row dues: qa owes total − 500 (deposit landed), qb owes everything.
+  // Per-row dues: qa (order in flight) owes total − 500, qb owes everything,
+  // qf (floor sale) owes nothing — the deposit was the full collection.
   const byId = new Map(d.accepted.map((a) => [a.q.id, a]));
   assert.equal(byId.get('qa').due, total('qa') - 500);
   assert.equal(byId.get('qa').total, total('qa'));
   assert.equal(byId.get('qb').due, total('qb'));
+  assert.equal(byId.get('qf').due, 0);
   // The KPI is the sum of the same per-row rule — one money source.
-  assert.equal(d.kpis.dueValue, byId.get('qa').due + byId.get('qb').due);
+  assert.equal(d.kpis.dueValue, byId.get('qa').due + byId.get('qb').due + byId.get('qf').due);
+});
+
+test('resolveDashboard next step: a floor sale completes at the deposit (no phantom balance)', () => {
+  const d = resolveDashboard({
+    quotes: SELLER_QUOTES, customers: [], lines: SELLER_LINES,
+    orders: [], containers: [], scopeIsTeam: false, meId: 'me', now: NOW,
+  });
+  const byId = new Map(d.accepted.map((a) => [a.q.id, a]));
+  // Floor sale (no order) with a deposit → "Completada", never "Balance pendiente".
+  assert.equal(byId.get('qf').step.label, 'Completada');
+  // An order in flight with a deposit still owes its balance.
+  assert.equal(byId.get('qa').step.label, 'Balance pendiente');
+  // A floor quote awaiting its deposit still nags for the anticipo.
+  assert.equal(byId.get('qb').step.label, 'Anticipo pendiente');
+  // Of the three accepted quotes (qa, qb, qf), the done floor sale (qf) is NOT
+  // counted as still in process — only qa and qb are.
+  assert.equal(d.kpis.inProcessCount, 2);
 });
 
 test('resolveDashboard stamps active orders with when they entered their stage', () => {

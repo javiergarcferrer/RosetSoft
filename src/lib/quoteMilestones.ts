@@ -127,24 +127,32 @@ export function quoteMilestoneState(quote: Quote | null | undefined): QuoteMiles
  * currency as `total` (the quote's grand total, USD base):
  *
  *   • nothing paid yet        → the full total (the deposit hasn't landed).
- *   • deposit received        → total − depositAmount (the balance).
+ *   • floor sale + deposit    → 0 — a floor (stock) sale has no order and no
+ *     balance cycle: the piece leaves the floor at the deposit, which IS the
+ *     full collection (the same rule that makes it ready to invoice). Once the
+ *     deposit lands there's nothing left to chase.
+ *   • deposit received        → total − depositAmount (the balance) — for an
+ *     order in flight, where the balance is collected on landing.
  *   • balance paid            → 0 — nothing outstanding, delivered or not
  *     (the dealer's rule: goods don't leave until the balance is paid,
  *     so delivery never adds money owed).
  *
- * A deposit recorded without an amount (`depositAmount` null/0) leaves
- * the full total outstanding — better to over-state what's owed than to
- * silently forgive the balance. Clamped at 0 so an over-collected
+ * A deposit recorded without an amount (`depositAmount` null/0) on an order in
+ * flight leaves the full total outstanding — better to over-state what's owed
+ * than to silently forgive the balance. Clamped at 0 so an over-collected
  * deposit can't show a negative receivable.
  */
 export function quoteOutstanding(
-  quote: Pick<Quote, 'depositReceivedAt' | 'balancePaidAt' | 'depositAmount'> | null | undefined,
+  quote: Pick<Quote, 'orderId' | 'depositReceivedAt' | 'balancePaidAt' | 'depositAmount'> | null | undefined,
   total: number,
 ): number {
   if (!quote) return 0;
   if (quote.balancePaidAt) return 0;
   const safeTotal = Math.max(0, Number(total) || 0);
   if (!quote.depositReceivedAt) return safeTotal;
+  // Floor sale (no order): the deposit is the full collection — there's no
+  // later balance to chase, so nothing is outstanding once it lands.
+  if (isFloorSale(quote)) return 0;
   return Math.max(0, safeTotal - (Number(quote.depositAmount) || 0));
 }
 

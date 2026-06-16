@@ -8,7 +8,7 @@
 // time-derived numbers (staleness, "won this month") stay testable.
 import { linesByQuoteId, quoteGrandTotal } from '../totals.js';
 import { currentOrderStage, ORDER_STAGE_BY_KEY } from '../../../lib/orderStages.js';
-import { quoteOutstanding } from '../../../lib/quoteMilestones.js';
+import { quoteOutstanding, isFloorSale } from '../../../lib/quoteMilestones.js';
 import { normalizeContainerNo, isValidContainerNo } from '../../../lib/containerTracking.js';
 
 // A sent quote waiting longer than this nudges a follow-up.
@@ -24,6 +24,11 @@ const ORDER_DONE_STAGES = new Set(['received', 'cancelled']);
 // (deposit → balance → delivery). `rank` sorts the most-pending to the top.
 function acceptedNextStep(q) {
   if (!q.depositReceivedAt) return { label: 'Anticipo pendiente', cls: 'status-pill-pending', rank: 0 };
+  // Floor (stock) sale — no order attached: the piece leaves the floor at the
+  // deposit, so there's no balance or delivery cycle to chase. The deposit IS
+  // the completion (the same rule that makes it ready to invoice), so it never
+  // hangs on a phantom "Balance pendiente" the dealer can't clear.
+  if (isFloorSale(q))       return { label: 'Completada',        cls: 'status-pill-archived', rank: 3 };
   if (!q.balancePaidAt)     return { label: 'Balance pendiente',  cls: 'status-pill-sent',    rank: 1 };
   if (!q.deliveredAt)       return { label: 'Entrega pendiente',  cls: 'status-pill-accepted', rank: 2 };
   return { label: 'Entregada', cls: 'status-pill-archived', rank: 3 };
