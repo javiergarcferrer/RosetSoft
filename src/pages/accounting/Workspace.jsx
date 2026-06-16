@@ -1102,15 +1102,15 @@ function CyclePill({ label, sub, active, onClick }) {
       aria-pressed={active}
       className={`text-left rounded-md border px-3 py-2 min-h-11 transition-all active:scale-[0.98] select-none ${
         active
-          ? 'border-brand-500 bg-brand-600 text-white shadow-sm ring-2 ring-brand-300/40'
+          ? 'border-brand-300 bg-brand-50 text-brand-700 shadow-xs'
           : 'border-ink-200 hover:border-ink-300 bg-surface hover:shadow-xs text-ink-700'
       }`}
     >
       <div className="flex items-center gap-1.5 text-sm font-medium">
-        <Calendar size={12} className={active ? 'text-brand-200' : 'text-ink-400'} />
+        <Calendar size={12} className={active ? 'text-brand-600' : 'text-ink-400'} />
         {label}
       </div>
-      <div className={`text-[10px] mt-0.5 tabular-nums ${active ? 'text-brand-200' : 'text-ink-500'}`}>{sub}</div>
+      <div className={`text-[10px] mt-0.5 tabular-nums ${active ? 'text-brand-600/80' : 'text-ink-500'}`}>{sub}</div>
     </button>
   );
 }
