@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { glbFor } from '../../assets/togo/togoModels3d.js';
-import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup, makeQuiltNormalMap } from './togoSceneBuilder.js';
 
 // Pick the three.js loader for a model URL by extension, loaded on demand (so a
 // scene with no real models pulls in no loader at all). pCon exports OBJ/FBX/
@@ -21,25 +21,36 @@ async function loaderFor(ext) {
 // glTF/Collada return a wrapper with `.scene`; OBJ/FBX/3DS return the Object3D.
 const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
 
+// The default fabric finish (the material editor overrides these live).
+const DEFAULT_FINISH = { sheen: 0.6, sheenRoughness: 0.55, roughness: 0.82, repeat: 3, normalScale: 1.0 };
+
 /**
- * The Togo 3D preview — a real-time three.js view of the SAME placed layout the
- * 2D plan edits, with each piece upholstered in its chosen fabric (the swatch
- * image, read through `swatch-proxy` so WebGL can use it cross-origin). three.js
- * + its addons load ONLY when this mounts (via safeDynamicImport — the engine is
- * fully code-split and never weighs on the initial widget), and the scene is
- * lit by a built-in RoomEnvironment (no HDR asset to ship).
+ * The Togo 3D visualizer — a real-time three.js view of the SAME placed layout
+ * the 2D plan edits, each piece upholstered in its chosen fabric + finish. High
+ * fidelity (physically-based fabric with a SHEEN lobe, a procedural quilt normal
+ * map for the iconic channels, image-based studio lighting + a soft contact
+ * shadow) yet low-latency: three.js loads only when this mounts (code-split via
+ * safeDynamicImport, no HDR asset — the lighting is the built-in RoomEnvironment)
+ * and the scene renders ON DEMAND (only on interaction, an edit, or a material
+ * change — zero idle GPU).
  *
- * Props: `scene3d` (a `resolveTogoScene` projection). Re-renders the furniture
- * group when it changes; the renderer/camera/orbit/lighting persist so the
- * user's viewpoint survives an edit. Geometry is procedural for now (sized to the
- * real footprints); when the dealer's pCon/OFML Togo GLBs land, the per-piece
- * build swaps to a glTF load with the rest of the wiring unchanged.
+ * Props:
+ *   • `scene3d`   — a `resolveTogoScene` projection (the layout + per-piece fabric)
+ *   • `material`  — the live finish from the material editor (sheen/roughness/
+ *                   tint/weave scale); re-skins every piece instantly
+ *   • `autoRotate`— a gentle intro turntable that stops on first interaction
+ *
+ * Geometry is procedural (sized to the real footprints); a real Togo mesh
+ * (pCon/OFML export → GLB/OBJ/FBX) drops in per kind via the manifest with the
+ * material + layout wiring unchanged.
  */
-export default function TogoScene3D({ scene3d, autoRotate = true, className = '' }) {
+export default function TogoScene3D({ scene3d, material, autoRotate = true, className = '' }) {
   const mountRef = useRef(null);
-  const api = useRef(null);      // three objects, kept across renders
+  const api = useRef(null);          // three objects, kept across renders
   const sceneRef = useRef(scene3d);
   sceneRef.current = scene3d;
+  const finishRef = useRef(material);
+  finishRef.current = material;
 
   const rebuild = useCallback(async () => {
     const l = api.current;
@@ -47,7 +58,7 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
     const sd = sceneRef.current || { pieces: [], overallCm: { widthCm: 0, depthCm: 0 } };
     // Preload the distinct fabric swatches as textures (CORS via swatch-proxy)…
     const codes = [...new Set((sd.pieces || []).map((p) => p.fabricCode).filter(Boolean))];
-    // …and any REAL Togo GLBs wired for the kinds in play (none → procedural).
+    // …and any REAL Togo models wired for the kinds in play (none → procedural).
     const kinds = [...new Set((sd.pieces || []).map((p) => p.kind).filter((k) => glbFor(k)))];
     await Promise.all([
       ...codes.map(async (code) => {
@@ -71,27 +82,30 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
     if (!api.current) return; // unmounted while awaiting
     if (l.group) { l.scene.remove(l.group); disposeGroup(l.group); }
     l.group = buildTogoGroup(l.deps, sd, {
+      ...DEFAULT_FINISH,
+      ...(finishRef.current || {}),
+      normalMap: l.quilt,
       textureFor: (c) => { const t = l.texCache.get(c); return t ? t.clone() : null; },
       modelFor: (piece) => l.modelCache.get(piece.kind) || null,
-      repeat: 3,
     });
     l.scene.add(l.group);
     // Frame the camera once the first pieces appear; keep the viewpoint after.
     const r = sceneRadius(sd);
-    l.controls.minDistance = r * 0.45;
-    l.controls.maxDistance = r * 8;
+    l.controls.minDistance = r * 0.4;
+    l.controls.maxDistance = r * 9;
     if (!l.framed && (sd.pieces || []).length) {
-      l.camera.position.set(r * 1.0, r * 0.95, r * 1.6);
-      l.controls.target.set(0, 28, 0);
-      l.camera.lookAt(0, 28, 0);
-      l.controls.update();
+      l.camera.position.set(r * 0.7, r * 0.5, r * 1.45);
+      l.controls.target.set(0, 18, 0);
+      l.camera.lookAt(0, 18, 0);
       l.framed = true;
     }
+    l.controls.update();
+    l.requestRender();
   }, []);
 
-  // Mount once: load three, build renderer/scene/camera/controls/stage + loop.
+  // Mount once: load three, build renderer/scene/camera/controls/stage.
   useEffect(() => {
-    let alive = true; let raf = 0; let ro = null;
+    let alive = true; let ro = null;
     (async () => {
       let mods;
       try {
@@ -109,57 +123,83 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
       const w = mount.clientWidth || 640, h = mount.clientHeight || 440;
 
       let renderer;
-      try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+      try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
       catch { return; }
       renderer.setSize(w, h);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.98;
       renderer.domElement.style.display = 'block';
       renderer.domElement.style.outline = 'none';
       mount.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(38, w / h, 1, 12000);
-      camera.position.set(300, 300, 480);
+      const camera = new THREE.PerspectiveCamera(33, w / h, 1, 12000);
+      camera.position.set(300, 240, 520);
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.08;
+      controls.enableDamping = false;     // on-demand rendering: no idle loop needed
       controls.enablePan = false;
       controls.maxPolarAngle = Math.PI * 0.49; // never dip under the floor
       controls.autoRotate = autoRotate;
       controls.autoRotateSpeed = 0.7;
-      controls.target.set(0, 28, 0);
+      controls.target.set(0, 18, 0);
+
+      // On-demand rendering — render only when something changes (interaction,
+      // edit, material). A single scheduled frame coalesces bursts of events.
+      const renderNow = () => { controls.update(); renderer.render(scene, camera); };
+      let scheduled = false;
+      const requestRender = () => {
+        if (scheduled || !alive) return;
+        scheduled = true;
+        requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); });
+      };
+      controls.addEventListener('change', requestRender);
+
+      // Gentle intro turntable; its loop is the ONLY continuous render, and it
+      // stops on the first interaction (then we're fully on-demand).
+      let autoRaf = 0;
+      const autoLoop = () => {
+        if (!alive || !controls.autoRotate) { autoRaf = 0; return; }
+        controls.update(); renderer.render(scene, camera);
+        autoRaf = requestAnimationFrame(autoLoop);
+      };
       const stopAuto = () => { controls.autoRotate = false; };
       renderer.domElement.addEventListener('pointerdown', stopAuto, { once: true });
 
       const disposeStage = setupTogoStage(deps, renderer, scene, 300);
-      api.current = { THREE, deps, renderer, scene, camera, controls, disposeStage, stopAuto, group: null, texCache: new Map(), modelCache: new Map(), framed: false };
+      const quilt = makeQuiltNormalMap(THREE);
+      if (quilt) quilt.repeat.set(2, 2);
+      api.current = {
+        THREE, deps, renderer, scene, camera, controls, disposeStage, stopAuto, quilt,
+        group: null, texCache: new Map(), modelCache: new Map(), framed: false,
+        requestRender, getAutoRaf: () => autoRaf,
+      };
 
       await rebuild();
       if (!alive) return;
-      const loop = () => { if (!alive) return; controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(loop); };
-      loop();
+      if (controls.autoRotate) autoLoop(); else requestRender();
 
       ro = new ResizeObserver(() => {
         const W = mount.clientWidth, H = mount.clientHeight;
-        if (W && H) { renderer.setSize(W, H); camera.aspect = W / H; camera.updateProjectionMatrix(); }
+        if (W && H) { renderer.setSize(W, H); camera.aspect = W / H; camera.updateProjectionMatrix(); requestRender(); }
       });
       ro.observe(mount);
     })();
 
     return () => {
       alive = false;
-      cancelAnimationFrame(raf);
       ro?.disconnect();
       const l = api.current;
       api.current = null;
       if (l) {
+        cancelAnimationFrame(l.getAutoRaf?.() || 0);
         l.renderer?.domElement?.removeEventListener?.('pointerdown', l.stopAuto);
         l.controls?.dispose?.();
         disposeGroup(l.group);
         l.disposeStage?.();
+        l.quilt?.dispose?.();
         l.texCache?.forEach((t) => t.dispose());
         l.modelCache?.forEach((m) => disposeGroup(m.object || m));
         l.renderer?.dispose?.();
@@ -168,8 +208,8 @@ export default function TogoScene3D({ scene3d, autoRotate = true, className = ''
     };
   }, [autoRotate, rebuild]);
 
-  // Re-render the furniture whenever the layout/fabrics change.
-  useEffect(() => { if (api.current) rebuild(); }, [scene3d, rebuild]);
+  // Re-skin / re-lay the scene whenever the layout, fabrics, or finish change.
+  useEffect(() => { if (api.current) rebuild(); }, [scene3d, material, rebuild]);
 
   return <div ref={mountRef} className={className} aria-label="Vista 3D de la configuración Togo" />;
 }

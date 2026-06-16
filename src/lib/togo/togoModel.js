@@ -17,7 +17,7 @@
 import { TOGO_PIECES } from '../../assets/togo/pieces.js';
 
 // Togo proportions (cm) — low and ground-hugging.
-const SEAT_TOP = 40;   // seat cushion height
+const SEAT_TOP = 38;   // seat cushion height
 const BACK_TOP = 72;   // backrest height
 const ARM_TOP = 56;    // armrest height
 
@@ -46,43 +46,43 @@ export function inferTogoForm(label = '', widthCm = 0, depthCm = 0) {
 export function togoParts(widthCm, depthCm, { armCount = 2 } = {}) {
   const W = Math.max(1, Number(widthCm) || 0);
   const D = Math.max(1, Number(depthCm) || 0);
-  const armW = armCount > 0 ? clamp(W * 0.15, 14, 26) : 0;
-  const backD = clamp(D * 0.28, 20, 32);
+  const armW = armCount > 0 ? clamp(W * 0.17, 16, 30) : 0;
+  const backThick = clamp(D * 0.34, 26, 40);
   const seatW = Math.max(20, W - (armCount === 2 ? 2 * armW : armCount === 1 ? armW : 0));
-  const seatD = Math.max(20, D - backD);
-  const seatZc = (-D / 2 + backD + D / 2) / 2;            // seat centre, between back and front edge
   const seatXc = armCount === 1 ? armW / 2 : 0;           // a single arm shifts the seat off the armed side
-  const backW = seatW + (armCount ? armW * 0.5 : 0);      // back tucks behind the arms (no corner gap)
+  const backW = seatW + (armCount ? armW * 0.7 : 0);      // back tucks behind the arms (no corner gap)
+  const seatBackZ = -D / 2 + backThick * 0.62;            // seat overlaps INTO the backrest
+  const seatFrontZ = D / 2;
+  const seatDepth = Math.max(20, seatFrontZ - seatBackZ);
   const parts = [];
 
-  // Seat — two ribs front↔back (the Togo channels run across the width).
-  const ribD = (seatD - 2) / 2;
-  for (const sign of [-1, 1]) {
-    parts.push({
-      role: 'seat', w: seatW, h: SEAT_TOP, d: ribD,
-      x: seatXc, y: SEAT_TOP / 2, z: seatZc + sign * (ribD / 2 + 1),
-      r: clamp(Math.min(SEAT_TOP, ribD) * 0.42, 4, 18),
-    });
-  }
-  // Backrest — two reclined tiers at the rear. The lower tier (top 48cm) OVERLAPS
-  // the 40cm seat so the back reads as connected, not a floating bar; the upper
-  // tier completes the pile to the Togo height.
-  const backZ = -D / 2 + backD / 2;
-  for (const t of [{ h: 48, y: 24 }, { h: BACK_TOP - 30, y: BACK_TOP - (BACK_TOP - 30) / 2 }]) {
-    parts.push({
-      role: 'back', w: backW, h: t.h, d: backD,
-      x: seatXc, y: t.y, z: backZ,
-      r: clamp(Math.min(t.h, backD) * 0.42, 4, 16),
-    });
-  }
-  // Arms — full-depth puffy rolls on the sides.
+  // Togo is a single, legless, low foam MASS — its identity is the quilted
+  // channels grooved INTO that mass, not separate rolls. So the geometry is a
+  // few generously-rounded bodies that OVERLAP into one cohesive sofa (no
+  // floating gaps); the channel quilting is added as a normal map on the fabric
+  // (togoSceneBuilder.makeQuiltNormalMap). r ≈ half the short side ⇒ plush.
+
+  // Seat cushion — one puffy body, overlapping the backrest at the rear.
+  parts.push({
+    role: 'seat', w: seatW, h: SEAT_TOP, d: seatDepth,
+    x: seatXc, y: SEAT_TOP / 2, z: (seatBackZ + seatFrontZ) / 2,
+    r: clamp(Math.min(SEAT_TOP, seatDepth) * 0.5, 9, 19),
+  });
+  // Backrest — a thick body at the rear; its lower half overlaps the seat so the
+  // two read as one continuous form (the quilt sells the recline).
+  parts.push({
+    role: 'back', w: backW, h: BACK_TOP, d: backThick,
+    x: seatXc, y: BACK_TOP / 2, z: -D / 2 + backThick / 2,
+    r: clamp(Math.min(backThick, BACK_TOP) * 0.42, 10, 18),
+  });
+  // Arms — full-depth bodies on the sides, overlapping the seat.
   const armXs = armCount === 2 ? [-(W / 2 - armW / 2), (W / 2 - armW / 2)]
     : armCount === 1 ? [-(W / 2 - armW / 2)] : [];
   for (const x of armXs) {
     parts.push({
       role: 'arm', w: armW, h: ARM_TOP, d: D,
       x, y: ARM_TOP / 2, z: 0,
-      r: clamp(Math.min(armW, ARM_TOP) * 0.42, 4, 16),
+      r: clamp(Math.min(armW, ARM_TOP) * 0.45, 9, 18),
     });
   }
   return parts;

@@ -21,12 +21,12 @@ test('inferTogoForm reads arms from the label, then the footprint shape', () => 
   assert.equal(inferTogoForm('Pieza', 174, 102).armCount, 2);
 });
 
-test('togoParts builds a floor-standing, footprint-bounded, ribbed pile', () => {
+test('togoParts builds a floor-standing, footprint-bounded, cohesive body', () => {
   const W = 174, D = 102;
   const parts = togoParts(W, D, { armCount: 2 });
-  assert.ok(parts.length >= 6, 'seat ribs + back ribs + 2 arms');
+  assert.ok(parts.length >= 3, 'seat + back + 2 arms');
   assert.equal(parts.filter((p) => p.role === 'arm').length, 2);
-  assert.equal(parts.filter((p) => p.role === 'seat').length, 2);
+  assert.equal(parts.filter((p) => p.role === 'seat').length, 1);
 
   let maxY = 0;
   for (const p of parts) {

@@ -19,18 +19,76 @@ import { togoParts } from '../../lib/togo/togoModel.js';
 const DEFAULT_COLOR = 0xB8AFA3;
 const DEG = Math.PI / 180;
 
-/** A fabric material: the swatch texture tiled over a matte dielectric, or a
- *  neutral fallback colour. `tex` is an already-loaded THREE.Texture or null. */
+/**
+ * Procedural QUILT normal map — the Togo's signature horizontal channels plus a
+ * fine fabric weave, baked into a tangent-space normal map so the cohesive body
+ * geometry reads as tufted upholstery without the polycount of real channels.
+ * Built once (canvas heightfield → finite-difference normals), tiled on every
+ * fabric material. Returns a THREE.Texture.
+ */
+export function makeQuiltNormalMap(THREE, { size = 256, channels = 6, weave = 90, strength = 2.6 } = {}) {
+  if (typeof document === 'undefined') return null;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const TAU = Math.PI * 2;
+  // Height field: DOMINANT rounded horizontal channels (the Togo quilting, vary
+  // along V only → grooves run across the width) + a faint, fine woven grain.
+  const H = (x, y) => {
+    const v = y / size, u = x / size;
+    const ch = (Math.cos(v * TAU * channels) * 0.5 + 0.5) ** 1.7;             // rounded grooves
+    const grain = (Math.sin(u * TAU * weave) + Math.sin(v * TAU * weave)) * 0.5;
+    return ch + grain * 0.05;
+  };
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const hL = H((x - 1 + size) % size, y), hR = H((x + 1) % size, y);
+      const hD = H(x, (y - 1 + size) % size), hU = H(x, (y + 1) % size);
+      let nx = (hL - hR) * strength, ny = (hD - hU) * strength, nz = 1;
+      const len = Math.hypot(nx, ny, nz) || 1; nx /= len; ny /= len; nz /= len;
+      const i = (y * size + x) * 4;
+      d[i] = (nx * 0.5 + 0.5) * 255;
+      d[i + 1] = (ny * 0.5 + 0.5) * 255;
+      d[i + 2] = (nz * 0.5 + 0.5) * 255;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/**
+ * A physically-based fabric material — the single biggest fidelity lever for
+ * upholstery. MeshPhysicalMaterial adds a SHEEN lobe (the soft retro-reflective
+ * glow real fabric has at grazing angles), tuned by the material editor. Takes
+ * the swatch texture (tiled, sRGB) or a neutral colour, plus an optional weave
+ * normal map. `tex` is an already-loaded THREE.Texture or null.
+ */
 export function makeFabricMaterial(THREE, tex, opts = {}) {
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0 });
+  const mat = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(opts.color ?? (tex ? 0xffffff : DEFAULT_COLOR)),
+    roughness: opts.roughness ?? 0.82,
+    metalness: 0,
+    sheen: opts.sheen ?? 0.5,
+    sheenRoughness: opts.sheenRoughness ?? 0.55,
+    sheenColor: new THREE.Color(opts.sheenColor ?? 0xffffff),
+    envMapIntensity: opts.envMapIntensity ?? 1.05,
+  });
   if (tex) {
-    tex.colorSpace = THREE.SRGBColorSpace;       // base colour is sRGB (research-confirmed)
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping; // tile the small swatch
+    tex.colorSpace = THREE.SRGBColorSpace;        // base colour is sRGB
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;  // tile the small swatch
     tex.repeat.set(opts.repeat || 3, opts.repeat || 3);
-    tex.anisotropy = opts.anisotropy || 4;
+    tex.anisotropy = opts.anisotropy || 8;
     mat.map = tex;
-  } else {
-    mat.color = new THREE.Color(opts.color ?? DEFAULT_COLOR);
+  }
+  if (opts.normalMap) {
+    mat.normalMap = opts.normalMap;
+    const ns = opts.normalScale ?? 0.5;
+    mat.normalScale = new THREE.Vector2(ns, ns);
   }
   return mat;
 }
@@ -124,7 +182,7 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   const envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
 
-  const key = new THREE.DirectionalLight(0xffffff, 2.1);
+  const key = new THREE.DirectionalLight(0xffffff, 2.5);
   key.position.set(radius * 0.8, radius * 1.6, radius * 0.9);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);

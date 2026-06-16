@@ -17,6 +17,17 @@ import TogoScene3D from '../../components/togo/TogoScene3D.jsx';
 
 const SCALE = PX_PER_CM;
 
+// The material editor's finish presets — physically-based fabric looks that
+// re-skin the 3D visualizer live (roughness + the sheen lobe that makes fabric
+// read as fabric). Fabric/colour stay per-piece (the swatch picker); the finish
+// is the configuration-wide surface character.
+const FINISHES = [
+  { key: 'mate', label: 'Mate', roughness: 0.95, sheen: 0.12, sheenRoughness: 0.85 },
+  { key: 'lino', label: 'Lino', roughness: 0.82, sheen: 0.5, sheenRoughness: 0.55 },
+  { key: 'terciopelo', label: 'Terciopelo', roughness: 0.6, sheen: 1.0, sheenRoughness: 0.3 },
+  { key: 'cuero', label: 'Cuero', roughness: 0.4, sheen: 0.08, sheenRoughness: 0.4 },
+];
+
 /**
  * PUBLIC, no-login Togo configurator — embedded in the dealer's website via an
  * <iframe>, and shown back IN the app (Togo workspace → Configurador tab) as a
@@ -55,6 +66,12 @@ export default function TogoEmbed() {
   const [matOpen, setMatOpen] = useState(false);
   const [matMode, setMatMode] = useState('one'); // 'one' (selected piece) | 'all'
   const [view, setView] = useState('2d');        // '2d' plan editor | '3d' preview
+  const [finishKey, setFinishKey] = useState('lino'); // material editor: surface finish
+  const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
+  const material = useMemo(() => {
+    const f = FINISHES.find((x) => x.key === finishKey) || FINISHES[1];
+    return { roughness: f.roughness, sheen: f.sheen, sheenRoughness: f.sheenRoughness, repeat: weave, normalScale: 1.0 };
+  }, [finishKey, weave]);
 
   useEffect(() => {
     let active = true;
@@ -308,7 +325,26 @@ export default function TogoEmbed() {
             )}
 
             {view === '3d' ? (
-              <TogoScene3D scene3d={scene3d} className="w-full h-[58vh] min-h-[420px] rounded-lg border border-ink-200 overflow-hidden bg-ink-50/40" />
+              <div className="space-y-2">
+                {/* Material editor — the finish re-skins every piece in the
+                    visualizer live; fabric/colour stay per-piece via the swatch
+                    picker (which also shows on the 2D plan). */}
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-200 bg-surface px-2.5 py-2">
+                  <span className="text-[11px] font-medium text-ink-600 inline-flex items-center gap-1"><Palette size={13} /> Material</span>
+                  <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
+                    {FINISHES.map((f, i) => (
+                      <button key={f.key} type="button" onClick={() => setFinishKey(f.key)} aria-pressed={finishKey === f.key}
+                        className={`px-2 py-1 text-[11px] ${i ? 'border-l border-ink-200' : ''} ${finishKey === f.key ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}>{f.label}</button>
+                    ))}
+                  </div>
+                  <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-500">
+                    Trama
+                    <input type="range" min="1.5" max="5" step="0.5" value={weave} onChange={(e) => setWeave(Number(e.target.value))} className="w-20 accent-brand-500" />
+                  </label>
+                  <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs ml-auto disabled:opacity-40" title="Aplicar una tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
+                </div>
+                <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[54vh] min-h-[400px] rounded-lg border border-ink-200 overflow-hidden bg-ink-50/40" />
+              </div>
             ) : (
             <div className="overflow-auto rounded-lg border border-ink-200 bg-ink-50/40">
               <div
