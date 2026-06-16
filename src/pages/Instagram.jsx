@@ -205,7 +205,7 @@ export default function Instagram() {
       )}
       {sec.id === 'contenido' && st && (
         <div className="h-full">
-          <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} />
+          <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} onPublish={() => setComposerOpen(true)} />
         </div>
       )}
       {sec.id === 'anuncios' && (
@@ -216,7 +216,6 @@ export default function Instagram() {
             spend7={sp?.kpis?.spend7}
             hasAds={!!sp?.hasAds}
             onChanged={load}
-            onPublish={() => setComposerOpen(true)}
             onCreateAd={() => setAdsOpen(true)}
           />
         </div>
@@ -267,8 +266,10 @@ export default function Instagram() {
         className="flex flex-col overflow-hidden"
         style={shellH ? { height: `${shellH}px` } : undefined}
       >
-        {/* Header — compact identity + live pill + the two primary actions. */}
-        <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pb-3">
+        {/* Header — compact identity + live pill + the two primary actions.
+            pt-1 keeps the avatar's ring-2 off the shell's overflow-hidden top
+            edge (the header sits flush against it, so the ring would clip). */}
+        <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pb-3 pt-1">
           <div className="flex min-w-0 items-center gap-3">
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-ink-100 ring-2 ring-brand-200">
               <ImageView id={null} fallbackUrl={st?.profile?.avatarUrl} alt="" className="h-full w-full object-cover" placeholderClassName="h-full w-full" />

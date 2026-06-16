@@ -2,10 +2,11 @@
 // "Anuncios" modal). Buckets every campaign the account returns — including
 // boosts made from the Meta Business Suite Ads tab — into Activas / Pausadas /
 // Inactivas (Activas default), with pause/resume (real money → confirm-gated).
-// Its header carries the primary actions: Publicar, Crear anuncio (the full
-// AdsManager wizard), and a jump straight to the Business Suite ad summary.
+// Its header carries the ad actions: Crear anuncio (the full AdsManager wizard)
+// and a jump straight to the Business Suite ad summary. (Publicar — posting
+// content — lives on the Contenido section, not here.)
 import { useCallback, useMemo, useState } from 'react';
-import { Megaphone, Plus, ExternalLink } from 'lucide-react';
+import { Megaphone, ExternalLink } from 'lucide-react';
 import { supabase } from '../../db/supabaseClient.js';
 
 const money = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -18,7 +19,7 @@ const bucketOf = (c) => {
 const BUSINESS_SUITE_ADS = 'https://business.facebook.com/latest/ad_center/all_ads';
 const TABS = [['active', 'Activas'], ['paused', 'Pausadas'], ['inactive', 'Inactivas']];
 
-export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasAds, onChanged, onPublish, onCreateAd }) {
+export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasAds, onChanged, onCreateAd }) {
   const [tab, setTab] = useState('active');
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
@@ -59,13 +60,8 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
             <ExternalLink size={14} /> Business Suite
           </a>
           {onCreateAd && (
-            <button type="button" className="btn-secondary text-xs" onClick={onCreateAd}>
+            <button type="button" className="btn-brand text-xs" onClick={onCreateAd}>
               <Megaphone size={14} /> Crear anuncio
-            </button>
-          )}
-          {onPublish && (
-            <button type="button" className="btn-brand text-xs" onClick={onPublish}>
-              <Plus size={14} /> Publicar
             </button>
           )}
         </div>
