@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen } from 'lucide-react';
+import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2 } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -12,8 +12,10 @@ import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
+import { syncShopify } from '../../lib/shopifySync.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 import {
-  resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal,
+  resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal, resolveKardex,
 } from '../../core/accounting/index.js';
 import { TEMPLATE_KEY } from './ExpedienteForm.jsx';
 
@@ -202,6 +204,9 @@ export default function ImportacionDetail() {
     ResizeHandle: CostResizeHandle, reset: resetCostWidths,
   } = useColumnWidths(costCols.cols, 'rs.importacion.detail.costs.widths.v1');
 
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState('');
+
   if (!allowed) {
     return (
       <>
@@ -251,6 +256,50 @@ export default function ImportacionDetail() {
     navigate('/accounting/importaciones?new=1');
   }
 
+  /** Delete this expediente and undo everything its save posted: the asiento
+   *  (entry + lines), the kardex IN movements it created, and — since movements
+   *  are the source of truth — each touched item's on-hand/avg recomputed from
+   *  its REMAINING movements. Lets the team re-register a file cleanly while the
+   *  import engine is in testing. The expediente row goes last so a mid-way
+   *  failure leaves it in place to retry; the steps are idempotent. */
+  async function deleteExpediente() {
+    const e = expQ.data;
+    if (!e || deleting) return;
+    if (!confirm(`¿Eliminar el expediente${e.number != null ? ` #${e.number}` : ''}? Se revierten el asiento, los movimientos de inventario y las existencias. Esta acción no se puede deshacer.`)) return;
+    setErr('');
+    setDeleting(true);
+    try {
+      // The kardex IN movements this expediente posted (refTable/refId tag).
+      const expMoves = (await db.inventoryMovements.where('refId').equals(e.id).toArray())
+        .filter((m) => m.refTable === 'import_expedientes');
+      const touched = [...new Set(expMoves.map((m) => m.itemId).filter(Boolean))];
+
+      // 1. The asiento — lines first, then the entry (mirror the quote cascade).
+      if (e.journalEntryId) {
+        const jl = await db.journalLines.where('entryId').equals(e.journalEntryId).toArray();
+        await db.journalLines.bulkDelete(jl.map((l) => l.id));
+        await db.journalEntries.delete(e.journalEntryId);
+      }
+      // 2. This expediente's kardex movements.
+      await db.inventoryMovements.bulkDelete(expMoves.map((m) => m.id));
+      // 3. Recompute each touched item from what's LEFT (self-heals the
+      //    denormalized qty/avg the weighted-average IN had advanced).
+      for (const itemId of touched) {
+        const remaining = await db.inventoryMovements.where('itemId').equals(itemId).toArray();
+        const k = resolveKardex(remaining);
+        await db.inventoryItems.update(itemId, { qtyOnHand: k.qty, avgCost: k.avgCost });
+      }
+      // 4. The expediente itself.
+      await db.importExpedientes.delete(e.id);
+      // Stock changed → reflect it in the Shopify catalog (best-effort).
+      if (touched.length) syncShopify(touched).catch(() => {});
+      navigate('/accounting/importaciones');
+    } catch (ex) {
+      setErr(userMessageFor(ex));
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       <BackLink to="/accounting/importaciones">Volver a importaciones</BackLink>
@@ -258,11 +307,18 @@ export default function ImportacionDetail() {
         title={`Expediente${meta.number != null ? ` #${meta.number}` : ''}`}
         subtitle={`${formatDate(meta.date)}${meta.bl ? ` · BL ${meta.bl}` : ''}`}
         actions={(
-          <button type="button" onClick={useAsTemplate} className="btn-secondary">
-            <Copy size={14} /> Usar como plantilla
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={useAsTemplate} className="btn-secondary">
+              <Copy size={14} /> Usar como plantilla
+            </button>
+            <button type="button" onClick={deleteExpediente} disabled={deleting}
+              className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 disabled:opacity-50">
+              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} <span className="hidden sm:inline">Eliminar</span>
+            </button>
+          </div>
         )}
       />
+      {err && <p className="text-sm text-rose-600 mb-3">{err}</p>}
 
       {/* Meta strip */}
       <div className="card p-3 mb-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
