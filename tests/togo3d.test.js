@@ -6,7 +6,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { inferTogoForm, togoParts, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
+import { inferTogoForm, inferTogoKind, togoParts, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
+import { glbFor, hasTogoGlb } from '../src/assets/togo/togoModels3d.js';
 import { resolveTogoScene } from '../src/core/quote/views/configuratorView.js';
 
 test('inferTogoForm reads arms from the label, then the footprint shape', () => {
@@ -42,6 +43,24 @@ test('togoParts builds a floor-standing, footprint-bounded, ribbed pile', () => 
   // Armless (chauffeuse) drops the arm parts; chaise keeps one.
   assert.equal(togoParts(87, 102, { armCount: 0 }).filter((p) => p.role === 'arm').length, 0);
   assert.equal(togoParts(131, 162, { armCount: 1 }).filter((p) => p.role === 'arm').length, 1);
+});
+
+test('inferTogoKind maps to a canonical Togo piece (label, then footprint), for GLB lookup', () => {
+  assert.equal(inferTogoKind('Chofesa Togo'), 'chauf');
+  assert.equal(inferTogoKind('Sofá grande Togo'), 'mc');
+  assert.equal(inferTogoKind('Meridiana Togo'), 'lounge');
+  // No keyword → nearest measured footprint (174×102 == the settee gb).
+  assert.equal(inferTogoKind('Pieza', 174, 102), 'gb');
+  assert.equal(inferTogoKind('', 0, 0), null);
+});
+
+test('the GLB manifest is empty until real models are exported (procedural fallback)', () => {
+  // No assets wired yet → every kind resolves to null, so the viewer draws
+  // procedural geometry. When a real Togo GLB is added this flips on with no
+  // other code change.
+  assert.equal(hasTogoGlb(), false);
+  assert.equal(glbFor('a'), null);
+  assert.equal(glbFor(null), null);
 });
 
 test('resolveTogoScene recentres the layout on the origin with the right overall size', () => {

@@ -36,27 +36,54 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
 }
 
 /**
+ * Drop a loaded REAL model (GLB scene) into a piece group: clone it, upholster
+ * every mesh in the piece's fabric material, then recentre on XZ and sit it on
+ * the floor — so the GLB's own origin/scale offset doesn't matter (set the
+ * cm scale on the object before passing it in). Casts/receives shadow.
+ */
+function placeRealModel(THREE, object, material, pieceGroup) {
+  const clone = object.clone(true);
+  clone.traverse((o) => {
+    if (o.isMesh) { o.material = material; o.castShadow = true; o.receiveShadow = true; }
+  });
+  const box = new THREE.Box3().setFromObject(clone);
+  const c = box.getCenter(new THREE.Vector3());
+  clone.position.x -= c.x;
+  clone.position.z -= c.z;
+  clone.position.y -= box.min.y;
+  pieceGroup.add(clone);
+}
+
+/**
  * Build the furniture group from a scene spec. `textureFor(fabricCode)` returns
- * a THREE.Texture or null (the caller owns loading/caching). Returns the group
- * plus the bounding radius (for camera framing). Pieces share one material each
- * (one per piece), so a fabric swap is a single `.map` change later if desired.
+ * a THREE.Texture or null (the caller owns loading/caching). `modelFor(piece)`
+ * returns a loaded GLB scene (THREE.Object3D) for a piece, or null to fall back
+ * to procedural geometry — so the SAME scene shows real Togo models the moment
+ * they're wired and generated cushions until then. Pieces share one material
+ * each (one per piece), so a fabric swap is a single `.map` change.
  */
 export function buildTogoGroup(deps, scene3d, opts = {}) {
   const { THREE, RoundedBoxGeometry } = deps;
   const textureFor = opts.textureFor || (() => null);
+  const modelFor = opts.modelFor || (() => null);
   const group = new THREE.Group();
 
   for (const piece of (scene3d?.pieces || [])) {
     const pieceGroup = new THREE.Group();
     const material = makeFabricMaterial(THREE, textureFor(piece.fabricCode), opts);
-    for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
-      const seg = Math.max(2, Math.round(part.r / 4));
-      const geo = new RoundedBoxGeometry(part.w, part.h, part.d, seg, part.r);
-      const mesh = new THREE.Mesh(geo, material);
-      mesh.position.set(part.x, part.y, part.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      pieceGroup.add(mesh);
+    const real = modelFor(piece);
+    if (real) {
+      placeRealModel(THREE, real, material, pieceGroup);
+    } else {
+      for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
+        const seg = Math.max(2, Math.round(part.r / 4));
+        const geo = new RoundedBoxGeometry(part.w, part.h, part.d, seg, part.r);
+        const mesh = new THREE.Mesh(geo, material);
+        mesh.position.set(part.x, part.y, part.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        pieceGroup.add(mesh);
+      }
     }
     // Plan x→world x, plan y→world z; the plan's clockwise screen rotation is a
     // negative rotation about the up axis in three's right-handed XZ floor.

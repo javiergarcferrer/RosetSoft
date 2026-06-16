@@ -15,7 +15,7 @@ import { compoundSubtotal } from '../../../lib/pricing.js';
 import { groupFamilies, productForGrade } from '../../../lib/catalog.js';
 import { composeSubtype } from '../../../lib/subtype.js';
 import { planToDxf } from '../../../lib/togo/planToDxf.js';
-import { inferTogoForm } from '../../../lib/togo/togoModel.js';
+import { inferTogoForm, inferTogoKind } from '../../../lib/togo/togoModel.js';
 
 // Plan canvas extent (cm) and the cm→px scale the View renders at. A Togo "room"
 // of ~7.6 × 5.4 m comfortably holds an L- or U-shaped sectional.
@@ -368,6 +368,7 @@ export function resolveTogoScene(placements) {
     widthCm: Number(p.widthCm) || 0,
     depthCm: Number(p.depthCm) || 0,
     form: inferTogoForm(p.label, p.widthCm, p.depthCm),
+    kind: inferTogoKind(p.label, p.widthCm, p.depthCm),
     x: +(pcx - cx).toFixed(2),
     z: +(pcy - cy).toFixed(2),
     rotationDeg: rot,

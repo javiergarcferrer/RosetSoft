@@ -14,6 +14,7 @@
  * Z = depth (back ↔ front: back at −Z, the open front at +Z), Y = up (floor 0).
  * Cushions split into ribs so the silhouette reads as Togo, not a slab.
  */
+import { TOGO_PIECES } from '../../assets/togo/pieces.js';
 
 // Togo proportions (cm) — low and ground-hugging.
 const SEAT_TOP = 40;   // seat cushion height
@@ -85,6 +86,28 @@ export function togoParts(widthCm, depthCm, { armCount = 2 } = {}) {
     });
   }
   return parts;
+}
+
+/**
+ * Map a placement to one of the five canonical Togo kinds (chauf · a · gb · mc ·
+ * lounge), so the renderer can look up a REAL 3D model (GLB) for it. Matches the
+ * piece's label keywords first (any language), then falls back to the nearest
+ * measured footprint. Returns a TOGO_PIECES id, or null if nothing is close.
+ */
+export function inferTogoKind(label = '', widthCm = 0, depthCm = 0) {
+  const s = String(label).toLowerCase();
+  for (const p of TOGO_PIECES) {
+    if ((p.match || []).some((k) => k !== 'togo' && s.includes(k))) return p.id;
+  }
+  if (widthCm > 0 && depthCm > 0) {
+    let best = null, bestD = Infinity;
+    for (const p of TOGO_PIECES) {
+      const d = Math.abs(p.widthCm - widthCm) + Math.abs(p.depthCm - depthCm);
+      if (d < bestD) { bestD = d; best = p.id; }
+    }
+    return best;
+  }
+  return null;
 }
 
 /** The overall built height (cm) of any Togo piece — the backrest top. */
