@@ -26,7 +26,9 @@ const HOME = { items: [{ to: '/', label: 'Inicio', icon: LayoutDashboard, end: t
 
 // The CRM "Ventas" group. Togo sits as a peer of Cotizaciones/Pedidos (no longer
 // nested). Comisiones — the bridge surface between a CRM sale and an accounting
-// payout — lives here too, right after Pedidos. The customer CHANNELS (WhatsApp +
+// payout — lives here too, right after Pedidos. Clientes/Profesionales sit just
+// below in their own label-less group (PEOPLE_GROUP) so they read as a separate
+// cluster from the sales documents above. The customer CHANNELS (WhatsApp +
 // Instagram) live in their own group below, in brand colors.
 const CRM_GROUP = {
   label: 'Ventas',
@@ -35,6 +37,13 @@ const CRM_GROUP = {
     { to: '/togo', label: 'Togo', icon: TogoIcon },
     { to: '/orders', label: 'Pedidos', icon: Package },
     { to: '/comisiones', label: 'Comisiones', icon: Wallet },
+  ],
+};
+
+// Clientes + Profesionales — a label-less group rendered right under Ventas, so
+// the mt-4 gap (and its own bracket) sets the people apart from the sales docs.
+const PEOPLE_GROUP = {
+  items: [
     { to: '/customers', label: 'Clientes', icon: Users },
     { to: '/professionals', label: 'Profesionales', icon: UserSquare2 },
   ],
@@ -109,12 +118,12 @@ export function navForRole(role, { accountingOpen = true } = {}) {
     // primitive, and GlobalSearch flattens them so every destination stays
     // searchable. Only the Contabilidad workspace nav is route-gated here.
     return [
-      HOME, CRM_GROUP, CHANNELS_GROUP, ADMIN_GROUP,
+      HOME, CRM_GROUP, PEOPLE_GROUP, CHANNELS_GROUP, ADMIN_GROUP,
       ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
       CONFIG_GROUP,
     ];
   }
-  if (role === 'employee') return [HOME, CRM_GROUP];
+  if (role === 'employee') return [HOME, CRM_GROUP, PEOPLE_GROUP];
   return [];
 }
 
