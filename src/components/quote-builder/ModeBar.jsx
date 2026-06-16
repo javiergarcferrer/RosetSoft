@@ -98,6 +98,7 @@ export default function ModeBar({ view, onChange, customer, showChat = true }) {
               );
             })}
           </div>
+        </div>
       </nav>
 
       {/* Desktop — a thin icon-only rail flush against the right edge of the

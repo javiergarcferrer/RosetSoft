@@ -46,7 +46,7 @@ const QUOTE_STATUS_LABELS = {
 
 export default function CustomerDetail() {
   const { customerId } = useParams();
-  const { profileId, isAdmin } = useApp();
+  const { profileId } = useApp();
   const navigate = useNavigate();
   // Local state for the edit modal. The same CustomerModal the list
   // page uses opens here too — passing onAfterDelete navigates back
