@@ -872,15 +872,10 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           </QuoteActionsContext.Provider>
           <ProjectPaletteCard />
           </ProjectPaletteContext.Provider>
-          {/* The customer's WhatsApp conversation, in the editor — read and
-              answer the client being quoted without leaving the workspace.
-              Sits right under the line items (above Notas) so it's in reach
-              while quoting. Renders only with a customer phone + the
-              Business API connected. Desktop-only: on a phone the bottom
-              ModeBar's WhatsApp tab owns the conversation full-screen. */}
-          <div className="hidden md:block">
-            <ContactChatCard contact={customer} contactKind="customer" quoteId={quote.id} />
-          </div>
+          {/* The customer's WhatsApp conversation lives in the Chats sidebar
+              (and the mobile ModeBar's WhatsApp tab) — it's intentionally NOT
+              embedded inline in the editor, where it sat between the line items
+              and Notas and got in the way while quoting. */}
           <NotesAndTermsCard quote={quote} settings={settings} onUpdateQuote={hx(updateQuote)} />
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
