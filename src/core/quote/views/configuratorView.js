@@ -26,6 +26,51 @@ export const EDGE_SNAP_CM = 8;   // flush-to-neighbour threshold
 const norm360 = (deg) => (((deg % 360) + 360) % 360);
 
 /**
+ * Admin "Modelos" projection: each saved model + its binding facts. A model's
+ * bound STATE is a property of the row (`productRoot`), NOT of the loaded
+ * catalog — so the list renders correct bound/unbound INSTANTLY from the (tiny)
+ * togo_models query, without waiting on the thousands-of-SKUs products catalog.
+ * When the catalog IS loaded (lazily, only to (re)bind), the family name + grade
+ * count enrich each row; until then they're null and the View just shows
+ * "Vinculado". Pure — no React, no db. `families` may be a root→family Map or an
+ * array (empty/undefined while the catalog hasn't been loaded yet).
+ */
+export function resolveTogoModelCards(models, families) {
+  const byRoot = families instanceof Map
+    ? families
+    : new Map((families || []).map((f) => [f.root, f]));
+  return (models || [])
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.name || '').localeCompare(b.name || ''))
+    .map((m) => {
+      const root = m.productRoot || null;
+      const fam = root ? byRoot.get(root) || null : null;
+      return {
+        id: m.id, name: m.name, svg: m.svg, widthCm: m.widthCm, depthCm: m.depthCm,
+        sortOrder: m.sortOrder || 0,
+        productRoot: root,
+        bound: !!root,
+        familyName: fam?.name || null,
+        graded: !!fam?.graded,
+        gradeCount: fam?.graded ? fam.grades.length : 0,
+      };
+    });
+}
+
+/**
+ * The "bind to product" picker list — Togo families first, then the rest. Pure;
+ * returns [] until the (lazily-loaded) catalog is available, so the View can show
+ * a "Cargando catálogo…" affordance without faking options.
+ */
+export function togoPickerFamilies(products) {
+  if (!products) return [];
+  const isTogo = (f) => /togo/i.test(f.name || '');
+  const all = groupFamilies(products).filter((f) => f.name);
+  return [...all.filter(isTogo), ...all.filter((f) => !isTogo(f))]
+    .sort((a, b) => (isTogo(b) - isTogo(a)) || (a.name || '').localeCompare(b.name || ''));
+}
+
+/**
  * Resolve the dealer's saved Togo models (`togo_models`) + the product catalog
  * into the configurator's palette: the active, drawable models sorted for
  * display, each merged with its catalog binding (cheapest grade → base price,

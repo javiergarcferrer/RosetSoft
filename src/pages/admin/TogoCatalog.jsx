@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { Sofa, Upload, Loader2, Trash2, Check, AlertCircle, Shield, Plus, Sparkles, Code2, Copy, ExternalLink } from 'lucide-react';
+import { Sofa, Upload, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2 } from 'lucide-react';
 import { togoEmbedSnippet, togoEmbedUrl } from '../../lib/togoEmbed.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { groupFamilies } from '../../lib/catalog.js';
+import { resolveTogoModelCards, togoPickerFamilies } from '../../core/quote/index.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import EmptyState from '../../components/EmptyState.jsx';
 import { TOGO_SEEDS } from '../../assets/togo/seeds.js';
@@ -17,6 +18,12 @@ import { TOGO_SEEDS } from '../../assets/togo/seeds.js';
  * Roset product for pricing, and save. Reliable because each model is an explicit,
  * dealer-authored entry — no name-matching guesswork. Renders no page chrome of
  * its own (the workspace owns the header + tabs); admin-only.
+ *
+ * Architecture: a model's BOUND state is a property of its own row (productRoot),
+ * so the list renders instantly from the tiny togo_models query. The full LR
+ * products catalog (thousands of SKUs) is a LAZY dependency — loaded only when the
+ * dealer actually opens a picker to bind/rebind (or adds/imports). Visiting the
+ * tab with everything already bound never pays the multi-second catalog load.
  */
 export default function TogoModels() {
   const { isAdmin, profileId } = useApp();
@@ -24,35 +31,31 @@ export default function TogoModels() {
     () => (profileId ? db.togoModels.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
     [profileId], [],
   );
+
+  // The LR catalog is fetched ONLY once a binding UI asks for it. Until then the
+  // query resolves null (cheap) and bound state comes from each model's row.
+  const [needCatalog, setNeedCatalog] = useState(false);
+  const requestCatalog = useCallback(() => setNeedCatalog(true), []);
   const products = useLiveQuery(
-    () => (profileId ? db.products.where('profileId').equals(profileId).toArray() : Promise.resolve([])),
-    [profileId], [],
+    () => (needCatalog && profileId
+      ? db.products.where('profileId').equals(profileId).toArray()
+      : Promise.resolve(null)),
+    [profileId, needCatalog], null,
   );
-  // Families for the "bind to product" select — Togo models first, then the rest.
-  const families = useMemo(() => {
-    const all = groupFamilies(products).filter((f) => f.name);
-    const isTogo = (f) => /togo/i.test(f.name);
-    return [...all.filter(isTogo), ...all.filter((f) => !isTogo(f))]
-      .sort((a, b) => (isTogo(b) - isTogo(a)) || (a.name || '').localeCompare(b.name || ''));
-  }, [products]);
+  const catalogLoading = needCatalog && products === null;
+  const families = useMemo(() => togoPickerFamilies(products), [products]);
+  const cards = useMemo(() => resolveTogoModelCards(models, families), [models, families]);
 
-  if (!isAdmin) {
-    return <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo Togo." />;
-  }
-
-  const sorted = [...(models || [])].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || (a.name || '').localeCompare(b.name || ''));
-
-  // Best-effort: bind a seed to a "Togo …" catalog family by its keywords, so the
-  // imported pieces are priced + fabric-enabled out of the box when the dealer
-  // has Togo products. Unmatched seeds stay unbound (bind them by hand below).
-  const togoFamilies = useMemo(() => families.filter((f) => /togo/i.test(f.name)), [families]);
-  const autoRoot = (seed) => {
-    const keys = (seed.match || []).filter((k) => k !== 'togo');
-    const hit = togoFamilies.find((f) => { const n = (f.name || '').toLowerCase(); return keys.some((k) => k && n.includes(k)); });
-    return hit ? hit.root : null;
-  };
-
-  const importSeeds = async () => {
+  const importSeeds = useCallback(async () => {
+    // One-off direct fetch so seed auto-binding works without making the whole
+    // tab eagerly load the catalog (this only runs from the empty state).
+    const prods = await db.products.where('profileId').equals(profileId).toArray();
+    const togoFams = groupFamilies(prods).filter((f) => /togo/i.test(f.name || ''));
+    const autoRoot = (seed) => {
+      const keys = (seed.match || []).filter((k) => k !== 'togo');
+      const hit = togoFams.find((f) => { const n = (f.name || '').toLowerCase(); return keys.some((k) => k && n.includes(k)); });
+      return hit ? hit.root : null;
+    };
     const existing = new Set((models || []).map((m) => (m.name || '').toLowerCase()));
     const base = models?.length ? Math.max(...models.map((m) => m.sortOrder || 0)) + 1 : 0;
     let i = 0;
@@ -64,16 +67,28 @@ export default function TogoModels() {
         active: true, createdAt: Date.now(), updatedAt: Date.now(),
       });
     }
-  };
+  }, [models, profileId]);
+
+  if (!isAdmin) {
+    return <EmptyState icon={Shield} title="Acceso restringido" description="Solo administradores pueden gestionar el catálogo Togo." />;
+  }
+
+  const nextSort = cards.length ? Math.max(...cards.map((c) => c.sortOrder || 0)) + 1 : 0;
 
   return (
     <>
-      <AddModelCard families={families} profileId={profileId} nextSort={sorted.length ? Math.max(...sorted.map((m) => m.sortOrder || 0)) + 1 : 0} />
+      <AddModelCard
+        families={families}
+        catalogLoading={catalogLoading}
+        onNeedCatalog={requestCatalog}
+        profileId={profileId}
+        nextSort={nextSort}
+      />
 
-      {sorted.length > 0 && <EmbedCard />}
+      {cards.length > 0 && <EmbedCard />}
 
       <div className="mt-5">
-        {sorted.length === 0 ? (
+        {cards.length === 0 ? (
           <EmptyState
             icon={Sofa}
             title="Aún no hay modelos Togo"
@@ -82,8 +97,8 @@ export default function TogoModels() {
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {sorted.map((m) => (
-              <ModelCard key={m.id} model={m} families={families} />
+            {cards.map((c) => (
+              <ModelCard key={c.id} card={c} families={families} catalogLoading={catalogLoading} onNeedCatalog={requestCatalog} />
             ))}
           </div>
         )}
@@ -93,7 +108,7 @@ export default function TogoModels() {
 }
 
 /** The upload + convert + bind form. */
-function AddModelCard({ families, profileId, nextSort }) {
+function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, nextSort }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -115,6 +130,8 @@ function AddModelCard({ families, profileId, nextSort }) {
         setError('No se encontró geometría de planta en el DWG (capa “Mobilier 2D”).');
       } else {
         setPlan(res);
+        // A parsed plan means the dealer is about to bind → warm the catalog now.
+        onNeedCatalog();
         if (!name) setName(file.name.replace(/\.dwg$/i, '').replace(/[_-]+/g, ' ').trim());
       }
     } catch (e) {
@@ -123,7 +140,7 @@ function AddModelCard({ families, profileId, nextSort }) {
     } finally {
       setBusy(false);
     }
-  }, [name]);
+  }, [name, onNeedCatalog]);
 
   const save = async () => {
     if (!plan || !name.trim() || saving) return;
@@ -180,12 +197,16 @@ function AddModelCard({ families, profileId, nextSort }) {
             </div>
             <div>
               <label className="label">Producto (precio por grado)</label>
-              <select className="input" value={root} onChange={(e) => setRoot(e.target.value)}>
-                <option value="">Sin vincular (precio manual en el configurador)</option>
-                {families.map((f) => (
-                  <option key={f.root} value={f.root}>{f.name}{f.graded ? ` · ${f.grades.length} grados` : ''}</option>
-                ))}
-              </select>
+              {catalogLoading ? (
+                <div className="input flex items-center gap-1.5 text-ink-400"><Loader2 size={14} className="animate-spin" /> Cargando catálogo…</div>
+              ) : (
+                <select className="input" value={root} onChange={(e) => setRoot(e.target.value)}>
+                  <option value="">Sin vincular (precio manual en el configurador)</option>
+                  {families.map((f) => (
+                    <option key={f.root} value={f.root}>{f.name}{f.graded ? ` · ${f.grades.length} grados` : ''}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="flex justify-end">
               <button type="button" onClick={save} disabled={!name.trim() || saving} className="btn-primary text-sm disabled:opacity-50">
@@ -219,47 +240,87 @@ function EmbedCard() {
   );
 }
 
-/** One saved model — thumbnail, footprint, editable name + product binding, delete. */
-function ModelCard({ model, families }) {
-  // Optimistic binding: the global invalidate refetches the whole (huge) products
-  // catalog, so a live refetch can lag ~seconds. Show the dealer's choice INSTANTLY
-  // and clear the optimistic value only once the persisted row catches up.
+/**
+ * One saved model — thumbnail, footprint, editable name + product binding, delete.
+ * Bound state shows INSTANTLY from the row (card.bound); the family picker only
+ * mounts (and the catalog only loads) when the dealer opens it to bind/rebind.
+ */
+function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
+  const [editing, setEditing] = useState(false);
+  // Optimistic binding: a global invalidate refetches the (huge) catalog, so the
+  // persisted row can lag ~seconds. Show the dealer's choice INSTANTLY and clear
+  // the optimistic value only once the row catches up.
   const [pending, setPending] = useState(null);
-  const value = pending != null ? pending : (model.productRoot || '');
+  const value = pending != null ? pending : (card.productRoot || '');
   useEffect(() => {
-    if (pending != null && (model.productRoot || '') === pending) setPending(null);
-  }, [model.productRoot, pending]);
+    if (pending != null && (card.productRoot || '') === pending) setPending(null);
+  }, [card.productRoot, pending]);
+
+  const openPicker = () => { onNeedCatalog(); setEditing(true); };
   const bind = async (val) => {
     setPending(val);
-    try { await db.togoModels.update(model.id, { productRoot: val || null, updatedAt: Date.now() }); }
+    setEditing(false);
+    try { await db.togoModels.update(card.id, { productRoot: val || null, updatedAt: Date.now() }); }
     catch { setPending(null); }
   };
+
+  const bound = !!value;
+  // Enrichment (family name + grade count) only once the catalog is loaded; the
+  // optimistic `pending` may point at a root we can already resolve in `families`.
   const boundFamily = families.find((f) => f.root === value) || null;
+
   return (
     <div className="card card-pad space-y-2.5">
       <div className="flex items-start gap-3">
-        <div className="shrink-0 w-16 h-16 rounded-lg bg-ink-50 text-ink-700 p-1 grid place-items-center" dangerouslySetInnerHTML={{ __html: model.svg }} />
+        <div className="shrink-0 w-16 h-16 rounded-lg bg-ink-50 text-ink-700 p-1 grid place-items-center" dangerouslySetInnerHTML={{ __html: card.svg }} />
         <div className="flex-1 min-w-0">
           <input
             className="input h-8 py-0 text-[13px] font-medium"
-            defaultValue={model.name}
-            onBlur={(e) => e.target.value.trim() && e.target.value !== model.name && db.togoModels.update(model.id, { name: e.target.value.trim(), updatedAt: Date.now() })}
+            defaultValue={card.name}
+            onBlur={(e) => e.target.value.trim() && e.target.value !== card.name && db.togoModels.update(card.id, { name: e.target.value.trim(), updatedAt: Date.now() })}
           />
-          <div className="text-[11px] text-ink-500 tabular-nums mt-1">{model.widthCm}×{model.depthCm} cm</div>
+          <div className="text-[11px] text-ink-500 tabular-nums mt-1">{card.widthCm}×{card.depthCm} cm</div>
         </div>
-        <button type="button" onClick={() => db.togoModels.delete(model.id)} className="text-ink-400 hover:text-red-600 p-1" title="Eliminar modelo">
+        <button type="button" onClick={() => db.togoModels.delete(card.id)} className="text-ink-400 hover:text-red-600 p-1" title="Eliminar modelo">
           <Trash2 size={15} />
         </button>
       </div>
-      <select className="input h-8 py-0 text-[11px]" value={value} onChange={(e) => bind(e.target.value)}>
-        <option value="">Sin vincular (precio manual)</option>
-        {families.map((f) => (
-          <option key={f.root} value={f.root}>{f.name}{f.graded ? ` · ${f.grades.length} grados` : ''}</option>
-        ))}
-      </select>
-      {value
-        ? <div className="text-[10px] text-emerald-600 inline-flex items-center gap-1"><Check size={11} /> Vinculado{boundFamily?.graded ? ` · precio por grado (${boundFamily.grades.length})` : ''}{pending != null ? ' · guardando…' : ''}</div>
-        : <div className="text-[10px] text-ink-400">Sin vincular · el configurador no podrá poner precio por tela</div>}
+
+      {editing ? (
+        catalogLoading ? (
+          <div className="h-8 inline-flex items-center gap-1.5 text-[11px] text-ink-400"><Loader2 size={12} className="animate-spin" /> Cargando catálogo…</div>
+        ) : (
+          <select
+            className="input h-8 py-0 text-[11px]"
+            value={value}
+            autoFocus
+            onChange={(e) => bind(e.target.value)}
+            onBlur={() => setEditing(false)}
+          >
+            <option value="">Sin vincular (precio manual)</option>
+            {families.map((f) => (
+              <option key={f.root} value={f.root}>{f.name}{f.graded ? ` · ${f.grades.length} grados` : ''}</option>
+            ))}
+          </select>
+        )
+      ) : (
+        <div className="flex items-center justify-between gap-2">
+          {bound ? (
+            <span className="min-w-0 text-[10px] text-emerald-600 inline-flex items-center gap-1">
+              <Check size={11} className="shrink-0" />
+              <span className="truncate">
+                Vinculado{boundFamily ? ` · ${boundFamily.name}` : ''}{boundFamily?.graded ? ` (${boundFamily.grades.length} grados)` : ''}
+              </span>
+              {pending != null && <span className="text-ink-400 shrink-0"> · guardando…</span>}
+            </span>
+          ) : (
+            <span className="text-[10px] text-ink-400">Sin vincular · sin precio por tela</span>
+          )}
+          <button type="button" onClick={openPicker} className="btn-ghost text-[11px] shrink-0">
+            <Link2 size={12} /> {bound ? 'Cambiar' : 'Vincular'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

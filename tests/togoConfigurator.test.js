@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   footprintOf, snapPlacement, clampToPlan, resolvePlacement,
   buildTogoComponents, buildTogoModularSeed, resolveConfigurator, resolveTogoModels,
+  resolveTogoModelCards, togoPickerFamilies,
 } from '../src/core/quote/views/configuratorView.js';
 import { compoundSubtotal } from '../src/lib/pricing.js';
 import { modulesOf, isModularLine } from '../src/lib/modules.js';
@@ -153,6 +154,48 @@ test('resolveTogoModels prices each model at its cheapest grade, drops inactive/
   // A request's placements replay through the SAME resolved palette → real total.
   const placed = [{ uid: 'u1', pieceId: 'm1', x: 0, y: 0, rot: 0 }];
   assert.equal(resolveConfigurator(placed, resolvedById, { scale: 1 }).subtotalUsd, 1200);
+});
+
+// ---- the Modelos tab: bound state is a row property, the catalog is lazy ----
+test('resolveTogoModelCards reads bound state from the row, enriches only when the catalog is loaded', () => {
+  const models = [
+    { id: 'm1', name: 'Sillón', productRoot: '15420000', widthCm: 102, depthCm: 102, svg: '<svg/>', sortOrder: 1 },
+    { id: 'm2', name: 'Sin vincular', productRoot: null, widthCm: 87, depthCm: 102, svg: '<svg/>', sortOrder: 0 },
+  ];
+
+  // Catalog NOT loaded (families empty) — bound state must STILL be correct.
+  // This is the bug fix: it used to derive "vinculado" from the loaded list, so a
+  // bound model flickered "Sin vincular" for the ~10s the catalog took to load.
+  const cold = resolveTogoModelCards(models, []);
+  assert.deepEqual(cold.map((c) => c.id), ['m2', 'm1'], 'sorted by sortOrder');
+  const m1cold = cold.find((c) => c.id === 'm1');
+  assert.equal(m1cold.bound, true, 'bound comes from productRoot, not the loaded list');
+  assert.equal(m1cold.familyName, null, 'no enrichment until the catalog loads');
+  assert.equal(cold.find((c) => c.id === 'm2').bound, false);
+
+  // Catalog loaded → name + grade count enrich the bound row.
+  const products = [
+    { reference: '15420000A', name: 'Togo Armchair', priceUsd: 1200, brand: 'ligne-roset' },
+    { reference: '15420000G', name: 'Togo Armchair', priceUsd: 1500, brand: 'ligne-roset' },
+  ];
+  const warm = resolveTogoModelCards(models, togoPickerFamilies(products));
+  const m1warm = warm.find((c) => c.id === 'm1');
+  assert.equal(m1warm.bound, true);
+  assert.equal(m1warm.familyName, 'Togo Armchair');
+  assert.equal(m1warm.graded, true);
+  assert.equal(m1warm.gradeCount, 2);
+});
+
+test('togoPickerFamilies is empty until the catalog loads, then lists Togo families first', () => {
+  assert.deepEqual(togoPickerFamilies(null), []);
+  assert.deepEqual(togoPickerFamilies(undefined), []);
+  const products = [
+    { reference: '99990000A', name: 'Aaa Sofa', priceUsd: 100, brand: 'ligne-roset' },
+    { reference: '99990000B', name: 'Aaa Sofa', priceUsd: 120, brand: 'ligne-roset' },
+    { reference: '15420000A', name: 'Togo Armchair', priceUsd: 1200, brand: 'ligne-roset' },
+  ];
+  const fams = togoPickerFamilies(products);
+  assert.equal(fams[0].name, 'Togo Armchair', 'Togo families sort ahead of the rest');
 });
 
 test('resolveConfigurator mirrors compoundSubtotal and lays tiles out in px', () => {
