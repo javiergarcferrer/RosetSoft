@@ -11,9 +11,12 @@ import { formatDop } from '../../lib/format.js';
 import { resolveItbisLiquidation } from '../../core/accounting/index.js';
 
 /**
- * Centro de impuestos — the DGII tax hub (QuickBooks "Taxes" center). Shows the
- * current-month ITBIS position and links to the 606 / 607 / IT-1. Self-gates on
- * accounting/admin.
+ * DGII — the single Dominican-fiscal pane. ALL DR tax logic routes from here:
+ * the current-month ITBIS position plus the 606 (compras), 607 (ventas), IT-1
+ * (liquidación) and the e-CF / comprobantes. Kept deliberately apart from the
+ * core books so the jurisdiction-specific surface is swappable (DR→PR). Reads
+ * from core data (sales postings, gastos, compras, importaciones); never enters
+ * it. Self-gates on accounting/admin.
  */
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -43,11 +46,12 @@ export default function Impuestos() {
     { code: '606', label: 'Compras y gastos (606)', desc: 'Comprobantes de proveedores del mes', to: '/accounting/expenses?tab=606' },
     { code: '607', label: 'Ventas (607)', desc: 'Comprobantes de ventas del mes', to: '/accounting/facturacion?tab=607' },
     { code: 'IT-1', label: 'Liquidación de ITBIS (IT-1)', desc: 'Débito fiscal − crédito fiscal', to: '/accounting/facturacion?tab=it1' },
+    { code: 'e-CF', label: 'Comprobantes e-CF', desc: 'Emisión / transmisión y secuencias e-NCF', to: '/accounting/facturacion?tab=607' },
   ];
 
   return (
-    <AccountingGate title="Centro de impuestos">
-      <PageHeader title="Centro de impuestos" subtitle={`Posición de ITBIS · ${monthLabel}`} />
+    <AccountingGate title="DGII">
+      <PageHeader title="DGII" subtitle={`Operaciones fiscales · ITBIS de ${monthLabel}`} />
 
       {!loaded ? <ListLoading /> : (
         <div className="space-y-4">
@@ -74,7 +78,7 @@ export default function Impuestos() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {forms.map((f) => (
               <Link key={f.code} to={f.to} className="card-interactive p-4 group hover:-translate-y-0.5">
                 <div className="flex items-center justify-between mb-1">
@@ -88,8 +92,9 @@ export default function Impuestos() {
           </div>
 
           <p className="text-xs text-ink-400 max-w-2xl">
-            Los formatos 606/607 se exportan en CSV desde cada reporte. La integración de envío
-            directo y los e-CF se gestionan en Ventas → Facturación.
+            Los formatos 606/607 se exportan en CSV (y TXT para la Oficina Virtual) desde cada
+            reporte. La emisión y transmisión de e-CF, junto con las secuencias e-NCF, viven en
+            esta misma sección DGII.
           </p>
         </div>
       )}

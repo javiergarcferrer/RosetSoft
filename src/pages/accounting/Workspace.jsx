@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Wallet, FileCheck, Users as UsersIcon, Download,
   Loader2, Calendar, ChevronDown, Briefcase, Check, Receipt,
+  Warehouse, MapPin, FileBarChart,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -29,6 +30,8 @@ import {
   commissionOwedAt, reportedCommission,
 } from '../../lib/commissions.js';
 import { resolveSales, resolveWorkspaceEntries } from '../../core/accounting/sales.js';
+import { groupFamilies } from '../../lib/catalog.js';
+import { resolveWarehouseOrder } from '../../core/quote/index.js';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -144,6 +147,20 @@ export default function AccountingWorkspace() {
     () => db.professionals.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
+  // Catalog products → families (keyed by SKU root), the SAME map the quote
+  // builder feeds the warehouse-order PDF — it resolves each pulled item's
+  // cover photo. Not gated into `loaded`: the page renders without it and the
+  // photos fill in once the catalog arrives (a warehouse order is still usable
+  // with reference + name while it loads).
+  const productsQ = useLiveQueryStatus(
+    () => db.products.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
+  const families = useMemo(() => {
+    const m = new Map();
+    for (const fam of groupFamilies(productsQ.data)) m.set(fam.root, fam);
+    return m;
+  }, [productsQ.data]);
 
   const loaded = quotesQ.loaded && customersQ.loaded && linesQ.loaded && professionalsQ.loaded;
 
@@ -373,13 +390,20 @@ export default function AccountingWorkspace() {
   }
 
   return (
-    <AccountingGate title="Ventas y comisiones">
+    <AccountingGate title="Ventas">
       <PageHeader
-        title="Ventas y comisiones"
-        subtitle={`Ciclo ${formatCycle(cycle)}`}
+        title="Ventas"
+        subtitle={`Comando de ventas · Ciclo ${formatCycle(cycle)}`}
         actions={
-          /* The four Odoo exports are one-shot commands — ONE menu instead of
-             four buttons crowding (and wrapping) the page header. */
+          <>
+          {/* The one report that leaves this screen: the monthly Ligne Roset
+              supplier sell-through. Everything else a sale needs lives in its
+              row below — this is the single top-level button. */}
+          <Link to="/accounting/ligne-roset" className="btn-secondary text-sm whitespace-nowrap">
+            <FileBarChart size={14} aria-hidden /> Reporte Ligne Roset
+          </Link>
+          {/* The four Odoo exports are one-shot commands — ONE menu instead of
+             four buttons crowding (and wrapping) the page header. */}
           <Dropdown
             align="right"
             ariaLabel="Exportar CSV para Odoo"
@@ -433,6 +457,7 @@ export default function AccountingWorkspace() {
               </>
             )}
           </Dropdown>
+          </>
         }
       />
 
@@ -535,6 +560,7 @@ export default function AccountingWorkspace() {
                 entry={e}
                 lines={linesByQuote.get(e.quote.id) || []}
                 settings={settings}
+                families={families}
                 savingPaid={savingPaid}
                 onSellerPaid={setSellerPaid}
                 onProPaid={setProPaid}
@@ -544,32 +570,45 @@ export default function AccountingWorkspace() {
         )}
       </section>
 
-      {/* Payout rollups — batch "who do I pay how much" for the cycle.
-          Same per-sale numbers as the cards above, grouped, with paid vs
-          pending split so the accountant can settle each in one go. */}
-      {loaded && derived.vendedorRows.length > 0 && (
-        <SummaryTable
-          title="Resumen por vendedor"
-          icon={UsersIcon}
-          rows={derived.vendedorRows}
-          keyOf={(r) => r.user.id}
-          nameOf={(r) => r.user.name || r.user.email || '—'}
-          subOf={(r) => (r.user.email && r.user.name ? r.user.email : null)}
-          colsStorageKey="rs.workspace.vendedores.cols.v1"
-          widthsStorageKey="rs.workspace.vendedores.widths.v1"
-        />
-      )}
-      {loaded && derived.profRows.length > 0 && (
-        <SummaryTable
-          title="Resumen por profesional"
-          icon={Briefcase}
-          rows={derived.profRows}
-          keyOf={(r) => r.professional.id}
-          nameOf={(r) => r.professional.name || '—'}
-          subOf={(r) => r.professional.company || null}
-          colsStorageKey="rs.workspace.profesionales.cols.v1"
-          widthsStorageKey="rs.workspace.profesionales.widths.v1"
-        />
+      {/* Payout rollups — batch "who do I pay how much" for the cycle. Same
+          per-sale numbers as the cards above, grouped, paid vs pending split.
+          Tucked in a collapsed disclosure so the SALE LIST is the single-screen
+          focus: the accountant opens this only when settling payouts. */}
+      {loaded && (derived.vendedorRows.length > 0 || derived.profRows.length > 0) && (
+        <details className="group mt-6">
+          <summary className="flex items-center gap-2 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden text-sm font-medium text-ink-600 hover:text-ink-900 py-2">
+            <ChevronDown size={16} className="text-ink-400 transition-transform group-open:rotate-180" aria-hidden />
+            Resumen de comisiones por persona
+            <span className="text-[11px] text-ink-400 font-normal">
+              {derived.vendedorRows.length} vendedor{derived.vendedorRows.length === 1 ? '' : 'es'}
+              {derived.profRows.length > 0 && ` · ${derived.profRows.length} profesional${derived.profRows.length === 1 ? '' : 'es'}`}
+            </span>
+          </summary>
+          {derived.vendedorRows.length > 0 && (
+            <SummaryTable
+              title="Resumen por vendedor"
+              icon={UsersIcon}
+              rows={derived.vendedorRows}
+              keyOf={(r) => r.user.id}
+              nameOf={(r) => r.user.name || r.user.email || '—'}
+              subOf={(r) => (r.user.email && r.user.name ? r.user.email : null)}
+              colsStorageKey="rs.workspace.vendedores.cols.v1"
+              widthsStorageKey="rs.workspace.vendedores.widths.v1"
+            />
+          )}
+          {derived.profRows.length > 0 && (
+            <SummaryTable
+              title="Resumen por profesional"
+              icon={Briefcase}
+              rows={derived.profRows}
+              keyOf={(r) => r.professional.id}
+              nameOf={(r) => r.professional.name || '—'}
+              subOf={(r) => r.professional.company || null}
+              colsStorageKey="rs.workspace.profesionales.cols.v1"
+              widthsStorageKey="rs.workspace.profesionales.widths.v1"
+            />
+          )}
+        </details>
       )}
     </AccountingGate>
   );
@@ -582,7 +621,7 @@ export default function AccountingWorkspace() {
  * BOTH commissions owed on the sale — vendedor and, if assigned, the
  * profesional (with the invoicing mode), each tickable as paid once earned.
  */
-function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid }) {
+function SaleCard({ entry, lines, settings, families, savingPaid, onSellerPaid, onProPaid }) {
   const {
     quote, customer, creator, professional, mode, decoratorPct, base, grandTotal, totals,
     commissionPct, potentialCommission, sellerReported, sellerPayable, sellerPaid, sellerHasCommission,
@@ -590,10 +629,20 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
   } = entry;
   const [open, setOpen] = useState(false);
   const pdf = usePdfDownload({ quote, customer, lines, settings });
+  // The warehouse-order (orden de almacén) PDF for THIS sale — the picking list
+  // the warehouse pulls from (photo · ref · name · qty). The seller is the
+  // quote's creator; families resolves the cover photos.
+  const warehouse = useWarehouseDownload({
+    quote, customer, professional, seller: creator, lines, settings, families,
+  });
   const currency = quote.currencyCode || 'USD';
   const rates = displayRatesFor(quote, settings);
   const invLines = useMemo(() => invoiceLinesForQuote(quote, lines), [quote, lines]);
   const customerName = customer?.company || customer?.name || '—';
+  // The delivery address — the piece accounting needs at a glance to invoice
+  // and dispatch. Street + city; falls back to a muted prompt when unset so
+  // it's obvious the customer record is missing it.
+  const addressText = [customer?.address, customer?.city].map((s) => (s || '').trim()).filter(Boolean).join(', ');
 
   // Commission figures always book in USD (the price-list currency), so the
   // detail strings render with a fixed USD rate regardless of the quote's
@@ -657,6 +706,10 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
             <div className="text-[11px] text-ink-500 truncate">
               {creatorDisplay(creator) || 'Sin vendedor'} · <span className="tabular-nums">{formatDate(quote.acceptedAt)}</span>
             </div>
+            <div className={`text-[11px] truncate flex items-center gap-1 mt-0.5 ${addressText ? 'text-ink-600' : 'text-ink-400 italic'}`}>
+              <MapPin size={11} className="flex-shrink-0 text-ink-400" aria-hidden />
+              <span className="truncate">{addressText || 'Sin dirección registrada'}</span>
+            </div>
             <div className="flex sm:hidden flex-wrap items-center gap-2 mt-1">
               <span className="tabular-nums font-semibold text-ink-900 text-sm">
                 {formatMoney(grandTotal, currency, rates)}
@@ -671,8 +724,14 @@ function SaleCard({ entry, lines, settings, savingPaid, onSellerPaid, onProPaid 
             {chip && <span className={`text-[10px] font-semibold ${chip.cls}`}>{chip.text}</span>}
           </div>
         </button>
-        <PdfButton pdf={pdf} />
+        <div className="flex flex-col items-stretch gap-1 flex-shrink-0">
+          <PdfButton pdf={pdf} />
+          <WarehouseButton warehouse={warehouse} />
+        </div>
       </div>
+      {warehouse.error && (
+        <div className="px-4 pb-2 -mt-1 text-[11px] text-rose-600">{warehouse.error}</div>
+      )}
 
       {open && (
         <div className="px-3 sm:px-4 pb-5 sm:pl-10 space-y-4 border-t border-ink-100 bg-ink-50/30 min-w-0">
@@ -1028,6 +1087,68 @@ function PdfButton({ pdf }) {
         : <><Download size={12} /> PDF</>}
     </button>
   );
+}
+
+/** Per-sale "Orden de almacén" button — prints the warehouse picking list. */
+function WarehouseButton({ warehouse }) {
+  return (
+    <button
+      type="button"
+      onClick={warehouse.run}
+      disabled={warehouse.busy}
+      className="btn-ghost text-xs disabled:opacity-60 disabled:cursor-wait"
+      aria-label="Imprimir orden de almacén"
+      title="Orden de almacén — lista de preparación (foto · ref · cantidad)"
+    >
+      {warehouse.busy
+        ? <><Loader2 size={12} className="animate-spin" /> Almacén</>
+        : <><Warehouse size={12} /> Almacén</>}
+    </button>
+  );
+}
+
+/**
+ * Build + deliver the warehouse-order (orden de almacén) PDF for one sale: the
+ * price-free picking list the warehouse pulls from (product photo · reference ·
+ * name · qty). Mirrors the quote builder's export (resolveWarehouseOrder VM →
+ * generateWarehouseOrderPdf), so the accountant can dispatch a sale straight
+ * from this screen without reopening the quote. safeDynamicImport recovers a
+ * stale-chunk reference the same way the PDF download does.
+ */
+function useWarehouseDownload({ quote, customer, professional, seller, lines, settings, families }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function run() {
+    if (busy) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const content = resolveWarehouseOrder({ quote, lines, customer, professional, seller });
+      if (content.rowCount === 0) {
+        throw new Error('La venta no tiene artículos con precio para preparar.');
+      }
+      const mod = await safeDynamicImport(() => import('../../pdf/order/index.js'));
+      const blob = await mod.generateWarehouseOrderPdf({
+        content,
+        settings,
+        lines,
+        families,
+        currency: quote.currencyCode || 'USD',
+        companyName: settings?.companyName || '',
+      });
+      if (!blob || !blob.size) {
+        throw new Error('El PDF generado está vacío; revisa que la venta tenga líneas.');
+      }
+      const num = quote.number ? `#${quote.number}` : '';
+      await mod.downloadBlob(blob, `Orden de almacén ${num}`.trim() + '.pdf');
+    } catch (err) {
+      console.error('[Contabilidad] warehouse order failed:', err);
+      setError(err?.message || 'No se pudo generar la orden de almacén.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, error, run };
 }
 
 function usePdfDownload({ quote, customer, lines, settings }) {

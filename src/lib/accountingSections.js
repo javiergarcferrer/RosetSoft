@@ -14,15 +14,26 @@ import {
   Percent, SlidersHorizontal, Ship,
 } from 'lucide-react';
 
+// The sales command screen leads: it's the daily front door (and the
+// /accounting landing). The DGII center isolates ALL Dominican fiscal logic
+// (607 · IT-1 · e-CF/comprobantes · 606) behind ONE label, so the rest of the
+// accounting stays jurisdiction-agnostic — moving DR→PR swaps this one center,
+// not the books. Everything below DGII is core Alcover accounting.
 export const ACCOUNTING_SECTIONS = [
+  { key: 'ventas', label: 'Ventas', icon: FileText, tabs: [
+    { to: '/accounting/ventas', label: 'Ventas' },
+  ], extraMatch: ['/accounting/ligne-roset'] },
+  // DGII — the single "local logic" pane. The hub (Resumen) shows the ITBIS
+  // position and routes to 606/607/IT-1; Facturación issues the 607 + e-CF;
+  // Secuencias holds the authorized e-NCF ranges. 606 is filed from Gastos but
+  // surfaced here through the hub.
+  { key: 'dgii', label: 'DGII', icon: Percent, tabs: [
+    { to: '/accounting/impuestos', label: 'Resumen' },
+    { to: '/accounting/facturacion', label: '607 · IT-1 · e-CF' },
+    { to: '/accounting/ecf', label: 'Secuencias e-NCF' },
+  ] },
   { key: 'panel', label: 'Panel', icon: Gauge, tabs: [
     { to: '/accounting/dashboard', label: 'Resumen' },
-  ] },
-  { key: 'ventas', label: 'Ventas', icon: FileText, tabs: [
-    { to: '/accounting/facturacion', label: 'Facturación' },
-    { to: '/accounting/ecf', label: 'Comprobantes e-NCF' },
-    { to: '/accounting/ligne-roset', label: 'Ventas Ligne Roset' },
-    { to: '/accounting/ventas', label: 'Ventas y comisiones' },
   ] },
   { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
@@ -45,9 +56,6 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'nomina', label: 'Nómina', icon: Wallet, tabs: [
     { to: '/accounting/nomina', label: 'Nómina' },
     { to: '/accounting/empleados', label: 'Empleados' },
-  ] },
-  { key: 'impuestos', label: 'Impuestos', icon: Percent, tabs: [
-    { to: '/accounting/impuestos', label: 'Centro de impuestos' },
   ] },
   { key: 'informes', label: 'Informes', icon: BarChart3, tabs: [
     { to: '/accounting/informes', label: 'Informes' },
@@ -96,7 +104,10 @@ export const accountingSectionNav = ACCOUNTING_SECTIONS.map((s) => ({
   to: s.tabs[0].to,
   label: s.label,
   icon: s.icon,
-  match: s.tabs.map((t) => t.to),
+  // Routes that light this center in the sidebar — its tabs plus any
+  // `extraMatch` (a page reached by a button, not a visible tab, e.g. the
+  // Ligne Roset report under Ventas).
+  match: [...s.tabs.map((t) => t.to), ...(s.extraMatch || [])],
 }));
 
 export function sectionForPath(pathname) {

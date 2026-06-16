@@ -295,7 +295,7 @@ function ProtectedApp() {
                 /accounting/ventas with the other Ventas tabs. Every legacy
                 sub-path redirects so old bookmarks still work. Pages
                 self-gate on the accounting/admin role. */}
-            <Route path="accounting" element={<Navigate to="/accounting/dashboard" replace />} />
+            <Route path="accounting" element={<Navigate to="/accounting/ventas" replace />} />
             <Route path="accounting/ventas" element={<AccountingWorkspace />} />
             <Route path="accounting/dashboard" element={<AccountingDashboard />} />
             <Route path="accounting/ledger" element={<AccountingLedger />} />
