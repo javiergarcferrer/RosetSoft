@@ -1003,6 +1003,10 @@ export interface ImportExpediente {
   lines: ImportExpedienteLine[];
   paymentMethod: PaymentMethod;  // settlement of the customs taxes
   journalEntryId?: string | null;
+  /** Google Drive folder for this importation's documents — created on demand
+   *  from the detail page; files for the container land inside it. */
+  driveFolderId?: string;
+  driveFolderUrl?: string;
   createdAt?: number;
   updatedAt?: number;
 }

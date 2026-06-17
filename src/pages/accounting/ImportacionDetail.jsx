@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import DriveDocumentsCard from '../../components/drive/DriveDocumentsCard.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
@@ -456,6 +457,14 @@ export default function ImportacionDetail() {
           </>
         )}
       </div>
+
+      {/* Documentos en Google Drive — one folder per importation */}
+      <DriveDocumentsCard
+        folderId={expQ.data.driveFolderId}
+        folderUrl={expQ.data.driveFolderUrl}
+        folderName={`Importación ${meta.number != null ? `#${meta.number}` : ''}${meta.bl ? ` — BL ${meta.bl}` : ''}`.trim()}
+        onFolderSaved={({ id, url }) => db.importExpedientes.update(expQ.data.id, { driveFolderId: id, driveFolderUrl: url })}
+      />
 
       {/* Asiento contable */}
       {asientoLines.length > 0 && (

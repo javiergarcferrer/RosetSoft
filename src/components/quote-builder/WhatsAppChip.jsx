@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, X, Send, Loader2, AlertTriangle, Link2, FileText, User as UserIcon, DraftingCompass } from 'lucide-react';
+import { Check, X, Send, Loader2, AlertTriangle, Link2, FileText, User as UserIcon, DraftingCompass, Mail, MessageCircle } from 'lucide-react';
 import Modal from '../Modal.jsx';
 import BrandName from '../BrandName.jsx';
 import { db } from '../../db/database.js';
@@ -10,6 +10,8 @@ import { waDigits, displayPhone } from '../../lib/phone.js';
 import { shareLinkUrl, newShareToken } from '../../lib/quoteShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
 import { sendQuoteLink, sendQuotePdf, phoneOwner, phoneInUseMessage } from '../../lib/whatsapp.js';
+import { sendGmail } from '../../lib/google.js';
+import { buildQuoteEmail } from '../../lib/quoteEmail.js';
 
 /**
  * The literal WhatsApp mark (phone inside a speech bubble) as an inline SVG —
@@ -152,6 +154,7 @@ export default function WhatsAppChip({ customer }) {
 export function SendQuoteModal({ open, onClose, customer, professional, quote, settings, onUpdateQuote, buildPdf }) {
   const [state, setState] = useState('idle'); // idle | sending | sent | error
   const [msg, setMsg] = useState('');
+  const [channel, setChannel] = useState('whatsapp'); // 'whatsapp' | 'email'
   const [format, setFormat] = useState('link'); // 'link' | 'pdf'
   const [recipientKind, setRecipientKind] = useState('customer'); // 'customer' | 'professional'
   const template = (settings?.whatsappQuoteTemplate || '').trim();
@@ -163,16 +166,22 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
   const hasProfessional = !!professional;
   const kind = hasProfessional ? recipientKind : 'customer';
   const recipient = kind === 'professional' ? professional : customer;
+  const isEmail = channel === 'email';
 
   // Single send surface — opened from the totals dock for ANY quote, so a
   // prerequisite may still be missing. Explain the next step instead of
-  // rendering a send form that would fail (no number to send to, no API).
-  const connected = !!settings?.whatsappConnectedAt;
-  const phone = recipient?.phone || '';
-  const recipientNoun = kind === 'professional' ? 'el profesional' : 'el cliente';
+  // rendering a send form that would fail (no destination, no API connected).
+  const connected = isEmail ? !!settings?.googleConnectedAt : !!settings?.whatsappConnectedAt;
+  const address = isEmail ? (recipient?.email || '') : (recipient?.phone || '');
   let blocker = null;
   if (!connected) {
-    blocker = (
+    blocker = isEmail ? (
+      <>
+        Gmail no está conectado. Actívalo en{' '}
+        <Link to="/integraciones" onClick={onClose} className="underline font-medium text-ink-700">Configuración → Integraciones → Gmail</Link>{' '}
+        para enviar la cotización por correo.
+      </>
+    ) : (
       <>
         WhatsApp Business no está conectado. Actívalo en{' '}
         <Link to="/settings" onClick={onClose} className="underline font-medium text-ink-700">Configuración → WhatsApp</Link>{' '}
@@ -180,9 +189,12 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
       </>
     );
   } else if (!recipient) {
-    blocker = <>Asigna {kind === 'professional' ? 'un profesional' : 'un cliente'} a la cotización para poder enviarla por WhatsApp.</>;
-  } else if (!phone) {
-    blocker = <>{recipient.name || recipient.company || (kind === 'professional' ? 'El profesional' : 'El cliente')} no tiene número de WhatsApp. Agrégalo en su ficha y vuelve a enviar.</>;
+    blocker = <>Asigna {kind === 'professional' ? 'un profesional' : 'un cliente'} a la cotización para poder enviarla.</>;
+  } else if (!address) {
+    const who = recipient.name || recipient.company || (kind === 'professional' ? 'El profesional' : 'El cliente');
+    blocker = isEmail
+      ? <>{who} no tiene correo. Agrégalo en su ficha y vuelve a enviar.</>
+      : <>{who} no tiene número de WhatsApp. Agrégalo en su ficha y vuelve a enviar.</>;
   }
 
   async function send() {
@@ -190,11 +202,8 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
     setState('sending');
     setMsg('');
     try {
-      let res;
-      if (format === 'pdf' && canPdf) {
-        const { blob, filename } = await buildPdf();
-        res = await sendQuotePdf({ to: recipient.phone, blob, filename, recipient, recipientKind: kind, quoteId: quote.id });
-      } else {
+      // Mint the public link once when the format (or email) needs it.
+      const mintLink = async () => {
         let token = quote.shareToken;
         if (!token || !quote.shareEnabled) {
           token = token || newShareToken();
@@ -202,7 +211,30 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
         }
         // The slug is the quote's own identity (client name + number), the same
         // whether it goes to the client or the professional.
-        const url = shareLinkUrl(token, quoteSlug(quote, customer));
+        return shareLinkUrl(token, quoteSlug(quote, customer));
+      };
+
+      if (isEmail) {
+        const wantsPdf = format === 'pdf' && canPdf;
+        const url = wantsPdf ? '' : await mintLink();
+        const { subject, html, text } = buildQuoteEmail({ quote, recipient, settings, url, hasPdf: wantsPdf });
+        const attachmentBlobs = [];
+        if (wantsPdf) {
+          const { blob, filename } = await buildPdf();
+          attachmentBlobs.push({ filename, blob });
+        }
+        await sendGmail({ to: recipient.email, subject, html, text, fromName: settings?.companyName || '', attachmentBlobs });
+        setState('sent');
+        setMsg(`Enviado a ${recipient.email}.`);
+        return;
+      }
+
+      let res;
+      if (format === 'pdf' && canPdf) {
+        const { blob, filename } = await buildPdf();
+        res = await sendQuotePdf({ to: recipient.phone, blob, filename, recipient, recipientKind: kind, quoteId: quote.id });
+      } else {
+        const url = await mintLink();
         res = await sendQuoteLink({ to: recipient.phone, url, settings, recipient, recipientKind: kind, quoteId: quote.id });
       }
       if (res?.ok) {
@@ -218,6 +250,11 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
     }
   }
 
+  const pickChannel = (c) => {
+    if (state === 'sending') return;
+    setChannel(c);
+    if (state === 'error' || state === 'sent') { setState('idle'); setMsg(''); }
+  };
   const pickFormat = (f) => {
     if (state === 'sending') return;
     setFormat(f);
@@ -228,6 +265,15 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
     setRecipientKind(k);
     if (state === 'error' || state === 'sent') { setState('idle'); setMsg(''); }
   };
+
+  // Channel toggle (WhatsApp / Correo) — the top-level choice; everything below
+  // (recipient, format, hints) adapts to it.
+  const channelToggle = (
+    <div className="grid grid-cols-2 gap-2 mb-3" role="radiogroup" aria-label="Canal de envío">
+      <FormatOption icon={MessageCircle} label="WhatsApp" hint="Al número del negocio" active={!isEmail} onPick={() => pickChannel('whatsapp')} />
+      <FormatOption icon={Mail} label="Correo" hint="Por Gmail, con PDF adjunto" active={isEmail} onPick={() => pickChannel('email')} />
+    </div>
+  );
 
   // The recipient toggle renders above both the blocker and the send form, so
   // the dealer can switch parties even when one of them is missing a number.
@@ -252,7 +298,8 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
 
   if (blocker) {
     return (
-      <Modal open={open} onClose={onClose} title="Enviar cotización por WhatsApp" size="sm">
+      <Modal open={open} onClose={onClose} title="Enviar cotización" size="sm">
+        {channelToggle}
         {recipientToggle}
         <p className="text-sm text-ink-600 flex items-start gap-2">
           <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
@@ -266,12 +313,16 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Enviar cotización por WhatsApp" size="sm">
+    <Modal open={open} onClose={onClose} title="Enviar cotización" size="sm">
+      {channelToggle}
       {recipientToggle}
       <p className="text-sm text-ink-600">
         Se enviará la cotización a{' '}
-        <strong><BrandName name={recipient.name || recipient.company} /></strong> ({displayPhone(waDigits(recipient.phone))})
-        {kind === 'professional' ? ' (profesional)' : ''} desde el número del negocio{settings?.whatsappDisplayNumber ? ` (${settings.whatsappDisplayNumber})` : ''}.
+        <strong><BrandName name={recipient.name || recipient.company} /></strong> ({isEmail ? recipient.email : displayPhone(waDigits(recipient.phone))})
+        {kind === 'professional' ? ' (profesional)' : ''}
+        {isEmail
+          ? `${settings?.googleEmail ? ` desde ${settings.googleEmail}` : ''}.`
+          : ` desde el número del negocio${settings?.whatsappDisplayNumber ? ` (${settings.whatsappDisplayNumber})` : ''}.`}
       </p>
 
       {/* Format — the interactive client link or the exported PDF document. */}
@@ -286,7 +337,7 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
         <FormatOption
           icon={FileText}
           label="PDF"
-          hint="El documento exportado, como archivo adjunto"
+          hint={isEmail ? 'El documento exportado, adjunto al correo' : 'El documento exportado, como archivo adjunto'}
           active={format === 'pdf'}
           disabled={!canPdf}
           onPick={() => pickFormat('pdf')}
@@ -294,11 +345,15 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
       </div>
 
       <p className="text-xs text-ink-500 mt-2.5">
-        {format === 'pdf'
-          ? 'El PDF viaja como archivo adjunto — WhatsApp solo lo entrega si el cliente escribió en las últimas 24 horas. Fuera de esa ventana, envía el enlace (usa la plantilla aprobada).'
-          : template
-            ? <>Se usa la plantilla aprobada <code>{template}</code>, así que llega aunque el cliente no haya escrito.</>
-            : 'Sin plantilla configurada se envía como texto libre — solo llega si el cliente escribió en las últimas 24 horas. Configura la plantilla en Configuración → WhatsApp.'}
+        {isEmail
+          ? (format === 'pdf'
+              ? 'El PDF se adjunta al correo. El correo se envía desde tu cuenta de Gmail conectada.'
+              : 'El correo incluye el enlace interactivo para que el cliente vea la cotización en vivo.')
+          : format === 'pdf'
+            ? 'El PDF viaja como archivo adjunto — WhatsApp solo lo entrega si el cliente escribió en las últimas 24 horas. Fuera de esa ventana, envía el enlace (usa la plantilla aprobada).'
+            : template
+              ? <>Se usa la plantilla aprobada <code>{template}</code>, así que llega aunque el cliente no haya escrito.</>
+              : 'Sin plantilla configurada se envía como texto libre — solo llega si el cliente escribió en las últimas 24 horas. Configura la plantilla en Configuración → WhatsApp.'}
       </p>
       {msg && (
         <p className={`text-xs mt-3 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>
@@ -313,7 +368,7 @@ export function SendQuoteModal({ open, onClose, customer, professional, quote, s
         {state !== 'sent' && (
           <button type="button" onClick={send} disabled={state === 'sending'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
             {state === 'sending' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            {state === 'error' ? 'Reintentar' : format === 'pdf' ? 'Enviar PDF' : 'Enviar enlace'}
+            {state === 'error' ? 'Reintentar' : isEmail ? 'Enviar correo' : format === 'pdf' ? 'Enviar PDF' : 'Enviar enlace'}
           </button>
         )}
       </div>
