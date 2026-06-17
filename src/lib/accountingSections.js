@@ -63,7 +63,6 @@ export const ACCOUNTING_SECTIONS = [
   ] },
   { key: 'contabilidad', label: 'Contabilidad', icon: BookOpen, tabs: [
     { to: '/accounting/ledger', label: 'Libro diario / mayor' },
-    { to: '/accounting/chart', label: 'Catálogo de cuentas' },
     { to: '/accounting/periodos', label: 'Cierre de período' },
   ] },
   { key: 'config', label: 'Configuración', icon: SlidersHorizontal, tabs: [
@@ -96,7 +95,6 @@ export const QUICK_CREATE = [
   ] },
   { group: 'Otros', items: [
     { label: 'Asiento contable', to: '/accounting/ledger?new=1' },
-    { label: 'Cuenta del catálogo', to: '/accounting/chart' },
   ] },
 ];
 

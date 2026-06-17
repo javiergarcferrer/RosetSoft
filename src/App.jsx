@@ -46,7 +46,6 @@ const AccountingWorkspace = lazyPage(() => import('./pages/accounting/Workspace.
 const AccountingDashboard = lazyPage(() => import('./pages/accounting/Dashboard.jsx'));
 const AccountingLedger = lazyPage(() => import('./pages/accounting/Ledger.jsx'));
 const AccountingStatements = lazyPage(() => import('./pages/accounting/Statements.jsx'));
-const ChartOfAccounts = lazyPage(() => import('./pages/accounting/ChartOfAccounts.jsx'));
 const AccountingSettings = lazyPage(() => import('./pages/accounting/AccountingSettings.jsx'));
 const AccountingExpenses = lazyPage(() => import('./pages/accounting/Expenses.jsx'));
 const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.jsx'));
@@ -300,7 +299,6 @@ function ProtectedApp() {
             <Route path="accounting/dashboard" element={<AccountingDashboard />} />
             <Route path="accounting/ledger" element={<AccountingLedger />} />
             <Route path="accounting/statements" element={<AccountingStatements />} />
-            <Route path="accounting/chart" element={<ChartOfAccounts />} />
             <Route path="accounting/settings" element={<AccountingSettings />} />
             <Route path="accounting/expenses" element={<AccountingExpenses />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />

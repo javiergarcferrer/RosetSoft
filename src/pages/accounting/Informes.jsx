@@ -18,7 +18,6 @@ const GROUPS = [
     { label: 'Balanza de comprobación', desc: 'Saldos por cuenta — debe = haber', to: '/accounting/ledger?tab=balanza' },
     { label: 'Libro mayor', desc: 'Movimientos por cuenta', to: '/accounting/ledger?tab=mayor' },
     { label: 'Libro diario', desc: 'Todos los asientos', to: '/accounting/ledger?tab=diario' },
-    { label: 'Catálogo de cuentas', desc: 'El plan de cuentas completo', to: '/accounting/chart' },
     { label: 'Cierre de período', desc: 'Meses bloqueados / abiertos', to: '/accounting/periodos' },
   ] },
   { title: 'Impuestos (DGII)', items: [

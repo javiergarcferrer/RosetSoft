@@ -9,7 +9,7 @@ import { ACCOUNT_CLASS_NAMES } from '../../core/accounting/index.js';
  * live rolled-up saldo beside every row; clicking a postable (leaf) account
  * calls `onSelect(code)` so the detail pane opens that account's mayor. Title
  * accounts toggle open/closed. A search box flattens the tree to matching
- * code/name (mirrors the Catálogo de cuentas page).
+ * code/name.
  *
  * Pure View: derives nothing — it just renders the tree the VM handed it and
  * raises selection back to the parent.
