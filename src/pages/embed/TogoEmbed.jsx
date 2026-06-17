@@ -696,6 +696,8 @@ function PlanDimensions({ tiles }) {
  *  and the "request a quote" CTA. Read-only over `placed` (the same data the
  *  lead submission and the estimate dock use). */
 function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
+  const [preview, setPreview] = useState(null); // hovered swatch → big centered preview
+  useEffect(() => { if (!open) setPreview(null); }, [open]);
   const rows = placed.map((p) => {
     const r = resolvePlacement(p, resolvedById);
     return { uid: p.uid, pieceId: p.pieceId, label: r.label || r.name || 'Togo', w: r.widthCm, d: r.depthCm, fabric: p.material?.fabric || '', code: p.material?.code || '', priced: !!p.material, price: r.unitPrice };
@@ -703,6 +705,7 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
   return (
     <Modal open={open} onClose={onClose} title="Resumen de tu Togo" size="lg">
       {open && (
+        <>
         <div className="space-y-3">
           {!rows.length && <p className="text-sm text-ink-500 py-6 text-center">Aún no has agregado piezas a tu sofá.</p>}
           {rows.length > 0 && (
@@ -716,14 +719,12 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
                     {row.fabric && <div className="text-[11px] text-ink-500 truncate">{row.fabric}</div>}
                   </div>
                   {row.code && (
-                    <div className="relative group shrink-0">
-                      <img src={swatchUrl(row.code)} alt={row.fabric} className="w-10 h-10 rounded-md object-cover border border-ink-200" />
-                      {/* hover → enlarged swatch */}
-                      <div className="pointer-events-none absolute right-0 bottom-full mb-2 z-[70] hidden group-hover:block">
-                        <img src={swatchUrl(row.code)} alt={row.fabric} className="w-48 h-48 rounded-xl object-cover border border-ink-200 shadow-pop bg-surface" />
-                        {row.fabric && <div className="mt-1 text-center text-[11px] text-ink-700 bg-surface/95 rounded px-1.5 py-0.5 truncate max-w-48">{row.fabric}</div>}
-                      </div>
-                    </div>
+                    <img
+                      src={swatchUrl(row.code)} alt={row.fabric}
+                      className="shrink-0 w-10 h-10 rounded-md object-cover border border-ink-200 cursor-zoom-in"
+                      onMouseEnter={() => setPreview({ code: row.code, fabric: row.fabric })}
+                      onMouseLeave={() => setPreview(null)}
+                    />
                   )}
                   <div className="shrink-0 w-28 text-right text-sm">
                     {row.priced
@@ -746,6 +747,16 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
             </div>
           )}
         </div>
+        {preview && createPortal(
+          <div className="fixed inset-0 z-[90] pointer-events-none flex items-center justify-center p-4">
+            <div className="bg-surface rounded-2xl shadow-pop border border-ink-200 p-2">
+              <img src={swatchUrl(preview.code)} alt={preview.fabric} className="w-64 h-64 sm:w-72 sm:h-72 rounded-xl object-cover" />
+              {preview.fabric && <div className="mt-1.5 text-center text-xs text-ink-700">{preview.fabric}</div>}
+            </div>
+          </div>,
+          document.body,
+        )}
+        </>
       )}
     </Modal>
   );
