@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
-import { glbFor } from '../../assets/togo/togoModels3d.js';
+import { glbForPiece } from '../../assets/togo/togoModels3d.js';
 import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup, makeQuiltNormalMap } from './togoSceneBuilder.js';
 
 // Pick the three.js loader for a model URL by extension, loaded on demand (so a
@@ -59,8 +59,10 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
     const sd = sceneRef.current || { pieces: [], overallCm: { widthCm: 0, depthCm: 0 } };
     // Preload the distinct fabric swatches as textures (CORS via swatch-proxy)…
     const codes = [...new Set((sd.pieces || []).map((p) => p.fabricCode).filter(Boolean))];
-    // …and any REAL Togo models wired for the kinds in play (none → procedural).
-    const kinds = [...new Set((sd.pieces || []).map((p) => p.kind).filter((k) => glbFor(k)))];
+    // …and any REAL Togo models wired for the pieces in play (none → procedural).
+    // Deduped by URL so two pieces sharing a model load it once.
+    const descByUrl = new Map();
+    for (const p of (sd.pieces || [])) { const d = glbForPiece(p); if (d?.url) descByUrl.set(d.url, d); }
     await Promise.all([
       ...codes.map(async (code) => {
         if (l.texCache.has(code)) return;
@@ -68,15 +70,14 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
         if (!url) return;
         try { l.texCache.set(code, await new l.THREE.TextureLoader().loadAsync(url)); } catch { /* 404 → default colour */ }
       }),
-      ...kinds.map(async (kind) => {
-        if (l.modelCache.has(kind)) return;
-        const desc = glbFor(kind);
+      ...[...descByUrl.values()].map(async (desc) => {
+        if (l.modelCache.has(desc.url)) return;
         const ext = extOf(desc.url);
         try {
           const loader = await loaderFor(ext);
           if (!loader) return;
           const object = normalizeLoaded(ext, await loader.loadAsync(desc.url));
-          if (object) l.modelCache.set(kind, { object, desc });
+          if (object) l.modelCache.set(desc.url, { object, desc });
         } catch { /* missing/unreadable → procedural */ }
       }),
     ]);
@@ -87,7 +88,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       ...(finishRef.current || {}),
       normalMap: l.quilt,
       textureFor: (c) => { const t = l.texCache.get(c); return t ? t.clone() : null; },
-      modelFor: (piece) => l.modelCache.get(piece.kind) || null,
+      modelFor: (piece) => { const d = glbForPiece(piece); return d ? (l.modelCache.get(d.url) || null) : null; },
     });
     l.scene.add(l.group);
     // Frame the camera once the first pieces appear; keep the viewpoint after.
