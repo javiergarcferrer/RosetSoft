@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal, Receipt } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -73,6 +73,8 @@ export default function TogoEmbed() {
   const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
   const [sheet, setSheet] = useState(null);      // mobile bottom sheet: 'pieces' | 'material' | null
   const [moreOpen, setMoreOpen] = useState(false); // mobile toolbar "⋯ Opciones" popover
+  const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ palette
+  const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const material = useMemo(() => {
     const f = FINISHES.find((x) => x.key === finishKey) || FINISHES[1];
     return {
@@ -147,14 +149,21 @@ export default function TogoEmbed() {
     setSelectedUid(uid);
   }, [resolvedById, placed]);
 
-  const rotateSel = useCallback(() => {
+  // uid-parameterized so the on-plan hover controls can rotate/delete ANY piece
+  // (not just the selected one) without a round-trip to the toolbar.
+  const rotatePiece = useCallback((uid) => {
     setPlaced((prev) => prev.map((p) => {
-      if (p.uid !== selectedUid) return p;
+      if (p.uid !== uid) return p;
       const rot = (p.rot + 90) % 360; const fp = footprintOf(resolvedById[p.pieceId], rot);
       return { ...p, rot, ...clampToPlan(p.x, p.y, fp.w, fp.h) };
     }));
-  }, [selectedUid, resolvedById]);
-  const deleteSel = useCallback(() => { setPlaced((prev) => prev.filter((p) => p.uid !== selectedUid)); setSelectedUid(null); }, [selectedUid]);
+  }, [resolvedById]);
+  const deletePiece = useCallback((uid) => {
+    setPlaced((prev) => prev.filter((p) => p.uid !== uid));
+    setSelectedUid((s) => (s === uid ? null : s));
+  }, []);
+  const rotateSel = useCallback(() => rotatePiece(selectedUid), [rotatePiece, selectedUid]);
+  const deleteSel = useCallback(() => deletePiece(selectedUid), [deletePiece, selectedUid]);
 
   // Material pick for the selected piece → reprice by grade + stamp swatch/subtype.
   const onPickMaterial = useCallback((pick) => {
@@ -265,7 +274,8 @@ export default function TogoEmbed() {
   // Shared building blocks — defined once, rendered in BOTH the desktop layout
   // and the mobile bottom sheets / docks so screen never drifts from sheet.
   const piecesList = (
-    <PiecesList models={models} rates={rates} onAdd={(id) => { addPiece(id); setSheet(null); }} />
+    <PiecesList models={models} rates={rates} onAdd={(id) => { addPiece(id); setSheet(null); }}
+      hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
   );
   const materialEditor = (
     <MaterialEditor finishKey={finishKey} setFinishKey={setFinishKey} weave={weave} setWeave={setWeave} />
@@ -275,6 +285,8 @@ export default function TogoEmbed() {
       view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById}
       selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
       placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
+      hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
+      onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
     />
   );
   // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
@@ -317,6 +329,7 @@ export default function TogoEmbed() {
                   <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
                   <button type="button" onClick={() => setArOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver tu sofá a tamaño real en tu sala (Realidad Aumentada)"><View size={14} /> En tu espacio</button>
                   <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
+                  <button type="button" onClick={() => setQuoteOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver el resumen de tu cotización"><Receipt size={14} /> Resumen</button>
                   <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
                 </div>
               </div>
@@ -356,6 +369,7 @@ export default function TogoEmbed() {
                     <button type="button" onClick={() => { setMoreOpen(false); openMaterial('all'); }} className="btn-ghost justify-start text-sm"><Layers size={15} /> Tela a todas</button>
                     <button type="button" onClick={() => { setMoreOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
                     <button type="button" onClick={() => { setMoreOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Plano (DXF)</button>
+                    <button type="button" onClick={() => { setMoreOpen(false); setQuoteOpen(true); }} className="btn-ghost justify-start text-sm"><Receipt size={15} /> Resumen</button>
                     <button type="button" onClick={() => { setMoreOpen(false); setPlaced([]); setSelectedUid(null); }} className="btn-ghost justify-start text-sm text-red-600"><Eraser size={15} /> Vaciar</button>
                   </div>
                 </>
@@ -454,6 +468,13 @@ export default function TogoEmbed() {
       />
 
       <TogoArViewer open={arOpen} onClose={() => setArOpen(false)} scene3d={scene3d} material={material} storeName={data.storeName} />
+
+      <QuoteSheet
+        open={quoteOpen} onClose={() => setQuoteOpen(false)}
+        placed={placed} resolvedById={resolvedById} svgById={svgById} rates={rates}
+        subtotalUsd={vm.subtotalUsd} overallCm={vm.overallCm}
+        onRequest={() => { setQuoteOpen(false); setStep('form'); }}
+      />
     </div>
   );
 }
@@ -461,22 +482,33 @@ export default function TogoEmbed() {
 /** Vertical list of Togo models (thumbnail · name · dims · price + add button).
  *  ONE list shared by the desktop pieces rail and the mobile "Agregar pieza"
  *  sheet, so they can never present a different catalog. */
-function PiecesList({ models, rates, onAdd }) {
+function PiecesList({ models, rates, onAdd, hoveredPieceId, onHover }) {
   return (
     <ul className="space-y-2">
-      {models.map((m) => (
-        <li key={m.id}>
-          <button type="button" onClick={() => onAdd(m.id)} className="w-full flex items-center gap-3 text-left rounded-xl border border-ink-100 hover:bg-ink-50 active:bg-ink-100 p-2.5 transition-colors">
-            <span className="shrink-0 w-14 h-14 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-medium truncate">{m.name}</span>
-              <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
-              {m.priceUsd != null && <span className="block text-[12px] font-medium text-brand-700 tabular-nums">{formatMoney(m.priceUsd, 'DOP', rates)}</span>}
-            </span>
-            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-600"><Plus size={16} /></span>
-          </button>
-        </li>
-      ))}
+      {models.map((m) => {
+        // Highlighted when its placed instance is hovered on the plan (and the
+        // reverse: hovering this row highlights its pieces on the plan).
+        const hot = hoveredPieceId != null && m.id === hoveredPieceId;
+        return (
+          <li key={m.id}>
+            <button
+              type="button"
+              onClick={() => onAdd(m.id)}
+              onMouseEnter={() => onHover?.(m.id)}
+              onMouseLeave={() => onHover?.(null)}
+              className={`w-full flex items-center gap-3 text-left rounded-xl border p-2.5 transition-colors ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
+            >
+              <span className="shrink-0 w-14 h-14 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-medium truncate">{m.name}</span>
+                <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
+                {m.priceUsd != null && <span className="block text-[12px] font-medium text-brand-700 tabular-nums">{formatMoney(m.priceUsd, 'DOP', rates)}</span>}
+              </span>
+              <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-600"><Plus size={16} /></span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -539,10 +571,16 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
  *  plan is a FIXED cm-sized canvas at SCALE px/cm (the drag math divides pointer
  *  deltas by SCALE) — it is NEVER rescaled; on small screens it lives in an
  *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
-function CanvasArea({ view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed, onTileDown, onTileMove, onTileUp }) {
+function CanvasArea({
+  view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed,
+  onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
+}) {
+  const [hoveredUid, setHoveredUid] = useState(null);
   if (view === '3d') {
     return <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
   }
+  const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
+  const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
   return (
     <div className="overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]">
       <div
@@ -556,29 +594,139 @@ function CanvasArea({ view, vm, scene3d, material, svgById, selectedUid, setSele
         }}
         onPointerDown={() => setSelectedUid(null)}
       >
+        {/* Overall assembled dimensions — measures the used area (top run + the
+            run coming down), live as pieces move. */}
+        <PlanDimensions tiles={vm.tiles} />
+
         {vm.tiles.map((t) => {
           const sel = t.uid === selectedUid;
+          // Linked-highlight: hovering this model in the palette (or another of
+          // its instances) rings every placed instance, and vice-versa.
+          const linked = !sel && hoveredPieceId != null && t.pieceId === hoveredPieceId;
           const code = codeByUid[t.uid];
+          const showControls = t.uid === hoveredUid || sel;
           return (
             <div
               key={t.uid}
               onPointerDown={(e) => onTileDown(e, placed.find((p) => p.uid === t.uid))}
               onPointerMove={onTileMove}
               onPointerUp={onTileUp}
+              onMouseEnter={() => enter(t)}
+              onMouseLeave={leave}
               className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10'].join(' ')}
               style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
             >
-              <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
+              <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : linked ? 'ring-2 ring-brand-300 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
               <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: svgById[t.pieceId] }} />
               <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
                 {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
                 {t.dimsLabel}
               </span>
+
+              {/* On-plan contextual controls — appear on hover/selection right
+                  under the piece, so rotate/delete is one click away (no trip to
+                  the toolbar). stopPropagation keeps a click off the drag/deselect. */}
+              {showControls && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                  <button type="button" title="Rotar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRotatePiece(t.uid); }} className="w-7 h-7 grid place-items-center rounded-full bg-surface shadow-pop border border-ink-200 text-ink-700 hover:bg-ink-50"><RotateCw size={14} /></button>
+                  <button type="button" title="Quitar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDeletePiece(t.uid); }} className="w-7 h-7 grid place-items-center rounded-full bg-surface shadow-pop border border-ink-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/** Overall-assembly dimension lines for the 2D plan — a width run along the top
+ *  and a depth run down the left of the bounding box of all placed pieces, each
+ *  labelled in cm. Pure overlay (px = cm at SCALE 1), non-interactive, recomputed
+ *  every render so it tracks the layout as pieces are added/moved/rotated. */
+function PlanDimensions({ tiles }) {
+  if (!tiles || tiles.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const t of tiles) {
+    minX = Math.min(minX, t.leftPx); minY = Math.min(minY, t.topPx);
+    maxX = Math.max(maxX, t.leftPx + t.wPx); maxY = Math.max(maxY, t.topPx + t.hPx);
+  }
+  const w = Math.round(maxX - minX), d = Math.round(maxY - minY);
+  const yT = Math.max(11, minY - 16);   // width dimension line (above the layout)
+  const xL = Math.max(11, minX - 16);   // depth dimension line (left of the layout)
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  return (
+    <svg className="absolute inset-0 z-[6] pointer-events-none overflow-visible text-brand-600" width="100%" height="100%" aria-hidden>
+      <g strokeOpacity="0.65">
+        <line x1={minX} y1={yT} x2={maxX} y2={yT} stroke="currentColor" strokeWidth="1" />
+        <line x1={minX} y1={yT - 4} x2={minX} y2={yT + 4} stroke="currentColor" strokeWidth="1" />
+        <line x1={maxX} y1={yT - 4} x2={maxX} y2={yT + 4} stroke="currentColor" strokeWidth="1" />
+        <line x1={xL} y1={minY} x2={xL} y2={maxY} stroke="currentColor" strokeWidth="1" />
+        <line x1={xL - 4} y1={minY} x2={xL + 4} y2={minY} stroke="currentColor" strokeWidth="1" />
+        <line x1={xL - 4} y1={maxY} x2={xL + 4} y2={maxY} stroke="currentColor" strokeWidth="1" />
+      </g>
+      <rect x={cx - 25} y={yT - 8} width="50" height="15" rx="3" fill="white" fillOpacity="0.92" />
+      <text x={cx} y={yT + 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="currentColor">{w} cm</text>
+      <g transform={`rotate(-90 ${xL} ${cy})`}>
+        <rect x={xL - 25} y={cy - 8} width="50" height="15" rx="3" fill="white" fillOpacity="0.92" />
+        <text x={xL} y={cy + 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="currentColor">{d} cm</text>
+      </g>
+    </svg>
+  );
+}
+
+/** The quote summary — a sheet listing every placed piece with its swatch (hover
+ *  a swatch to see it big), unit price, the assembled size, the running total,
+ *  and the "request a quote" CTA. Read-only over `placed` (the same data the
+ *  lead submission and the estimate dock use). */
+function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subtotalUsd, overallCm, onRequest }) {
+  const rows = placed.map((p) => {
+    const r = resolvePlacement(p, resolvedById);
+    return { uid: p.uid, pieceId: p.pieceId, label: r.label || r.name || 'Togo', w: r.widthCm, d: r.depthCm, fabric: p.material?.fabric || '', code: p.material?.code || '', price: r.unitPrice };
+  });
+  return (
+    <Modal open={open} onClose={onClose} title="Resumen de tu Togo" size="lg">
+      {open && (
+        <div className="space-y-3">
+          {!rows.length && <p className="text-sm text-ink-500 py-6 text-center">Aún no has agregado piezas a tu sofá.</p>}
+          {rows.length > 0 && (
+            <ul className="divide-y divide-ink-100 -my-1">
+              {rows.map((row) => (
+                <li key={row.uid} className="flex items-center gap-3 py-2.5">
+                  <span className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[row.pieceId] || '' }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{row.label}</div>
+                    <div className="text-[11px] text-ink-500 tabular-nums">{row.w}×{row.d} cm</div>
+                    {row.fabric && <div className="text-[11px] text-ink-500 truncate">{row.fabric}</div>}
+                  </div>
+                  {row.code && (
+                    <div className="relative group shrink-0">
+                      <img src={swatchUrl(row.code)} alt={row.fabric} className="w-10 h-10 rounded-md object-cover border border-ink-200" />
+                      {/* hover → enlarged swatch */}
+                      <div className="pointer-events-none absolute right-0 bottom-full mb-2 z-[70] hidden group-hover:block">
+                        <img src={swatchUrl(row.code)} alt={row.fabric} className="w-48 h-48 rounded-xl object-cover border border-ink-200 shadow-pop bg-surface" />
+                        {row.fabric && <div className="mt-1 text-center text-[11px] text-ink-700 bg-surface/95 rounded px-1.5 py-0.5 truncate max-w-48">{row.fabric}</div>}
+                      </div>
+                    </div>
+                  )}
+                  <div className="shrink-0 w-24 text-right tabular-nums text-sm font-medium">{row.price != null ? formatMoney(row.price, 'DOP', rates) : '—'}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {rows.length > 0 && (
+            <div className="flex items-center justify-between gap-3 border-t border-ink-200 pt-3">
+              <div className="min-w-0">
+                <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado · {rows.length} pieza{rows.length === 1 ? '' : 's'}</div>
+                <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(subtotalUsd, 'DOP', rates)}</div>
+                {overallCm?.widthCm > 0 && <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {overallCm.widthCm} × {overallCm.depthCm} cm</div>}
+              </div>
+              <button type="button" onClick={onRequest} className="btn-primary text-sm shrink-0">Solicitar cotización <ArrowRight size={15} /></button>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
 
