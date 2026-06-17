@@ -8,7 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
-import { resolveItbisLiquidation, activeFiscalPlugin } from '../../core/accounting/index.js';
+import { resolveItbisLiquidation, activeFiscalPlugin, resolveFilingDeadline } from '../../core/accounting/index.js';
 
 /**
  * DGII — the single Dominican-fiscal pane. ALL DR tax logic routes from here:
@@ -49,6 +49,12 @@ export default function Impuestos() {
   const monthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
   // The filings to file — straight from the plugin (DR: 606 · 607 · IT-1 · e-CF).
   const forms = fiscal.reports;
+  // Live filing deadlines per report (the periodic ones carry a `dueDay`); the
+  // View only formats — the math lives in the plugin's resolveFilingDeadline VM.
+  const deadlines = useMemo(
+    () => Object.fromEntries(forms.map((f) => [f.code, resolveFilingDeadline(f.dueDay, today.getTime())])),
+    [forms, today],
+  );
 
   return (
     <AccountingGate title={fiscal.authority}>
@@ -88,6 +94,13 @@ export default function Impuestos() {
                 </div>
                 <div className="text-sm font-medium text-ink-900 mt-1">{f.label}</div>
                 <div className="text-xs text-ink-500 mt-0.5">{f.description}</div>
+                {deadlines[f.code] && (
+                  <div className={`text-[11px] font-medium tabular-nums mt-1.5 ${deadlines[f.code].daysLeft <= 3 ? 'text-rose-600' : 'text-ink-400'}`}>
+                    Vence {new Date(deadlines[f.code].dueAt).getDate()} {MONTHS[new Date(deadlines[f.code].dueAt).getMonth()].slice(0, 3).toLowerCase()}
+                    {' · '}
+                    {deadlines[f.code].daysLeft === 0 ? 'hoy' : `faltan ${deadlines[f.code].daysLeft} días`}
+                  </div>
+                )}
               </Link>
             ))}
           </div>

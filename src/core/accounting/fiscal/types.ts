@@ -63,6 +63,10 @@ export interface FiscalReport {
   to: string;
   /** Family, so a View can group/route without knowing the code. */
   kind: 'purchases' | 'sales' | 'liquidation' | 'receipt';
+  /** Calendar day of the month AFTER the period by which the filing is due (DR:
+   *  606/607 → 15, IT-1 → 20). Omitted for non-periodic filings (per-document
+   *  e-CF). A View turns this into a live deadline via `resolveFilingDeadline`. */
+  dueDay?: number;
 }
 
 /**

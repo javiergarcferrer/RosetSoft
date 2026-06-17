@@ -9,6 +9,7 @@ import { dgiiPlugin } from './dgii.js';
 import type { FiscalPlugin } from './types.js';
 
 export type { FiscalPlugin, FiscalTax, FiscalId, FiscalReceipt, FiscalReport } from './types.js';
+export { resolveFilingDeadline, type FilingDeadline } from './deadlines.js';
 export { dgiiPlugin };
 
 /** Every registered jurisdiction, keyed by ISO country code. */

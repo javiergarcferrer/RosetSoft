@@ -51,6 +51,7 @@ export const dgiiPlugin: FiscalPlugin = {
       description: 'Comprobantes de proveedores del mes',
       to: '/accounting/expenses?tab=606',
       kind: 'purchases',
+      dueDay: 15, // envío 606 vence el 15 del mes siguiente
     },
     {
       code: '607',
@@ -58,6 +59,7 @@ export const dgiiPlugin: FiscalPlugin = {
       description: 'Comprobantes de ventas del mes',
       to: '/accounting/facturacion?tab=607',
       kind: 'sales',
+      dueDay: 15, // envío 607 vence el 15 del mes siguiente
     },
     {
       code: 'IT-1',
@@ -65,6 +67,7 @@ export const dgiiPlugin: FiscalPlugin = {
       description: 'Débito fiscal − crédito fiscal',
       to: '/accounting/facturacion?tab=it1',
       kind: 'liquidation',
+      dueDay: 20, // declaración/pago IT-1 vence el 20 del mes siguiente
     },
     {
       code: 'e-CF',

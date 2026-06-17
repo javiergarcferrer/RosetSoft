@@ -9,7 +9,10 @@
  *
  * Business decisions baked as defaults (owner-confirmed): ITBIS 18%, no exempt
  * operations (so input ITBIS is fully creditable), customs duty 20% on
- * merchandise. Retention rates are starting points to confirm with the advisor.
+ * merchandise. Retention rates are starting points to confirm with the advisor:
+ * the ITBIS-retention default (30%) is the persona-JURÍDICA rate for servicios
+ * profesionales / alquiler de muebles (Norma 02-05); a persona física triggers
+ * a 100% ITBIS retention (Norma 07-07) — set that per supplier with the asesor.
  *
  * Pure: no React, no Supabase.
  */
@@ -67,8 +70,8 @@ export const POSTING_ROLES: PostingRole[] = [
 export const TAX_DEFAULTS = {
   itbisRate: 18,                 // ITBIS general
   dutyRate: 20,                  // customs duty on merchandise (owner: 99% of cases)
-  retentionIsrServicesRate: 10,  // ISR withheld on services from individuals — confirm
-  retentionItbisRate: 30,        // % of ITBIS withheld on services from individuals — confirm
+  retentionIsrServicesRate: 10,  // ISR retenido a personas físicas por honorarios/servicios (Norma 07-07)
+  retentionItbisRate: 30,        // ITBIS retenido a personas jurídicas (serv. prof. / alquiler muebles, Norma 02-05); persona física = 100%
 };
 
 /** A fully-resolved config: tax rates + a complete role→code map (no gaps). */
