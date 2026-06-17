@@ -94,117 +94,166 @@ export default function WhatsAppCard({ settings, saveSettings }) {
 
   return (
     <SettingsSection title={<><MessageCircle size={16} className="text-emerald-600" aria-hidden /> WhatsApp Business</>}>
-      <p className="text-xs text-ink-500 mb-4">
-        Conecta tu app de WhatsApp Business (Cloud API) para enviar cotizaciones y chatear con
-        clientes desde ALCOVER, con el número del negocio. Empieza con el <strong>número de prueba</strong> de
-        Meta; cuando el flujo esté validado, migra tu número real (ojo: al conectarlo a la API, ese
-        número se desconecta de la app WhatsApp Business del teléfono).
-      </p>
+      <StatusHeader connectedAt={connectedAt} displayNumber={displayNumber} verifiedName={verifiedName} settings={settings} webhook={webhook} />
 
-      <SetupGuide settings={settings} />
-
-      <CoexistenceRow settings={settings} saveSettings={saveSettings} onConnected={refreshWebhook} />
-
-      {locked ? (
-        <div className="mt-4 rounded-lg border border-ink-100 bg-ink-50/60 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-ink-600 flex items-start gap-2 min-w-0">
-            <Lock size={14} className="text-ink-400 shrink-0 mt-px" aria-hidden />
-            <span>
-              Credenciales guardadas y <strong>bloqueadas</strong> — token, Phone Number ID, WABA ID y App Secret.
-              No se muestran, no se autocompletan y no se pueden modificar sin desbloquear.
-            </span>
-          </div>
-          <button type="button" onClick={() => setEditing(true)} className="btn-ghost text-xs shrink-0">
-            Editar credenciales
-          </button>
-        </div>
-      ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-        <div className="sm:col-span-2">
-          <label className="label" htmlFor="wa-token">Token de acceso (permanente)</label>
-          {/* Credential fields render through CredentialInput — the anti-autofill
-              measures (and the incident that motivated them) are documented there. */}
-          <CredentialInput secret id="wa-token" name="wa-access-token" value={accessToken} onChange={(e) => setAccessToken(e.target.value)}
-            placeholder={connectedAt ? '•••••••• (guardado)' : 'EAA…'} className="input mt-1" />
-        </div>
-        <div>
-          <label className="label" htmlFor="wa-phone-id">Phone Number ID</label>
-          <CredentialInput id="wa-phone-id" name="wa-phone-number-id" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
-            placeholder={connectedAt ? '(guardado)' : 'p. ej. 123456789012345'} className="input mt-1" inputMode="numeric" />
-        </div>
-        <div>
-          <label className="label" htmlFor="wa-waba-id">WhatsApp Business Account ID</label>
-          <CredentialInput id="wa-waba-id" name="wa-waba-account-id" value={wabaId} onChange={(e) => setWabaId(e.target.value)}
-            placeholder={connectedAt ? '(guardado)' : 'p. ej. 109876543210987'} className="input mt-1" inputMode="numeric" />
-        </div>
-        <div className="sm:col-span-2">
-          <label className="label" htmlFor="wa-secret">App Secret (para recibir mensajes)</label>
-          <CredentialInput secret id="wa-secret" name="wa-app-secret" value={appSecret} onChange={(e) => setAppSecret(e.target.value)}
-            placeholder={connectedAt ? '•••••••• (guardado)' : '32 caracteres hexadecimales'} className="input mt-1" />
-          <p className="text-[11px] text-ink-500 mt-1">
-            Meta → tu app → App settings → Basic → App Secret → Show. Firma los mensajes entrantes; sin él no se recibe nada.
-          </p>
-        </div>
-      </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2 mt-3">
-        {!locked && (
-          <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-            {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar conexión
-          </button>
-        )}
-        {!locked && connectedAt ? (
-          <button
-            type="button"
-            onClick={() => { setAccessToken(''); setPhoneNumberId(''); setWabaId(''); setAppSecret(''); setEditing(false); setMsg(''); setStatus('idle'); }}
-            className="btn-ghost text-sm"
-          >
-            Cancelar
-          </button>
-        ) : null}
-        {connectedAt ? (
-          <span className="text-[11px] text-ink-400 min-w-0 truncate">
-            Conectado{displayNumber ? ` · ${displayNumber}` : ''}{verifiedName ? ` (${verifiedName})` : ''} · {formatDateTime(connectedAt)}
-          </span>
-        ) : null}
-      </div>
-      {connectedAt && (
-        <p className="text-[11px] text-ink-400 mt-1.5">
-          La conexión queda guardada — los deploys no la tocan. Para cambiar un solo valor (p. ej. un token nuevo), pega solo ese campo: los vacíos conservan lo guardado.
+      {/* ── Conexión — credentials + the number link ──────────────────────── */}
+      <Section title="Conexión" hint="credenciales y vínculo del número" defaultOpen={!connectedAt}>
+        <p className="text-xs text-ink-500 mb-4">
+          Conecta tu app de WhatsApp Business (Cloud API) para enviar cotizaciones y chatear con
+          clientes desde ALCOVER, con el número del negocio. Empieza con el <strong>número de prueba</strong> de
+          Meta; cuando el flujo esté validado, migra tu número real (ojo: al conectarlo a la API, ese
+          número se desconecta de la app WhatsApp Business del teléfono).
         </p>
-      )}
-      {connectedAt && <NumberHealth settings={settings} />}
-      {webhook && (
-        webhook.subscribed ? (
-          <p className="text-[11px] text-emerald-700 mt-1.5 flex items-start gap-1">
-            <Check size={12} className="mt-px shrink-0" />
-            Recepción activa: las respuestas del cliente y las confirmaciones de entrega llegan a la app.
-          </p>
+
+        <SetupGuide settings={settings} />
+
+        <CoexistenceRow settings={settings} saveSettings={saveSettings} onConnected={refreshWebhook} />
+
+        {locked ? (
+          <div className="mt-4 rounded-lg border border-ink-100 bg-ink-50/60 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-ink-600 flex items-start gap-2 min-w-0">
+              <Lock size={14} className="text-ink-400 shrink-0 mt-px" aria-hidden />
+              <span>
+                Credenciales guardadas y <strong>bloqueadas</strong> — token, Phone Number ID, WABA ID y App Secret.
+                No se muestran, no se autocompletan y no se pueden modificar sin desbloquear.
+              </span>
+            </div>
+            <button type="button" onClick={() => setEditing(true)} className="btn-ghost text-xs shrink-0">
+              Editar credenciales
+            </button>
+          </div>
         ) : (
-          <p className="text-[11px] text-amber-700 mt-1.5 flex items-start gap-1">
-            <AlertTriangle size={12} className="mt-px shrink-0" />
-            <span>Recepción inactiva — Meta no está entregando mensajes a la app. {webhook.error}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor="wa-token">Token de acceso (permanente)</label>
+            {/* Credential fields render through CredentialInput — the anti-autofill
+                measures (and the incident that motivated them) are documented there. */}
+            <CredentialInput secret id="wa-token" name="wa-access-token" value={accessToken} onChange={(e) => setAccessToken(e.target.value)}
+              placeholder={connectedAt ? '•••••••• (guardado)' : 'EAA…'} className="input mt-1" />
+          </div>
+          <div>
+            <label className="label" htmlFor="wa-phone-id">Phone Number ID</label>
+            <CredentialInput id="wa-phone-id" name="wa-phone-number-id" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
+              placeholder={connectedAt ? '(guardado)' : 'p. ej. 123456789012345'} className="input mt-1" inputMode="numeric" />
+          </div>
+          <div>
+            <label className="label" htmlFor="wa-waba-id">WhatsApp Business Account ID</label>
+            <CredentialInput id="wa-waba-id" name="wa-waba-account-id" value={wabaId} onChange={(e) => setWabaId(e.target.value)}
+              placeholder={connectedAt ? '(guardado)' : 'p. ej. 109876543210987'} className="input mt-1" inputMode="numeric" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor="wa-secret">App Secret (para recibir mensajes)</label>
+            <CredentialInput secret id="wa-secret" name="wa-app-secret" value={appSecret} onChange={(e) => setAppSecret(e.target.value)}
+              placeholder={connectedAt ? '•••••••• (guardado)' : '32 caracteres hexadecimales'} className="input mt-1" />
+            <p className="text-[11px] text-ink-500 mt-1">
+              Meta → tu app → App settings → Basic → App Secret → Show. Firma los mensajes entrantes; sin él no se recibe nada.
+            </p>
+          </div>
+        </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {!locked && (
+            <button type="button" onClick={save} disabled={status === 'saving'} className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
+              {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar conexión
+            </button>
+          )}
+          {!locked && connectedAt ? (
+            <button
+              type="button"
+              onClick={() => { setAccessToken(''); setPhoneNumberId(''); setWabaId(''); setAppSecret(''); setEditing(false); setMsg(''); setStatus('idle'); }}
+              className="btn-ghost text-sm"
+            >
+              Cancelar
+            </button>
+          ) : null}
+          {connectedAt ? (
+            <span className="text-[11px] text-ink-400 min-w-0 truncate">
+              Conectado{displayNumber ? ` · ${displayNumber}` : ''}{verifiedName ? ` (${verifiedName})` : ''} · {formatDateTime(connectedAt)}
+            </span>
+          ) : null}
+        </div>
+        {connectedAt && (
+          <p className="text-[11px] text-ink-400 mt-1.5">
+            La conexión queda guardada — los deploys no la tocan. Para cambiar un solo valor (p. ej. un token nuevo), pega solo ese campo: los vacíos conservan lo guardado.
           </p>
-        )
-      )}
-      {msg && (
-        <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>
-      )}
+        )}
+        {msg && (
+          <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>
+        )}
+      </Section>
 
       {connectedAt ? (
         <>
-          <WebhookRow settings={settings} />
-          <ReceptionHealth />
-          <TemplateRow settings={settings} saveSettings={saveSettings} />
-          <CatalogRow settings={settings} saveSettings={saveSettings} />
-          <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
-          <ConversationalRow />
-          <QrCodesRow />
-          <TestSendRow />
+          {/* ── Recepción — webhook + reception health/self-test ────────────── */}
+          <Section title="Recepción" hint="recibir mensajes">
+            <WebhookRow settings={settings} />
+            <ReceptionHealth />
+          </Section>
+
+          {/* ── Envío — quote template, catalog, test send ──────────────────── */}
+          <Section title="Envío" hint="enviar cotizaciones y catálogo">
+            <TemplateRow settings={settings} saveSettings={saveSettings} />
+            <CatalogRow settings={settings} saveSettings={saveSettings} />
+            <TestSendRow />
+          </Section>
+
+          {/* ── Automatización — quick replies, start menu, QR codes ────────── */}
+          <Section title="Automatización" hint="respuestas, menú y códigos QR">
+            <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
+            <ConversationalRow />
+            <QrCodesRow />
+          </Section>
         </>
       ) : null}
     </SettingsSection>
+  );
+}
+
+/** A collapsible section in the WhatsApp config menu — the grouping primitive
+ *  for Conexión / Recepción / Envío / Automatización. */
+function Section({ title, hint, defaultOpen = false, children }) {
+  return (
+    <details className="group mt-3 rounded-lg border border-ink-100 overflow-hidden" open={defaultOpen}>
+      <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 min-h-11 text-sm font-semibold text-ink-800 hover:bg-ink-50/60 transition-colors list-none">
+        <span className="inline-flex items-baseline gap-2">{title}{hint && <span className="text-[11px] font-normal text-ink-400">{hint}</span>}</span>
+        <ChevronDown size={14} className="disclosure-chevron text-ink-400" aria-hidden />
+      </summary>
+      <div className="px-4 pb-4 pt-3 border-t border-ink-100">{children}</div>
+    </details>
+  );
+}
+
+/** Connection status header — the at-a-glance state above the sections:
+ *  connected/not, number, Meta quality rating, and webhook reception. */
+function StatusHeader({ connectedAt, displayNumber, verifiedName, settings, webhook }) {
+  return (
+    <div className="mb-1 rounded-lg border border-ink-100 bg-ink-50/40 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {connectedAt ? (
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden /> Conectado
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-500">
+            <span className="h-2 w-2 rounded-full bg-ink-300" aria-hidden /> No conectado
+          </span>
+        )}
+        {connectedAt && (displayNumber || verifiedName) && (
+          <span className="text-sm text-ink-600 min-w-0 truncate">
+            {displayNumber || ''}{verifiedName ? ` · ${verifiedName}` : ''}
+          </span>
+        )}
+        {connectedAt && webhook && (
+          webhook.subscribed ? (
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-emerald-700"><Check size={12} /> Recepción activa</span>
+          ) : (
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={12} /> Recepción inactiva</span>
+          )
+        )}
+      </div>
+      {connectedAt && <NumberHealth settings={settings} />}
+    </div>
   );
 }
 
