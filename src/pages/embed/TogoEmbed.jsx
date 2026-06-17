@@ -136,6 +136,15 @@ export default function TogoEmbed() {
     return o;
   }, [placed]);
 
+  // Togo's price depends on the fabric GRADE, so a piece has no real price until
+  // a fabric is chosen: the estimate sums ONLY fabric-chosen pieces (the rest
+  // read "Elige una tela"), and the palette shows no price at all. USD throughout.
+  const pricedUsd = useMemo(
+    () => placed.reduce((s, p) => s + (p.material ? (Number(p.material.unitPrice) || 0) : 0), 0),
+    [placed],
+  );
+  const pendingFabric = useMemo(() => placed.filter((p) => !p.material).length, [placed]);
+
   const addPiece = useCallback((modelId) => {
     const r = resolvedById[modelId]; if (!r) return;
     const fp = footprintOf(r, 0);
@@ -263,8 +272,8 @@ export default function TogoEmbed() {
           modelId: p.pieceId, x: p.x, y: p.y, rot: p.rot,
           ...(p.material ? { material: { grade: p.material.grade, fabric: p.material.fabric, code: p.material.code } } : {}),
         }))}
-        estimateUsd={vm.subtotalUsd}
-        totalDop={formatMoney(vm.subtotalUsd, 'DOP', rates)}
+        estimateUsd={pricedUsd}
+        total={formatMoney(pricedUsd, 'USD', rates)}
         onBack={() => setStep('build')}
         onDone={() => setStep('done')}
       />
@@ -274,7 +283,7 @@ export default function TogoEmbed() {
   // Shared building blocks — defined once, rendered in BOTH the desktop layout
   // and the mobile bottom sheets / docks so screen never drifts from sheet.
   const piecesList = (
-    <PiecesList models={models} rates={rates} onAdd={(id) => { addPiece(id); setSheet(null); }}
+    <PiecesList models={models} onAdd={(id) => { addPiece(id); setSheet(null); }}
       hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
   );
   const materialEditor = (
@@ -415,7 +424,9 @@ export default function TogoEmbed() {
           <div className="mx-auto max-w-[1400px] flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
-              <div className="text-lg font-display font-semibold tabular-nums leading-tight">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+              {pricedUsd > 0
+                ? <div className="text-lg font-display font-semibold tabular-nums leading-tight">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-[11px] font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
+                : <div className="text-sm text-ink-500 leading-tight py-0.5">{vm.count ? 'Elige una tela' : '—'}</div>}
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
                 <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
@@ -435,7 +446,9 @@ export default function TogoEmbed() {
           <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-4">
             <div>
               <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
-              <div className="text-xl font-display font-semibold tabular-nums">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+              {pricedUsd > 0
+                ? <div className="text-xl font-display font-semibold tabular-nums">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-xs font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
+                : <div className="text-base text-ink-500">{vm.count ? 'Elige una tela para ver el estimado' : '—'}</div>}
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
                 <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
@@ -472,7 +485,7 @@ export default function TogoEmbed() {
       <QuoteSheet
         open={quoteOpen} onClose={() => setQuoteOpen(false)}
         placed={placed} resolvedById={resolvedById} svgById={svgById} rates={rates}
-        subtotalUsd={vm.subtotalUsd} overallCm={vm.overallCm}
+        subtotalUsd={pricedUsd} pending={pendingFabric} overallCm={vm.overallCm}
         onRequest={() => { setQuoteOpen(false); setStep('form'); }}
       />
     </div>
@@ -482,7 +495,7 @@ export default function TogoEmbed() {
 /** Vertical list of Togo models (thumbnail · name · dims · price + add button).
  *  ONE list shared by the desktop pieces rail and the mobile "Agregar pieza"
  *  sheet, so they can never present a different catalog. */
-function PiecesList({ models, rates, onAdd, hoveredPieceId, onHover }) {
+function PiecesList({ models, onAdd, hoveredPieceId, onHover }) {
   return (
     <ul className="space-y-2">
       {models.map((m) => {
@@ -502,7 +515,6 @@ function PiecesList({ models, rates, onAdd, hoveredPieceId, onHover }) {
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-medium truncate">{m.name}</span>
                 <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
-                {m.priceUsd != null && <span className="block text-[12px] font-medium text-brand-700 tabular-nums">{formatMoney(m.priceUsd, 'DOP', rates)}</span>}
               </span>
               <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-600"><Plus size={16} /></span>
             </button>
@@ -547,8 +559,12 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
         <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
           {selected.material?.code && <ImageView id={null} fallbackUrl={swatchUrl(selected.material.code)} alt="" className="w-3 h-3 rounded-sm object-cover" />}
           <span className="truncate">{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin opciones de tela')}</span>
-          <span className="text-ink-300">·</span>
-          <span className="tabular-nums font-medium text-ink-700">{selResolved.unitPrice != null ? formatMoney(selResolved.unitPrice, 'DOP', rates) : 'sin precio'}</span>
+          {selected.material && selResolved.unitPrice != null && (
+            <>
+              <span className="text-ink-300">·</span>
+              <span className="tabular-nums font-medium text-ink-700">{formatMoney(selResolved.unitPrice, 'USD', rates)}</span>
+            </>
+          )}
           <span className="text-ink-400 tabular-nums hidden sm:inline">· {selResolved.widthCm}×{selResolved.depthCm} cm</span>
         </div>
       </div>
@@ -679,10 +695,10 @@ function PlanDimensions({ tiles }) {
  *  a swatch to see it big), unit price, the assembled size, the running total,
  *  and the "request a quote" CTA. Read-only over `placed` (the same data the
  *  lead submission and the estimate dock use). */
-function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subtotalUsd, overallCm, onRequest }) {
+function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
   const rows = placed.map((p) => {
     const r = resolvePlacement(p, resolvedById);
-    return { uid: p.uid, pieceId: p.pieceId, label: r.label || r.name || 'Togo', w: r.widthCm, d: r.depthCm, fabric: p.material?.fabric || '', code: p.material?.code || '', price: r.unitPrice };
+    return { uid: p.uid, pieceId: p.pieceId, label: r.label || r.name || 'Togo', w: r.widthCm, d: r.depthCm, fabric: p.material?.fabric || '', code: p.material?.code || '', priced: !!p.material, price: r.unitPrice };
   });
   return (
     <Modal open={open} onClose={onClose} title="Resumen de tu Togo" size="lg">
@@ -709,7 +725,11 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
                       </div>
                     </div>
                   )}
-                  <div className="shrink-0 w-24 text-right tabular-nums text-sm font-medium">{row.price != null ? formatMoney(row.price, 'DOP', rates) : '—'}</div>
+                  <div className="shrink-0 w-28 text-right text-sm">
+                    {row.priced
+                      ? (row.price != null ? <span className="font-medium tabular-nums">{formatMoney(row.price, 'USD', rates)}</span> : <span className="text-ink-400">sin precio</span>)
+                      : <span className="text-[11px] text-ink-400">Elige una tela</span>}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -718,7 +738,8 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
             <div className="flex items-center justify-between gap-3 border-t border-ink-200 pt-3">
               <div className="min-w-0">
                 <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado · {rows.length} pieza{rows.length === 1 ? '' : 's'}</div>
-                <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(subtotalUsd, 'DOP', rates)}</div>
+                <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(subtotalUsd, 'USD', rates)}</div>
+                {pending > 0 && <div className="text-[11px] text-amber-600">{pending} sin tela — elige una para incluirla</div>}
                 {overallCm?.widthCm > 0 && <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {overallCm.widthCm} × {overallCm.depthCm} cm</div>}
               </div>
               <button type="button" onClick={onRequest} className="btn-primary text-sm shrink-0">Solicitar cotización <ArrowRight size={15} /></button>
@@ -794,7 +815,7 @@ function Centered({ children }) {
   return <div className="min-h-full bg-surface grid place-items-center p-6">{children}</div>;
 }
 
-function RequestForm({ storeName, items, estimateUsd, totalDop, onBack, onDone }) {
+function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
   const [form, setForm] = useState({ name: '', phone: '', email: '', note: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -820,7 +841,7 @@ function RequestForm({ storeName, items, estimateUsd, totalDop, onBack, onDone }
         <button type="button" onClick={onBack} className="btn-ghost text-xs text-ink-500"><ArrowLeft size={14} /> Volver al diseño</button>
         <div>
           <h2 className="font-display font-semibold text-lg">Solicita tu cotización</h2>
-          <p className="text-xs text-ink-500 mt-0.5">{storeName} te contactará con el precio final y la disponibilidad. Estimado: <b className="text-ink-700 tabular-nums">{totalDop}</b></p>
+          <p className="text-xs text-ink-500 mt-0.5">{storeName} te contactará con el precio final y la disponibilidad. Estimado: <b className="text-ink-700 tabular-nums">{total}</b></p>
         </div>
         <div>
           <label className="label">Nombre *</label>
