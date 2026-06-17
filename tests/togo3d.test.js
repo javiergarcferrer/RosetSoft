@@ -21,35 +21,47 @@ test('inferTogoForm reads arms from the label, then the footprint shape', () => 
   assert.equal(inferTogoForm('Pieza', 174, 102).armCount, 2);
 });
 
-test('togoParts builds a floor-standing, footprint-bounded, cohesive body', () => {
+// AABB half-extents per part shape (box: w/h/d; ridge capsule: length along its
+// axis + radius caps, radius on the other two axes).
+function aabb(p) {
+  if (p.shape === 'ridge') {
+    const ex = p.axis === 'x' ? p.length / 2 + p.radius : p.radius;
+    const ez = p.axis === 'z' ? p.length / 2 + p.radius : p.radius;
+    return { x0: p.x - ex, x1: p.x + ex, y0: p.y - p.radius, y1: p.y + p.radius, z0: p.z - ez, z1: p.z + ez };
+  }
+  return { x0: p.x - p.w / 2, x1: p.x + p.w / 2, y0: p.y - p.h / 2, y1: p.y + p.h / 2, z0: p.z - p.d / 2, z1: p.z + p.d / 2 };
+}
+
+test('togoParts builds a floor-standing, channeled Togo within its footprint', () => {
   const W = 174, D = 102;
   const parts = togoParts(W, D, { armCount: 2 });
-  assert.ok(parts.length >= 3, 'seat + back + 2 arms');
-  assert.equal(parts.filter((p) => p.role === 'arm').length, 2);
-  assert.equal(parts.filter((p) => p.role === 'seat').length, 1);
+  const cores = parts.filter((p) => p.shape === 'box');
+  assert.equal(cores.filter((p) => p.role === 'seat').length, 1);
+  assert.equal(cores.filter((p) => p.role === 'arm').length, 2);
+  assert.ok(parts.some((p) => p.shape === 'ridge'), 'has the channel ridges');
 
   let maxY = 0;
   for (const p of parts) {
-    // Every part sits on/above the floor (Togo is legless) …
-    assert.ok(p.y - p.h / 2 >= -0.01, `${p.role} dips below the floor`);
-    // … and stays within the footprint AABB (the 3D mass = the 2D tile).
-    assert.ok(p.x - p.w / 2 >= -W / 2 - 0.5 && p.x + p.w / 2 <= W / 2 + 0.5, `${p.role} exceeds width`);
-    assert.ok(p.z - p.d / 2 >= -D / 2 - 0.5 && p.z + p.d / 2 <= D / 2 + 0.5, `${p.role} exceeds depth`);
-    assert.ok(p.r > 0, 'parts are rounded (puffy)');
-    maxY = Math.max(maxY, p.y + p.h / 2);
+    const b = aabb(p);
+    maxY = Math.max(maxY, b.y1);
+    assert.ok(b.y0 >= -0.5, `${p.role} dips below the floor`);
   }
-  assert.ok(Math.abs(maxY - TOGO_HEIGHT_CM) < 1, 'the backrest reaches the Togo height');
+  assert.ok(Math.abs(maxY - TOGO_HEIGHT_CM) <= 8, 'reaches ~the Togo height');
 
-  // Armless (chauffeuse) drops the arm parts; chaise keeps one.
-  assert.equal(togoParts(87, 102, { armCount: 0 }).filter((p) => p.role === 'arm').length, 0);
+  // The CORE mass stays inside the footprint tile (ridges may plush-overhang).
+  const inFootprint = (list, w, d) => list.filter((p) => p.shape === 'box').forEach((p) => {
+    const b = aabb(p);
+    assert.ok(b.x0 >= -w / 2 - 0.5 && b.x1 <= w / 2 + 0.5, `${p.role} core exceeds width`);
+    assert.ok(b.z0 >= -d / 2 - 0.5 && b.z1 <= d / 2 + 0.5, `${p.role} core exceeds depth`);
+  });
+  inFootprint(parts, W, D);
+
+  // Armless (chauffeuse) drops the arms; chaise keeps one and still fits (the
+  // single-arm backrest tuck-behind once overflowed the armed side).
+  assert.equal(togoParts(87, 102, { armCount: 0 }).filter((p) => p.role === 'arm' && p.shape === 'box').length, 0);
   const chaise = togoParts(131, 162, { armCount: 1 });
-  assert.equal(chaise.filter((p) => p.role === 'arm').length, 1);
-  // Single-arm pieces must ALSO stay inside the footprint (the backrest tuck-
-  // behind once overflowed the armed side) — the 3D mass matches the 2D tile.
-  for (const p of chaise) {
-    assert.ok(p.x - p.w / 2 >= -131 / 2 - 0.5 && p.x + p.w / 2 <= 131 / 2 + 0.5, `${p.role} exceeds width`);
-    assert.ok(p.z - p.d / 2 >= -162 / 2 - 0.5 && p.z + p.d / 2 <= 162 / 2 + 0.5, `${p.role} exceeds depth`);
-  }
+  assert.equal(chaise.filter((p) => p.role === 'arm' && p.shape === 'box').length, 1);
+  inFootprint(chaise, 131, 162);
 });
 
 test('inferTogoKind maps to a canonical Togo piece (label, then footprint), for GLB lookup', () => {

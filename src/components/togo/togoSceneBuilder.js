@@ -20,26 +20,26 @@ const DEFAULT_COLOR = 0xB8AFA3;
 const DEG = Math.PI / 180;
 
 /**
- * Procedural QUILT normal map — the Togo's signature horizontal channels plus a
- * fine fabric weave, baked into a tangent-space normal map so the cohesive body
- * geometry reads as tufted upholstery without the polycount of real channels.
- * Built once (canvas heightfield → finite-difference normals), tiled on every
- * fabric material. Returns a THREE.Texture.
+ * Procedural fabric GRAIN normal map — the fine woven micro-relief that keeps
+ * the upholstery from reading as smooth plastic (the big quilt CHANNELS are real
+ * geometry now, see togoModel.togoParts). Built once (canvas heightfield →
+ * finite-difference normals), tiled on every fabric material. A non-zero
+ * `channels` still bakes in soft horizontal grooves if ever wanted.
+ * Returns a THREE.Texture (linear — it's a normal map, not colour).
  */
-export function makeQuiltNormalMap(THREE, { size = 256, channels = 6, weave = 90, strength = 2.6 } = {}) {
+export function makeQuiltNormalMap(THREE, { size = 256, channels = 0, weave = 150, strength = 1.4 } = {}) {
   if (typeof document === 'undefined') return null;
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const ctx = cv.getContext('2d');
   const img = ctx.createImageData(size, size);
   const TAU = Math.PI * 2;
-  // Height field: DOMINANT rounded horizontal channels (the Togo quilting, vary
-  // along V only → grooves run across the width) + a faint, fine woven grain.
+  // Height field: a fine woven grain (+ optional soft horizontal grooves).
   const H = (x, y) => {
     const v = y / size, u = x / size;
-    const ch = (Math.cos(v * TAU * channels) * 0.5 + 0.5) ** 1.7;             // rounded grooves
+    const ch = channels ? (Math.cos(v * TAU * channels) * 0.5 + 0.5) ** 1.7 : 0;
     const grain = (Math.sin(u * TAU * weave) + Math.sin(v * TAU * weave)) * 0.5;
-    return ch + grain * 0.05;
+    return ch + grain * 0.18;
   };
   const d = img.data;
   for (let y = 0; y < size; y++) {
@@ -149,9 +149,15 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
       placeRealModel(THREE, real.object, material, real.desc, pieceGroup);
     } else {
       for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
-        const seg = Math.max(2, Math.round(part.r / 4));
-        const geo = new RoundedBoxGeometry(part.w, part.h, part.d, seg, part.r);
-        const mesh = new THREE.Mesh(geo, material);
+        let mesh;
+        if (part.shape === 'ridge') {
+          // A channel: a capsule laid along the width (x) or depth (z).
+          mesh = new THREE.Mesh(new THREE.CapsuleGeometry(part.radius, part.length, 8, 18), material);
+          mesh.rotation[part.axis === 'x' ? 'z' : 'x'] = Math.PI / 2;
+        } else {
+          const seg = Math.max(2, Math.round(part.r / 4));
+          mesh = new THREE.Mesh(new RoundedBoxGeometry(part.w, part.h, part.d, seg, part.r), material);
+        }
         mesh.position.set(part.x, part.y, part.z);
         mesh.castShadow = true;
         mesh.receiveShadow = true;

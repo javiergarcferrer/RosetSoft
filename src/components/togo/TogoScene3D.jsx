@@ -22,7 +22,7 @@ async function loaderFor(ext) {
 const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
 
 // The default fabric finish (the material editor overrides these live).
-const DEFAULT_FINISH = { sheen: 0.6, sheenRoughness: 0.55, roughness: 0.82, repeat: 3, normalScale: 1.0 };
+const DEFAULT_FINISH = { sheen: 0.6, sheenRoughness: 0.55, roughness: 0.82, repeat: 3, normalScale: 0.45 };
 
 /**
  * The Togo 3D visualizer — a real-time three.js view of the SAME placed layout
@@ -80,8 +80,6 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       }),
     ]);
     if (!api.current) return; // unmounted while awaiting
-    const rep = (finishRef.current?.repeat) || DEFAULT_FINISH.repeat;
-    if (l.quilt) l.quilt.repeat.set(rep, rep);                 // quilt scale follows the weave control
     if (l.group) { l.scene.remove(l.group); disposeGroup(l.group); }
     l.group = buildTogoGroup(l.deps, sd, {
       ...DEFAULT_FINISH,
@@ -112,7 +110,6 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
     if (!l || !l.group) return;
     const f = { ...DEFAULT_FINISH, ...(finishRef.current || {}) };
     const rep = f.repeat || 3;
-    if (l.quilt) l.quilt.repeat.set(rep, rep);
     const seen = new Set();
     l.group.traverse((o) => {
       const m = o.material;
@@ -194,8 +191,8 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       renderer.domElement.addEventListener('pointerdown', stopAuto, { once: true });
 
       const disposeStage = setupTogoStage(deps, renderer, scene, 300);
-      const quilt = makeQuiltNormalMap(THREE);
-      if (quilt) quilt.repeat.set(2, 2);
+      const quilt = makeQuiltNormalMap(THREE);     // fine fabric grain (channels are geometry)
+      if (quilt) quilt.repeat.set(5, 5);
       api.current = {
         THREE, deps, renderer, scene, camera, controls, disposeStage, stopAuto, quilt,
         group: null, texCache: new Map(), modelCache: new Map(), framed: false,
