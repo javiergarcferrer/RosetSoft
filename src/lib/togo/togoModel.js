@@ -79,6 +79,17 @@ export function togoParts(widthCm, depthCm, { armCount = 2 } = {}) {
   for (let i = 0; i < 5; i++) { const t = i / 4; ridge('backch', 'x', seatW, 8.5, backX, 16 + t * 46, (-D / 2 + 14) + 12 - t * 6); }
   for (const x of armXs) { ridge('armch', 'z', D - 16, 7, x, 49, 2); ridge('armch', 'z', D - 16, 7, x, 37, 2); }
 
+  // Cushion seams — a settee/3-seater is several seats, not one stretched
+  // cushion (the "wrong proportions" read on wide pieces). Drop a front-to-back
+  // welt at each seat boundary so the mass reads as distinct cushions. Seat
+  // count from the overall width (~90 cm/seat); a chair/chauffeuse stays single.
+  // role 'seam' (a ridge) ⇒ the seat CORE count stays 1, so the pin holds.
+  const seats = clamp(Math.round(W / 90), 1, 4);
+  for (let i = 1; i < seats; i++) {
+    const sx = seatXc - seatW / 2 + (i * seatW) / seats;
+    ridge('seam', 'z', seatDepth - 6, 3.2, sx, 31, seatCZ);
+  }
+
   return parts;
 }
 

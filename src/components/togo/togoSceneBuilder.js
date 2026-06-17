@@ -69,18 +69,22 @@ export function makeQuiltNormalMap(THREE, { size = 256, channels = 0, weave = 15
  * normal map. `tex` is an already-loaded THREE.Texture or null.
  */
 export function makeFabricMaterial(THREE, tex, opts = {}) {
+  const base = new THREE.Color(opts.color ?? (tex ? 0xffffff : DEFAULT_COLOR));
   const mat = new THREE.MeshPhysicalMaterial({
-    color: new THREE.Color(opts.color ?? (tex ? 0xffffff : DEFAULT_COLOR)),
+    color: base,
     roughness: opts.roughness ?? 0.82,
     metalness: 0,
     sheen: opts.sheen ?? 0.5,
     sheenRoughness: opts.sheenRoughness ?? 0.55,
-    sheenColor: new THREE.Color(opts.sheenColor ?? 0xffffff),
+    // Tint the sheen lobe toward the FABRIC colour (not white): coloured velvet
+    // keeps its saturation at grazing angles instead of washing out to a pale
+    // film — the single biggest cause of the "flat pale plastic" look.
+    sheenColor: new THREE.Color(opts.sheenColor ?? base),
     // A thin clearcoat lobe for coated finishes (leather) — off by default so
     // matte/cloth finishes pay nothing. Layers on top of the sheen.
     clearcoat: opts.clearcoat ?? 0,
     clearcoatRoughness: opts.clearcoatRoughness ?? 0.4,
-    envMapIntensity: opts.envMapIntensity ?? 1.05,
+    envMapIntensity: opts.envMapIntensity ?? 0.85,
   });
   if (tex) {
     tex.colorSpace = THREE.SRGBColorSpace;        // base colour is sRGB
@@ -95,6 +99,42 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
     mat.normalScale = new THREE.Vector2(ns, ns);
   }
   return mat;
+}
+
+/**
+ * The DOMINANT colour of a Ligne Roset swatch image (a packed 0xRRGGBB int) or
+ * null. LR swatches are a folded fabric photo with an A–F letter strip down the
+ * LEFT edge, so we average the right ~75% and drop near-white/near-black pixels
+ * (the strip, blown highlights, fold shadows) for a true, saturated velvet
+ * colour. Reading the pixels needs a CORS-clean image — the swatch-proxy gives
+ * that; a direct (tainted) load throws on getImageData → null → default colour.
+ * Returns null under Node (no `document`) so the export path stays test-safe.
+ */
+export function sampleSwatchColor(image) {
+  try {
+    if (typeof document === 'undefined' || !image || !image.width || !image.height) return null;
+    const cv = document.createElement('canvas');
+    const w = (cv.width = 96), h = (cv.height = 96);
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(image, 0, 0, w, h);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let r = 0, g = 0, b = 0, n = 0;
+    const x0 = Math.floor(w * 0.22), x1 = Math.floor(w * 0.96);
+    const y0 = Math.floor(h * 0.08), y1 = Math.floor(h * 0.92);
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * w + x) * 4;
+        const R = data[i], G = data[i + 1], B = data[i + 2];
+        if (data[i + 3] < 8) continue;
+        const lum = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+        if (lum < 28 || lum > 232) continue;           // drop letter strip + extremes
+        r += R; g += G; b += B; n++;
+      }
+    }
+    if (!n) return null;
+    return (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n);
+  } catch { return null; }
 }
 
 /**
@@ -153,13 +193,16 @@ function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
  */
 export function buildTogoGroup(deps, scene3d, opts = {}) {
   const { THREE, RoundedBoxGeometry } = deps;
-  const textureFor = opts.textureFor || (() => null);
+  const colorFor = opts.colorFor || (() => null);
   const modelFor = opts.modelFor || (() => null);
   const group = new THREE.Group();
 
   for (const piece of (scene3d?.pieces || [])) {
     const pieceGroup = new THREE.Group();
-    const material = makeFabricMaterial(THREE, textureFor(piece.fabricCode), opts);
+    // Upholster in the swatch's DOMINANT colour (sampled from the LR swatch, the
+    // A–F letter strip skipped) rather than tiling the folded swatch PHOTO, which
+    // repeats its letters/folds/seams; the quilt normal supplies the micro-weave.
+    const material = makeFabricMaterial(THREE, null, { ...opts, color: colorFor(piece.fabricCode) ?? opts.color });
     const real = modelFor(piece);
     if (real && real.object) {
       placeRealModel(THREE, real.object, material, real.desc, piece, pieceGroup);
@@ -211,7 +254,7 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   const envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
 
-  const key = new THREE.DirectionalLight(0xffffff, 2.5);
+  const key = new THREE.DirectionalLight(0xffffff, 2.0);
   key.position.set(radius * 0.8, radius * 1.6, radius * 0.9);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);

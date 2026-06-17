@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { glbForPiece } from '../../assets/togo/togoModels3d.js';
-import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup, makeQuiltNormalMap } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup, makeQuiltNormalMap, sampleSwatchColor } from './togoSceneBuilder.js';
 
 // Pick the three.js loader for a model URL by extension, loaded on demand (so a
 // scene with no real models pulls in no loader at all). pCon exports OBJ/FBX/
@@ -70,7 +70,14 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
         if (l.texCache.has(code)) return;
         const url = swatchProxyUrl(code) || swatchUrl(code);
         if (!url) return;
-        try { l.texCache.set(code, await new l.THREE.TextureLoader().loadAsync(url)); } catch { /* 404 → default colour */ }
+        try {
+          const tex = await new l.THREE.TextureLoader().loadAsync(url);
+          l.texCache.set(code, tex);
+          // Sample the swatch's dominant colour once — the material upholsters
+          // with this (a true, saturated velvet colour), not the folded photo.
+          const c = sampleSwatchColor(tex.image);
+          if (c != null) l.colorCache.set(code, c);
+        } catch { /* 404 / CORS-tainted → default colour */ }
       }),
       ...[...descByUrl.values()].map(async (desc) => {
         if (l.modelCache.has(desc.url)) return;
@@ -89,7 +96,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       ...DEFAULT_FINISH,
       ...(finishRef.current || {}),
       normalMap: l.quilt,
-      textureFor: (c) => { const t = l.texCache.get(c); return t ? t.clone() : null; },
+      colorFor: (c) => (l.colorCache.has(c) ? l.colorCache.get(c) : null),
       modelFor: (piece) => { const d = descFor(piece); return d ? (l.modelCache.get(d.url) || null) : null; },
     });
     l.scene.add(l.group);
@@ -158,7 +165,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.98;
+      renderer.toneMappingExposure = 0.92;
       renderer.domElement.style.display = 'block';
       renderer.domElement.style.outline = 'none';
       mount.appendChild(renderer.domElement);
@@ -201,7 +208,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       if (quilt) quilt.repeat.set(5, 5);
       api.current = {
         THREE, deps, renderer, scene, camera, controls, disposeStage, stopAuto, quilt,
-        group: null, texCache: new Map(), modelCache: new Map(), framed: false,
+        group: null, texCache: new Map(), colorCache: new Map(), modelCache: new Map(), framed: false,
         requestRender,
       };
 

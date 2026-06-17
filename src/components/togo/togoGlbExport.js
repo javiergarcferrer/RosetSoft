@@ -16,7 +16,7 @@
  * exported root is scaled 0.01 — that's what makes AR place the sofa
  * TRUE-TO-SCALE in the customer's room.
  */
-import { buildTogoGroup, makeQuiltNormalMap, disposeGroup } from './togoSceneBuilder.js';
+import { buildTogoGroup, makeQuiltNormalMap, disposeGroup, sampleSwatchColor } from './togoSceneBuilder.js';
 
 const CM_TO_M = 0.01;
 
@@ -52,10 +52,16 @@ export function buildArGroup(deps, scene3d, opts = {}) {
   const rep = opts.repeat || 3;
   if (quilt) quilt.repeat.set(rep, rep);
 
+  // Upholster in each swatch's DOMINANT colour (sampled once from the loaded
+  // image), matching the inline preview — not the tiled photo. KHR_materials_sheen
+  // then carries the velvet sheen into AR (Scene Viewer / Quick Look).
+  const colors = new Map();
+  textures.forEach((t, code) => { const c = sampleSwatchColor(t?.image); if (c != null) colors.set(code, c); });
+
   const group = buildTogoGroup(deps, scene3d, {
     ...opts,
     normalMap: quilt,
-    textureFor: (code) => { const t = textures.get(code); return t ? t.clone() : null; },
+    colorFor: (code) => (colors.has(code) ? colors.get(code) : null),
   });
 
   const root = new THREE.Group();
