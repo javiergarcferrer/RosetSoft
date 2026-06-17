@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Megaphone, LayoutTemplate, Loader2, Plus, Trash2, Send, Search,
-  CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2, MessagesSquare,
+  CheckCheck, AlertTriangle, Users, UserSquare2, RefreshCw, Check, Link2, MessagesSquare, Mail,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import TemplateRejectionsPanel from '../components/whatsapp/TemplateRejectionsPanel.jsx';
@@ -14,13 +14,15 @@ import { useApp } from '../context/AppContext.jsx';
 import { db } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import {
-  VAR_SOURCES, resolveBroadcastAudience, buildBroadcastRecipients,
+  VAR_SOURCES, resolveBroadcastAudience, resolveEmailAudience, buildBroadcastRecipients,
   fillTemplateBody, resolveCampaignsList, displayPhone,
   resolveGroupAudience, buildGroupBroadcastRecipients,
 } from '../core/crm/index.js';
 import {
   listWaTemplates, createWaTemplate, deleteWaTemplate, sendWhatsappBroadcast,
 } from '../lib/whatsapp.js';
+import { sendGmail } from '../lib/google.js';
+import { newId } from '../db/database.js';
 import { shareLinkBase } from '../lib/quoteShare.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -85,42 +87,49 @@ export default function Difusion() {
     () => db.waGroups.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
+  const { data: emailCampaigns } = useLiveQueryStatus(
+    () => db.emailCampaigns.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
 
   const campaignRows = useMemo(
     () => resolveCampaignsList({ campaigns, messages }),
     [campaigns, messages],
   );
 
-  const connected = !!settings?.whatsappConnectedAt;
-  if (!connected) {
-    return (
-      <>
-        <BackLink to="/chats">Volver a WhatsApp</BackLink>
-        <PageHeader title="Difusión" subtitle="Campañas de WhatsApp con plantillas aprobadas" />
-        <EmptyState
-          icon={Megaphone}
-          title="WhatsApp no está conectado"
-          description="Conecta tu app de WhatsApp Business (Cloud API) en Configuración para crear plantillas y enviar campañas."
-          action={<Link to="/settings" className="btn-primary text-sm">Ir a Configuración</Link>}
-        />
-      </>
-    );
-  }
+  const waConnected = !!settings?.whatsappConnectedAt;
+  const waGate = (
+    <EmptyState
+      icon={Megaphone}
+      title="WhatsApp no está conectado"
+      description="Conecta tu app de WhatsApp Business (Cloud API) en Configuración para crear plantillas y enviar campañas."
+      action={<Link to="/settings" className="btn-primary text-sm">Ir a Configuración</Link>}
+    />
+  );
 
   return (
     <>
       <BackLink to="/chats">Volver a WhatsApp</BackLink>
       <PageHeader
         title="Difusión"
-        subtitle="Campañas de marketing por WhatsApp — plantillas aprobadas a tu lista de contactos"
+        subtitle="Campañas de marketing a tu lista de contactos — por WhatsApp o correo"
       />
 
       <div className="flex items-center gap-1.5 mb-4">
         <TabButton active={tab === 'campaigns'} onClick={() => setTab('campaigns')} icon={Megaphone} label="Campañas" />
         <TabButton active={tab === 'templates'} onClick={() => setTab('templates')} icon={LayoutTemplate} label="Plantillas" />
+        <TabButton active={tab === 'email'} onClick={() => setTab('email')} icon={Mail} label="Correo" />
       </div>
 
-      {tab === 'campaigns' ? (
+      {tab === 'email' ? (
+        <EmailCampaignsTab
+          campaigns={emailCampaigns}
+          customers={customers}
+          professionals={professionals}
+        />
+      ) : !waConnected ? (
+        waGate
+      ) : tab === 'campaigns' ? (
         <CampaignsTab
           templates={templates}
           templatesError={templatesError}
@@ -555,6 +564,322 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               Enviar a {picked.size} {isGroups ? (picked.size === 1 ? 'grupo' : 'grupos') : (picked.size === 1 ? 'contacto' : 'contactos')}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* --------------------------------- email --------------------------------- */
+
+const EMAIL_KINDS = [
+  { value: 'customers', label: 'Clientes', icon: Users },
+  { value: 'professionals', label: 'Profesionales', icon: UserSquare2 },
+  { value: 'all', label: 'Todos', icon: Megaphone },
+];
+
+/** Replace the {nombre}/{nombre_completo}/{empresa} tokens for one contact. */
+function fillEmailTokens(text, contact) {
+  return String(text || '')
+    .replace(/\{nombre_completo\}/gi, contact.name || '')
+    .replace(/\{nombre\}/gi, contact.firstName || contact.name || '')
+    .replace(/\{empresa\}/gi, contact.company || '');
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Difusión → Correo: send a personalized email to a mailing-list audience via
+ *  Gmail, one message per recipient, with a frozen send history. */
+function EmailCampaignsTab({ campaigns, customers, professionals }) {
+  const { settings } = useApp();
+  const connected = !!settings?.googleConnectedAt;
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const rows = useMemo(
+    () => (campaigns || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+    [campaigns],
+  );
+
+  if (!connected) {
+    return (
+      <EmptyState
+        icon={Mail}
+        title="Gmail no está conectado"
+        description="Conecta una cuenta de Google en Configuración → Integraciones para enviar correos a tu lista de contactos."
+        action={<Link to="/integraciones" className="btn-primary text-sm">Ir a Integraciones</Link>}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="card card-pad flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-display text-sm font-semibold text-ink-900">Nueva campaña de correo</div>
+          <p className="text-xs text-ink-500 mt-0.5">
+            Envía un correo personalizado a tus clientes o profesionales con correo registrado. Se envía
+            uno por destinatario desde {settings?.googleEmail || 'tu cuenta de Gmail'}.
+          </p>
+        </div>
+        <button type="button" onClick={() => setWizardOpen(true)} className="btn-brand shrink-0">
+          <Plus size={14} /> Crear campaña
+        </button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="card card-pad py-12 flex flex-col items-center gap-3 text-center">
+          <span className="w-12 h-12 rounded-full bg-brand-50 flex items-center justify-center">
+            <Mail size={20} className="text-brand-400" />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-ink-700">Sin campañas de correo todavía</p>
+            <p className="text-xs text-ink-400 mt-0.5">Tu primer envío aparecerá aquí con su conteo de enviados y fallidos.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((c) => (
+            <div key={c.id} className="card card-pad">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-display text-sm font-semibold text-ink-900 truncate">{c.name}</div>
+                  <div className="text-[11px] text-ink-500 mt-0.5">
+                    {c.subject ? <span className="truncate">{c.subject}</span> : null}
+                    {c.audience ? <> · {c.audience}</> : null}
+                    {' · '}{formatDateTime(c.createdAt)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-center shrink-0">
+                  <Metric label="Enviados" value={c.sentCount || 0} of={c.recipientCount || 0} />
+                  {(c.failedCount || 0) > 0 && <Metric label="Fallidos" value={c.failedCount} of={c.recipientCount || 0} tone="text-red-600" />}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <EmailCampaignWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        customers={customers}
+        professionals={professionals}
+        fromName={settings?.companyName || ''}
+      />
+    </div>
+  );
+}
+
+/** Audience → subject/body → send, one personalized email per recipient. */
+function EmailCampaignWizard({ open, onClose, customers, professionals, fromName }) {
+  const { profileId } = useApp();
+  const [kind, setKind] = useState('customers');
+  const [needle, setNeedle] = useState('');
+  const [picked, setPicked] = useState(() => new Set());
+  const [name, setName] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState(null); // { done, total }
+  const [result, setResult] = useState(null); // { sent, failed, errors }
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setKind('customers');
+    setNeedle('');
+    setPicked(new Set());
+    setName(`Correo · ${new Date().toLocaleDateString('es-DO')}`);
+    setSubject('');
+    setBody('Hola {nombre},\n\n');
+    setSending(false);
+    setProgress(null);
+    setResult(null);
+    setError(null);
+  }, [open]);
+
+  const audience = useMemo(
+    () => resolveEmailAudience(customers, professionals, { kind, needle }),
+    [customers, professionals, kind, needle],
+  );
+  const fullAudience = useMemo(
+    () => resolveEmailAudience(customers, professionals, { kind }),
+    [customers, professionals, kind],
+  );
+  const selectedContacts = useMemo(
+    () => fullAudience.filter((c) => picked.has(c.key)),
+    [fullAudience, picked],
+  );
+
+  function toggle(key) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+  const allVisiblePicked = audience.length > 0 && audience.every((c) => picked.has(c.key));
+  function toggleAllVisible() {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (allVisiblePicked) audience.forEach((c) => next.delete(c.key));
+      else audience.forEach((c) => next.add(c.key));
+      return next;
+    });
+  }
+
+  const previewContact = selectedContacts[0] || audience[0] || null;
+
+  async function send() {
+    if (sending) return;
+    if (!subject.trim()) { setError('Escribe el asunto.'); return; }
+    if (!body.trim()) { setError('Escribe el mensaje.'); return; }
+    if (!selectedContacts.length) { setError('Elige al menos un destinatario.'); return; }
+    setSending(true);
+    setError(null);
+    setProgress({ done: 0, total: selectedContacts.length });
+    let sent = 0;
+    let failed = 0;
+    const errors = [];
+    for (let i = 0; i < selectedContacts.length; i += 1) {
+      const c = selectedContacts[i];
+      try {
+        const text = fillEmailTokens(body, c);
+        const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.55">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+        await sendGmail({ to: c.email, subject: fillEmailTokens(subject, c), html, text, fromName });
+        sent += 1;
+      } catch (e) {
+        failed += 1;
+        if (errors.length < 5) errors.push({ to: c.email, error: e?.message || 'falló' });
+      }
+      setProgress({ done: i + 1, total: selectedContacts.length });
+    }
+    const kindLabel = EMAIL_KINDS.find((k) => k.value === kind)?.label || '';
+    const audienceLabel = `${kindLabel} · ${selectedContacts.length} contacto${selectedContacts.length === 1 ? '' : 's'}`;
+    try {
+      await db.emailCampaigns.put({
+        id: newId(), profileId: profileId || 'team', name: name.trim() || subject.trim(),
+        subject: subject.trim(), audience: audienceLabel,
+        recipientCount: selectedContacts.length, sentCount: sent, failedCount: failed,
+        createdAt: Date.now(), updatedAt: Date.now(),
+      });
+    } catch { /* history is best-effort — the send already happened */ }
+    setSending(false);
+    setResult({ sent, failed, errors });
+  }
+
+  return (
+    <Modal open={open} onClose={sending ? () => {} : onClose} title="Nueva campaña de correo" size="lg">
+      {result ? (
+        <div className="space-y-3 text-center py-4">
+          <span className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${result.failed ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+            {result.failed ? <AlertTriangle size={22} className="text-amber-600" /> : <Check size={22} className="text-emerald-600" />}
+          </span>
+          <p className="text-sm font-medium text-ink-900">
+            {result.sent} {result.sent === 1 ? 'correo enviado' : 'correos enviados'}
+            {result.failed ? ` · ${result.failed} fallidos` : ''}
+          </p>
+          {result.errors.map((e, i) => (
+            <p key={i} className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 text-left">
+              {e.to ? `${e.to}: ` : ''}{e.error}
+            </p>
+          ))}
+          <div className="flex items-center justify-center gap-2">
+            <button type="button" onClick={onClose} className="btn-primary text-sm">Listo</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Audience */}
+          <div>
+            <div className="label">Audiencia</div>
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+              {EMAIL_KINDS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setKind(value)}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    kind === value ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'
+                  }`}
+                >
+                  <Icon size={12} /> {label}
+                </button>
+              ))}
+              <span className="ml-auto text-xs text-ink-500 tabular-nums">{picked.size} seleccionados</span>
+            </div>
+            <div className="relative mb-1.5">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" aria-hidden />
+              <input className="input pl-8 text-sm" value={needle} onChange={(e) => setNeedle(e.target.value)} placeholder="Buscar contacto…" />
+            </div>
+            <div className="max-h-44 overflow-y-auto rounded-lg ring-1 ring-inset ring-ink-100 divide-y divide-ink-50">
+              <label className="flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-ink-600 bg-ink-50/60 cursor-pointer">
+                <input type="checkbox" checked={allVisiblePicked} onChange={toggleAllVisible} className="accent-brand-600" />
+                Seleccionar visibles ({audience.length})
+              </label>
+              {audience.map((c) => (
+                <label key={c.key} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-ink-50/60">
+                  <input type="checkbox" checked={picked.has(c.key)} onChange={() => toggle(c.key)} className="accent-brand-600" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-ink-900 truncate">{c.name}</span>
+                    <span className="block text-[11px] text-ink-400 truncate">{c.email}</span>
+                  </span>
+                </label>
+              ))}
+              {!audience.length && <p className="text-xs text-ink-400 text-center py-4">Sin contactos con correo.</p>}
+            </div>
+          </div>
+
+          {/* Compose */}
+          <div>
+            <div className="label">Nombre de la campaña</div>
+            <input className="input text-sm" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <div className="label">Asunto</div>
+            <input className="input text-sm" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Novedades de Ligne Roset" />
+          </div>
+          <div>
+            <div className="label">Mensaje</div>
+            <textarea className="input min-h-[140px] text-sm" value={body} onChange={(e) => setBody(e.target.value)} />
+            <p className="text-[11px] text-ink-400 mt-1">
+              Personaliza con <code>{'{nombre}'}</code>, <code>{'{nombre_completo}'}</code> o <code>{'{empresa}'}</code>.
+            </p>
+          </div>
+
+          {/* Preview */}
+          <div className="rounded-xl bg-emerald-50/60 ring-1 ring-inset ring-emerald-100 px-3 py-2.5">
+            <div className="eyebrow-xs text-emerald-700 mb-1">
+              Vista previa{previewContact ? ` — ${previewContact.name}` : ''}
+            </div>
+            {previewContact ? (
+              <>
+                <p className="text-xs font-medium text-ink-800">{fillEmailTokens(subject, previewContact) || '(sin asunto)'}</p>
+                <p className="text-sm text-ink-800 whitespace-pre-wrap mt-1">{fillEmailTokens(body, previewContact)}</p>
+              </>
+            ) : (
+              <p className="text-xs text-ink-400">Elige un destinatario para ver la vista previa.</p>
+            )}
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{error}</span>
+            </p>
+          )}
+          {progress && (
+            <div className="text-xs text-ink-500 flex items-center gap-2">
+              <Loader2 size={13} className="animate-spin" /> Enviando… {progress.done}/{progress.total}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} disabled={sending} className="btn-ghost text-sm">Cancelar</button>
+            <button type="button" onClick={send} disabled={sending || !picked.size} className="btn-primary text-sm inline-flex items-center gap-1.5">
+              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              Enviar a {picked.size} {picked.size === 1 ? 'contacto' : 'contactos'}
             </button>
           </div>
         </div>

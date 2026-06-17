@@ -22,6 +22,7 @@ export {
 export {
   VAR_SOURCES,
   resolveBroadcastAudience,
+  resolveEmailAudience,
   buildBroadcastRecipients,
   fillTemplateBody,
   resolveCampaignsList,

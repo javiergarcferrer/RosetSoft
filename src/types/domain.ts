@@ -381,6 +381,25 @@ export interface WaCampaign {
 }
 
 /**
+ * An email broadcast (Difusión → Correo) — one subject/body sent individually
+ * to a chosen mailing-list audience via Gmail. Unlike WhatsApp there's no
+ * delivery webhook, so the sent/failed counts are frozen here at send time.
+ */
+export interface EmailCampaign {
+  id: string;
+  profileId: string;
+  name: string;
+  subject: string;
+  /** Human label of the audience picked ("Clientes · 12 contactos"). */
+  audience?: string;
+  recipientCount?: number;
+  sentCount?: number;
+  failedCount?: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * A WhatsApp group the business number belongs to — the local mirror of a Cloud
  * API group (the inbox renders group threads off wa_messages.groupId; this row
  * carries the subject/roster/state those threads need). Created either by us

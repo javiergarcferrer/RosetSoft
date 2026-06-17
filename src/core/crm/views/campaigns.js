@@ -66,6 +66,55 @@ export function resolveBroadcastAudience(customers, professionals, { kind = 'pro
   return out;
 }
 
+/**
+ * The selectable audience for an EMAIL campaign: every contact with an email,
+ * deduped by lowercased email (one send per address). Mirrors
+ * resolveBroadcastAudience but keyed on email rather than phone, and carries the
+ * first name for a personalized greeting.
+ *
+ *   resolveEmailAudience(customers, professionals, { kind, needle })
+ *     → [{ key, email, name, firstName, company, contactKind, customerId, professionalId }]
+ *
+ * `kind`: 'professionals' | 'customers' | 'all'.
+ */
+export function resolveEmailAudience(customers, professionals, { kind = 'customers', needle = '' } = {}) {
+  const rows = [];
+  if (kind === 'professionals' || kind === 'all') {
+    for (const p of professionals || []) rows.push({ row: p, contactKind: 'professional' });
+  }
+  if (kind === 'customers' || kind === 'all') {
+    for (const c of customers || []) rows.push({ row: c, contactKind: 'customer' });
+  }
+  const q = needle.trim().toLowerCase();
+  const seen = new Set();
+  const out = [];
+  for (const { row, contactKind } of rows) {
+    const email = String(row.email || '').trim();
+    const key = email.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    const name = row.name || row.company || email;
+    if (q) {
+      const hit = name.toLowerCase().includes(q)
+        || (row.company || '').toLowerCase().includes(q)
+        || key.includes(q);
+      if (!hit) continue;
+    }
+    seen.add(key);
+    out.push({
+      key,
+      email,
+      name,
+      firstName: (name || '').trim().split(/\s+/)[0] || name,
+      company: row.company || '',
+      contactKind,
+      customerId: contactKind === 'customer' ? row.id : null,
+      professionalId: contactKind === 'professional' ? row.id : null,
+    });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
 /** A contact's value for one variable spec ({ source, text? }). Falls back to
  *  the full name so an empty company never sends a blank into the template
  *  (Meta rejects empty parameters). */
