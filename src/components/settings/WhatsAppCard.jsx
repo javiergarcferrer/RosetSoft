@@ -5,7 +5,7 @@ import { db, newId } from '../../db/database.js';
 import { formatDateTime } from '../../lib/format.js';
 import {
   saveWhatsappConfig, pingWhatsapp, sendWhatsappTemplate, waWebhookUrl,
-  listWaTemplates, listWaCatalog, getWaBusinessProfile, saveWaBusinessProfile, completeWaOnboarding,
+  listWaTemplates, listWaCatalog, completeWaOnboarding,
   getConversationalAutomation, saveConversationalAutomation,
   listWaQrCodes, createWaQrCode, deleteWaQrCode,
 } from '../../lib/whatsapp.js';
@@ -201,7 +201,6 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           <QuickRepliesRow settings={settings} saveSettings={saveSettings} />
           <ConversationalRow />
           <QrCodesRow />
-          <BusinessProfileRow />
           <TestSendRow />
         </>
       ) : null}
@@ -873,7 +872,10 @@ function ConversationalRow() {
 
   return (
     <div className="mt-3 rounded-lg border border-ink-100 p-3">
-      <div className="label inline-flex items-center gap-1.5"><MessageCircle size={12} className="text-emerald-600" /> Menú de inicio</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="label inline-flex items-center gap-1.5 mb-0"><MessageCircle size={12} className="text-emerald-600" /> Menú de inicio</div>
+        <button type="button" onClick={() => setOpen(false)} className="p-1 -m-1 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 shrink-0" aria-label="Cerrar"><X size={14} /></button>
+      </div>
       <p className="text-[11px] text-ink-500 mb-2.5">
         Lo que ve un cliente nuevo al abrir el chat: <strong>botones de inicio</strong> (máx. 4) y{' '}
         <strong>comandos «/»</strong>. Se guardan en el número de WhatsApp.
@@ -1040,7 +1042,10 @@ function QrCodesRow() {
 
   return (
     <div className="mt-3 rounded-lg border border-ink-100 p-3">
-      <div className="label inline-flex items-center gap-1.5"><QrCode size={12} className="text-emerald-600" /> Códigos QR / enlaces de chat</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="label inline-flex items-center gap-1.5 mb-0"><QrCode size={12} className="text-emerald-600" /> Códigos QR / enlaces de chat</div>
+        <button type="button" onClick={() => setOpen(false)} className="p-1 -m-1 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 shrink-0" aria-label="Cerrar"><X size={14} /></button>
+      </div>
       <p className="text-[11px] text-ink-500 mb-2.5">
         Imprime un código en catálogos, facturas o la tienda: al escanearlo, el cliente abre WhatsApp
         con un mensaje ya escrito hacia tu número.
@@ -1128,114 +1133,6 @@ function NumberHealth({ settings }) {
         <span className="text-red-700">Meta está limitando este número — revisa la calidad en WhatsApp Manager.</span>
       )}
     </div>
-  );
-}
-
-function BusinessProfileRow() {
-  const [fetched, setFetched] = useState(false); // first-open fetch guard
-  const [loading, setLoading] = useState(false);
-  const [about, setAbout] = useState('');
-  const [description, setDescription] = useState('');
-  const [address, setAddress] = useState('');
-  const [email, setEmail] = useState('');
-  const [website, setWebsite] = useState('');
-  const [state, setState] = useState('idle'); // idle | saving | saved | error
-  const [msg, setMsg] = useState('');
-
-  async function loadOnFirstOpen(e) {
-    if (!e.currentTarget.open || fetched) return;
-    setFetched(true);
-    setLoading(true);
-    try {
-      const res = await getWaBusinessProfile();
-      if (res?.ok && res.profile) {
-        setAbout(res.profile.about || '');
-        setDescription(res.profile.description || '');
-        setAddress(res.profile.address || '');
-        setEmail(res.profile.email || '');
-        setWebsite((res.profile.websites || [])[0] || '');
-      }
-    } catch { /* fields stay blank — still editable, save round-trips anyway */ }
-    setLoading(false);
-  }
-
-  async function save() {
-    if (state === 'saving') return;
-    setState('saving');
-    setMsg('');
-    try {
-      const res = await saveWaBusinessProfile({ about, address, description, email, websites: [website] });
-      if (res?.ok) {
-        setState('saved');
-        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000);
-      } else {
-        setState('error');
-        setMsg(res?.error || 'No se pudo guardar el perfil.');
-      }
-    } catch (e) {
-      setState('error');
-      setMsg(userMessageFor(e));
-    }
-  }
-
-  return (
-    <details className="group mt-4 rounded-lg border border-ink-100 overflow-hidden" onToggle={loadOnFirstOpen}>
-      <summary className="flex items-center justify-between cursor-pointer select-none px-4 py-3 min-h-11 text-sm font-medium text-ink-700 hover:bg-ink-50/60 transition-colors list-none">
-        <span>Perfil del negocio (lo que ve el cliente)</span>
-        <ChevronDown size={14} className="disclosure-chevron text-ink-400" aria-hidden />
-      </summary>
-      <div className="px-4 pb-4 pt-3 border-t border-ink-100 bg-ink-50/40">
-        {loading ? (
-          <p className="text-xs text-ink-400 inline-flex items-center gap-1.5">
-            <Loader2 size={13} className="animate-spin" /> Cargando perfil…
-          </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="wa-profile-about">Descripción corta</label>
-                <input id="wa-profile-about" className="input mt-1" value={about} maxLength={139}
-                  onChange={(e) => setAbout(e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="wa-profile-description">Descripción</label>
-                <textarea id="wa-profile-description" className="input mt-1" rows={3} value={description} maxLength={512}
-                  onChange={(e) => setDescription(e.target.value)} />
-              </div>
-              <div>
-                <label className="label" htmlFor="wa-profile-address">Dirección</label>
-                <input id="wa-profile-address" className="input mt-1" value={address} maxLength={256}
-                  onChange={(e) => setAddress(e.target.value)} />
-              </div>
-              <div>
-                <label className="label" htmlFor="wa-profile-email">Correo</label>
-                <input id="wa-profile-email" className="input mt-1" type="email" value={email} maxLength={128}
-                  onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="label" htmlFor="wa-profile-website">Sitio web</label>
-                <input id="wa-profile-website" className="input mt-1" type="url" value={website} maxLength={256}
-                  onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" />
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <button type="button" onClick={save} disabled={state === 'saving'}
-                className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-40">
-                {state === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar perfil
-              </button>
-              {state === 'saved' && (
-                <span className="text-[11px] text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>
-              )}
-              {state === 'error' && <span className="text-[11px] text-rose-600">{msg || 'No se pudo guardar el perfil.'}</span>}
-            </div>
-          </>
-        )}
-        <p className="text-[11px] text-ink-500 mt-3">
-          Este perfil aparece cuando el cliente abre el chat del negocio en WhatsApp. La foto de
-          perfil se cambia en Meta → WhatsApp Manager.
-        </p>
-      </div>
-    </details>
   );
 }
 
