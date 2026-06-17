@@ -788,7 +788,7 @@
   /* Comercial + Enlace: every panel fills and scrolls its OWN body. */
   .jv-col-center > section,
   .jv-col-right > section { flex: 1 1 0; min-height: 0; }
-  .jv-col-center > section:first-of-type { flex: 1.35 1 0; }  /* pulse leads */
+  .jv-col-center > section.jv-lead { flex: 1.35 1 0; }        /* pulse leads */
   .jv-col-right > .jv-console-panel { flex: 1.4 1 0; }        /* console gets room */
 
   /* Sistemas: glance panels stay intrinsic; the integration list takes the
@@ -891,7 +891,7 @@
 
   /* Business pulse leads its rail; the console is the tallest of the feeds. */
   .jv-col-center > section { flex: 1 1 0; min-height: 0; }
-  .jv-col-center > section:first-of-type { flex: 1.5 1 0; }
+  .jv-col-center > section.jv-lead { flex: 1.5 1 0; }
   .jv-col-right > section { flex: 1 1 0; min-height: 0; }
   .jv-col-right > .jv-console-panel { flex: 1.45 1 0; }
 
@@ -1042,7 +1042,165 @@
   .jv-gauge .value { transition: none; }
   .jv-funnel-row .bar i { transition: none; }
   .jv-skeleton { animation: none; }
+  .jv-aging .abar i { transition: none; }
   /* Kill the ambient command-center motion — keep the layout, drop the show. */
   .jv-core, .jv-gauge-sweep { animation: none; }
   .jarvis::after { display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   COMMAND DECK — the cross-domain obligations strip, the Finanzas board and
+   the Bandejas inbox. The strip sits between the HUD bar and the grid; it never
+   grows (flex:none) and its chips scroll sideways on overflow, so the PAGE
+   still never scrolls. Finance + inbox panels reuse the existing scroll model
+   (their bodies are `.jv-fill` / capped lists; only those scroll).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── obligations strip ──────────────────────────────────────────────────── */
+.jv-obligations {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0.15rem 0.6rem;
+  min-width: 0;
+}
+.jv-ob-lead {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--jv-faint);
+  padding-right: 0.6rem;
+  border-right: 1px solid var(--jv-border);
+}
+.jv-ob-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.3rem;
+  border-radius: 9999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #0a0a0a;
+  background: var(--jv-danger);
+}
+.jv-ob-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.jv-ob-track::-webkit-scrollbar { display: none; }
+.jv-ob-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid var(--jv-border);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.jv-ob-chip:hover { background: rgba(255, 255, 255, 0.08); border-color: var(--jv-border-strong); }
+.jv-ob-chip .dot { flex: none; width: 6px; height: 6px; border-radius: 9999px; background: var(--jv-faint); }
+.jv-ob-chip .ob-label { color: var(--jv-fg); font-weight: 500; }
+.jv-ob-chip .ob-detail { color: var(--jv-muted); }
+.jv-ob-chip .ob-amount { color: var(--jv-fg); font-weight: 600; }
+.jv-ob-danger {
+  border-color: color-mix(in srgb, var(--jv-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--jv-danger) 12%, transparent);
+}
+.jv-ob-danger .dot { background: var(--jv-danger); }
+.jv-ob-warn {
+  border-color: color-mix(in srgb, var(--jv-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--jv-warning) 10%, transparent);
+}
+.jv-ob-warn .dot { background: var(--jv-warning); }
+.jv-ob-info .dot { background: var(--jv-accent); }
+
+/* ── Finanzas: warn-tinted KPI value + CxC aging mini-bars ───────────────── */
+.jv-kpi.is-warn b { color: var(--jv-warning); }
+.jv-aging {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  height: 54px;
+}
+.jv-aging .acol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  height: 100%;
+  min-width: 0;
+}
+.jv-aging .abar {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  overflow: hidden;
+  min-height: 0;
+}
+.jv-aging .abar i {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.5s ease;
+}
+.jv-aging .abar i.b0 { background: var(--jv-muted); }
+.jv-aging .abar i.b1 { background: var(--jv-warning); }
+.jv-aging .abar i.b2 { background: #e8a76d; }
+.jv-aging .abar i.b3 { background: var(--jv-danger); }
+.jv-aging .alabel { font-size: 0.58rem; color: var(--jv-faint); }
+
+/* ── Bandejas: linkable count tiles + the capped "waiting" list ──────────── */
+.jv-stat.is-link {
+  display: block;
+  text-align: center;
+  border-radius: 6px;
+  padding: 0.1rem 0.15rem;
+  transition: background-color 0.15s ease;
+}
+.jv-stat.is-link:hover { background: rgba(255, 255, 255, 0.05); }
+.jv-stat-sub {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--jv-muted);
+  margin-top: 0.05rem;
+}
+.jv-inbox-list {
+  max-height: 8.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.jv-inbox-list::-webkit-scrollbar { width: 6px; }
+.jv-inbox-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 999px; }
+
+/* On phones the strip stays a single non-wrapping, swipeable row above the
+   board deck — same no-scroll contract as the grid below it. */
+@media (max-width: 619.98px) {
+  .jv-obligations { margin: 0 0.75rem 0.5rem; }
 }

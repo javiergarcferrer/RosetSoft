@@ -2,9 +2,9 @@ import { userMessageFor } from '../lib/errorMessages.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity, Bot, Command, Cpu, FileText, KeyRound, LayoutDashboard, Megaphone,
-  Package, RefreshCw, Satellite, Send, Share2, ShieldAlert, TrendingUp,
-  Users, X, Zap,
+  Activity, Bot, CalendarClock, Command, Cpu, FileText, Inbox, KeyRound,
+  LayoutDashboard, Megaphone, MessageSquare, Package, RefreshCw, Satellite,
+  Send, Share2, ShieldAlert, TrendingUp, Users, Wallet, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { db, newId } from '../db/database.js';
@@ -19,14 +19,24 @@ import {
   resolveActivityHeatmap,
   resolveSocialPulse,
   resolveAdsSalesWeeks,
-  resolveWaBrief,
   resolveFollowUps,
   resolveShipments,
+  resolveObligations,
+  resolveCommsBrief,
+  resolveScheduleAgenda,
   systemIntegrity,
   sparkPoints,
   agoLabel,
 } from '../core/jarvis/index.js';
-import { formatMoney } from '../lib/format.js';
+// JARVIS is the one surface that reads BOTH cores — it sits above the
+// CRM↔Accounting barrier (it's in neither core list in architecture.test.js),
+// so it can project the whole business. It never translates between them
+// (that's the bridge's job); it only renders each core's own resolvers.
+import {
+  resolveAccountingDashboard, resolveFilingDeadline, dgiiPlugin,
+} from '../core/accounting/index.js';
+import { resolveConversations, resolveIgConversations } from '../core/crm/index.js';
+import { formatMoney, formatDop } from '../lib/format.js';
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
 import './jarvis.css';
 
@@ -94,6 +104,47 @@ function StatusChip({ status, label }) {
 /** Shimmering placeholder block in the final layout's shape (no spinners). */
 function Skeleton({ w = '100%', h = '0.8rem', className = '' }) {
   return <span className={`jv-skeleton ${className}`} style={{ width: w, height: h }} aria-hidden="true" />;
+}
+
+/** A money/figure KPI tile (Finanzas). `tone`: 'won' | 'warn' tint the value. */
+function JvKpi({ label, value, sub, to, tone }) {
+  const cls = `jv-kpi${tone === 'won' ? ' is-won' : tone === 'warn' ? ' is-warn' : ''}`;
+  const body = (
+    <>
+      <span className="label">{label}</span>
+      <b className="jv-mono">{value}</b>
+      {sub ? <span className="sub">{sub}</span> : null}
+    </>
+  );
+  return to ? <Link to={to} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
+}
+
+/** A compact count tile for the inbox board (WhatsApp / IG / posts). */
+function JvStat({ icon: Icon, label, value, sub, to, warn }) {
+  const body = (
+    <>
+      <b style={warn ? { color: 'var(--jv-warning)' } : undefined}>{value}</b>
+      <span className="flex items-center justify-center gap-1">{Icon ? <Icon size={10} /> : null}{label}</span>
+      {sub ? <span className="jv-stat-sub">{sub}</span> : null}
+    </>
+  );
+  return to ? <Link to={to} className="jv-stat is-link">{body}</Link> : <div className="jv-stat">{body}</div>;
+}
+
+/** One obligation chip in the cross-domain alert strip. Money is formatted at
+    the render site (the leaf call the VM deliberately left to the View). */
+function ObligationChip({ item }) {
+  const money = item.amount != null
+    ? (item.currency === 'USD' ? formatMoney(item.amount) : formatDop(item.amount))
+    : null;
+  return (
+    <Link to={item.to} className={`jv-ob-chip jv-ob-${item.tone}`} title={`${item.label}${item.detail ? ` · ${item.detail}` : ''}`}>
+      <span className="dot" aria-hidden="true" />
+      <span className="ob-label">{item.label}</span>
+      {item.detail ? <span className="ob-detail">{item.detail}</span> : null}
+      {money ? <span className="ob-amount jv-mono">{money}</span> : null}
+    </Link>
+  );
 }
 
 /** ⌘K command palette — fuzzy-less filter over the page's actions. */
@@ -192,18 +243,49 @@ export default function Jarvis() {
   // fresh across devices, same as the uplink thread.
   const { data: biz, loaded: bizLoaded } = useLiveQueryStatus(
     async () => {
-      const [quotes, orders, customers, products, quoteLines, waMessages] = await Promise.all([
-        db.quotes.where('profileId').equals(profileId || '').toArray(),
-        db.orders.where('profileId').equals(profileId || '').toArray(),
-        db.customers.where('profileId').equals(profileId || '').toArray(),
-        db.products.where('profileId').equals(profileId || '').toArray(),
+      const scope = profileId || '';
+      const [quotes, orders, customers, products, quoteLines, waMessages, igMessages, scheduledPosts] = await Promise.all([
+        db.quotes.where('profileId').equals(scope).toArray(),
+        db.orders.where('profileId').equals(scope).toArray(),
+        db.customers.where('profileId').equals(scope).toArray(),
+        db.products.where('profileId').equals(scope).toArray(),
         db.quoteLines.toArray(),
-        db.waMessages.where('profileId').equals(profileId || '').toArray(),
+        db.waMessages.where('profileId').equals(scope).toArray(),
+        db.igMessages.where('profileId').equals(scope).toArray(),
+        db.scheduledPosts.where('profileId').equals(scope).toArray(),
       ]);
-      return { quotes, orders, customers, products, quoteLines, waMessages };
+      return { quotes, orders, customers, products, quoteLines, waMessages, igMessages, scheduledPosts };
     },
     [profileId, tick],
-    { quotes: [], orders: [], customers: [], products: [], quoteLines: [], waMessages: [] },
+    { quotes: [], orders: [], customers: [], products: [], quoteLines: [], waMessages: [], igMessages: [], scheduledPosts: [] },
+  );
+
+  // The accounting half of the command center. It's the same row set the
+  // Contabilidad home reads, projected through the SAME resolver
+  // (resolveAccountingDashboard) so JARVIS agrees with it to the cent. Kept off
+  // the 10s `tick` — the ledger doesn't move second-to-second, and these are the
+  // heaviest tables (journal lines); it still refreshes on any local posting via
+  // the live-query invalidation.
+  const { data: fin, loaded: finLoaded } = useLiveQueryStatus(
+    async () => {
+      const scope = profileId || '';
+      const [accounts, entries, lines, salesPostings, purchases, expenses, payments, imports, expedientes, ecfSequences, suppliers] = await Promise.all([
+        db.accounts.where('profileId').equals(scope).toArray(),
+        db.journalEntries.where('profileId').equals(scope).toArray(),
+        db.journalLines.where('profileId').equals(scope).toArray(),
+        db.salesPostings.where('profileId').equals(scope).toArray(),
+        db.purchases.where('profileId').equals(scope).toArray(),
+        db.expenses.where('profileId').equals(scope).toArray(),
+        db.payments.where('profileId').equals(scope).toArray(),
+        db.importLiquidations.where('profileId').equals(scope).toArray(),
+        db.importExpedientes.where('profileId').equals(scope).toArray(),
+        db.ecfSequences.where('profileId').equals(scope).toArray(),
+        db.suppliers.where('profileId').equals(scope).toArray(),
+      ]);
+      return { accounts, entries, lines, salesPostings, purchases, expenses, payments, imports, expedientes, ecfSequences, suppliers };
+    },
+    [profileId],
+    { accounts: [], entries: [], lines: [], salesPostings: [], purchases: [], expenses: [], payments: [], imports: [], expedientes: [], ecfSequences: [], suppliers: [] },
   );
 
   // ── live diagnostics ─────────────────────────────────────────────────
@@ -411,7 +493,7 @@ export default function Jarvis() {
   // horizontal swipe is the enhancement. An IntersectionObserver keeps the
   // active tab synced to whichever board is centered (more robust than
   // scroll-position math), and only arms on mobile so desktop pays nothing.
-  const MOBILE_BOARDS = ['Comercial', 'Sistemas', 'Enlace'];
+  const MOBILE_BOARDS = ['Negocio', 'Sistemas', 'Enlace'];
   const gridRef = useRef(null);
   const [activeBoard, setActiveBoard] = useState(0);
   // While a pager-tap smooth scroll animates, suppress the observer so the
@@ -514,7 +596,6 @@ export default function Jarvis() {
     }),
     [biz, nowMin],
   );
-  const waBrief = useMemo(() => resolveWaBrief(biz.waMessages, nowMin), [biz, nowMin]);
   const followUps = useMemo(
     () => resolveFollowUps({
       quotes: biz.quotes, lines: biz.quoteLines, customers: biz.customers,
@@ -536,6 +617,76 @@ export default function Jarvis() {
       ? resolveAdsSalesWeeks({ adsDaily: socialRaw.adsDaily, quotes: biz.quotes, now: nowMin })
       : null),
     [socialRaw, biz, nowMin],
+  );
+
+  // ── finance + obligations + inbox (the command-center half) ───────────
+  const monthStart = useMemo(() => {
+    const d = new Date(nowMin);
+    return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  }, [nowMin]);
+  const customersById = useMemo(
+    () => new Map(biz.customers.map((c) => [c.id, c])),
+    [biz.customers],
+  );
+  const suppliersById = useMemo(
+    () => new Map(fin.suppliers.map((s) => [s.id, s])),
+    [fin.suppliers],
+  );
+  // The whole accounting position, through the SAME resolver the Contabilidad
+  // home uses — cash, CxC aging + DSO, CxP, ITBIS, utilidad/P&L, e-CF health.
+  const finDash = useMemo(
+    () => (finLoaded ? resolveAccountingDashboard({
+      accounts: fin.accounts, entries: fin.entries, lines: fin.lines,
+      salesPostings: fin.salesPostings, purchases: fin.purchases, expenses: fin.expenses,
+      payments: fin.payments, imports: fin.imports, expedientes: fin.expedientes,
+      ecfSequences: fin.ecfSequences, customersById, suppliersById,
+      monthStart, monthEnd: nowMin,
+    }) : null),
+    [finLoaded, fin, customersById, suppliersById, monthStart, nowMin],
+  );
+
+  // The next DGII filing for each periodic report (606/607 by the 15th, IT-1 by
+  // the 20th) — straight from the active fiscal plugin's schedule, so JARVIS
+  // never re-spells the calendar.
+  const deadlines = useMemo(
+    () => dgiiPlugin.reports
+      .filter((r) => r.dueDay)
+      .map((r) => ({ ...r, ...resolveFilingDeadline(r.dueDay, nowMin) })),
+    [nowMin],
+  );
+
+  // Inbox load across channels — WhatsApp + Instagram Direct + the post queue.
+  const waConvos = useMemo(
+    () => resolveConversations(biz.waMessages, biz.customers, [], { now: nowMin }),
+    [biz.waMessages, biz.customers, nowMin],
+  );
+  const igConvos = useMemo(
+    () => resolveIgConversations(biz.igMessages, { now: nowMin }),
+    [biz.igMessages, nowMin],
+  );
+  const agenda = useMemo(
+    () => resolveScheduleAgenda(biz.scheduledPosts, { now: nowMin }),
+    [biz.scheduledPosts, nowMin],
+  );
+  const comms = useMemo(
+    () => resolveCommsBrief({ conversations: waConvos, igConversations: igConvos, agenda, now: nowMin }),
+    [waConvos, igConvos, agenda, nowMin],
+  );
+
+  // The cross-domain alert strip — everything time-sensitive, ranked by urgency.
+  const obligations = useMemo(
+    () => resolveObligations({
+      deadlines,
+      itbis: finDash?.itbis,
+      ecfAlerts: finDash?.ecfSeqAlerts || [],
+      ecfPending: finDash?.ecfPending || 0,
+      arOverdue: finDash?.overdue || 0,
+      shipments,
+      followUps,
+      comms,
+      now: nowMin,
+    }),
+    [deadlines, finDash, shipments, followUps, comms, nowMin],
   );
 
   useEffect(() => {
@@ -611,6 +762,22 @@ export default function Jarvis() {
         </div>
       </header>
 
+      {/* ── obligations strip — the cross-domain "needs attention now" rail.
+          Spans the rails (above the grid), never grows (flex:none); the chips
+          scroll horizontally on overflow, so the PAGE still never scrolls. ── */}
+      {obligations.count > 0 && (
+        <nav className="jv-obligations" aria-label="Obligaciones y alertas">
+          <span className="jv-ob-lead jv-mono">
+            <CalendarClock size={12} />
+            <span className="hidden sm:inline">Obligaciones</span>
+            {obligations.urgent > 0 && <span className="jv-ob-badge">{obligations.urgent}</span>}
+          </span>
+          <div className="jv-ob-track">
+            {obligations.items.map((it) => <ObligationChip key={it.id} item={it} />)}
+          </div>
+        </nav>
+      )}
+
       <div className="jv-grid" ref={gridRef}>
         {/* ── left rail: reactor + stats + integration status list ──── */}
         <div className="jv-col-left flex flex-col gap-3 min-h-0">
@@ -649,19 +816,45 @@ export default function Jarvis() {
             </div>
           </section>
 
-          <section className="jv-panel">
-            <div className="jv-panel-head"><Send size={12} /> WhatsApp · 7 días</div>
-            <div className="grid grid-cols-2 gap-2 p-3">
-              <div className="jv-stat"><b>{waBrief.in7}</b><span>Recibidos</span></div>
-              <div className="jv-stat"><b>{waBrief.out7}</b><span>Enviados</span></div>
-              <div className="jv-stat">
-                <b style={{ color: waBrief.unread > 0 ? 'var(--jv-warning)' : undefined }}>{waBrief.unread}</b>
-                <span>Sin leer</span>
+          {/* Bandejas — inbound load across channels (WhatsApp + Instagram
+              Direct) + the post queue, each tile deep-linking to its surface,
+              with the conversations that have waited longest listed below. */}
+          <section className="jv-panel jv-inbox-panel">
+            <div className="jv-panel-head justify-between">
+              <span className="flex items-center gap-2"><Inbox size={12} /> Bandejas</span>
+              <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>
+                {comms.waUnread + comms.igUnread > 0 ? `${comms.waUnread + comms.igUnread} sin leer` : 'al día'}
+              </span>
+            </div>
+            <div className="p-3 space-y-2.5">
+              <div className="grid grid-cols-3 gap-2">
+                <JvStat
+                  icon={MessageSquare} label="WhatsApp" value={comms.waUnread} warn={comms.waUnread > 0}
+                  sub={comms.waOldestWaitingAt ? agoLabel(comms.waOldestWaitingAt, now) : 'al día'} to="/chats"
+                />
+                <JvStat
+                  icon={Share2} label="Instagram" value={comms.igUnread} warn={comms.igUnread > 0}
+                  sub={comms.igOldestWaitingAt ? agoLabel(comms.igOldestWaitingAt, now) : 'al día'} to="/marketing"
+                />
+                <JvStat
+                  icon={CalendarClock} label="Posts" value={comms.postsUpcoming} warn={comms.postsOverdue > 0}
+                  sub={comms.postsOverdue > 0 ? `${comms.postsOverdue} atrasadas` : comms.postsUpcoming > 0 ? 'en cola' : 'sin cola'}
+                  to="/marketing"
+                />
               </div>
-              <div className="jv-stat">
-                <b style={{ fontSize: '0.85rem', lineHeight: '1.9rem' }}>{waBrief.lastInAgo || '—'}</b>
-                <span>Último entrante</span>
-              </div>
+              {comms.waiting.length > 0 ? (
+                <div className="jv-inbox-list">
+                  {comms.waiting.map((w) => (
+                    <Link key={w.id} to={w.to} className="jv-followup-row" title={`Responder a ${w.name}`}>
+                      <span className="name truncate">{w.name}</span>
+                      <span className="quiet">{w.channel === 'ig' ? 'IG' : 'WA'}{w.unread > 0 ? ` · ${w.unread}` : ''}</span>
+                      <span className="money jv-mono">{w.ago}</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs py-1" style={{ color: 'var(--jv-muted)' }}>Sin conversaciones en espera.</div>
+              )}
             </div>
           </section>
 
@@ -700,9 +893,93 @@ export default function Jarvis() {
           </section>
         </div>
 
-        {/* ── center: business pulse + social ──────────────────────── */}
+        {/* ── center: finance + business pulse + social ─────────────── */}
         <div className="jv-col-center flex flex-col gap-3 min-h-0">
+        {/* Finanzas — the accounting position, through resolveAccountingDashboard
+            (the SAME resolver the Contabilidad home uses), so it agrees to the
+            cent. DOP throughout (accounting's base), each tile deep-linked. */}
         <section className="jv-panel jv-flex-panel">
+          <div className="jv-panel-head justify-between">
+            <span className="flex items-center gap-2"><Wallet size={12} /> Finanzas</span>
+            <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>DOP · contabilidad en vivo</span>
+          </div>
+          {!finLoaded || !finDash ? (
+            <div className="jv-fill p-4">
+              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="jv-kpi" style={{ gap: '0.4rem' }}>
+                    <Skeleton w="55%" h="0.6rem" />
+                    <Skeleton w="75%" h="1.2rem" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="jv-fill p-4 space-y-3.5">
+              <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3">
+                <JvKpi label="Efectivo" value={formatDop(finDash.cash)} sub="caja y bancos" to="/accounting/ledger" />
+                <JvKpi
+                  label="Por cobrar" value={formatDop(finDash.cxcBalance)}
+                  sub={finDash.overdue > 0 ? `${formatDop(finDash.overdue)} +90 d` : finDash.ar.dso != null ? `DSO ${finDash.ar.dso} d` : 'al día'}
+                  tone={finDash.overdue > 0 ? 'warn' : undefined} to="/accounting/cuentas"
+                />
+                <JvKpi label="Por pagar" value={formatDop(finDash.cxpBalance)} sub="a proveedores" to="/accounting/cuentas" />
+                <JvKpi
+                  label="ITBIS" value={formatDop(finDash.itbis.aPagar > 0 ? finDash.itbis.aPagar : finDash.itbis.aFavor)}
+                  sub={finDash.itbis.aPagar > 0 ? 'a pagar' : 'a favor'} to="/accounting/facturacion"
+                />
+                <JvKpi
+                  label={`Utilidad · ${clock.toLocaleDateString('es-DO', { month: 'short' })}`}
+                  value={formatDop(finDash.utilidadMonth)} sub="neta del mes"
+                  tone={finDash.utilidadMonth >= 0 ? 'won' : 'warn'} to="/accounting/dashboard"
+                />
+                <JvKpi label="Cobrado · 30 d" value={formatDop(finDash.collected30)} sub="entradas de clientes" tone="won" to="/accounting/cuentas" />
+              </div>
+
+              {/* CxC aging — the receivable split, +90 reads as the alarming one */}
+              {finDash.ar.unpaid > 0 && (() => {
+                const buckets = [
+                  { key: 'd0_30', label: '0–30', cls: 'b0' },
+                  { key: 'd31_60', label: '31–60', cls: 'b1' },
+                  { key: 'd61_90', label: '61–90', cls: 'b2' },
+                  { key: 'd90', label: '+90', cls: 'b3' },
+                ];
+                const max = Math.max(1, ...buckets.map((b) => finDash.ar.buckets[b.key]));
+                return (
+                  <div>
+                    <div className="jv-kicker mb-1.5">Cuentas por cobrar · antigüedad</div>
+                    <div className="jv-aging">
+                      {buckets.map((b) => (
+                        <div key={b.key} className="acol" title={`${b.label} días · ${formatDop(finDash.ar.buckets[b.key])}`}>
+                          <div className="abar"><i className={b.cls} style={{ height: `${Math.max(finDash.ar.buckets[b.key] > 0 ? 6 : 0, (finDash.ar.buckets[b.key] / max) * 100)}%` }} /></div>
+                          <span className="alabel">{b.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Mayores deudores — who owes the most, deep-linked to chase */}
+              {finDash.cxcTop.length > 0 && (
+                <div>
+                  <div className="jv-kicker mb-1.5">Mayores deudores</div>
+                  <div className="space-y-0.5">
+                    {finDash.cxcTop.slice(0, 3).map((r) => (
+                      <Link key={r.partyId} to="/accounting/cuentas" className="jv-followup-row" title={`Estado de ${r.party?.name || ''}`}>
+                        <span className="name truncate">{r.party?.name || '—'}</span>
+                        <span aria-hidden="true" />
+                        <span className="money jv-mono">{formatDop(r.balance)}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="jv-panel jv-flex-panel jv-lead">
           <div className="jv-panel-head justify-between">
             <span className="flex items-center gap-2"><TrendingUp size={12} /> Pulso comercial</span>
             <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>USD · datos reales en vivo</span>

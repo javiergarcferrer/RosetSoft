@@ -17,6 +17,7 @@ export {
   sparkPoints,
   FUNNEL_STAGES,
 } from './pulse.js';
+export { resolveObligations, resolveCommsBrief } from './command.js';
 export { resolveSocialPulse, resolveAdsSalesWeeks, inLabel } from './social.js';
 export { resolveAdsBoard, resolveAdChildren, adInsightTiles } from './ads.js';
 export {
