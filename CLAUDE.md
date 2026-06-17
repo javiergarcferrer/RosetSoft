@@ -86,7 +86,8 @@ conversation. Two kinds:
   fields, code tables) — never relax it to match the app; fix the builder.
   `landedCalc` pins the landed-cost CALCULATOR engine (the interactive
   simulator, separate from the expediente posting Model): the DGA stack
-  (CIF → gravamen → ITBIS on CIF+gravamen+ISC → 0.4% servicio aduanal), the
+  (CIF → gravamen → ISC on CIF+gravamen (CT Art. 367) → ITBIS on
+  CIF+gravamen+ISC (Art. 339) → 0.4% servicio aduanal of bare CIF), the
   EPA 0% vs NMF 20% furniture-duty lever (EU origin + EUR.1), per-bucket cost
   allocation (volume for bulky furniture, value for duty/insurance; drift→last)
   and the two-way margin back-calc. ITBIS stays OUT of landed cost (recoverable

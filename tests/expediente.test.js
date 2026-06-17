@@ -99,6 +99,17 @@ test('tax check flags a gravamen/ITBIS mismatch vs the configured rates', () => 
   assert.equal(off.dutyDiff, -600);
 });
 
+test('tax check: selectivo enters the expected ITBIS base (CT Art. 339), no false mismatch', () => {
+  // CIF 10k, gravamen 2k, selectivo 500 → ITBIS 18% of 12500 = 2250.
+  const withSel = expedienteTaxCheck({ cif: 10000, duty: 2000, selectivo: 500, importItbis: 2250, config });
+  assert.equal(withSel.matches, true);
+  assert.equal(withSel.computed.importItbis, 2250);
+  // Without accounting for selectivo the same ITBIS would have looked 90 off
+  // (18% of 12000 = 2160) — the regression this guards against.
+  const ignored = expedienteTaxCheck({ cif: 10000, duty: 2000, importItbis: 2250, config });
+  assert.equal(ignored.matches, false);
+});
+
 test('prorateCif: FOB + flete/seguro by FOB weight, sums to total CIF', () => {
   const out = prorateCif([{ fob: 600 }, { fob: 400 }], 50, 50); // extras 100
   assert.equal(out[0].cif, 660); // 600 + 100*0.6

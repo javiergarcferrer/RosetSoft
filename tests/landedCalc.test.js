@@ -52,7 +52,7 @@ test('EPA origin: duty 0% collapses the gravamen and its ITBIS', () => {
   assert.equal(r.effectiveCustomsRate, 18.4); // the ~18.4% headline
 });
 
-test('ISC stacks into the ITBIS base when a line carries it', () => {
+test('ISC stacks on CIF+gravamen (CT Art. 367), then into the ITBIS base', () => {
   const r = computeLanded({
     ...base, incoterm: 'CIF', dutyRate: 20,
     lines: [{ id: 'a', qty: 1, unitCost: 1000, iscRate: 10 }],
@@ -60,8 +60,8 @@ test('ISC stacks into the ITBIS base when a line carries it', () => {
   });
   const t = r.totals;
   assert.equal(t.duty, 200);             // 20% of 1000
-  assert.equal(t.isc, 100);              // 10% of 1000
-  assert.equal(t.itbis, 234);            // 18% of (1000 + 200 + 100)
+  assert.equal(t.isc, 120);              // 10% of (1000 + 200 gravamen)
+  assert.equal(t.itbis, 237.6);          // 18% of (1000 + 200 + 120)
 });
 
 test('FOB adds freight + insurance into the CIF; CIF incoterm does not', () => {

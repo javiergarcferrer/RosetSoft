@@ -21,8 +21,8 @@
  *
  * The DGA stack (per CIF line, all percentages, currency-agnostic):
  *   CIF       = goods + (intl freight + insurance, when not already in the price)
- *   gravamen  = CIF × dutyRate          (0% EPA · 20% MFN furniture)
- *   ISC       = CIF × iscRate           (0 for furniture)
+ *   gravamen  = CIF × dutyRate            (0% EPA · 20% MFN furniture)
+ *   ISC       = (CIF + gravamen) × iscRate (0 for furniture; base per CT Art. 367)
  *   ITBIS     = (CIF + gravamen + ISC) × itbisRate   ← RECOVERABLE input credit
  *   servicio  = CIF × serviceFeeRate    (0.4%)
  *   landed    = CIF + gravamen + ISC + servicio + local costs   (excludes ITBIS)
@@ -327,7 +327,8 @@ export function computeLanded(input: CalcInput): CalcResult {
     const dutyRate = ddp ? 0 : (l.dutyRate != null ? clampPos(l.dutyRate) : defaultDuty);
     const iscRate = ddp ? 0 : clampPos(l.iscRate);
     const duty = round2((cif * dutyRate) / 100);
-    const isc = round2((cif * iscRate) / 100);
+    // ISC stacks on CIF + gravamen (Código Tributario Art. 367), not bare CIF.
+    const isc = round2(((cif + duty) * iscRate) / 100);
     const itbis = ddp ? 0 : round2(((cif + duty + isc) * itbisRate) / 100);
     const serviceFee = ddp ? 0 : round2((cif * serviceFeeRate) / 100);
     const landedTotal = round2(cif + duty + isc + serviceFee + localNet[i]);

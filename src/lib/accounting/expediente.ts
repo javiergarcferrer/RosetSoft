@@ -19,7 +19,6 @@
  */
 import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
-import { computeImportTaxes } from './importLiquidation.js';
 import type { ImportExpediente, ImportCost, JournalEntry, JournalLine, PaymentMethod } from '../../types/domain.ts';
 
 /** The preset cost concepts an expediente itemizes. `otro` covers anything else. */
@@ -202,14 +201,26 @@ export function expedienteCreditableItbis(e: Pick<ImportExpediente, 'importItbis
  * Does the entered gravamen / import ITBIS match what the rates (20% / 18% by
  * config) would compute from the CIF? Surfaced as a verification banner — a
  * mismatch usually means the goods' HS arancel isn't the default rate.
+ *
+ * The expected ITBIS base is CIF + gravamen + selectivo (Código Tributario
+ * Art. 339): gravamen is rate-derived from the CIF, but the selectivo has no
+ * single rate (it varies by HS arancel), so it's taken as entered. Omitting it
+ * (selectivo = 0) reproduces the legacy CIF+gravamen base exactly.
  */
-export function expedienteTaxCheck({ cif, duty, importItbis, config }: {
-  cif: number; duty: number; importItbis: number; config: ResolvedAccountingConfig;
+export function expedienteTaxCheck({ cif, duty, selectivo = 0, importItbis, config }: {
+  cif: number; duty: number; selectivo?: number; importItbis: number; config: ResolvedAccountingConfig;
 }): { computed: { duty: number; importItbis: number }; dutyDiff: number; itbisDiff: number; matches: boolean } {
-  const computed = computeImportTaxes({ cif: round2(cif), config });
-  const dutyDiff = round2(round2(duty) - computed.duty);
-  const itbisDiff = round2(round2(importItbis) - computed.importItbis);
-  return { computed, dutyDiff, itbisDiff, matches: Math.abs(dutyDiff) < 0.5 && Math.abs(itbisDiff) < 0.5 };
+  const c = round2(cif);
+  const computedDuty = round2((c * config.dutyRate) / 100);
+  const sel = round2(Math.max(0, Number(selectivo) || 0));
+  const computedItbis = round2(((c + computedDuty + sel) * config.itbisRate) / 100);
+  const dutyDiff = round2(round2(duty) - computedDuty);
+  const itbisDiff = round2(round2(importItbis) - computedItbis);
+  return {
+    computed: { duty: computedDuty, importItbis: computedItbis },
+    dutyDiff, itbisDiff,
+    matches: Math.abs(dutyDiff) < 0.5 && Math.abs(itbisDiff) < 0.5,
+  };
 }
 
 /**
