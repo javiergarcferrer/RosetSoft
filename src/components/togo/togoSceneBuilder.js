@@ -12,7 +12,7 @@
  * (the dealer's pCon/OFML channel), swap the per-piece build for a glTF load —
  * the layout/material wiring here is unchanged.
  */
-import { togoParts } from '../../lib/togo/togoModel.js';
+import { togoParts, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
 
 // Default Togo upholstery when no fabric is picked — a warm, mid neutral that
 // reads as fabric under the studio IBL (not flat plastic).
@@ -163,15 +163,16 @@ function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
   wrap.add(clone);
   wrap.updateMatrixWorld(true);
   let box = new THREE.Box3().setFromObject(wrap);
-  // Scale: an explicit unit scale (drawing units → cm), else AUTO-FIT the largest
-  // horizontal extent to the piece's footprint so an upload "just works" without
-  // the dealer knowing whether it was exported in mm, cm or metres.
+  // Scale: an explicit unit scale (drawing units → cm), else AUTO-FIT by HEIGHT
+  // to the Togo's uniform ~72 cm. EVERY Togo piece is the same height, so fitting
+  // by height (not the horizontal footprint) makes an uploaded settee and corner
+  // come out the SAME height — and matches the procedural pieces. Fitting by
+  // footprint tied height to width, so wide pieces towered over narrow ones. This
+  // still absorbs mm/cm/m export units (it's a ratio). `piece` kept for the call.
   let scale = Number(desc?.scale) || 0;
   if (!(scale > 0)) {
     const size = box.getSize(new THREE.Vector3());
-    const modelMax = Math.max(size.x, size.z) || size.y || 1;
-    const footMax = Math.max(Number(piece?.widthCm) || 0, Number(piece?.depthCm) || 0) || modelMax;
-    scale = footMax / modelMax;
+    scale = TOGO_HEIGHT_CM / (size.y || TOGO_HEIGHT_CM);
   }
   clone.scale.multiplyScalar(scale);
   wrap.updateMatrixWorld(true);
