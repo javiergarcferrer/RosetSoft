@@ -16,6 +16,11 @@ import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveImportacionesList, resolveAccountingConfig } from '../../core/accounting/index.js';
 import ExpedienteForm from './ExpedienteForm.jsx';
 
+/** A small "Borrador" tag for work-in-progress (un-posted) expedientes. */
+function DraftPill() {
+  return <span className="inline-flex items-center rounded-full bg-amber-50 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5">Borrador</span>;
+}
+
 /** One KPI tile of the band over the filtered expedientes. */
 function Stat({ label, value, accent }) {
   return (
@@ -36,7 +41,7 @@ const EXPEDIENTE_COLUMNS = [
   {
     key: 'date', label: 'Fecha', canHide: false,
     thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
-    cell: ({ r }) => formatDate(r.date),
+    cell: ({ r }) => <span className="inline-flex items-center gap-1.5">{formatDate(r.date)}{r.isDraft && <DraftPill />}</span>,
   },
   {
     key: 'number', label: 'No.',
@@ -164,11 +169,18 @@ export default function Importaciones() {
   const loaded = importsQ.loaded && suppliersQ.loaded && itemsQ.loaded && expedientesQ.loaded;
 
   const [params] = useSearchParams();
+  // ?edit=<id> resumes a saved draft (from its detail page) in the form.
+  const editId = params.get('edit') || '';
+  const editing = useMemo(
+    () => (editId ? (expedientesQ.data || []).find((e) => e.id === editId) || null : null),
+    [editId, expedientesQ.data],
+  );
   const [showExpediente, setShowExpediente] = useState(!!params.get('new'));
+  const formOpen = showExpediente || !!editId;
   // Catalog + materials drive the imported pieces' selling price (reference +
   // fabric → grade → list price). Loaded only while the expediente form is open.
-  const productsQ = useLiveQueryStatus(() => (showExpediente ? db.products.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, showExpediente], []);
-  const materialsQ = useLiveQueryStatus(() => (showExpediente ? db.materials.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, showExpediente], []);
+  const productsQ = useLiveQueryStatus(() => (formOpen ? db.products.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, formOpen], []);
+  const materialsQ = useLiveQueryStatus(() => (formOpen ? db.materials.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, formOpen], []);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('expedientes');
   const [filters, setFilters] = useState({});
@@ -220,10 +232,11 @@ export default function Importaciones() {
           </div>
         )} />
 
-      {showExpediente && loaded && (
-        <ExpedienteForm scope={scope} config={config} settings={settings} suppliers={suppliersQ.data} items={itemsQ.data}
+      {formOpen && loaded && (!editId || editing) && (
+        <ExpedienteForm key={editId || 'new'} scope={scope} config={config} settings={settings} suppliers={suppliersQ.data} items={itemsQ.data}
           orders={ordersQ.data || []} containers={containersQ.data || []}
-          products={productsQ.data || []} materials={materialsQ.data || []} onClose={() => setShowExpediente(false)} />
+          products={productsQ.data || []} materials={materialsQ.data || []} existing={editing}
+          onClose={() => { setShowExpediente(false); if (editId) navigate('/accounting/importaciones'); }} />
       )}
 
       {!loaded ? <ListLoading /> : empty ? (
@@ -278,7 +291,7 @@ export default function Importaciones() {
               rows={vm.rows.map((r) => ({
                 key: r.id,
                 to: `/accounting/importaciones/${r.id}`,
-                title: <>{r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</>,
+                title: <>{r.isDraft && <DraftPill />} {r.supplierName || '—'}{r.supplierExtra > 0 && <span className="text-ink-400 text-xs"> +{r.supplierExtra}</span>}</>,
                 right: formatDop(r.landed),
                 sub: <>
                   {r.number != null && <span className="tabular-nums mr-1.5">#{r.number}</span>}

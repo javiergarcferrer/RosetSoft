@@ -14,6 +14,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import { driveCreateFolder, driveUploadBlob, driveList, driveCopy } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatDate } from '../../lib/format.js';
+import Modal from '../Modal.jsx';
 import DrivePickerModal from './DrivePickerModal.jsx';
 
 export default function DriveDocumentsCard({ folderId, folderUrl, folderName, parentId, onFolderSaved }) {
@@ -25,6 +26,7 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
   const [busy, setBusy] = useState(false);      // creating | uploading
   const [loading, setLoading] = useState(false); // listing
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [preview, setPreview] = useState(null); // a file to view in-app
   const [err, setErr] = useState('');
 
   const refresh = useCallback(async (id) => {
@@ -137,8 +139,9 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
                 {files.map((f) => (
                   <li key={f.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                     <FileText size={14} className="shrink-0 text-ink-400" />
-                    <a href={f.webViewLink || '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-ink-700 hover:underline">{f.name}</a>
+                    <button type="button" onClick={() => setPreview(f)} className="min-w-0 flex-1 truncate text-left text-ink-700 hover:underline">{f.name}</button>
                     {f.modifiedTime && <span className="shrink-0 text-[11px] text-ink-400">{formatDate(Date.parse(f.modifiedTime))}</span>}
+                    <a href={f.webViewLink || '#'} target="_blank" rel="noreferrer" className="shrink-0 text-ink-400 hover:text-ink-600" title="Abrir en Drive"><ExternalLink size={13} /></a>
                   </li>
                 ))}
               </ul>
@@ -150,6 +153,22 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
       </div>
 
       <DrivePickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={pickFromDrive} picking={busy} />
+
+      {preview && (
+        <Modal open onClose={() => setPreview(null)} title={preview.name} size="lg">
+          <iframe
+            title={preview.name}
+            src={`https://drive.google.com/file/d/${preview.id}/preview`}
+            className="h-[70vh] w-full rounded-lg border border-ink-100"
+            allow="autoplay"
+          />
+          <div className="mt-2 text-right">
+            <a href={preview.webViewLink || '#'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline">
+              <ExternalLink size={12} /> Abrir en Drive
+            </a>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

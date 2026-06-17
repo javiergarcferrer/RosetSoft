@@ -1011,6 +1011,10 @@ export interface ImportExpediente {
   orderId?: string | null;
   containerId?: string | null;
   liquidatedAt: number;
+  /** 'draft' = work-in-progress (no asiento, no kardex; collect docs + finish
+   *  later) · 'posted' = contabilizado (posted the asiento + landed inventory).
+   *  Absent ⇒ legacy posted. */
+  status?: 'draft' | 'posted';
   cif: number;          // total CIF / valor en aduana (derived from the embarques)
   duty: number;         // gravamen arancelario (total, derived)
   selectivo?: number;   // ISC (total, derived)

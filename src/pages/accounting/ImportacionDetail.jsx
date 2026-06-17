@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2 } from 'lucide-react';
+import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2, Pencil } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -230,6 +230,7 @@ export default function ImportacionDetail() {
   }
 
   const { meta, totals, embarques, costs, costTotals } = detail;
+  const isDraft = expQ.data.status === 'draft';
 
   /** Seed a new expediente with this one's structure — suppliers, artículos and
    *  cost concepts kept; BL/DUA, montos and cantidades cleared (a stale amount
@@ -316,9 +317,14 @@ export default function ImportacionDetail() {
       <BackLink to="/accounting/importaciones">Volver a importaciones</BackLink>
       <PageHeader
         title={`Expediente${meta.number != null ? ` #${meta.number}` : ''}`}
-        subtitle={`${formatDate(meta.date)}${meta.bl ? ` · BL ${meta.bl}` : ''}`}
+        subtitle={`${formatDate(meta.date)}${meta.bl ? ` · BL ${meta.bl}` : ''}${isDraft ? ' · Borrador (sin contabilizar)' : ''}`}
         actions={(
           <div className="flex items-center gap-2">
+            {isDraft && (
+              <button type="button" onClick={() => navigate(`/accounting/importaciones?edit=${expQ.data.id}`)} className="btn-primary">
+                <Pencil size={14} /> Editar / Contabilizar
+              </button>
+            )}
             <button type="button" onClick={useAsTemplate} className="btn-secondary">
               <Copy size={14} /> Usar como plantilla
             </button>

@@ -86,6 +86,7 @@ export function resolveImportacionesList({
     return {
       id: e.id,
       number: e.number ?? null,
+      isDraft: e.status === 'draft',
       date: e.liquidatedAt || 0,
       bl: bls[0] || '',
       blExtra: Math.max(0, bls.length - 1),
@@ -128,7 +129,9 @@ export function resolveImportacionesList({
     return (va < vb ? -1 : va > vb ? 1 : 0) * dir || (b.date - a.date);
   });
 
-  const kpis = rows.reduce((acc, r) => ({
+  // KPIs reflect POSTED expedientes only — a draft hasn't claimed its ITBIS
+  // credit or landed its cost yet, so its figures don't belong in the band.
+  const kpis = rows.filter((r) => !r.isDraft).reduce((acc, r) => ({
     cif: round2(acc.cif + r.cif),
     landed: round2(acc.landed + r.landed),
     itbisCred: round2(acc.itbisCred + r.itbisCred),

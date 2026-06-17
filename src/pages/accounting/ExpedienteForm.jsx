@@ -1,6 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Check, X, Plus, Trash2, FileText, Upload, Ship, Receipt, History, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Check, X, Plus, Trash2, FileText, Upload, Ship, Receipt, History, Sparkles, Save } from 'lucide-react';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { formatDop } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
@@ -23,6 +24,24 @@ const num = 'input w-28 text-right tabular-nums';
 
 const draftKey = (scope) => `rosetsoft.importacionDraft.${scope}`;
 export const TEMPLATE_KEY = (scope) => `rosetsoft.importacionTemplate.${scope}`;
+
+/** Seed the form from an EXISTING draft expediente being resumed (Editar). Its
+ *  embarques/costs are already in the form's shape (toModel stored them that
+ *  way), so they load straight back in. */
+function seedFromExisting(e, defaults) {
+  return {
+    kind: 'existing',
+    head: {
+      date: e.liquidatedAt ? new Date(e.liquidatedAt).toISOString().slice(0, 10) : defaults.date,
+      orderId: e.orderId || '',
+      paymentMethod: e.paymentMethod || 'bank',
+      rate: e.rate != null && e.rate !== '' ? String(e.rate) : defaults.rate,
+      duaTotal: '',
+    },
+    embs: (e.embarques?.length ? e.embarques : null),
+    costs: e.costs || null,
+  };
+}
 
 /** Read the entry seed: an explicit template (set by "Usar como plantilla" on a
  *  saved expediente, consumed once) wins over a leftover autosaved draft. */
@@ -64,7 +83,8 @@ function Stat({ label, value, accent }) {
  * and focuses it; the half-entered form autosaves as a draft and a saved
  * expediente can seed a new one as a template.
  */
-export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, onClose }) {
+export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, existing = null, onClose }) {
+  const navigate = useNavigate();
   // Catalog families (by SKU root) → the list price an imported piece is sold at.
   // A newly-minted inventory item is priced from the catalog, by reference +
   // the fabric (grade) it shipped in; cost still comes from the landed liquidation.
@@ -74,7 +94,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     rate: String(effectiveDopRate(settings) || ''), duaTotal: '',
   }), [settings]);
   const seedRef = useRef(null);
-  if (seedRef.current == null) seedRef.current = readSeed(scope, defaults);
+  if (seedRef.current == null) seedRef.current = existing ? seedFromExisting(existing, defaults) : readSeed(scope, defaults);
   const seed = seedRef.current;
 
   const [head, setHead] = useState({ ...defaults, ...(seed.head || {}) });
@@ -112,6 +132,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       || e.facturas.some((f) => f.supplierId || f.invoiceRef || f.lines.some((l) => l.name || l.itemId || l.fob !== '' || l.qty !== '')))
   ), [head.duaTotal, embs, costs]);
   useEffect(() => {
+    if (existing) return undefined; // editing a saved draft — don't touch the local "new" autosave
     const t = setTimeout(() => {
       try {
         if (hasContent) localStorage.setItem(draftKey(scope), JSON.stringify({ head, embs, costs }));
@@ -184,7 +205,48 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
   function addCost() { setCosts((cs) => [...cs, { id: newId(), concept: 'agenciamiento', supplierId: '', ncf: '', amount: '', itbis: '', paymentMethod: 'bank' }]); }
   function removeCost(id) { setCosts((cs) => cs.filter((c) => c.id !== id)); }
 
-  async function save() {
+  /** Build the row fields shared by a draft save and a posting. `lines` is the
+   *  resolved cascade (flat); `totals` the rolled-up figures. */
+  const buildRowFields = (exp, resolved, status, journalEntryId) => ({
+    bl: exp.embarques?.[0]?.bl || '', customsRef: exp.embarques?.[0]?.customsRef || '',
+    supplierId: exp.supplierId ?? exp.embarques?.[0]?.facturas?.[0]?.supplierId ?? null,
+    orderId: head.orderId || null, containerId: exp.embarques?.[0]?.containerId || null,
+    liquidatedAt: new Date(head.date).getTime(),
+    cif: resolved.totals.cif, duty: resolved.totals.gravamen, selectivo: resolved.totals.selectivo, importItbis: resolved.totals.importItbis,
+    embarques: exp.embarques, costs: exp.costs,
+    lines: resolved.lines.map((l) => ({ id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty, fob: l.fob, selectivo: l.selectivo, cifValue: l.cif })),
+    paymentMethod: head.paymentMethod, rate: Number(head.rate) || 0, status,
+    ...(journalEntryId ? { journalEntryId } : {}),
+  });
+
+  /** Save WITHOUT posting — a work-in-progress expediente you can keep editing
+   *  and attach documents to. No asiento, no kardex, no inventory minted. */
+  async function saveDraft() {
+    setErr('');
+    setSaving(true);
+    try {
+      const exp = toModel(embs, costs);
+      const resolved = resolveExpediente(exp, config);
+      const rowFields = buildRowFields(exp, resolved, 'draft');
+      let savedId = existing?.id;
+      if (existing?.id) {
+        await db.importExpedientes.update(existing.id, { ...rowFields, updatedAt: Date.now() });
+      } else {
+        const rec = await assignSequenceNumber({
+          table: 'importExpedientes', profileId: scope, start: 1,
+          build: (n) => ({ id: newId(), profileId: scope, number: n, ...rowFields, createdAt: Date.now() }),
+        });
+        savedId = rec.id;
+      }
+      if (!existing) { try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ } }
+      navigate(`/accounting/importaciones/${savedId}`);
+    } catch (e) {
+      setErr(userMessageFor(e));
+      setSaving(false);
+    }
+  }
+
+  async function post() {
     setErr('');
     if (t.cif <= 0) { setErr('Agrega al menos una línea con valor FOB.'); return; }
     setSaving(true);
@@ -233,25 +295,23 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       if (newItems.length) await db.inventoryItems.bulkPut(newItems);
       const itemById = new Map([...items, ...newItems].map((i) => [i.id, i]));
 
-      const id = newId();
+      // Reuse the draft's id + number when contabilizing an existing draft.
+      const id = existing?.id || newId();
       const postedAt = new Date(head.date).getTime();
       const exp = { ...toModel(embsPatched, costs), id, bl: embsPatched[0]?.bl || '', supplierId: embsPatched[0]?.facturas?.[0]?.supplierId || null };
       const resolvedSave = resolveExpediente(exp, config);
       const built = buildExpedienteEntry({ newId, config, expediente: exp, postedAt });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
-      await assignSequenceNumber({
-        table: 'importExpedientes', profileId: scope, start: 1,
-        build: (n) => ({
-          id, profileId: scope, number: n, bl: exp.bl, customsRef: embsPatched[0]?.customsRef || '',
-          supplierId: exp.supplierId, orderId: head.orderId || null, containerId: embsPatched[0]?.containerId || null,
-          liquidatedAt: postedAt,
-          cif: resolvedSave.totals.cif, duty: resolvedSave.totals.gravamen, selectivo: resolvedSave.totals.selectivo, importItbis: resolvedSave.totals.importItbis,
-          embarques: exp.embarques, costs: exp.costs,
-          lines: resolvedSave.lines.map((l) => ({ id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty, fob: l.fob, selectivo: l.selectivo, cifValue: l.cif })),
-          paymentMethod: head.paymentMethod, rate: Number(head.rate) || 0, journalEntryId: built.entry.id,
-        }),
-      });
+      const rowFields = buildRowFields(exp, resolvedSave, 'posted', built.entry.id);
+      if (existing?.id) {
+        await db.importExpedientes.update(id, { ...rowFields, updatedAt: Date.now() });
+      } else {
+        await assignSequenceNumber({
+          table: 'importExpedientes', profileId: scope, start: 1,
+          build: (n) => ({ id, profileId: scope, number: n, ...rowFields, createdAt: Date.now() }),
+        });
+      }
       // Land each line into inventory at its landed unit cost.
       const touched = [];
       for (const l of resolvedSave.lines) {
@@ -273,8 +333,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         touched.push(l.itemId);
       }
       if (touched.length) syncShopify(touched).catch(() => {});
-      try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ }
-      onClose();
+      if (!existing) { try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ } }
+      navigate(`/accounting/importaciones/${id}`);
     } catch (e) {
       setErr(userMessageFor(e));
       setSaving(false);
@@ -480,9 +540,14 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             <span className="text-xs text-amber-700 inline-flex items-center gap-1"><Plus size={12} /> {newItemCount} artículo{newItemCount > 1 ? 's' : ''} nuevo{newItemCount > 1 ? 's' : ''} se crear{newItemCount > 1 ? 'án' : 'á'} en inventario</span>
           )}
         </div>
-        <button type="button" onClick={save} disabled={saving} className="btn-primary self-start sm:self-auto">
-          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar expediente
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button type="button" onClick={saveDraft} disabled={saving} className="btn-secondary">
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar borrador
+          </button>
+          <button type="button" onClick={post} disabled={saving} className="btn-primary">
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Contabilizar expediente
+          </button>
+        </div>
       </div>
       {err && <p className="text-sm text-rose-600 mt-2">{err}</p>}
     </div>
