@@ -98,6 +98,11 @@ export async function driveCopy({ fileId, folderId, name } = {}) {
   return invokeGoogle({ driveCopy: { fileId, folderId, name } });
 }
 
+/** Delete a Drive file or folder (deleting a folder removes its contents). */
+export async function driveDelete(fileId) {
+  return invokeGoogle({ driveDelete: { fileId } });
+}
+
 /** List a folder's files; returns { files }. */
 export async function driveList(folderId) {
   return invokeGoogle({ driveList: { folderId } });

@@ -81,6 +81,7 @@ type Body = {
   driveCreateFolder?: { name?: string; parentId?: string };
   driveUpload?: { folderId?: string; filename?: string; mimeType?: string; base64?: string };
   driveCopy?: { fileId?: string; folderId?: string; name?: string };
+  driveDelete?: { fileId?: string };
   driveList?: { folderId?: string };
   driveSearch?: { q?: string; pageSize?: number };
   driveRecent?: { pageSize?: number };
@@ -486,6 +487,22 @@ Deno.serve(async (req) => {
         body: JSON.stringify(meta),
       });
       return json({ ok: true, id: d.id, name: d.name, url: d.webViewLink || '' });
+    }
+
+    // ── Drive: delete a file/folder (folder deletion removes its contents) ───
+    if (body.driveDelete) {
+      const fileId = String(body.driveDelete.fileId || '').trim();
+      if (!fileId) return json({ ok: false, error: 'Falta el archivo' }, 400);
+      const r = await fetch(`${DRIVE}/files/${fileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // 404 ⇒ already gone — treat as success (idempotent).
+      if (!r.ok && r.status !== 404) {
+        const d = await r.json().catch(() => ({}));
+        return json({ ok: false, error: d?.error?.message || `Drive ${r.status}` }, 502);
+      }
+      return json({ ok: true });
     }
 
     // ── Drive: list a folder ─────────────────────────────────────────────────

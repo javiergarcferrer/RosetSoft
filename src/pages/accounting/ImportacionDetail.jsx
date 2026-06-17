@@ -15,6 +15,7 @@ import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { syncShopify } from '../../lib/shopifySync.js';
+import { driveDelete } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import {
   resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal, resolveKardex,
@@ -270,7 +271,7 @@ export default function ImportacionDetail() {
   async function deleteExpediente() {
     const e = expQ.data;
     if (!e || deleting) return;
-    if (!confirm(`¿Eliminar el expediente${e.number != null ? ` #${e.number}` : ''}? Se revierten el asiento, los movimientos de inventario y las existencias. Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar el expediente${e.number != null ? ` #${e.number}` : ''}? Se revierten el asiento, los movimientos de inventario y las existencias${e.driveFolderId ? ', y se borra su carpeta de documentos en Drive' : ''}. Esta acción no se puede deshacer.`)) return;
     setErr('');
     setDeleting(true);
     try {
@@ -303,6 +304,9 @@ export default function ImportacionDetail() {
       }
       // 4. The expediente itself.
       await db.importExpedientes.delete(e.id);
+      // 5. Its Google Drive folder + documents (best-effort — a Drive blip must
+      //    not block the accounting reversal that already succeeded).
+      if (e.driveFolderId) driveDelete(e.driveFolderId).catch(() => {});
       // Stock changed → reflect it in the Shopify catalog (best-effort).
       if (touched.length) syncShopify(touched).catch(() => {});
       navigate('/accounting/importaciones');

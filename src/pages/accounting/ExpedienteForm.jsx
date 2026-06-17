@@ -7,6 +7,7 @@ import { formatDop } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { parseInvoicePdf } from '../../lib/loadRosetInvoice.js';
+import { driveCreateFolder, driveUploadBlob } from '../../lib/google.js';
 import SearchPicker from '../../components/SearchPicker.jsx';
 import { groupFamilies, catalogSellingPrice } from '../../lib/catalog.js';
 import {
@@ -85,6 +86,11 @@ function Stat({ label, value, accent }) {
  */
 export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, existing = null, onClose }) {
   const navigate = useNavigate();
+  // Invoice PDFs the user imported, kept to upload into the expediente's Drive
+  // folder on save (keyed by factura id so a re-import replaces). Drive archival
+  // needs a connected Google account.
+  const facturaFilesRef = useRef(new Map());
+  const driveReady = !!settings?.googleConnectedAt;
   // Catalog families (by SKU root) → the list price an imported piece is sold at.
   // A newly-minted inventory item is priced from the catalog, by reference +
   // the fabric (grade) it shipped in; cost still comes from the landed liquidation.
@@ -168,6 +174,14 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       });
       if (!seeded.length) { setErr('No se encontraron muebles en el PDF.'); return; }
       mapLines(eid, fid, (ls) => [...ls.filter((l) => l.name || l.fob !== ''), ...seeded]);
+      // Keep the PDF to archive into the expediente's Drive folder on save. If
+      // we're editing a draft that already has a folder, upload it now.
+      facturaFilesRef.current.set(fid, file);
+      if (driveReady && existing?.driveFolderId) {
+        driveUploadBlob({ folderId: existing.driveFolderId, filename: file.name, blob: file })
+          .then(() => facturaFilesRef.current.delete(fid))
+          .catch(() => { /* will retry on save */ });
+      }
       const matched = seeded.filter((l) => l.itemId).length;
       setPdfNote({ fid, matched, toCreate: seeded.length - matched });
     } catch (e) {
@@ -219,6 +233,25 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     ...(journalEntryId ? { journalEntryId } : {}),
   });
 
+  /** Upload the imported factura PDFs into the expediente's Drive folder,
+   *  creating the folder on first use and persisting its id on the row. Best
+   *  effort: a Drive blip must never fail the save/posting that already wrote. */
+  async function archiveFacturasToDrive(savedId, number, bl, folderId) {
+    const files = [...facturaFilesRef.current.values()].filter(Boolean);
+    if (!driveReady || !files.length) return;
+    try {
+      let fid = folderId;
+      if (!fid) {
+        const name = `Importación ${number != null ? `#${number}` : ''}${bl ? ` — BL ${bl}` : ''}`.trim() || 'Importación';
+        const data = await driveCreateFolder({ name });
+        fid = data.id;
+        await db.importExpedientes.update(savedId, { driveFolderId: fid, driveFolderUrl: data.url || '' });
+      }
+      for (const f of files) await driveUploadBlob({ folderId: fid, filename: f.name, blob: f });
+      facturaFilesRef.current.clear();
+    } catch { /* the expediente is saved; the docs can be added from the detail page */ }
+  }
+
   /** Save WITHOUT posting — a work-in-progress expediente you can keep editing
    *  and attach documents to. No asiento, no kardex, no inventory minted. */
   async function saveDraft() {
@@ -229,6 +262,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       const resolved = resolveExpediente(exp, config);
       const rowFields = buildRowFields(exp, resolved, 'draft');
       let savedId = existing?.id;
+      let savedNumber = existing?.number;
       if (existing?.id) {
         await db.importExpedientes.update(existing.id, { ...rowFields, updatedAt: Date.now() });
       } else {
@@ -237,7 +271,9 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           build: (n) => ({ id: newId(), profileId: scope, number: n, ...rowFields, createdAt: Date.now() }),
         });
         savedId = rec.id;
+        savedNumber = rec.number;
       }
+      await archiveFacturasToDrive(savedId, savedNumber, rowFields.bl, existing?.driveFolderId);
       if (!existing) { try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ } }
       navigate(`/accounting/importaciones/${savedId}`);
     } catch (e) {
@@ -304,13 +340,15 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
       const rowFields = buildRowFields(exp, resolvedSave, 'posted', built.entry.id);
+      let savedNumber = existing?.number;
       if (existing?.id) {
         await db.importExpedientes.update(id, { ...rowFields, updatedAt: Date.now() });
       } else {
-        await assignSequenceNumber({
+        const rec = await assignSequenceNumber({
           table: 'importExpedientes', profileId: scope, start: 1,
           build: (n) => ({ id, profileId: scope, number: n, ...rowFields, createdAt: Date.now() }),
         });
+        savedNumber = rec.number;
       }
       // Land each line into inventory at its landed unit cost.
       const touched = [];
@@ -333,6 +371,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         touched.push(l.itemId);
       }
       if (touched.length) syncShopify(touched).catch(() => {});
+      await archiveFacturasToDrive(id, savedNumber, rowFields.bl, existing?.driveFolderId);
       if (!existing) { try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ } }
       navigate(`/accounting/importaciones/${id}`);
     } catch (e) {
@@ -433,6 +472,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                     <p className="text-xs text-ink-500 mb-1.5">
                       PDF importado: <b>{pdfNote.matched + pdfNote.toCreate}</b> líneas — {pdfNote.matched} en inventario
                       {pdfNote.toCreate > 0 && <span className="text-amber-700">, {pdfNote.toCreate} se crearán al guardar</span>}.
+                      {driveReady && <span className="text-emerald-700"> La factura se guardará en Google Drive.</span>}
                     </p>
                   )}
 
