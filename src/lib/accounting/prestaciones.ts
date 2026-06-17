@@ -113,25 +113,41 @@ export function preavisoDays(months: number): number {
   return 28;
 }
 
-/** Auxilio de cesantía days (Art. 80): 6 / 13 in the first year, then 21 days
- *  per year (1–5 yrs) or 23 per year (>5 yrs) applied to the whole tenure. */
+/** A trailing year-fraction is paid per Art. 80's closing clause ("Toda fracción
+ *  de un año mayor de tres meses se pagará conforme a los ordinales 1o. y 2o."):
+ *  a 3–6 month remainder pays the first-tier days, 6–12 months the second tier,
+ *  a remainder of ≤3 months pays nothing. Shared by cesantía and asistencia. */
+function fractionDays(fracMonths: number, tier1: number, tier2: number): number {
+  if (fracMonths >= 6) return tier2; // 6–12 month remainder
+  if (fracMonths > 3) return tier1;  // 3–6  month remainder
+  return 0;                          // ≤3 months: not paid
+}
+
+/** Auxilio de cesantía days (Art. 80): 6 / 13 in the first year, then 21 days per
+ *  COMPLETED year for years 1–5 and 23 days per year from year 6 on (NOT 23× the
+ *  whole tenure once past 5 years), plus the >3-month remainder at the 6/13-day
+ *  partial tier — the official Ministerio de Trabajo schedule. */
 export function cesantiaDays(months: number): number {
   const m = Number(months) || 0;
   if (m < 3) return 0;
   if (m < 6) return 6;
   if (m < 12) return 13;
-  const years = m / 12;
-  return round2((years > 5 ? 23 : 21) * years);
+  const fullYears = Math.floor(m / 12);
+  let days = 0;
+  for (let y = 1; y <= fullYears; y++) days += y <= 5 ? 21 : 23;
+  return round2(days + fractionDays(m - fullYears * 12, 6, 13));
 }
 
 /** Asistencia económica days for no-fault terminations (Art. 82): 5 / 10 in the
- *  first year, then 15 days per year — NOT cesantía, a smaller separate scale. */
+ *  first year, then 15 days per COMPLETED year plus the >3-month remainder at the
+ *  5/10-day partial tier — a smaller separate scale than cesantía (flat 15/yr). */
 export function asistenciaEconomicaDays(months: number): number {
   const m = Number(months) || 0;
   if (m < 3) return 0;
   if (m < 6) return 5;
   if (m < 12) return 10;
-  return round2(15 * (m / 12));
+  const fullYears = Math.floor(m / 12);
+  return round2(fullYears * 15 + fractionDays(m - fullYears * 12, 5, 10));
 }
 
 // ── Liquidación (full termination payout) ────────────────────────────────────

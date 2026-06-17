@@ -65,14 +65,21 @@ test('preavisoDays: flat schedule (Art. 76)', () => {
   assert.equal(preavisoDays(60), 28);
 });
 
-test('cesantiaDays: 6/13 first year, then 21/yr (≤5) or 23/yr (>5) (Art. 80)', () => {
+test('cesantiaDays: 6/13 first year, then 21/yr (yrs 1–5) + 23/yr (yr 6+) (Art. 80)', () => {
   assert.equal(cesantiaDays(2), 0);
   assert.equal(cesantiaDays(3), 6);
   assert.equal(cesantiaDays(6), 13);
   assert.equal(cesantiaDays(11), 13);
   assert.equal(cesantiaDays(12), 21);          // 1 year → 21
-  assert.equal(cesantiaDays(60), round2(21 * 5)); // 5 years → 105
-  assert.equal(cesantiaDays(72), round2(23 * 6)); // 6 years (>5) → 138
+  assert.equal(cesantiaDays(60), 105);         // 5 years → 21×5
+  // Past 5 years it is NOT 23 × all years: years 1–5 stay at 21, 23 from year 6.
+  assert.equal(cesantiaDays(72), 128);         // 6 years → 21×5 + 23
+  assert.equal(cesantiaDays(120), 220);        // 10 years → 21×5 + 23×5
+  // A trailing remainder >3 months pays the 6/13-day partial tier; ≤3 pays 0.
+  assert.equal(cesantiaDays(15), 21);          // 1y 3m → no remainder credit
+  assert.equal(cesantiaDays(16), 27);          // 1y 4m → 21 + 6
+  assert.equal(cesantiaDays(18), 34);          // 1y 6m → 21 + 13
+  assert.equal(cesantiaDays(79), 141);         // 6y 7m → 128 + 13
 });
 
 test('asistenciaEconomicaDays: the no-fault scale (Art. 82)', () => {
@@ -81,6 +88,10 @@ test('asistenciaEconomicaDays: the no-fault scale (Art. 82)', () => {
   assert.equal(asistenciaEconomicaDays(6), 10);
   assert.equal(asistenciaEconomicaDays(12), 15);
   assert.equal(asistenciaEconomicaDays(24), 30);
+  // Trailing >3-month remainder pays the 5/10-day partial tier; ≤3 pays 0.
+  assert.equal(asistenciaEconomicaDays(15), 15); // 1y 3m → no remainder credit
+  assert.equal(asistenciaEconomicaDays(16), 20); // 1y 4m → 15 + 5
+  assert.equal(asistenciaEconomicaDays(18), 25); // 1y 6m → 15 + 10
 });
 
 test('liquidacion: employer desahucio owes preaviso + cesantía + derechos', () => {
