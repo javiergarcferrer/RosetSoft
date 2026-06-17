@@ -150,6 +150,15 @@ verify_jwt = false
 [functions.meta-social]
 verify_jwt = false
 
+# google-api — Gmail (send) + Google Drive (folders/upload/list) on ONE Google
+# OAuth account. Verifies the caller ITSELF (auth.getUser on the Authorization
+# header) — gateway check off so the CORS preflight passes, same as wa-send. The
+# OAuth client creds + refresh token live in the write-only google_oauth_config
+# table (service role only); the access token is a server-owned cache and never
+# reaches the browser. The GET callback is the public OAuth redirect.
+[functions.google-api]
+verify_jwt = false
+
 # Instagram webhooks (comments + mentions). Public callback — Meta calls it
 # unauthenticated; it verifies the hub token and persists to ig_events.
 [functions.meta-webhook]

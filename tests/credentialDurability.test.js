@@ -1,8 +1,9 @@
 // Credential-durability fitness function — "a deploy never erases what the
 // dealer pasted into Configuración."
 //
-// The credential stores (shopify_config, whatsapp_config, ecf_credentials)
-// are written ONLY from the app, through their SECURITY DEFINER save_* RPCs.
+// The credential stores (shopify_config, whatsapp_config, ecf_credentials,
+// google_oauth_config) are written ONLY from the app (the save_* RPCs or, for
+// google_oauth_config, the google-api Edge Function with the service role).
 // History shows how this erodes without a guard: three shopify domain "fixes"
 // rewrote the saved connection (each breaking it for the other store), and
 // the Dev-Dashboard cutover DELETEd every legacy row — from the dealer's
@@ -24,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'supabase', 'migrations');
 
-const CREDENTIAL_TABLES = ['shopify_config', 'whatsapp_config', 'ecf_credentials'];
+const CREDENTIAL_TABLES = ['shopify_config', 'whatsapp_config', 'ecf_credentials', 'google_oauth_config'];
 
 // One-time historical mutations, shipped before this guard existed.
 const GRANDFATHERED = new Set([

@@ -11,6 +11,8 @@ import { useApp } from '../context/AppContext.jsx';
 import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
 import InstagramCard from '../components/settings/InstagramCard.jsx';
 import ShopifyCard from '../components/settings/ShopifyCard.jsx';
+import GmailCard from '../components/settings/GmailCard.jsx';
+import GoogleDriveCard from '../components/settings/GoogleDriveCard.jsx';
 import BusinessProfileCard from '../components/whatsapp/BusinessProfileCard.jsx';
 import { SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 
@@ -62,8 +64,18 @@ export default function Integrations() {
         </div>
       ),
     },
-    { id: 'gmail', icon: Mail, name: 'Gmail', desc: 'Correo y seguimiento de conversaciones con clientes.', comingSoon: true },
-    { id: 'drive', icon: HardDrive, name: 'Google Drive', desc: 'Documentos, archivos y respaldos en la nube.', comingSoon: true },
+    {
+      id: 'gmail', icon: Mail, name: 'Gmail',
+      desc: 'Envía cotizaciones y archivos por correo.',
+      connected: !!settings?.googleConnectedAt,
+      config: <GmailCard />,
+    },
+    {
+      id: 'drive', icon: HardDrive, name: 'Google Drive',
+      desc: 'Documentos y carpetas por importación en la nube.',
+      connected: !!settings?.googleConnectedAt,
+      config: <GoogleDriveCard />,
+    },
   ];
 
   return (

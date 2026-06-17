@@ -242,6 +242,19 @@ export interface Settings {
    *  show the connection is configured and pre-fill the field. The app SECRET
    *  stays write-only in meta_social_config, never here. */
   metaSocialIgAppId?: string;
+  /** Google (Gmail + Drive) connection — ONE OAuth account powers both. The
+   *  OAuth client secret + refresh token stay write-only in google_oauth_config;
+   *  only these non-sensitive mirrors live here. Set by the google-api Edge
+   *  Function's OAuth callback. */
+  googleConnectedAt?: number | null;
+  /** The connected account's email (display). */
+  googleEmail?: string;
+  /** OAuth client id — NON-secret mirror so the card shows it's configured and
+   *  pre-fills the field. The client SECRET stays in google_oauth_config. */
+  googleClientId?: string;
+  /** The Drive "RosetSoft" workspace folder id we file per-importation
+   *  subfolders under (created on first use). */
+  googleDriveRootFolderId?: string;
   /** Webhook handshake string shown in Settings to paste into the Meta portal
    *  (not a secret — it only gates webhook REGISTRATION; payloads are
    *  authenticated by the app-secret HMAC signature). */
