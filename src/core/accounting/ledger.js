@@ -84,6 +84,35 @@ function prune(node) {
 }
 
 /**
+ * Multi-period twin of buildTree: ONE tree whose every node carries an
+ * `amounts[]` array (one natural balance per period, same order as `raws`), so
+ * the periods stay perfectly aligned by account code for a side-by-side
+ * comparative — no merging two independently-pruned trees.
+ */
+function buildMultiTree(index, raws, code) {
+  const node = index.byCode.get(code);
+  if (!node) return null;
+  const children = (index.childrenByParent.get(code) || [])
+    .map((c) => buildMultiTree(index, raws, c.code))
+    .filter(Boolean);
+  const amounts = node.isPostable
+    ? raws.map((raw) => round2(leafNatural(raw, code, node.nature)))
+    : raws.map((_, i) => round2(children.reduce((s, c) => s + c.amounts[i], 0)));
+  return {
+    code, name: node.name, level: node.level, nature: node.nature,
+    class: node.class, isPostable: node.isPostable, amounts, children,
+  };
+}
+
+/** Drop nodes that are zero across EVERY period (and have no kept children). */
+function pruneMulti(node) {
+  if (!node) return null;
+  node.children = node.children.map(pruneMulti).filter(Boolean);
+  if (node.amounts.every((a) => a === 0) && node.children.length === 0) return null;
+  return node;
+}
+
+/**
  * Balanza de comprobación — one row per postable account with movement, its
  * debit/credit totals and natural balance. `totalDebit` must equal
  * `totalCredit` (the ledger-wide proof of double entry).
@@ -169,6 +198,71 @@ export function resolveIncomeStatement({ accounts, lines, entries, start, end } 
     start: start ?? null, end: end ?? null,
     income, costs, expenses,
     totalIncome, totalCosts, totalExpenses, grossProfit, netIncome,
+  };
+}
+
+/**
+ * Estado de Resultados COMPARATIVO over N periods (the quick-period comparison:
+ * período actual vs anterior vs año pasado). `periods: [{ label, start, end }]`
+ * — usually 1 or 2. Returns the SAME income/costs/expenses trees as the single
+ * version but every node carries `amounts[]` (one per period, aligned by code),
+ * plus per-period total/utilidad arrays. The View reads column i for period i
+ * and the delta from the first two.
+ */
+export function resolveIncomeStatementComparison({ accounts, lines, entries, periods = [] } = {}) {
+  const index = buildChartIndex(accounts);
+  const raws = periods.map((p) => accountRawBalances(lines, { entries, start: p.start, end: p.end }));
+  const rootByClass = {};
+  for (const r of chartRoots(index)) rootByClass[r.class] = r;
+  const treeFor = (cls) => (rootByClass[cls] ? pruneMulti(buildMultiTree(index, raws, rootByClass[cls].code)) : null);
+
+  const income = treeFor(4);
+  const costs = treeFor(5);
+  const expenses = treeFor(6);
+  const per = (tree) => periods.map((_, i) => (tree ? tree.amounts[i] : 0));
+  const totalIncome = per(income);
+  const totalCosts = per(costs);
+  const totalExpenses = per(expenses);
+  const grossProfit = totalIncome.map((v, i) => round2(v - totalCosts[i]));
+  const netIncome = grossProfit.map((v, i) => round2(v - totalExpenses[i]));
+
+  return {
+    periods,
+    income, costs, expenses,
+    totalIncome, totalCosts, totalExpenses, grossProfit, netIncome,
+  };
+}
+
+/**
+ * Balance General COMPARATIVO at N cut-off dates. `periods: [{ label, asOf }]`.
+ * Like resolveBalanceSheet, the period result (4−5−6 up to each asOf) is folded
+ * into equity so each column balances before the closing entry. Trees carry
+ * `amounts[]`; the totals are per-period arrays.
+ */
+export function resolveBalanceSheetComparison({ accounts, lines, entries, periods = [] } = {}) {
+  const index = buildChartIndex(accounts);
+  const raws = periods.map((p) => accountRawBalances(lines, { entries, end: p.asOf }));
+  const rootByClass = {};
+  for (const r of chartRoots(index)) rootByClass[r.class] = r;
+  const treeFor = (cls) => (rootByClass[cls] ? pruneMulti(buildMultiTree(index, raws, rootByClass[cls].code)) : null);
+
+  const assets = treeFor(1);
+  const liabilities = treeFor(2);
+  const equity = treeFor(3);
+  const per = (tree) => periods.map((_, i) => (tree ? tree.amounts[i] : 0));
+  const totalAssets = per(assets);
+  const totalLiabilities = per(liabilities);
+  const equityBooked = per(equity);
+  const netIncome = raws.map((raw) => round2(sumClass(index, raw, 4) - sumClass(index, raw, 5) - sumClass(index, raw, 6)));
+  const totalEquity = equityBooked.map((v, i) => round2(v + netIncome[i]));
+  const totalLiabEquity = totalLiabilities.map((v, i) => round2(v + totalEquity[i]));
+
+  return {
+    periods,
+    assets, liabilities, equity,
+    totalAssets, totalLiabilities, equityBooked, netIncome, totalEquity, totalLiabEquity,
+    balanced: periods.map((_, i) => Math.abs(totalAssets[i] - totalLiabEquity[i]) < 0.01),
+    difference: periods.map((_, i) => round2(totalAssets[i] - totalLiabEquity[i])),
   };
 }
 

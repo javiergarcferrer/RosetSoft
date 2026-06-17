@@ -20,6 +20,7 @@ import {
 } from '../src/lib/accounting/ledger.js';
 import {
   resolveTrialBalance, resolveBalanceSheet, resolveIncomeStatement,
+  resolveBalanceSheetComparison, resolveIncomeStatementComparison,
   resolveJournal, resolveAccountLedger, accountRawBalances,
 } from '../src/core/accounting/ledger.js';
 
@@ -250,6 +251,58 @@ test('resolveBalanceSheet balances: Activo = Pasivo + Patrimonio + Resultado', (
   assert.equal(bs.totalLiabEquity, 103800);
   assert.equal(bs.balanced, true);
   assert.equal(bs.difference, 0);
+});
+
+test('resolveIncomeStatementComparison aligns two periods by account code', () => {
+  const { entries, lines } = scenario();
+  // P1 captures only the sale (@2000); P2 only the cost (@3000) + expense (@4000).
+  const cmp = resolveIncomeStatementComparison({
+    accounts: ACCOUNTS, lines, entries,
+    periods: [
+      { label: 'P1', start: 1500, end: 2500 },
+      { label: 'P2', start: 2500, end: 4500 },
+    ],
+  });
+  assert.deepEqual(cmp.totalIncome, [10000, 0]);
+  assert.deepEqual(cmp.totalCosts, [0, 6000]);
+  assert.deepEqual(cmp.totalExpenses, [0, 2000]);
+  assert.deepEqual(cmp.grossProfit, [10000, -6000]);
+  assert.deepEqual(cmp.netIncome, [10000, -8000]);
+  // Every node carries one amount per period, aligned by code.
+  assert.deepEqual(cmp.income.amounts, [10000, 0]);
+  const ventas = cmp.income.children.find((c) => c.code === '4-1');
+  assert.deepEqual(ventas.amounts, [10000, 0]);
+});
+
+test('resolveIncomeStatementComparison with ONE period matches the single statement', () => {
+  const { entries, lines } = scenario();
+  const single = resolveIncomeStatement({ accounts: ACCOUNTS, lines, entries });
+  const cmp = resolveIncomeStatementComparison({
+    accounts: ACCOUNTS, lines, entries, periods: [{ label: 'todo', start: null, end: null }],
+  });
+  assert.equal(cmp.totalIncome[0], single.totalIncome);
+  assert.equal(cmp.grossProfit[0], single.grossProfit);
+  assert.equal(cmp.netIncome[0], single.netIncome);
+  assert.equal(cmp.income.amounts[0], single.income.amount);
+});
+
+test('resolveBalanceSheetComparison keeps every cut-off column balanced', () => {
+  const { entries, lines } = scenario();
+  const bcmp = resolveBalanceSheetComparison({
+    accounts: ACCOUNTS, lines, entries,
+    periods: [
+      { label: 'hoy', asOf: 5000 },  // all entries
+      { label: 'medio', asOf: 2500 }, // opening + sale only
+    ],
+  });
+  assert.deepEqual(bcmp.totalAssets, [103800, 111800]);
+  assert.deepEqual(bcmp.totalLiabilities, [1800, 1800]);
+  assert.deepEqual(bcmp.equityBooked, [100000, 100000]);
+  assert.deepEqual(bcmp.netIncome, [2000, 10000]);
+  assert.deepEqual(bcmp.totalEquity, [102000, 110000]);
+  assert.deepEqual(bcmp.totalLiabEquity, [103800, 111800]);
+  assert.deepEqual(bcmp.balanced, [true, true]);
+  assert.deepEqual(bcmp.difference, [0, 0]);
 });
 
 test('resolveJournal lists entries newest-first with balanced totals', () => {
