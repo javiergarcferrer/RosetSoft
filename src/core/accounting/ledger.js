@@ -267,6 +267,24 @@ export function resolveBalanceSheetComparison({ accounts, lines, entries, period
 }
 
 /**
+ * Full chart-of-accounts tree with rolled-up natural balances — the navigator
+ * for the Mayor master-detail. Unlike the statement resolvers it does NOT prune
+ * zero nodes: every account stays present and selectable even without movement.
+ * Each node carries its natural `amount` (a leaf = its own balance, a title =
+ * Σ children) so the tree can show a live saldo beside every row. `start`/`end`
+ * window the movements like the other resolvers (omit ⇒ all-time, matching the
+ * total `resolveAccountLedger` shows for that account).
+ */
+export function resolveChartTree({ accounts, lines, entries, start, end } = {}) {
+  const index = buildChartIndex(accounts);
+  const raw = accountRawBalances(lines, { entries, start, end });
+  const roots = chartRoots(index)
+    .map((r) => buildTree(index, raw, r.code))
+    .filter(Boolean);
+  return { roots };
+}
+
+/**
  * Libro Diario — entries newest-first, each with its lines and debit/credit
  * totals. `limit` caps the list for the recent-activity view.
  */

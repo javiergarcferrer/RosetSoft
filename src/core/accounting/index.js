@@ -17,6 +17,7 @@ export {
   resolveIncomeStatement,
   resolveBalanceSheetComparison,
   resolveIncomeStatementComparison,
+  resolveChartTree,
   resolveJournal,
   resolveAccountLedger,
 } from './ledger.js';

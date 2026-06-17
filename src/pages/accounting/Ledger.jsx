@@ -11,6 +11,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import AccountTree from '../../components/accounting/AccountTree.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv } from '../../lib/csv.js';
@@ -18,7 +19,7 @@ import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import {
-  resolveJournal, resolveTrialBalance, resolveAccountLedger,
+  resolveJournal, resolveTrialBalance, resolveAccountLedger, resolveChartTree,
   postableAccounts, assertBalanced, buildJournalEntry, buildReversalEntry, debitTotal, creditTotal,
 } from '../../core/accounting/index.js';
 
@@ -262,6 +263,12 @@ export default function Ledger() {
     () => (mayorCode ? resolveAccountLedger({ accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data, accountCode: mayorCode }) : null),
     [mayorCode, accountsQ.data, entriesQ.data, linesQ.data],
   );
+  // The chart-of-accounts tree with live roll-up balances — the navigator pane
+  // of the Mayor master-detail (all-time, so a node's saldo matches its mayor).
+  const chartTree = useMemo(
+    () => resolveChartTree({ accounts: accountsQ.data, lines: linesQ.data, entries: entriesQ.data }),
+    [accountsQ.data, linesQ.data, entriesQ.data],
+  );
   const postable = useMemo(
     () => postableAccounts(accountsQ.data).sort((a, b) => a.code.localeCompare(b.code)),
     [accountsQ.data],
@@ -390,12 +397,19 @@ export default function Ledger() {
           </div>
         )
       ) : tab === 'mayor' ? (
-        <>
+        <div className="md:flex md:gap-4 md:items-start">
+          {/* Desktop: interactive catálogo navigator with live roll-up saldos —
+              click a postable account to open its mayor in the detail pane. */}
+          <div className="hidden md:block md:w-80 lg:w-96 shrink-0">
+            <AccountTree roots={chartTree.roots} selectedCode={mayorCode} onSelect={setMayorCode} />
+          </div>
+          {/* Mobile: the flat picker (the tree would crowd a phone). */}
           <select value={mayorCode} onChange={(e) => setMayorCode(e.target.value)}
-            className="mb-4 w-full max-w-lg rounded-lg border border-ink-200 px-3 py-2 text-sm">
+            className="md:hidden mb-4 w-full max-w-lg rounded-lg border border-ink-200 px-3 py-2 text-sm">
             <option value="">— Elige una cuenta —</option>
             {postable.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
           </select>
+          <div className="flex-1 min-w-0">
           {!mayor ? (
             <EmptyState icon={BookOpen} title="Selecciona una cuenta"
               description="Elige una cuenta imputable para ver su mayor." />
@@ -462,7 +476,8 @@ export default function Ledger() {
             </div>
             </>
           )}
-        </>
+          </div>
+        </div>
       ) : (
         trial.rows.length === 0 ? (
           <EmptyState icon={BookOpen} title="Sin movimientos"

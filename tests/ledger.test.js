@@ -21,7 +21,7 @@ import {
 import {
   resolveTrialBalance, resolveBalanceSheet, resolveIncomeStatement,
   resolveBalanceSheetComparison, resolveIncomeStatementComparison,
-  resolveJournal, resolveAccountLedger, accountRawBalances,
+  resolveJournal, resolveAccountLedger, resolveChartTree, accountRawBalances,
 } from '../src/core/accounting/ledger.js';
 
 /* ----------------------------- fixture chart ---------------------------- */
@@ -312,6 +312,21 @@ test('resolveJournal lists entries newest-first with balanced totals', () => {
   assert.equal(j[0].entry.postedAt, 4000); // newest first
   assert.equal(j[3].entry.postedAt, 1000);
   for (const row of j) assert.equal(row.debit, row.credit); // each entry balances
+});
+
+test('resolveChartTree rolls balances up the tree and keeps zero nodes', () => {
+  const { entries, lines } = scenario();
+  const { roots } = resolveChartTree({ accounts: ACCOUNTS, lines, entries });
+  // Every class root is present (no pruning), in class order.
+  assert.deepEqual(roots.map((r) => r.class), [1, 2, 3, 4, 5, 6]);
+  const activos = roots.find((r) => r.code === '1');
+  assert.equal(activos.amount, 103800); // Σ of its leaves (CAJA 0 + BANCO 103800)
+  const cajaYBancos = activos.children.find((c) => c.code === '1-1');
+  assert.equal(cajaYBancos.amount, 103800);
+  const caja = cajaYBancos.children.find((c) => c.code === '1-1-1');
+  assert.equal(caja.amount, 0); // a zero-movement leaf is NOT pruned (still selectable)
+  const banco = cajaYBancos.children.find((c) => c.code === '1-1-2');
+  assert.equal(banco.amount, 103800);
 });
 
 test('resolveAccountLedger gives a running balance in date order', () => {
