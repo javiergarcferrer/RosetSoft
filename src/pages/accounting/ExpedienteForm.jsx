@@ -249,7 +249,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           cif: resolvedSave.totals.cif, duty: resolvedSave.totals.gravamen, selectivo: resolvedSave.totals.selectivo, importItbis: resolvedSave.totals.importItbis,
           embarques: exp.embarques, costs: exp.costs,
           lines: resolvedSave.lines.map((l) => ({ id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty, fob: l.fob, selectivo: l.selectivo, cifValue: l.cif })),
-          paymentMethod: head.paymentMethod, journalEntryId: built.entry.id,
+          paymentMethod: head.paymentMethod, rate: Number(head.rate) || 0, journalEntryId: built.entry.id,
         }),
       });
       // Land each line into inventory at its landed unit cost.

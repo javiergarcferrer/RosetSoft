@@ -150,12 +150,17 @@ export function resolveImportacionesList({
  * cached) and dresses every level with display names: header meta, embarque
  * cards with their facturas + lines, the cost sheet and the rolled-up totals.
  */
-export function resolveExpedienteDetail({ expediente, config, suppliers, items, containers, orders } = {}) {
+export function resolveExpedienteDetail({ expediente, config, suppliers, items, containers, orders, rate } = {}) {
   if (!expediente) return null;
   const supById = new Map((suppliers || []).map((s) => [s.id, s]));
   const itemById = new Map((items || []).map((i) => [i.id, i]));
   const contById = new Map((containers || []).map((c) => [c.id, c]));
   const orderById = new Map((orders || []).map((o) => [o.id, o]));
+  // FOB is stored in DOP (the customs-valuation currency). Show it back in USD
+  // using the rate captured on the expediente; fall back to the live rate passed
+  // in for legacy rows that never stored one (approximate). rate ≤ 0 ⇒ no USD.
+  const fxRate = Number(expediente.rate) > 0 ? Number(expediente.rate) : (Number(rate) || 0);
+  const toUsd = (dop) => (fxRate > 0 ? round2((Number(dop) || 0) / fxRate) : 0);
 
   const norm = { ...expediente, embarques: expedienteEmbarques(expediente) };
   const resolved = resolveExpediente(norm, config);
@@ -181,6 +186,7 @@ export function resolveExpedienteDetail({ expediente, config, suppliers, items, 
             inInventory: !!item,
             qty: rl?.qty || 0,
             fob: rl?.fob || 0,
+            fobUsd: toUsd(rl?.fob || 0),
             cif: rl?.cif || 0,
             gravamen: rl?.gravamen || 0,
             selectivo: rl?.selectivo || 0,
@@ -198,6 +204,7 @@ export function resolveExpedienteDetail({ expediente, config, suppliers, items, 
           ncf: f.ncf || '',
           lines,
           fob: round2(lines.reduce((s, l) => s + l.fob, 0)),
+          fobUsd: round2(lines.reduce((s, l) => s + l.fobUsd, 0)),
           landed: round2(lines.reduce((s, l) => s + l.landedTotal, 0)),
         };
       }),

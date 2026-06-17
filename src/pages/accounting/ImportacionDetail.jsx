@@ -12,7 +12,8 @@ import DriveDocumentsCard from '../../components/drive/DriveDocumentsCard.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
-import { formatDop, formatDate } from '../../lib/format.js';
+import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
+import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import {
@@ -67,10 +68,10 @@ const LINE_COLUMNS = [
     cell: ({ l }) => l.qty || '—',
   },
   {
-    key: 'fob', label: 'FOB',
+    key: 'fob', label: 'FOB (US$)',
     thClass: 'text-right font-medium pb-1 whitespace-nowrap', tdClass: 'py-1.5 text-right tabular-nums whitespace-nowrap',
-    cell: ({ l }) => formatDop(l.fob),
-    footClass: 'py-1.5 text-right tabular-nums whitespace-nowrap', foot: ({ f }) => formatDop(f.fob),
+    cell: ({ l }) => formatMoney(l.fobUsd, 'USD'),
+    footClass: 'py-1.5 text-right tabular-nums whitespace-nowrap', foot: ({ f }) => formatMoney(f.fobUsd, 'USD'),
   },
   {
     key: 'cif', label: 'CIF',
@@ -172,10 +173,11 @@ export default function ImportacionDetail() {
     [jeId], [],
   );
 
+  const fallbackRate = useMemo(() => effectiveDopRate(settings), [settings]);
   const detail = useMemo(() => resolveExpedienteDetail({
     expediente: expQ.data, config, suppliers: suppliersQ.data, items: itemsQ.data,
-    containers: containersQ.data, orders: ordersQ.data,
-  }), [expQ.data, config, suppliersQ.data, itemsQ.data, containersQ.data, ordersQ.data]);
+    containers: containersQ.data, orders: ordersQ.data, rate: fallbackRate,
+  }), [expQ.data, config, suppliersQ.data, itemsQ.data, containersQ.data, ordersQ.data, fallbackRate]);
 
   const accountName = useMemo(() => {
     const m = new Map(accountsQ.data.map((a) => [a.code, a.name]));

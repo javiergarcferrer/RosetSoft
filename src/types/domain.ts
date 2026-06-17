@@ -1021,6 +1021,9 @@ export interface ImportExpediente {
   /** Legacy flat lines (single-embarque). Superseded by `embarques`. */
   lines: ImportExpedienteLine[];
   paymentMethod: PaymentMethod;  // settlement of the customs taxes
+  /** USD→DOP rate used when the FOB (stored in DOP) was captured — lets the
+   *  detail view show FOB back in dollars exactly. */
+  rate?: number | null;
   journalEntryId?: string | null;
   /** Google Drive folder for this importation's documents — created on demand
    *  from the detail page; files for the container land inside it. */
