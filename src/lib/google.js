@@ -93,6 +93,11 @@ export async function driveUploadBlob({ folderId, filename, blob }) {
   return invokeGoogle({ driveUpload: { folderId, filename, mimeType: blob?.type || 'application/octet-stream', base64 } });
 }
 
+/** Copy an existing Drive file into a folder ("add from Drive"); returns { id, name, url }. */
+export async function driveCopy({ fileId, folderId, name } = {}) {
+  return invokeGoogle({ driveCopy: { fileId, folderId, name } });
+}
+
 /** List a folder's files; returns { files }. */
 export async function driveList(folderId) {
   return invokeGoogle({ driveList: { folderId } });

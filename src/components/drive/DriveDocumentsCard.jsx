@@ -8,12 +8,13 @@
 // account (the Gmail/Drive integration); when disconnected it explains where to
 // connect rather than failing.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { HardDrive, FolderPlus, Upload, ExternalLink, RefreshCw, FileText } from 'lucide-react';
+import { HardDrive, FolderPlus, Upload, ExternalLink, RefreshCw, FileText, FolderInput } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext.jsx';
-import { driveCreateFolder, driveUploadBlob, driveList } from '../../lib/google.js';
+import { driveCreateFolder, driveUploadBlob, driveList, driveCopy } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatDate } from '../../lib/format.js';
+import DrivePickerModal from './DrivePickerModal.jsx';
 
 export default function DriveDocumentsCard({ folderId, folderUrl, folderName, parentId, onFolderSaved }) {
   const { settings } = useApp();
@@ -23,6 +24,7 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);      // creating | uploading
   const [loading, setLoading] = useState(false); // listing
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [err, setErr] = useState('');
 
   const refresh = useCallback(async (id) => {
@@ -72,6 +74,21 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
     }
   }, [folderId, refresh]);
 
+  const pickFromDrive = useCallback(async (file) => {
+    if (!folderId || !file?.id) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await driveCopy({ fileId: file.id, folderId, name: file.name });
+      setPickerOpen(false);
+      await refresh(folderId);
+    } catch (ex) {
+      setErr(userMessageFor(ex));
+    } finally {
+      setBusy(false);
+    }
+  }, [folderId, refresh]);
+
   return (
     <div className="card overflow-hidden mt-4">
       <div className="card-header flex items-center justify-between">
@@ -104,6 +121,9 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
               <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy} className="btn-secondary">
                 {busy ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />} Subir archivo
               </button>
+              <button type="button" onClick={() => setPickerOpen(true)} disabled={busy} className="btn-secondary">
+                <FolderInput size={14} /> Agregar desde Drive
+              </button>
               <button type="button" onClick={() => refresh(folderId)} disabled={loading} className="btn-icon text-ink-400" aria-label="Actualizar">
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
@@ -128,6 +148,8 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
 
         {err && <p className="text-sm text-rose-600 mt-2">{err}</p>}
       </div>
+
+      <DrivePickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={pickFromDrive} picking={busy} />
     </div>
   );
 }

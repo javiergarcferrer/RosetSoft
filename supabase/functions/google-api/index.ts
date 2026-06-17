@@ -80,6 +80,7 @@ type Body = {
   driveEnsureRoot?: { name?: string };
   driveCreateFolder?: { name?: string; parentId?: string };
   driveUpload?: { folderId?: string; filename?: string; mimeType?: string; base64?: string };
+  driveCopy?: { fileId?: string; folderId?: string; name?: string };
   driveList?: { folderId?: string };
   driveSearch?: { q?: string; pageSize?: number };
   driveRecent?: { pageSize?: number };
@@ -469,6 +470,21 @@ Deno.serve(async (req) => {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return json({ ok: false, error: d?.error?.message || `Drive ${r.status}` }, 502);
+      return json({ ok: true, id: d.id, name: d.name, url: d.webViewLink || '' });
+    }
+
+    // ── Drive: copy an existing file into a folder ("add from Drive") ────────
+    if (body.driveCopy) {
+      const fileId = String(body.driveCopy.fileId || '').trim();
+      if (!fileId) return json({ ok: false, error: 'Falta el archivo' }, 400);
+      const parents = body.driveCopy.folderId ? [body.driveCopy.folderId] : [(await ensureRoot(admin, token)).id];
+      const meta: Record<string, unknown> = { parents };
+      if (body.driveCopy.name) meta.name = body.driveCopy.name;
+      const d = await driveFetch(token, `${DRIVE}/files/${fileId}/copy?fields=id,name,webViewLink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meta),
+      });
       return json({ ok: true, id: d.id, name: d.name, url: d.webViewLink || '' });
     }
 
