@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -70,6 +71,8 @@ export default function TogoEmbed() {
   const [view, setView] = useState('2d');        // '2d' plan editor | '3d' preview
   const [finishKey, setFinishKey] = useState('lino'); // material editor: surface finish
   const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
+  const [sheet, setSheet] = useState(null);      // mobile bottom sheet: 'pieces' | 'material' | null
+  const [moreOpen, setMoreOpen] = useState(false); // mobile toolbar "⋯ Opciones" popover
   const material = useMemo(() => {
     const f = FINISHES.find((x) => x.key === finishKey) || FINISHES[1];
     return {
@@ -86,6 +89,10 @@ export default function TogoEmbed() {
       .catch((e) => { if (active) setCat({ status: 'error', data: null, error: e?.message || 'Error' }); });
     return () => { active = false; };
   }, []);
+
+  // The material editor only makes sense in 3D (the finish/weave re-skin the
+  // visualizer). Drop back to 2D → close its bottom sheet so it can't dangle.
+  useEffect(() => { if (view !== '3d') setSheet((s) => (s === 'material' ? null : s)); }, [view]);
 
   const data = cat.data;
   const rates = data?.rates || { USD: 1, DOP: 60 };
@@ -255,145 +262,166 @@ export default function TogoEmbed() {
     );
   }
 
+  // Shared building blocks — defined once, rendered in BOTH the desktop layout
+  // and the mobile bottom sheets / docks so screen never drifts from sheet.
+  const piecesList = (
+    <PiecesList models={models} rates={rates} onAdd={(id) => { addPiece(id); setSheet(null); }} />
+  );
+  const materialEditor = (
+    <MaterialEditor finishKey={finishKey} setFinishKey={setFinishKey} weave={weave} setWeave={setWeave} />
+  );
+  const canvas = (
+    <CanvasArea
+      view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById}
+      selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
+      placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
+    />
+  );
+  // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
+  const viewToggle = (
+    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden shrink-0 bg-surface">
+      <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 ${view === '2d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Square size={13} /> 2D</button>
+      <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 border-l border-ink-200 ${view === '3d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Box size={13} /> 3D</button>
+    </div>
+  );
+
   return (
-    <div className="min-h-full bg-surface text-ink-900 p-3 sm:p-4">
-      <header className="flex items-center gap-2.5 mb-3">
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 text-brand-600"><Sofa size={16} /></span>
-        <div className="min-w-0">
-          <h1 className="font-display font-semibold text-base leading-tight truncate">Configura tu Togo</h1>
-          <p className="text-[11px] text-ink-500">Arrastra las piezas, elige tus telas y arma tu sofá · {data.storeName}</p>
+    <div className="min-h-full bg-surface text-ink-900">
+      <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-28 lg:pb-6">
+        <header className="flex items-center gap-2.5 mb-3 sm:mb-4">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 text-brand-600"><Sofa size={16} /></span>
+          <div className="min-w-0">
+            <h1 className="font-display font-semibold text-base sm:text-lg leading-tight truncate">Configura tu Togo</h1>
+            <p className="text-[11px] sm:text-xs text-ink-500 truncate">Arrastra las piezas, elige tus telas y arma tu sofá · {data.storeName}</p>
+          </div>
+        </header>
+
+        {/* ─── DESKTOP (lg+): centered, balanced 3-zone layout ─── pieces rail ·
+            canvas hero · estimate dock. The whole thing is capped to the
+            max-width container above, so it never sprawls edge-to-edge. */}
+        <div className="hidden lg:grid lg:grid-cols-[17rem_minmax(0,1fr)] gap-5 items-start">
+          <aside className="card p-3 space-y-2.5 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-auto">
+            <h2 className="text-xs font-display font-semibold text-ink-700 uppercase tracking-[0.06em]">Piezas</h2>
+            {piecesList}
+          </aside>
+
+          <section className="space-y-5 min-w-0">
+            <div className="card p-3 sm:p-4 space-y-3">
+              {/* Toolbar — view toggle + the configuration-wide actions. */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {viewToggle}
+                  <span className="text-xs text-ink-500 truncate">{view === '3d' ? 'Arrastra para girar · rueda para acercar' : (vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla')}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
+                  <button type="button" onClick={() => setArOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver tu sofá a tamaño real en tu sala (Realidad Aumentada)"><View size={14} /> En tu espacio</button>
+                  <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
+                  <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
+                </div>
+              </div>
+
+              {/* Selected-piece strip — name, fabric, price, size + per-piece actions. */}
+              {selected && selResolved && (
+                <SelectedStrip
+                  selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
+                  svgById={svgById} rates={rates}
+                  onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
+                  onRotate={rotateSel} onDelete={deleteSel}
+                />
+              )}
+
+              {/* Material editor strip — only meaningful in 3D (re-skins the visualizer). */}
+              {view === '3d' && materialEditor}
+
+              {canvas}
+            </div>
+          </section>
         </div>
-      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)] gap-3 items-start">
-        <aside className="rounded-xl border border-ink-200 bg-surface p-2.5 space-y-2">
-          <h2 className="text-xs font-display font-semibold text-ink-700">Piezas</h2>
-          <ul className="grid grid-cols-2 lg:grid-cols-1 gap-2">
-            {models.map((m) => (
-              <li key={m.id}>
-                <button type="button" onClick={() => addPiece(m.id)} className="w-full flex items-center gap-2.5 text-left rounded-lg border border-ink-100 hover:bg-ink-50 p-2 transition-colors">
-                  <span className="shrink-0 w-12 h-12 rounded-md bg-ink-50 text-ink-700 p-1 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[12px] font-medium truncate">{m.name}</span>
-                    <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
-                    {m.priceUsd != null && <span className="block text-[11px] font-medium text-brand-700 tabular-nums">{formatMoney(m.priceUsd, 'DOP', rates)}</span>}
-                  </span>
-                  <Plus size={15} className="shrink-0 text-ink-400" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-
-        <section className="space-y-3 min-w-0">
-          <div className="rounded-xl border border-ink-200 bg-surface p-2.5">
-            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-              <div className="flex items-center gap-2 min-w-0">
-                {/* 2D plan (edit) ⇄ 3D preview (covered in the chosen fabric). */}
-                <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden shrink-0">
-                  <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 ${view === '2d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Square size={13} /> 2D</button>
-                  <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 border-l border-ink-200 ${view === '3d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Box size={13} /> 3D</button>
-                </div>
-                <span className="text-[11px] text-ink-500 hidden sm:inline truncate">{view === '3d' ? 'Arrastra para girar · rueda para acercar' : (vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla')}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
-                <button type="button" onClick={() => setArOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver tu sofá a tamaño real en tu sala (Realidad Aumentada)"><View size={14} /> En tu espacio</button>
-                <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
-                <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
-              </div>
-            </div>
-
-            {/* Selected-piece panel — name, fabric, price, size + per-piece actions. */}
-            {selected && selResolved && (
-              <div className="mb-2 flex flex-wrap items-center gap-3 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2">
-                <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[selected.pieceId] }} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-medium truncate">{selResolved.label}</div>
-                  <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
-                    {selected.material?.code && <ImageView id={null} fallbackUrl={swatchUrl(selected.material.code)} alt="" className="w-3 h-3 rounded-sm object-cover" />}
-                    <span>{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin opciones de tela')}</span>
-                    <span className="text-ink-300">·</span>
-                    <span className="tabular-nums font-medium text-ink-700">{selResolved.unitPrice != null ? formatMoney(selResolved.unitPrice, 'DOP', rates) : 'sin precio'}</span>
-                    <span className="text-ink-400 tabular-nums">· {selResolved.widthCm}×{selResolved.depthCm} cm</span>
+        {/* ─── MOBILE (< lg): canvas is the hero; controls live in dynamic
+            menus (bottom sheets) + a sticky dock so nothing crowds the plan. ─── */}
+        <div className="lg:hidden space-y-3">
+          {/* Compact bar: view toggle + secondary actions folded behind ⋯. */}
+          <div className="flex items-center justify-between gap-2">
+            {viewToggle}
+            <div className="relative">
+              <button type="button" onClick={() => setMoreOpen((v) => !v)} disabled={!vm.count} aria-expanded={moreOpen} className="btn-ghost text-xs disabled:opacity-40" title="Más opciones">
+                <MoreHorizontal size={16} /> Opciones
+              </button>
+              {moreOpen && vm.count > 0 && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} aria-hidden />
+                  <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-ink-200 bg-surface shadow-pop p-1.5 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <button type="button" onClick={() => { setMoreOpen(false); openMaterial('all'); }} className="btn-ghost justify-start text-sm"><Layers size={15} /> Tela a todas</button>
+                    <button type="button" onClick={() => { setMoreOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
+                    <button type="button" onClick={() => { setMoreOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Plano (DXF)</button>
+                    <button type="button" onClick={() => { setMoreOpen(false); setPlaced([]); setSelectedUid(null); }} className="btn-ghost justify-start text-sm text-red-600"><Eraser size={15} /> Vaciar</button>
                   </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {selectedFamily && (
-                    <button type="button" onClick={() => openMaterial('one')} className="btn-ghost text-xs" title="Elegir tela"><Palette size={14} /> Tela</button>
-                  )}
-                  {selected.material && (
-                    <button type="button" onClick={clearFabric} className="btn-ghost text-xs text-ink-500" title="Quitar tela"><X size={14} /></button>
-                  )}
-                  <button type="button" onClick={rotateSel} className="btn-ghost text-xs" title="Rotar"><RotateCw size={14} /></button>
-                  <button type="button" onClick={deleteSel} className="btn-ghost text-xs text-red-600" title="Quitar"><Trash2 size={14} /></button>
-                </div>
-              </div>
-            )}
-
-            {view === '3d' ? (
-              <div className="space-y-2">
-                {/* Material editor — the finish re-skins every piece in the
-                    visualizer live; fabric/colour stay per-piece via the swatch
-                    picker (which also shows on the 2D plan). */}
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink-200 bg-surface px-2.5 py-2">
-                  <span className="text-[11px] font-medium text-ink-600 inline-flex items-center gap-1"><Palette size={13} /> Material</span>
-                  <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
-                    {FINISHES.map((f, i) => (
-                      <button key={f.key} type="button" onClick={() => setFinishKey(f.key)} aria-pressed={finishKey === f.key}
-                        className={`px-2 py-1 text-[11px] ${i ? 'border-l border-ink-200' : ''} ${finishKey === f.key ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}>{f.label}</button>
-                    ))}
-                  </div>
-                  <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-500 ml-1">
-                    Trama
-                    <input type="range" min="1.5" max="5" step="0.5" value={weave} onChange={(e) => setWeave(Number(e.target.value))} className="w-20 accent-brand-500" />
-                  </label>
-                </div>
-                <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[54vh] min-h-[400px] rounded-lg border border-ink-200 overflow-hidden bg-ink-50/40" />
-              </div>
-            ) : (
-            <div className="overflow-auto rounded-lg border border-ink-200 bg-ink-50/40">
-              <div
-                className="relative mx-auto"
-                style={{
-                  width: vm.canvas.wPx, height: vm.canvas.hPx,
-                  backgroundSize: `${50 * SCALE}px ${50 * SCALE}px`,
-                  backgroundImage:
-                    'linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),'
-                    + 'linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)',
-                }}
-                onPointerDown={() => setSelectedUid(null)}
-              >
-                {vm.tiles.map((t) => {
-                  const sel = t.uid === selectedUid;
-                  const code = codeByUid[t.uid];
-                  return (
-                    <div
-                      key={t.uid}
-                      onPointerDown={(e) => onTileDown(e, placed.find((p) => p.uid === t.uid))}
-                      onPointerMove={onTileMove}
-                      onPointerUp={onTileUp}
-                      className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10'].join(' ')}
-                      style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
-                    >
-                      <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
-                      <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: svgById[t.pieceId] }} />
-                      <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
-                        {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
-                        {t.dimsLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                </>
+              )}
             </div>
-            )}
           </div>
 
-          <div className="rounded-xl border border-ink-200 bg-surface p-3 flex flex-wrap items-center justify-between gap-3 sticky bottom-2">
+          {/* The canvas — the hero. Sized large via CanvasArea's mobile heights. */}
+          {canvas}
+
+          {/* Add-piece + Material entries → open the bottom sheets. Material only
+              in 3D (the finish/weave editor has no effect on the 2D plan). */}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setSheet('pieces')} className="btn-primary flex-1 justify-center text-sm">
+              <Plus size={16} /> Agregar pieza
+            </button>
+            {view === '3d' && (
+              <button type="button" onClick={() => setSheet('material')} className="btn-secondary text-sm shrink-0">
+                <Palette size={15} /> Material
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Mobile sticky bottom dock — estimate + the single primary CTA;
+          a contextual selected-piece bar floats just ABOVE it when a piece is
+          picked. Both are mobile-only (lg:hidden); desktop uses its own dock. ─── */}
+      <div className="lg:hidden">
+        {selected && selResolved && (
+          <div className="fixed inset-x-0 bottom-[4.75rem] z-40 px-3 pb-2 pointer-events-none">
+            <div className="pointer-events-auto mx-auto max-w-[1400px]">
+              <SelectedStrip
+                selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
+                svgById={svgById} rates={rates} compact
+                onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
+                onRotate={rotateSel} onDelete={deleteSel}
+              />
+            </div>
+          </div>
+        )}
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/95 backdrop-blur px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto max-w-[1400px] flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
+              <div className="text-lg font-display font-semibold tabular-nums leading-tight">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+              {vm.count > 0 && vm.overallCm.widthCm > 0 && (
+                <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
+              )}
+            </div>
+            <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50 shrink-0">
+              Cotizar <ArrowRight size={15} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Desktop estimate / CTA dock — full container width, at the bottom
+          of the centered container. Sticky so it stays in reach as the canvas
+          grows. ─── */}
+      <div className="hidden lg:block">
+        <div className="mx-auto w-full max-w-[1400px] px-6 pb-6">
+          <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-4">
             <div>
               <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
-              <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
+              <div className="text-xl font-display font-semibold tabular-nums">{formatMoney(vm.subtotalUsd, 'DOP', rates)}</div>
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
                 <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
@@ -402,8 +430,17 @@ export default function TogoEmbed() {
               Solicitar cotización <ArrowRight size={15} />
             </button>
           </div>
-        </section>
+        </div>
       </div>
+
+      {/* ─── Mobile bottom sheets — Piezas (add) and Material (3D finish). ─── */}
+      <BottomSheet open={sheet === 'pieces'} onClose={() => setSheet(null)} title="Agregar pieza">
+        {piecesList}
+      </BottomSheet>
+      <BottomSheet open={sheet === 'material'} onClose={() => setSheet(null)} title="Material">
+        <p className="text-xs text-ink-500 mb-3">El acabado re-viste todas las piezas en el visualizador 3D. La tela y el color se eligen por pieza.</p>
+        {materialEditor}
+      </BottomSheet>
 
       <FabricModal
         open={matOpen}
@@ -418,6 +455,163 @@ export default function TogoEmbed() {
 
       <TogoArViewer open={arOpen} onClose={() => setArOpen(false)} scene3d={scene3d} material={material} storeName={data.storeName} />
     </div>
+  );
+}
+
+/** Vertical list of Togo models (thumbnail · name · dims · price + add button).
+ *  ONE list shared by the desktop pieces rail and the mobile "Agregar pieza"
+ *  sheet, so they can never present a different catalog. */
+function PiecesList({ models, rates, onAdd }) {
+  return (
+    <ul className="space-y-2">
+      {models.map((m) => (
+        <li key={m.id}>
+          <button type="button" onClick={() => onAdd(m.id)} className="w-full flex items-center gap-3 text-left rounded-xl border border-ink-100 hover:bg-ink-50 active:bg-ink-100 p-2.5 transition-colors">
+            <span className="shrink-0 w-14 h-14 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-medium truncate">{m.name}</span>
+              <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
+              {m.priceUsd != null && <span className="block text-[12px] font-medium text-brand-700 tabular-nums">{formatMoney(m.priceUsd, 'DOP', rates)}</span>}
+            </span>
+            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-600"><Plus size={16} /></span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Material editor — surface finish chips (Mate/Lino/Terciopelo/Cuero) + the
+ *  weave/quilt ("Trama") slider. The finish re-skins every piece in the 3D
+ *  visualizer live; fabric/colour stay per-piece via the swatch picker. Shared
+ *  by the desktop strip and the mobile Material sheet. */
+function MaterialEditor({ finishKey, setFinishKey, weave, setWeave }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-surface px-3 py-2.5">
+      <span className="text-[11px] font-medium text-ink-600 inline-flex items-center gap-1"><Palette size={13} /> Material</span>
+      <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
+        {FINISHES.map((f, i) => (
+          <button key={f.key} type="button" onClick={() => setFinishKey(f.key)} aria-pressed={finishKey === f.key}
+            className={`px-2.5 py-1 text-[11px] ${i ? 'border-l border-ink-200' : ''} ${finishKey === f.key ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}>{f.label}</button>
+        ))}
+      </div>
+      <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-500 ml-1">
+        Trama
+        <input type="range" min="1.5" max="5" step="0.5" value={weave} onChange={(e) => setWeave(Number(e.target.value))} className="w-24 accent-brand-500" />
+      </label>
+    </div>
+  );
+}
+
+/** Selected-piece strip — thumbnail, label, fabric swatch, price, dims + the
+ *  per-piece actions (Tela / clear-fabric / rotate / delete). `compact` packs
+ *  it onto one floating row for the mobile contextual bar. */
+function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, onPickFabric, onClearFabric, onRotate, onDelete, compact = false }) {
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border border-brand-200 ${compact ? 'bg-surface shadow-pop' : 'bg-brand-50/50'} px-3 py-2`}>
+      <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[selected.pieceId] }} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium truncate">{selResolved.label}</div>
+        <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
+          {selected.material?.code && <ImageView id={null} fallbackUrl={swatchUrl(selected.material.code)} alt="" className="w-3 h-3 rounded-sm object-cover" />}
+          <span className="truncate">{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin opciones de tela')}</span>
+          <span className="text-ink-300">·</span>
+          <span className="tabular-nums font-medium text-ink-700">{selResolved.unitPrice != null ? formatMoney(selResolved.unitPrice, 'DOP', rates) : 'sin precio'}</span>
+          <span className="text-ink-400 tabular-nums hidden sm:inline">· {selResolved.widthCm}×{selResolved.depthCm} cm</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {selectedFamily && (
+          <button type="button" onClick={onPickFabric} className="btn-ghost text-xs" title="Elegir tela"><Palette size={14} /><span className="hidden sm:inline"> Tela</span></button>
+        )}
+        {selected.material && (
+          <button type="button" onClick={onClearFabric} className="btn-icon text-ink-500" title="Quitar tela"><X size={15} /></button>
+        )}
+        <button type="button" onClick={onRotate} className="btn-icon" title="Rotar"><RotateCw size={15} /></button>
+        <button type="button" onClick={onDelete} className="btn-icon text-red-600" title="Quitar"><Trash2 size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
+/** The canvas — the visual hero. 3D visualizer (TogoScene3D, covered in the
+ *  chosen fabric/finish) OR the top-down 2D plan with draggable tiles. The 2D
+ *  plan is a FIXED cm-sized canvas at SCALE px/cm (the drag math divides pointer
+ *  deltas by SCALE) — it is NEVER rescaled; on small screens it lives in an
+ *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
+function CanvasArea({ view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed, onTileDown, onTileMove, onTileUp }) {
+  if (view === '3d') {
+    return <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
+  }
+  return (
+    <div className="overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]">
+      <div
+        className="relative mx-auto"
+        style={{
+          width: vm.canvas.wPx, height: vm.canvas.hPx,
+          backgroundSize: `${50 * SCALE}px ${50 * SCALE}px`,
+          backgroundImage:
+            'linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),'
+            + 'linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)',
+        }}
+        onPointerDown={() => setSelectedUid(null)}
+      >
+        {vm.tiles.map((t) => {
+          const sel = t.uid === selectedUid;
+          const code = codeByUid[t.uid];
+          return (
+            <div
+              key={t.uid}
+              onPointerDown={(e) => onTileDown(e, placed.find((p) => p.uid === t.uid))}
+              onPointerMove={onTileMove}
+              onPointerUp={onTileUp}
+              className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10'].join(' ')}
+              style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
+            >
+              <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
+              <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: svgById[t.pieceId] }} />
+              <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
+                {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
+                {t.dimsLabel}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Mobile bottom sheet — a `fixed inset-x-0 bottom-0 rounded-t-2xl` panel that
+ *  slides up over a dimmed backdrop. Portaled to <body> (like Modal) so an
+ *  ancestor `transform`/`opacity` can't re-base its `position: fixed` or tint
+ *  it. Tap the backdrop or the X to dismiss; body scroll locks while open. Used
+ *  for the Piezas and Material menus so the controls never crowd the canvas. */
+function BottomSheet({ open, onClose, title, children }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [open, onClose]);
+  if (!open || typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-150" onClick={onClose} aria-hidden />
+      <div className="relative w-full max-w-lg bg-surface shadow-pop border-x border-t border-ink-100/60 rounded-t-2xl max-h-[82vh] flex flex-col pb-[env(safe-area-inset-bottom)] animate-in slide-in-from-bottom-4 duration-200">
+        <div className="pt-3 pb-1 flex justify-center" aria-hidden>
+          <div className="w-10 h-[3px] rounded-full bg-ink-200" />
+        </div>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-ink-100">
+          <h2 className="font-display text-base font-semibold text-ink-900 leading-snug pr-3 min-w-0">{title}</h2>
+          <button onClick={onClose} className="btn-icon -mr-1.5 text-ink-400 hover:text-ink-600 hover:bg-ink-100" aria-label="Cerrar"><X size={18} aria-hidden /></button>
+        </div>
+        <div className="overflow-y-auto overscroll-contain px-4 py-4 flex-1 min-w-0">{children}</div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
