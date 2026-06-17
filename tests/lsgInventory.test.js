@@ -52,13 +52,15 @@ import { ShopifyAccessDeniedError } from '../supabase/functions/shopify-sync/sto
 // read_locations), so we can pin the graceful degradation to the lean query.
 //
 // The post-set storefront-visibility reconcile is also driven here: a
-// `product(id:)` read answers with { status: productStatus, totalInventory }
-// and the `productUpdate` mutation is recorded. `productStatus`/`totalInventory`
-// (default ACTIVE/10 → no flip) shape the visibility scenario; `denyProductWrite`
-// makes productUpdate raise ShopifyAccessDeniedError (token without write_products).
+// `product(id:)` read answers with { status, variants→inventoryItem→levels of
+// `available` } and the `productUpdate` mutation is recorded. The decision is
+// summed from the variants' inventory-LEVEL available (NOT product.totalInventory,
+// which lags) — `productAvailable`/`productStatus`/`productTracked` (default
+// 10/ACTIVE/true → no flip) shape the scenario; `denyProductWrite` makes
+// productUpdate raise ShopifyAccessDeniedError (token without write_products).
 function makeGql({
   mutationUserErrors = [], onHand = 10, denyLocationFields = false,
-  productStatus = 'ACTIVE', totalInventory = 10, productUpdateUserErrors = [], denyProductWrite = false,
+  productStatus = 'ACTIVE', productAvailable = 10, productTracked = true, productUpdateUserErrors = [], denyProductWrite = false,
 } = {}) {
   const calls = { mutation: null, denied: 0, productUpdates: [], statusReads: 0 };
   const L = (id, isActive, online, q) => ({ id, isActive, online, q });
@@ -87,7 +89,9 @@ function makeGql({
     }
     if (query.includes('product(id:')) {
       calls.statusReads++;
-      return { product: { status: productStatus, totalInventory } };
+      return { product: { status: productStatus, variants: { nodes: [
+        { inventoryItem: { tracked: productTracked, inventoryLevels: { nodes: [{ quantities: [{ name: 'available', quantity: productAvailable }] }] } } },
+      ] } } };
     }
     if (query.includes('productUpdate')) {
       if (denyProductWrite) throw new ShopifyAccessDeniedError('alcoversrl.myshopify.com', 'productUpdate');
@@ -231,7 +235,7 @@ test('no-op inputs never hit the network', async () => {
 /* --------------------- storefront visibility (out of stock → draft) --------------------- */
 
 test('out of stock → DRAFT: a sale that empties a product hides it from the storefront', async () => {
-  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'ACTIVE', totalInventory: 0 });
+  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'ACTIVE', productAvailable: 0 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: -1 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, true);
   assert.equal(res.drafted, 1);
@@ -244,7 +248,7 @@ test('out of stock → DRAFT: a sale that empties a product hides it from the st
 });
 
 test('restock → ACTIVE: a revert that brings a drafted product back republishes it', async () => {
-  const { gql, calls } = makeGql({ onHand: 0, productStatus: 'DRAFT', totalInventory: 3 });
+  const { gql, calls } = makeGql({ onHand: 0, productStatus: 'DRAFT', productAvailable: 3 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: 3 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, true);
   assert.equal(res.republished, 1);
@@ -253,7 +257,7 @@ test('restock → ACTIVE: a revert that brings a drafted product back republishe
 });
 
 test('idempotent: already DRAFT + still out of stock → no productUpdate (no updated_at churn)', async () => {
-  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'DRAFT', totalInventory: 0 });
+  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'DRAFT', productAvailable: 0 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: -1 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, true);
   assert.equal(res.drafted, 0);
@@ -262,9 +266,27 @@ test('idempotent: already DRAFT + still out of stock → no productUpdate (no up
   assert.equal(calls.productUpdates.length, 0); // …but writes nothing
 });
 
+test('restock decision uses inventory-LEVEL available (lag-free), so a republish lands the same push', async () => {
+  // The bug a revert hit: product.totalInventory lagged at 0 right after the
+  // restock, so the piece stayed DRAFT with stock. We sum the variants' level
+  // `available` (here 1, freshly consistent) → DRAFT → ACTIVE in the same push.
+  const { gql, calls } = makeGql({ onHand: 0, productStatus: 'DRAFT', productAvailable: 1 });
+  const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: 1 }], { idempotencyKey: 'k' });
+  assert.equal(res.republished, 1);
+  assert.deepEqual(calls.productUpdates[0].product, { id: 'gid://shopify/Product/111', status: 'ACTIVE' });
+});
+
+test('an untracked product is left alone (no tracked variant → visibility untouched)', async () => {
+  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'ACTIVE', productTracked: false, productAvailable: 0 });
+  const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: -1 }], { idempotencyKey: 'k' });
+  assert.equal(res.ok, true);
+  assert.equal(res.drafted, 0);
+  assert.equal(calls.productUpdates.length, 0);
+});
+
 test('ARCHIVED / UNLISTED products are never touched by the visibility flip', async () => {
   for (const productStatus of ['ARCHIVED', 'UNLISTED']) {
-    const { gql, calls } = makeGql({ onHand: 1, productStatus, totalInventory: 0 });
+    const { gql, calls } = makeGql({ onHand: 1, productStatus, productAvailable: 0 });
     const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: -1 }], { idempotencyKey: 'k' });
     assert.equal(res.ok, true, productStatus);
     assert.equal(res.drafted, 0, productStatus);
@@ -273,7 +295,7 @@ test('ARCHIVED / UNLISTED products are never touched by the visibility flip', as
 });
 
 test('missing write_products degrades: stock still lands, visibility flip surfaced as a note (not fatal)', async () => {
-  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'ACTIVE', totalInventory: 0, denyProductWrite: true });
+  const { gql, calls } = makeGql({ onHand: 1, productStatus: 'ACTIVE', productAvailable: 0, denyProductWrite: true });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: -1 }], { idempotencyKey: 'k' });
   // The stock change still succeeded and is reported applied — the ledger advances.
   assert.equal(res.adjusted, 1);
@@ -287,7 +309,7 @@ test('missing write_products degrades: stock still lands, visibility flip surfac
 });
 
 test('the visibility flip runs once per PRODUCT, deduped across multiple lines', async () => {
-  const { gql, calls } = makeGql({ onHand: 5, productStatus: 'ACTIVE', totalInventory: 0 });
+  const { gql, calls } = makeGql({ onHand: 5, productStatus: 'ACTIVE', productAvailable: 0 });
   // Two lines of the SAME product (variant 111) → one set batch, one status read.
   const res = await adjustLsgInventory(
     gql,
@@ -300,7 +322,7 @@ test('the visibility flip runs once per PRODUCT, deduped across multiple lines',
 });
 
 test('a visibility flip is skipped on a failed stock set (out.adjusted 0 → no status calls)', async () => {
-  const { gql, calls } = makeGql({ mutationUserErrors: [{ field: ['input'], message: 'boom' }], productStatus: 'ACTIVE', totalInventory: 0 });
+  const { gql, calls } = makeGql({ mutationUserErrors: [{ field: ['input'], message: 'boom' }], productStatus: 'ACTIVE', productAvailable: 0 });
   const res = await adjustLsgInventory(gql, [{ productId: 'lsg-111', delta: -1 }], { idempotencyKey: 'k' });
   assert.equal(res.ok, false);
   assert.equal(calls.statusReads, 0);

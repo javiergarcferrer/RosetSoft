@@ -102,7 +102,10 @@ async function applyLocalMirror(applied) {
     try {
       const p = await db.products.get(id);
       if (!p || p.stockQty == null) continue;
-      await db.products.update(id, { stockQty: Number(p.stockQty) + delta, updatedAt: Date.now() });
+      // Floor at 0 — Shopify's on_hand is floored too (lsgInventory), so a
+      // negative mirror is never real; it only made the gate read a nonsense
+      // "-1". The 15-min cron reconciles the absolute figure regardless.
+      await db.products.update(id, { stockQty: Math.max(0, Number(p.stockQty) + delta), updatedAt: Date.now() });
     } catch {
       /* best-effort — the cron reconciles the absolute figure anyway */
     }

@@ -45,9 +45,9 @@
 //
 // STOREFRONT VISIBILITY — after the stock change lands, reconcile each touched
 // product's status to its on-hand reality: a product left with nothing sellable
-// (totalInventory <= 0) is switched to DRAFT so the storefront stops offering a
-// piece that physically left the floor; a product a restock (revert/cancel)
-// brought back above zero is re-published to ACTIVE. STRICTLY along the
+// (variants' available <= 0) is switched to DRAFT so the storefront stops
+// offering a piece that physically left the floor; a product a restock
+// (revert/cancel) brought back above zero is re-published to ACTIVE. STRICTLY along the
 // ACTIVE↔DRAFT axis — an ARCHIVED or UNLISTED product is left exactly as the
 // dealer set it. Idempotent (reads status, writes only on a real transition) and
 // best-effort (a missing write_products scope or a transport error is surfaced
@@ -119,6 +119,32 @@ interface ResolvedVariant {
   inventoryItem: InvItem | null;
 }
 
+interface ProductVisibility {
+  status: string;
+  variants: {
+    nodes: { inventoryItem: { tracked: boolean; inventoryLevels: { nodes: InvLevel[] } | null } | null }[];
+  } | null;
+}
+
+/** A product's sellable units, summed from its variants' inventory-LEVEL
+ *  `available` quantities (strongly consistent — see reconcileProductStatus on
+ *  why not product.totalInventory). Returns null when NO variant is inventory-
+ *  tracked, so an untracked product's storefront visibility is left untouched. */
+function productSellable(p: ProductVisibility): number | null {
+  let tracked = false;
+  let available = 0;
+  for (const v of p.variants?.nodes ?? []) {
+    const item = v.inventoryItem;
+    if (!item?.tracked) continue;
+    tracked = true;
+    for (const lvl of item.inventoryLevels?.nodes ?? []) {
+      const q = (lvl.quantities || []).find((x) => x.name === 'available');
+      available += Number(q?.quantity) || 0;
+    }
+  }
+  return tracked ? available : null;
+}
+
 /** The variant→inventory-item query. `rich` selects the read_locations-gated
  *  location fields used for accurate targeting; the lean form omits them so the
  *  push survives on read_inventory alone when read_locations isn't on the token.
@@ -145,10 +171,19 @@ function variantQuery(rich: boolean): string {
 /**
  * After the stock change lands, reconcile each touched product's storefront
  * visibility to its on-hand reality — the "out of stock → draft" safeguard.
- * Hide a product with nothing sellable (totalInventory <= 0) by switching it to
- * DRAFT; re-publish (ACTIVE) one a restock brought back above zero. STRICTLY on
- * the ACTIVE↔DRAFT axis: an ARCHIVED or UNLISTED product is left as the dealer
- * set it (we never un-archive or override a deliberate listing choice).
+ * Hide a product with nothing sellable by switching it to DRAFT; re-publish
+ * (ACTIVE) one a restock brought back above zero. STRICTLY on the ACTIVE↔DRAFT
+ * axis: an ARCHIVED or UNLISTED product is left as the dealer set it (we never
+ * un-archive or override a deliberate listing choice).
+ *
+ * Sellable is summed from the variants' inventory-LEVEL `available` quantities,
+ * NOT `product.totalInventory`: that rollup is EVENTUALLY consistent, so right
+ * after a restock write it can still read the stale pre-restock value and leave
+ * the product wrongly stuck in DRAFT (the exact bug a revert hit — stock back to
+ * 1 but the piece never re-published). The inventory-level quantities are
+ * derived from the on_hand we just wrote and are strongly consistent on the very
+ * next read, so the flip decision matches the change that triggered it.
+ *
  * Idempotent — reads the current status and writes only on a real transition, so
  * it doesn't churn updated_at (which the catalog cron syncs on). Best-effort and
  * NON-fatal: a transport error or a missing write_products scope is returned as a
@@ -165,13 +200,28 @@ async function reconcileProductStatus(
   for (const id of productGids) {
     if (scopeDenied) break;
     try {
-      const p = (await gql<{ product: { status: string; totalInventory: number | null } | null }>(
-        `query($id: ID!) { product(id: $id) { status totalInventory } }`,
+      const p = (await gql<{ product: ProductVisibility | null }>(
+        `query($id: ID!) {
+          product(id: $id) {
+            status
+            variants(first: 50) {
+              nodes {
+                inventoryItem {
+                  tracked
+                  inventoryLevels(first: 10) {
+                    nodes { quantities(names: ["available"]) { name quantity } }
+                  }
+                }
+              }
+            }
+          }
+        }`,
         { id },
       )).product;
-      // totalInventory null ⇒ inventory not tracked → leave visibility alone.
-      if (!p || p.totalInventory == null) continue;
-      const sellable = Number(p.totalInventory) || 0;
+      if (!p) continue;
+      const sellable = productSellable(p);
+      // null ⇒ no tracked variant → inventory isn't managed here; leave visibility.
+      if (sellable == null) continue;
       let target: 'DRAFT' | 'ACTIVE' | null = null;
       if (sellable <= 0 && p.status === 'ACTIVE') target = 'DRAFT';
       else if (sellable > 0 && p.status === 'DRAFT') target = 'ACTIVE';
