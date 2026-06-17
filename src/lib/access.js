@@ -89,6 +89,21 @@ const ADMIN_GROUP = {
 
 const ACCOUNTING_GROUP = { label: 'Contabilidad', items: accountingSectionNav };
 
+// The slice of the CRM an accounting user gets, sitting ABOVE the Contabilidad
+// centers in their sidebar: quoting + the clients they quote for. They're not
+// sellers (no Togo/Pedidos/Comisiones) — they price the deal and keep the
+// books. The quote builder picks/creates a customer inline, so the Clientes
+// page is there to manage the full customer record (RNC, address) the invoice
+// needs, not as a hard dependency of quoting. Label-less on purpose so the
+// cluster doesn't read as a second "Ventas" beside the accounting Ventas center
+// just below it.
+const ACCOUNTING_SALES_GROUP = {
+  items: [
+    { to: '/quotes', label: 'Cotizaciones', icon: FileText },
+    { to: '/customers', label: 'Clientes', icon: Users },
+  ],
+};
+
 const CONFIG_GROUP = {
   items: [
     {
@@ -106,12 +121,13 @@ const CONFIG_GROUP = {
 /**
  * The unified sidebar for a role. ONE structure; the role reveals its slice:
  *   • employee   — Inicio + CRM + Comisiones (their own).
- *   • accounting — the Contabilidad centers (commissions live in its Ventas tab).
+ *   • accounting — quoting + clients (ACCOUNTING_SALES_GROUP), then the
+ *                  Contabilidad centers below.
  *   • admin      — everything, both cores, in one place.
  * `team` is the shared settings row, not a human, so it gets nothing.
  */
 export function navForRole(role, { accountingOpen = true } = {}) {
-  if (role === 'accounting') return [{ items: accountingSectionNav }];
+  if (role === 'accounting') return [ACCOUNTING_SALES_GROUP, { items: accountingSectionNav }];
   if (role === 'admin') {
     // Nested children (Materiales, Integraciones, Usuarios) always live in the
     // structure — the sidebar reveals them per-route via the `children`

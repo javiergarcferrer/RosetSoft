@@ -77,6 +77,9 @@ export const ACCOUNTING_SECTIONS = [
  */
 export const QUICK_CREATE = [
   { group: 'Clientes', items: [
+    // Front of the sales funnel — the quote precedes the factura. Lands on the
+    // draft quote builder (the same target as every "Nueva cotización" button).
+    { label: 'Cotización', to: '/quotes/new' },
     { label: 'Factura', to: '/accounting/facturacion' },
     { label: 'Cobro', to: '/accounting/cuentas?new=in' },
   ] },
