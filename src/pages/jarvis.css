@@ -255,53 +255,6 @@
 /* In-flight probe (a response to pressing Diagnóstico). */
 .jv-int-row.is-scanning .idot { color: var(--jv-scan); }
 
-/* ── uplink console ──────────────────────────────────────────────────── */
-.jv-console {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  line-height: 1.6;
-}
-.jv-console .row { padding: 0.3rem 0; display: flex; gap: 0.6rem; align-items: baseline; }
-.jv-console .who { flex: none; font-size: 0.7rem; padding-top: 0.1rem; }
-.jv-console .who.user { color: var(--jv-muted); }
-.jv-console .who.claude { color: var(--jv-accent); }
-.jv-console .body { white-space: pre-wrap; word-break: break-word; color: var(--jv-fg); }
-/* Streaming caret — appears only while a reply is arriving (event-driven). */
-.jv-caret {
-  display: inline-block;
-  width: 0.55em;
-  height: 1em;
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  background: var(--jv-accent);
-  animation: jv-blink 1s steps(1) infinite;
-}
-@keyframes jv-blink {
-  50% { opacity: 0; }
-}
-
-.jv-input {
-  width: 100%;
-  background: #000;
-  border: 1px solid var(--jv-border);
-  border-radius: 6px;
-  color: var(--jv-fg);
-  font-size: 0.875rem;
-  padding: 0.5rem 0.75rem;
-  min-height: 2.25rem;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.jv-input:focus {
-  border-color: var(--jv-accent);
-  box-shadow: 0 0 0 3px rgba(82, 168, 255, 0.25);
-}
-.jv-input::placeholder { color: var(--jv-faint); }
-/* ≥16px on small screens so iOS Safari doesn't auto-zoom the console. */
-@media (max-width: 640px) {
-  .jv-input { font-size: 1rem; }
-}
-
 /* ── buttons — ghost by default, solid for the primary action ────────── */
 .jv-btn {
   display: inline-flex;
@@ -346,6 +299,15 @@
 }
 .jv-feed .tag.commit { color: var(--jv-muted); }
 .jv-feed .tag.deploy { color: var(--jv-accent); }
+/* Movimientos feed — clickable asiento rows + source-coded tags. */
+.jv-feed .item.jv-feed-link { border-radius: 4px; transition: background-color 0.15s ease; }
+.jv-feed .item.jv-feed-link:hover { background: rgba(255, 255, 255, 0.04); }
+.jv-feed .tag.src-sale { color: var(--jv-success); }
+.jv-feed .tag.src-payment { color: var(--jv-accent); }
+.jv-feed .tag.src-expense,
+.jv-feed .tag.src-purchase,
+.jv-feed .tag.src-import { color: var(--jv-warning); }
+.jv-feed .tag.src-payroll { color: var(--jv-scan); }
 
 /* ── stat counters ───────────────────────────────────────────────────── */
 .jv-stat b {
@@ -789,7 +751,6 @@
   .jv-col-center > section,
   .jv-col-right > section { flex: 1 1 0; min-height: 0; }
   .jv-col-center > section.jv-lead { flex: 1.35 1 0; }        /* pulse leads */
-  .jv-col-right > .jv-console-panel { flex: 1.4 1 0; }        /* console gets room */
 
   /* Sistemas: glance panels stay intrinsic; the integration list takes the
      slack and scrolls — so the board fits one screen with no page scroll. */
@@ -872,9 +833,8 @@
 .jv-header, .jv-grid { position: relative; z-index: 1; }
 
 /* A panel that hosts a scrolling body becomes a flex column so its `.jv-fill`
-   body takes the slack and scrolls while the header (and any input) stays put. */
-.jv-flex-panel,
-.jv-console-panel { display: flex; flex-direction: column; min-height: 0; }
+   body takes the slack and scrolls while the header stays put. */
+.jv-flex-panel { display: flex; flex-direction: column; min-height: 0; }
 .jv-fill { min-height: 0; }
 
 /* ── LOCK: from a half-screen window up, the page stops scrolling — the grid
@@ -893,7 +853,6 @@
   .jv-col-center > section { flex: 1 1 0; min-height: 0; }
   .jv-col-center > section.jv-lead { flex: 1.5 1 0; }
   .jv-col-right > section { flex: 1 1 0; min-height: 0; }
-  .jv-col-right > .jv-console-panel { flex: 1.45 1 0; }
 
   /* Bodies flex to fill their panel and scroll only themselves. */
   .jv-fill { flex: 1 1 0; overflow-y: auto; }
@@ -983,9 +942,8 @@
   100% { transform: translateY(100vh); opacity: 0; }
 }
 
-/* ── HUD corner brackets on the hero panels (reactor + console) ────────── */
-.jv-reactor::before, .jv-reactor::after,
-.jv-console-panel::before, .jv-console-panel::after {
+/* ── HUD corner brackets on the reactor (the hero panel) ───────────────── */
+.jv-reactor::before, .jv-reactor::after {
   content: '';
   position: absolute;
   width: 14px;
@@ -994,13 +952,13 @@
   opacity: 0.55;
   z-index: 2;
 }
-.jv-reactor::before, .jv-console-panel::before {
+.jv-reactor::before {
   top: 6px;
   right: 6px;
   border-top: 1px solid var(--jv-accent);
   border-right: 1px solid var(--jv-accent);
 }
-.jv-reactor::after, .jv-console-panel::after {
+.jv-reactor::after {
   bottom: 6px;
   left: 6px;
   border-bottom: 1px solid var(--jv-accent);
@@ -1032,13 +990,7 @@
 }
 @keyframes jv-sweep { to { transform: rotate(360deg); } }
 
-/* The command console reads as a terminal: a faint accent glow on focus. */
-.jv-console-panel .jv-input:focus {
-  box-shadow: 0 0 0 3px rgba(82, 168, 255, 0.25), 0 0 18px rgba(82, 168, 255, 0.18);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .jv-caret { animation: none; }
   .jv-gauge .value { transition: none; }
   .jv-funnel-row .bar i { transition: none; }
   .jv-skeleton { animation: none; }

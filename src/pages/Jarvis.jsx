@@ -2,17 +2,16 @@ import { userMessageFor } from '../lib/errorMessages.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity, Bot, CalendarClock, Command, Cpu, FileText, Inbox, KeyRound,
+  Activity, BookOpen, CalendarClock, Command, Cpu, FileText, Inbox,
   LayoutDashboard, Megaphone, MessageSquare, Package, RefreshCw, Satellite,
-  Send, Share2, ShieldAlert, TrendingUp, Users, Wallet, X, Zap,
+  Share2, ShieldAlert, TrendingUp, Users, Wallet, X, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { db, newId } from '../db/database.js';
+import { db } from '../db/database.js';
 import { supabase } from '../db/supabaseClient.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import {
   resolveIntegrationBoard,
-  resolveUplinkFeed,
   resolveActivityFeed,
   resolveBusinessPulse,
   resolveOpsFeed,
@@ -50,6 +49,13 @@ const BUILD = (() => {
   }
 })();
 
+// Journal-entry source → a short Spanish tag for the Movimientos feed.
+const ENTRY_SOURCE = {
+  manual: 'Manual', sale: 'Venta', expense: 'Gasto', purchase: 'Compra',
+  payment: 'Pago', import: 'Importación', opening: 'Apertura', payroll: 'Nómina',
+  adjustment: 'Ajuste', depreciation: 'Depreciación', fx: 'Cambio', tax: 'Impuestos', gateway: 'Pasarela',
+};
+
 /** Animated count-up for the stat strip. */
 function useCountUp(target, ms = 900) {
   const [value, setValue] = useState(0);
@@ -67,29 +73,6 @@ function useCountUp(target, ms = 900) {
     return () => cancelAnimationFrame(raf);
   }, [target, ms]);
   return value;
-}
-
-/** Typewriter reveal for the newest Claude transmission. */
-function TypeLine({ text }) {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    setN(0);
-    if (!text) return undefined;
-    const iv = setInterval(() => {
-      setN((v) => {
-        if (v >= text.length) { clearInterval(iv); return v; }
-        return v + 2;
-      });
-    }, 18);
-    return () => clearInterval(iv);
-  }, [text]);
-  const done = n >= (text || '').length;
-  return (
-    <span className="body">
-      {(text || '').slice(0, n)}
-      {!done && <span className="jv-caret" />}
-    </span>
-  );
 }
 
 function StatusChip({ status, label }) {
@@ -232,6 +215,9 @@ export default function Jarvis() {
     return () => clearInterval(iv);
   }, []);
 
+  // Agent telemetry rows (Claude Code activity/deploy notes) — the "Cambios en
+  // vigor" feed interleaves these with the baked-in commit log. `tick` refreshes
+  // them across devices.
   const { data: messages } = useLiveQueryStatus(
     () => db.claudeMessages.where('profileId').equals(profileId || '').toArray(),
     [profileId, tick],
@@ -240,7 +226,7 @@ export default function Jarvis() {
 
   // The business rows themselves (not just counts) — the pulse panel and the
   // ops feed project honest figures straight from them. `tick` keeps them
-  // fresh across devices, same as the uplink thread.
+  // fresh across devices.
   const { data: biz, loaded: bizLoaded } = useLiveQueryStatus(
     async () => {
       const scope = profileId || '';
@@ -375,83 +361,6 @@ export default function Jarvis() {
     setScanning(false);
   }, [scanning, profileId, refreshSettings, setProbe]);
 
-  // ── uplink console ───────────────────────────────────────────────────
-  // With a Claude API key linked, the console is a LIVE channel: claude-chat
-  // (Edge Function) relays the message to the Claude API and persists both
-  // turns server-side. Without a key, messages queue as pending directives.
-  const claudeLinked = !!settings?.claudeConnectedAt;
-  const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
-  const [uplinkError, setUplinkError] = useState(null);
-  const consoleEndRef = useRef(null);
-  const draftInputRef = useRef(null);
-
-  const transmit = useCallback(async () => {
-    const content = draft.trim();
-    if (!content || sending) return;
-    setSending(true);
-    setUplinkError(null);
-    try {
-      if (claudeLinked) {
-        const { data, error } = await supabase.functions.invoke('claude-chat', {
-          body: { message: content },
-        });
-        if (error) throw new Error(error.message || 'Sin respuesta del enlace');
-        if (data?.configured === false || data?.ok === false || data?.error) {
-          throw new Error(data?.error || 'El enlace no respondió');
-        }
-        setDraft('');
-        // Both turns were written server-side — pull them in now.
-        setTick((t) => t + 1);
-      } else {
-        await db.claudeMessages.put({
-          id: newId(),
-          profileId: profileId || 'team',
-          role: 'user',
-          kind: 'directive',
-          content,
-          status: 'pending',
-          meta: {},
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
-        setDraft('');
-      }
-    } catch (e) {
-      setUplinkError(userMessageFor(e));
-    } finally {
-      setSending(false);
-    }
-  }, [draft, sending, profileId, claudeLinked]);
-
-  // One-time key link: the RPC writes the write-only claude_config table and
-  // stamps settings.claudeConnectedAt (the UI mirror). OPTIONAL — the channel
-  // works without it as a directive queue answered by Claude Code sessions
-  // (the existing subscription); the key only buys instant in-app replies.
-  const [showKeyForm, setShowKeyForm] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState(null);
-  const linkClaude = useCallback(async () => {
-    const key = apiKey.trim();
-    if (!key || linking) return;
-    setLinking(true);
-    setLinkError(null);
-    try {
-      const { error } = await supabase.rpc('save_claude_config', {
-        p_api_key: key,
-        p_model: 'claude-opus-4-8',
-      });
-      if (error) throw new Error(error.message);
-      setApiKey('');
-      await refreshSettings();
-    } catch (e) {
-      setLinkError(userMessageFor(e));
-    } finally {
-      setLinking(false);
-    }
-  }, [apiKey, linking, refreshSettings]);
-
   // ── Meta social (Instagram + Facebook + Ads) ─────────────────────────
   // Linked via the meta-social Edge Function (the token never reaches the
   // browser); once linked, the panel pulls one consolidated snapshot.
@@ -493,7 +402,7 @@ export default function Jarvis() {
   // horizontal swipe is the enhancement. An IntersectionObserver keeps the
   // active tab synced to whichever board is centered (more robust than
   // scroll-position math), and only arms on mobile so desktop pays nothing.
-  const MOBILE_BOARDS = ['Negocio', 'Sistemas', 'Enlace'];
+  const MOBILE_BOARDS = ['Negocio', 'Sistemas', 'Actividad'];
   const gridRef = useRef(null);
   const [activeBoard, setActiveBoard] = useState(0);
   // While a pager-tap smooth scroll animates, suppress the observer so the
@@ -544,26 +453,16 @@ export default function Jarvis() {
   useKeyboardShortcut('mod+k', () => setPaletteOpen((v) => !v), { ignoreInInput: false });
   const paletteActions = useMemo(() => [
     { id: 'diag', icon: Zap, label: 'Ejecutar diagnóstico', hint: 'integraciones', run: runDiagnostics },
-    {
-      id: 'transmit',
-      icon: Send,
-      label: 'Transmitir directiva a Claude',
-      hint: 'enlace',
-      run: () => draftInputRef.current?.focus(),
-    },
-    ...(!claudeLinked ? [{
-      id: 'key',
-      icon: KeyRound,
-      label: 'Vincular llave API (respuestas al instante)',
-      hint: 'opcional',
-      run: () => setShowKeyForm(true),
-    }] : []),
     { id: 'dash', icon: LayoutDashboard, label: 'Ir al Dashboard', hint: '/', run: () => navigate('/') },
     { id: 'quotes', icon: FileText, label: 'Ir a Cotizaciones', hint: '/quotes', run: () => navigate('/quotes') },
     { id: 'orders', icon: Package, label: 'Ir a Pedidos', hint: '/orders', run: () => navigate('/orders') },
     { id: 'customers', icon: Users, label: 'Ir a Clientes', hint: '/customers', run: () => navigate('/customers') },
+    { id: 'accounting', icon: Wallet, label: 'Ir a Contabilidad', hint: '/accounting', run: () => navigate('/accounting/dashboard') },
+    { id: 'ledger', icon: BookOpen, label: 'Ir al Diario contable', hint: '/accounting/ledger', run: () => navigate('/accounting/ledger') },
+    { id: 'whatsapp', icon: MessageSquare, label: 'Ir a WhatsApp', hint: '/chats', run: () => navigate('/chats') },
+    { id: 'marketing', icon: Share2, label: 'Ir a Marketing', hint: '/marketing', run: () => navigate('/marketing') },
     { id: 'exit', icon: X, label: 'Salir de JARVIS', hint: 'esc', run: () => navigate('/') },
-  ], [claudeLinked, navigate, runDiagnostics]);
+  ], [navigate, runDiagnostics]);
 
   // ── projections ──────────────────────────────────────────────────────
   const now = clock.getTime();
@@ -575,7 +474,6 @@ export default function Jarvis() {
     [settings, probes, now],
   );
   const integrity = useMemo(() => systemIntegrity(board), [board]);
-  const thread = useMemo(() => resolveUplinkFeed(messages), [messages]);
   const activity = useMemo(
     () => resolveActivityFeed({ commits: BUILD.log || [], messages, now }),
     [messages, now],
@@ -689,12 +587,6 @@ export default function Jarvis() {
     [deadlines, finDash, shipments, followUps, comms, nowMin],
   );
 
-  useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [thread.length]);
-
-  const pendingCount = thread.filter((m) => m.role === 'user' && m.status === 'pending').length;
-  const lastClaudeId = [...thread].reverse().find((m) => m.role === 'claude')?.id;
   const integrityShown = useCountUp(integrity);
   const nQuotes = useCountUp(biz.quotes.length);
   const nOrders = useCountUp(biz.orders.length);
@@ -1394,122 +1286,32 @@ export default function Jarvis() {
             </div>
           </section>
 
-          {/* ── Claude uplink — the command line, inside the right rail ── */}
-          <section className="jv-panel jv-console-panel">
-        <div className="jv-panel-head justify-between">
-          <span className="flex items-center gap-2"><Bot size={12} /> Enlace Claude</span>
-          <span style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>
-            {claudeLinked
-              ? `Canal en vivo · ${settings?.claudeModel || 'claude-opus-4-8'} responde al instante`
-              : pendingCount
-                ? `${pendingCount} directiva${pendingCount > 1 ? 's' : ''} en cola — Claude Code las atiende en su próxima sesión`
-                : 'Canal asíncrono — Claude Code atiende las directivas con tu cuenta actual, sin llave API'}
-          </span>
-        </div>
-        <div className="jv-console jv-fill p-4 overflow-y-auto">
-          {thread.length === 0 && (
-            <div className="row">
-              <span className="who claude">claude</span>
-              <span className="body" style={{ color: 'var(--jv-muted)' }}>
-                {claudeLinked
-                  ? 'Canal en vivo. Pregunta lo que necesites — respondo al instante.'
-                  : 'Canal establecido. Transmite una directiva — queda registrada aquí y Claude Code la recoge en su próxima sesión, con tu cuenta actual. No requiere llave API.'}
-              </span>
+          {/* ── Movimientos contables — the live ledger feed (recent asientos:
+              ventas, gastos, pagos, nómina…), straight from finDash.recent
+              (resolveJournal), each row deep-linking into the diario. ── */}
+          <section className="jv-panel jv-flex-panel">
+            <div className="jv-panel-head justify-between">
+              <span className="flex items-center gap-2"><BookOpen size={12} /> Movimientos contables</span>
+              <Link to="/accounting/ledger" style={{ color: 'var(--jv-faint)', fontWeight: 400 }}>Ver diario →</Link>
             </div>
-          )}
-          {thread.map((m) => (
-            <div key={m.id} className="row">
-              <span className={`who ${m.role === 'claude' ? 'claude' : 'user'}`}>
-                {m.role === 'claude' ? 'claude' : 'tú'}
-              </span>
-              {m.role === 'claude' && m.id === lastClaudeId
-                ? <TypeLine text={m.content} />
-                : <span className="body">{m.content}</span>}
-              {m.role === 'user' && (
-                <span className="ml-auto flex-none">
-                  <StatusChip
-                    status={m.status === 'done' ? 'online' : m.status === 'seen' ? 'scanning' : 'standby'}
-                    label={m.status === 'done' ? 'Hecho' : m.status === 'seen' ? 'En curso' : 'En cola'}
-                  />
-                </span>
+            <div className="jv-feed jv-fill jv-mono p-3 overflow-y-auto">
+              {!finLoaded && [0, 1, 2, 3].map((i) => (
+                <div key={i} className="item"><Skeleton w={`${82 - i * 12}%`} h="0.6rem" /></div>
+              ))}
+              {finDash?.recent?.map(({ entry, debit }) => (
+                <Link key={entry.id} to="/accounting/ledger" className="item jv-feed-link" title={entry.memo || ''}>
+                  <span className={`tag src-${entry.source || 'manual'}`}>{ENTRY_SOURCE[entry.source] || entry.source || '—'}</span>
+                  <span style={{ color: 'var(--jv-fg)' }}>{entry.memo || '—'}</span>
+                  <span className="ml-auto flex-none" style={{ color: 'var(--jv-muted)' }}>{formatDop(debit)}</span>
+                </Link>
+              ))}
+              {finLoaded && !finDash?.recent?.length && (
+                <div className="text-xs py-2" style={{ color: 'var(--jv-muted)' }}>
+                  Sin asientos registrados todavía.
+                </div>
               )}
             </div>
-          ))}
-          {sending && claudeLinked && (
-            <div className="row">
-              <span className="who claude">claude</span>
-              <span className="body" style={{ color: 'var(--jv-muted)' }}>
-                procesando<span className="jv-caret" />
-              </span>
-            </div>
-          )}
-          <div ref={consoleEndRef} />
-        </div>
-        {!claudeLinked && (
-          <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
-            {!showKeyForm ? (
-              <button
-                type="button"
-                className="jv-btn"
-                style={{ minHeight: '1.8rem', fontSize: '0.72rem' }}
-                onClick={() => setShowKeyForm(true)}
-              >
-                <KeyRound size={12} /> Respuestas al instante (opcional, llave API)
-              </button>
-            ) : (
-              <>
-                <div className="jv-kicker mb-2">Enlace en vivo — opcional</div>
-                <p className="text-xs mb-2" style={{ color: 'var(--jv-muted)' }}>
-                  Tu suscripción de Claude no incluye acceso a la API: las respuestas al
-                  instante dentro de la app requieren una llave API de Anthropic (pago por
-                  uso). Sin llave, el canal funciona igual como cola de directivas.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    className="jv-input"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-ant-…  (llave API de Anthropic)"
-                    autoComplete="new-password"
-                    spellCheck={false}
-                  />
-                  <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={linkClaude} disabled={!apiKey.trim() || linking}>
-                    {linking ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />} Vincular
-                  </button>
-                </div>
-                {linkError && (
-                  <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{linkError}</div>
-                )}
-                <p className="text-xs mt-2" style={{ color: 'var(--jv-muted)' }}>
-                  La llave se guarda en una tabla de solo escritura (como WhatsApp y Shopify) y nunca llega al navegador.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-        <div className="p-3 border-t" style={{ borderColor: 'var(--jv-border)' }}>
-          <div className="flex gap-2">
-            <input
-              ref={draftInputRef}
-              className="jv-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') transmit(); }}
-              placeholder={claudeLinked
-                ? 'Transmitir a Claude — p. ej. «¿cómo va la tasa hoy?» o «registra: filtro por marca en el catálogo»'
-                : 'Transmitir directiva — p. ej. «agrega filtro por marca al catálogo»; Claude Code la atiende'}
-              maxLength={2000}
-            />
-            <button type="button" className="jv-btn jv-btn-primary flex-none" onClick={transmit} disabled={!draft.trim() || sending}>
-              <Send size={12} /> Transmitir
-            </button>
-          </div>
-          {uplinkError && (
-            <div className="text-xs mt-2" style={{ color: 'var(--jv-danger)' }}>{uplinkError}</div>
-          )}
-        </div>
-      </section>
+          </section>
         </div>
       </div>
 
