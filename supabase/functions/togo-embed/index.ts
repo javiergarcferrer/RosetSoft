@@ -148,6 +148,11 @@ async function buildCatalog(admin: Admin): Promise<Row> {
       root,
       family,                                                  // { root, name, graded, grades, byGrade } | null
       offeredFabricKeys: root ? (offeredByRoot.get(root) || []) : [],
+      // Real 3D model (a dealer-uploaded mesh in the public togo-models bucket);
+      // null ⇒ the configurator draws the procedural Togo.
+      mesh: m.mesh_url
+        ? { url: String(m.mesh_url), scale: Number(m.mesh_scale) || null, upAxis: (m.mesh_up_axis as string) || 'y', rotateY: Number(m.mesh_rotate_y) || 0 }
+        : null,
     };
   });
   return {

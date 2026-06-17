@@ -120,6 +120,7 @@ export default function TogoEmbed() {
         id: m.id, label: m.name, widthCm: m.widthCm, depthCm: m.depthCm,
         unitPrice: m.priceUsd, root: m.family?.root || m.root || null,
         offeredKeys: m.offeredFabricKeys || [],
+        mesh: m.mesh || null,
       };
     }
     return o;

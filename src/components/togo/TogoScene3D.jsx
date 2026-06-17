@@ -59,10 +59,12 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
     const sd = sceneRef.current || { pieces: [], overallCm: { widthCm: 0, depthCm: 0 } };
     // Preload the distinct fabric swatches as textures (CORS via swatch-proxy)…
     const codes = [...new Set((sd.pieces || []).map((p) => p.fabricCode).filter(Boolean))];
-    // …and any REAL Togo models wired for the pieces in play (none → procedural).
-    // Deduped by URL so two pieces sharing a model load it once.
+    // …and any REAL Togo models for the pieces in play (none → procedural). A
+    // dealer-uploaded mesh (piece.mesh, from Storage) wins over the static
+    // manifest; deduped by URL so two pieces sharing a model load it once.
+    const descFor = (p) => ((p.mesh && p.mesh.url) ? p.mesh : glbForPiece(p));
     const descByUrl = new Map();
-    for (const p of (sd.pieces || [])) { const d = glbForPiece(p); if (d?.url) descByUrl.set(d.url, d); }
+    for (const p of (sd.pieces || [])) { const d = descFor(p); if (d?.url) descByUrl.set(d.url, d); }
     await Promise.all([
       ...codes.map(async (code) => {
         if (l.texCache.has(code)) return;
@@ -88,7 +90,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       ...(finishRef.current || {}),
       normalMap: l.quilt,
       textureFor: (c) => { const t = l.texCache.get(c); return t ? t.clone() : null; },
-      modelFor: (piece) => { const d = glbForPiece(piece); return d ? (l.modelCache.get(d.url) || null) : null; },
+      modelFor: (piece) => { const d = descFor(piece); return d ? (l.modelCache.get(d.url) || null) : null; },
     });
     l.scene.add(l.group);
     // Frame the camera once the first pieces appear; keep the viewpoint after.

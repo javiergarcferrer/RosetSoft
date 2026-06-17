@@ -1440,6 +1440,14 @@ export interface TogoModel {
   /** Converted top-down plan markup (stroke=currentColor), rendered inline. */
   svg: string;
   sortOrder?: number;
+  /** Real 3D model file (public Storage URL) uploaded in Modelos — when set, the
+   *  configurator renders it instead of the procedural geometry. */
+  meshUrl?: string | null;
+  /** Mesh fixups: scale = drawing units → cm (null ⇒ auto-fit to footprint);
+   *  upAxis 'y' (default) | 'z' (CAD Z-up); rotateY in degrees. */
+  meshScale?: number | null;
+  meshUpAxis?: string | null;
+  meshRotateY?: number | null;
   active?: boolean;
   createdAt?: number;
   updatedAt?: number;

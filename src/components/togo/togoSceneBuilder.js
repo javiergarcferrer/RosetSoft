@@ -104,7 +104,7 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
  * descriptor's unit scale + axis/facing fixups, then recentre on XZ and sit it
  * on the floor — so the export's own origin/scale/up-axis don't matter.
  */
-function placeRealModel(THREE, object, material, desc, pieceGroup) {
+function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
   const clone = object.clone(true);
   clone.traverse((o) => {
     if (o.isMesh) {
@@ -118,12 +118,24 @@ function placeRealModel(THREE, object, material, desc, pieceGroup) {
   });
   if (desc?.upAxis === 'z') clone.rotation.x = -Math.PI / 2;       // CAD Z-up → three Y-up
   if (desc?.rotateY) clone.rotation.y += (desc.rotateY * Math.PI) / 180;
-  clone.scale.setScalar(desc?.scale || 1);                          // drawing units → cm
 
   const wrap = new THREE.Group();
   wrap.add(clone);
   wrap.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(wrap);
+  let box = new THREE.Box3().setFromObject(wrap);
+  // Scale: an explicit unit scale (drawing units → cm), else AUTO-FIT the largest
+  // horizontal extent to the piece's footprint so an upload "just works" without
+  // the dealer knowing whether it was exported in mm, cm or metres.
+  let scale = Number(desc?.scale) || 0;
+  if (!(scale > 0)) {
+    const size = box.getSize(new THREE.Vector3());
+    const modelMax = Math.max(size.x, size.z) || size.y || 1;
+    const footMax = Math.max(Number(piece?.widthCm) || 0, Number(piece?.depthCm) || 0) || modelMax;
+    scale = footMax / modelMax;
+  }
+  clone.scale.multiplyScalar(scale);
+  wrap.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(wrap);
   const c = box.getCenter(new THREE.Vector3());
   wrap.position.x -= c.x;
   wrap.position.z -= c.z;
@@ -150,7 +162,7 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
     const material = makeFabricMaterial(THREE, textureFor(piece.fabricCode), opts);
     const real = modelFor(piece);
     if (real && real.object) {
-      placeRealModel(THREE, real.object, material, real.desc, pieceGroup);
+      placeRealModel(THREE, real.object, material, real.desc, piece, pieceGroup);
     } else {
       for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
         let mesh;

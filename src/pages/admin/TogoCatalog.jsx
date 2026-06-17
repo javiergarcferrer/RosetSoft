@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { Sofa, Upload, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2 } from 'lucide-react';
+import { Sofa, Upload, UploadCloud, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2, Box } from 'lucide-react';
 import { togoEmbedSnippet, togoEmbedUrl } from '../../lib/togoEmbed.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
+import { uploadTogoMesh, removeTogoMesh } from '../../db/togoMeshUpload.js';
 import { groupFamilies } from '../../lib/catalog.js';
 import { resolveTogoModelCards, togoPickerFamilies } from '../../core/quote/index.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
@@ -256,6 +257,29 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
     if (pending != null && (card.productRoot || '') === pending) setPending(null);
   }, [card.productRoot, pending]);
 
+  // Real 3D model upload (overrides the procedural geometry in the configurator).
+  const [meshBusy, setMeshBusy] = useState(false);
+  const [meshErr, setMeshErr] = useState(null);
+  const onMeshFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    setMeshBusy(true); setMeshErr(null);
+    try {
+      const prev = card.meshUrl;
+      const url = await uploadTogoMesh(file);
+      await db.togoModels.update(card.id, { meshUrl: url, meshScale: null, meshUpAxis: card.meshUpAxis || 'y', meshRotateY: card.meshRotateY || 0, updatedAt: Date.now() });
+      if (prev) removeTogoMesh(prev);
+    } catch (err) { setMeshErr(err?.message || 'No se pudo subir el modelo 3D.'); }
+    finally { setMeshBusy(false); }
+  };
+  const removeMesh = async () => {
+    const prev = card.meshUrl;
+    await db.togoModels.update(card.id, { meshUrl: null, updatedAt: Date.now() });
+    if (prev) removeTogoMesh(prev);
+  };
+  const toggleAxis = () => db.togoModels.update(card.id, { meshUpAxis: card.meshUpAxis === 'z' ? 'y' : 'z', updatedAt: Date.now() });
+  const ACCEPT_3D = '.fbx,.glb,.gltf,.obj,.dae,.3ds';
+
   const openPicker = () => { onNeedCatalog(); setEditing(true); };
   const bind = async (val) => {
     setPending(val);
@@ -321,6 +345,29 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
           </button>
         </div>
       )}
+
+      {/* Real 3D model — a pCon mesh export (FBX/GLB/…). When set, the
+          configurator renders it instead of the procedural Togo. */}
+      <div className="border-t border-ink-100 pt-2 space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`min-w-0 text-[10px] inline-flex items-center gap-1 ${card.meshUrl ? 'text-emerald-600' : 'text-ink-400'}`}>
+            <Box size={11} className="shrink-0" /> {card.meshUrl ? 'Modelo 3D cargado' : 'Geometría generada'}
+          </span>
+          <div className="flex items-center gap-1 shrink-0">
+            {card.meshUrl && (
+              <button type="button" onClick={toggleAxis} className="btn-ghost text-[11px]" title="Si el modelo aparece acostado, cambia el eje vertical">Eje {card.meshUpAxis === 'z' ? 'Z' : 'Y'}</button>
+            )}
+            <label className="btn-ghost text-[11px] cursor-pointer">
+              {meshBusy ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />} {card.meshUrl ? 'Reemplazar' : 'Subir 3D'}
+              <input type="file" accept={ACCEPT_3D} className="hidden" onChange={onMeshFile} disabled={meshBusy} />
+            </label>
+            {card.meshUrl && (
+              <button type="button" onClick={removeMesh} className="text-ink-400 hover:text-red-600 p-1" title="Quitar modelo 3D"><Trash2 size={13} /></button>
+            )}
+          </div>
+        </div>
+        {meshErr && <div className="text-[10px] text-red-600 inline-flex items-start gap-1"><AlertCircle size={11} className="mt-0.5 shrink-0" /> {meshErr}</div>}
+      </div>
     </div>
   );
 }

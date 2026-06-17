@@ -55,6 +55,9 @@ export function resolveTogoModelCards(models, families) {
         familyName: fam?.name || null,
         graded: !!fam?.graded,
         gradeCount: fam?.graded ? fam.grades.length : 0,
+        meshUrl: m.meshUrl || null,
+        meshUpAxis: m.meshUpAxis || 'y',
+        meshRotateY: m.meshRotateY || 0,
       };
     });
 }
@@ -108,6 +111,7 @@ export function resolveTogoModels(models, products) {
       id: m.id, label: m.name, name, reference, subtype,
       widthCm: m.widthCm, depthCm: m.depthCm, root: m.productRoot || null,
       unitPrice, dimensions: dimensions || `${m.widthCm}×${m.depthCm} cm`,
+      mesh: m.meshUrl ? { url: m.meshUrl, scale: m.meshScale ?? null, upAxis: m.meshUpAxis || 'y', rotateY: m.meshRotateY || 0 } : null,
     };
   }
   return { families, activeModels, resolvedById, svgById };
@@ -327,6 +331,7 @@ export function scenePlacementsFromPlaced(placed, resolvedById) {
       x: p.x, y: p.y, rot: p.rot,
       widthCm: Number(r.widthCm) || 0, depthCm: Number(r.depthCm) || 0,
       label: r.label || r.name || 'Togo', fabricCode: p.material?.code || r.code || '',
+      mesh: r.mesh || null,
     };
   });
 }
@@ -373,6 +378,7 @@ export function resolveTogoScene(placements) {
     z: +(pcy - cy).toFixed(2),
     rotationDeg: rot,
     fabricCode: p.fabricCode || '',
+    mesh: p.mesh || null,
   }));
   return {
     count: pieces.length,
