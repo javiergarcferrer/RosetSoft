@@ -76,6 +76,10 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
     sheen: opts.sheen ?? 0.5,
     sheenRoughness: opts.sheenRoughness ?? 0.55,
     sheenColor: new THREE.Color(opts.sheenColor ?? 0xffffff),
+    // A thin clearcoat lobe for coated finishes (leather) — off by default so
+    // matte/cloth finishes pay nothing. Layers on top of the sheen.
+    clearcoat: opts.clearcoat ?? 0,
+    clearcoatRoughness: opts.clearcoatRoughness ?? 0.4,
     envMapIntensity: opts.envMapIntensity ?? 1.05,
   });
   if (tex) {

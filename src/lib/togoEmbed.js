@@ -13,9 +13,14 @@ export function togoEmbedUrl() {
   return `${origin}/#/embed/togo`;
 }
 
+// The device-capability grants the in-widget "Ver en tu espacio" (WebAR) needs
+// to reach the camera + motion sensors from inside a (cross-origin) iframe.
+// Without these on the host's <iframe>, AR Quick Look / WebXR is blocked.
+export const TOGO_EMBED_ALLOW = 'xr-spatial-tracking; camera; gyroscope; accelerometer; magnetometer; fullscreen';
+
 /** The `<iframe>` snippet the dealer pastes into their website. */
 export function togoEmbedSnippet() {
-  return `<iframe src="${togoEmbedUrl()}" width="100%" height="760" style="border:0;border-radius:12px" title="Configurador Togo" loading="lazy"></iframe>`;
+  return `<iframe src="${togoEmbedUrl()}" width="100%" height="760" style="border:0;border-radius:12px" title="Configurador Togo" loading="lazy" allow="${TOGO_EMBED_ALLOW}" allowfullscreen></iframe>`;
 }
 
 function endpoint() {

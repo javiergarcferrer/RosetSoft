@@ -4,7 +4,7 @@ import { Inbox, Boxes, ExternalLink, Copy, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
-import { togoEmbedUrl, togoEmbedSnippet } from '../lib/togoEmbed.js';
+import { togoEmbedUrl, togoEmbedSnippet, TOGO_EMBED_ALLOW } from '../lib/togoEmbed.js';
 import TogoIcon from '../lib/icons/TogoIcon.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import TogoRequests from './TogoRequests.jsx';
@@ -127,6 +127,8 @@ function TogoLivePreview() {
           title="Configurador Togo — vista en vivo"
           className="w-full bg-white border-0 block h-[78vh] min-h-[560px]"
           loading="lazy"
+          allow={TOGO_EMBED_ALLOW}
+          allowFullScreen
         />
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -14,6 +14,7 @@ import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
 import TogoScene3D from '../../components/togo/TogoScene3D.jsx';
+import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
 
@@ -25,7 +26,7 @@ const FINISHES = [
   { key: 'mate', label: 'Mate', roughness: 0.95, sheen: 0.12, sheenRoughness: 0.85 },
   { key: 'lino', label: 'Lino', roughness: 0.82, sheen: 0.5, sheenRoughness: 0.55 },
   { key: 'terciopelo', label: 'Terciopelo', roughness: 0.6, sheen: 1.0, sheenRoughness: 0.3 },
-  { key: 'cuero', label: 'Cuero', roughness: 0.4, sheen: 0.08, sheenRoughness: 0.4 },
+  { key: 'cuero', label: 'Cuero', roughness: 0.4, sheen: 0.08, sheenRoughness: 0.4, clearcoat: 0.5, clearcoatRoughness: 0.35 },
 ];
 
 /**
@@ -64,13 +65,18 @@ export default function TogoEmbed() {
   const [selectedUid, setSelectedUid] = useState(null);
   const [step, setStep] = useState('build'); // 'build' | 'form' | 'done'
   const [matOpen, setMatOpen] = useState(false);
+  const [arOpen, setArOpen] = useState(false);   // "Ver en tu espacio" (WebAR)
   const [matMode, setMatMode] = useState('one'); // 'one' (selected piece) | 'all'
   const [view, setView] = useState('2d');        // '2d' plan editor | '3d' preview
   const [finishKey, setFinishKey] = useState('lino'); // material editor: surface finish
   const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
   const material = useMemo(() => {
     const f = FINISHES.find((x) => x.key === finishKey) || FINISHES[1];
-    return { roughness: f.roughness, sheen: f.sheen, sheenRoughness: f.sheenRoughness, repeat: weave, normalScale: 1.0 };
+    return {
+      roughness: f.roughness, sheen: f.sheen, sheenRoughness: f.sheenRoughness,
+      clearcoat: f.clearcoat ?? 0, clearcoatRoughness: f.clearcoatRoughness ?? 0.4,
+      repeat: weave, normalScale: 1.0,
+    };
   }, [finishKey, weave]);
 
   useEffect(() => {
@@ -292,6 +298,7 @@ export default function TogoEmbed() {
               </div>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
+                <button type="button" onClick={() => setArOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver tu sofá a tamaño real en tu sala (Realidad Aumentada)"><View size={14} /> En tu espacio</button>
                 <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
                 <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
               </div>
@@ -408,6 +415,8 @@ export default function TogoEmbed() {
         currentGrade={matMode === 'all' ? undefined : selected?.material?.grade}
         currentFabric={matMode === 'all' ? undefined : selected?.material?.fabric}
       />
+
+      <TogoArViewer open={arOpen} onClose={() => setArOpen(false)} scene3d={scene3d} material={material} storeName={data.storeName} />
     </div>
   );
 }

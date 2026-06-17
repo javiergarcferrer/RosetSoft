@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { glbFor } from '../../assets/togo/togoModels3d.js';
@@ -47,6 +47,7 @@ const DEFAULT_FINISH = { sheen: 0.6, sheenRoughness: 0.55, roughness: 0.82, repe
 export default function TogoScene3D({ scene3d, material, autoRotate = true, className = '' }) {
   const mountRef = useRef(null);
   const api = useRef(null);          // three objects, kept across renders
+  const [failed, setFailed] = useState(false);  // WebGL/three unavailable → fallback
   const sceneRef = useRef(scene3d);
   sceneRef.current = scene3d;
   const finishRef = useRef(material);
@@ -118,6 +119,8 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       if ('roughness' in m) m.roughness = f.roughness;
       if ('sheen' in m) m.sheen = f.sheen;
       if ('sheenRoughness' in m) m.sheenRoughness = f.sheenRoughness;
+      if ('clearcoat' in m) m.clearcoat = f.clearcoat ?? 0;
+      if ('clearcoatRoughness' in m) m.clearcoatRoughness = f.clearcoatRoughness ?? 0.4;
       if (m.normalScale) m.normalScale.set(f.normalScale, f.normalScale);
       if (m.map) m.map.repeat.set(rep, rep);
     });
@@ -137,7 +140,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
           safeDynamicImport(() => import('three/examples/jsm/environments/RoomEnvironment.js')),
           safeDynamicImport(() => import('three/examples/jsm/geometries/RoundedBoxGeometry.js')),
         ]);
-      } catch { return; }
+      } catch { if (alive) setFailed(true); return; }
       const mount = mountRef.current;
       if (!alive || !mount) return;
       const [THREE, { OrbitControls }, { RoomEnvironment }, { RoundedBoxGeometry }] = mods;
@@ -146,7 +149,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
 
       let renderer;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
-      catch { return; }
+      catch { if (alive) setFailed(true); return; }
       renderer.setSize(w, h);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.shadowMap.enabled = true;
@@ -237,5 +240,14 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
   useEffect(() => { if (api.current) rebuild(); }, [scene3d, rebuild]);
   useEffect(() => { if (api.current) reskin(); }, [material, reskin]);
 
-  return <div ref={mountRef} className={className} aria-label="Vista 3D de la configuración Togo" />;
+  return (
+    <div className={`relative ${className}`} aria-label="Vista 3D de la configuración Togo">
+      <div ref={mountRef} className="absolute inset-0" />
+      {failed && (
+        <div className="absolute inset-0 grid place-items-center text-center px-6 text-xs text-ink-500">
+          La vista 3D no está disponible en este dispositivo. Usa la vista 2D para diseñar tu sofá.
+        </div>
+      )}
+    </div>
+  );
 }
