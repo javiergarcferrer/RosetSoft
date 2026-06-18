@@ -107,16 +107,15 @@ test('resolveTogoScene recentres the layout on the origin with the right overall
 });
 
 test('togoMeshFit pins 2D↔3D parity: an uploaded mesh fills its plan tile at the Togo height', () => {
-  // A settee mesh measured 174(W)×72(H)×102(D) onto a 174×102 tile → identity.
+  // A settee mesh measured 174(W)×72(H)×102(D) onto a 174×102 tile → identity,
+  // so a correctly-proportioned model is NOT distorted.
   let f = togoMeshFit({ x: 174, y: 72, z: 102 }, 174, 102, 72);
-  assert.equal(f.rotate90, false);
   assert.ok(Math.abs(f.sx - 1) < 1e-6 && Math.abs(f.sy - 1) < 1e-6 && Math.abs(f.sz - 1) < 1e-6);
 
-  // Same mesh exported SIDEWAYS (footprint 102×174) onto the 174×102 tile → it
-  // auto-rotates 90°, then fills the tile EXACTLY instead of being squashed.
-  f = togoMeshFit({ x: 102, y: 72, z: 174 }, 174, 102, 72);
-  assert.equal(f.rotate90, true);
-  assert.ok(Math.abs(f.sx - 1) < 1e-6 && Math.abs(f.sz - 1) < 1e-6, 'fills the tile after the 90°');
+  // The footprint lands EXACTLY on the tile (the location fix): a mesh 0.5×/2×
+  // off in plan still ends up widthCm×depthCm so its edges line up with the plan.
+  f = togoMeshFit({ x: 87, y: 72, z: 204 }, 174, 102, 72);
+  assert.ok(Math.abs(f.sx * 87 - 174) < 1e-6 && Math.abs(f.sz * 204 - 102) < 1e-6);
 
   // Height ALWAYS normalises to the Togo height — every uploaded piece, any
   // footprint, comes out the same height (the bug where settees towered).
@@ -129,6 +128,5 @@ test('togoMeshFit pins 2D↔3D parity: an uploaded mesh fills its plan tile at t
 
   // No footprint (untracked) → uniform scale by height, never NaN.
   f = togoMeshFit({ x: 80, y: 36, z: 80 }, 0, 0, 72);
-  assert.equal(f.rotate90, false);
   assert.ok(Math.abs(f.sx - f.sy) < 1e-9 && Math.abs(f.sy - f.sz) < 1e-9 && Math.abs(f.sy * 36 - 72) < 1e-6);
 });
