@@ -4,22 +4,35 @@ import { formatDop } from '../../lib/format.js';
 import { ecfTypeLabel } from '../../lib/accounting/ecf.js';
 
 export interface InvoiceItem { name: string; qty: number; unitPrice: number; amount: number; }
+export interface InvoicePayment { date?: number | null; method: string; reference?: string; amount: number; }
 export interface InvoiceDocumentProps {
   emisor: { name: string; rnc?: string; address?: string; phone?: string; email?: string };
   comprador?: { name?: string; rnc?: string } | null;
   ecfType: string;
   eNcf: string;
+  /** Header label override: an e-CF type label, or a plain "Factura de venta". */
+  docLabel?: string;
   fechaEmision: number;
   items: InvoiceItem[];
   gravado: number;
   itbis: number;
   total: number;
   itbisRate?: number;
+  /** Payment activity (deposit + cobros), dated; renders a "Pagos registrados" block. */
+  payments?: InvoicePayment[];
+  amountPaid?: number;
+  balanceDue?: number;
   securityCode?: string;
   /** PNG data URL of the e-CF QR (built in generate.tsx). */
   qrDataUrl?: string;
   logoDataUrl?: string;
 }
+
+const dmy = (ms?: number | null) => {
+  if (ms == null) return '';
+  const d = new Date(ms);
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+};
 
 const st = StyleSheet.create({
   page: { fontFamily: 'Lausanne', fontSize: FS.body, color: C.ink, padding: MARGIN },
@@ -46,6 +59,15 @@ const st = StyleSheet.create({
   totRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
   totLabel: { fontSize: fs(9.5), color: C.inkMid },
   totVal: { fontSize: fs(9.5) },
+  payWrap: { marginTop: 18 },
+  payRow: { flexDirection: 'row', paddingVertical: 3.5, borderBottomWidth: 0.5, borderBottomColor: C.inkLine },
+  pDate: { width: 80, fontSize: fs(8.5), color: C.inkMid },
+  pMethod: { flex: 1, fontSize: fs(8.5) },
+  pAmount: { width: 100, textAlign: 'right', fontSize: fs(8.5) },
+  payTot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
+  payTotLabel: { fontSize: fs(9.5), color: C.inkMid },
+  payTotVal: { fontSize: fs(9.5), fontWeight: 'bold' },
+  balVal: { fontSize: fs(9.5), fontWeight: 'bold', color: C.brand700 },
   band: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.bandInk, height: 38, paddingHorizontal: 12, marginTop: 8 },
   bandLabel: { fontFamily: 'Sohne', fontSize: fs(8), color: C.bandCream, letterSpacing: 1.5 },
   bandVal: { fontSize: fs(15), fontWeight: 'bold', color: C.white },
@@ -61,11 +83,15 @@ const money = (v: number) => formatDop(v);
 
 export function InvoiceDocument(props: InvoiceDocumentProps) {
   const { emisor, comprador, ecfType, eNcf, items, gravado, itbis, total, itbisRate = 18, securityCode, qrDataUrl } = props;
+  const payments = props.payments || [];
+  const amountPaid = props.amountPaid ?? 0;
+  const balanceDue = props.balanceDue ?? 0;
+  const docLabel = props.docLabel || `${ecfTypeLabel(ecfType)} (e-CF ${ecfType})`;
   const date = new Date(props.fechaEmision);
   const dateStr = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
 
   return (
-    <Document title={`Factura ${eNcf}`}>
+    <Document title={`Factura ${eNcf || comprador?.name || ''}`.trim()}>
       <Page size={[PAGE.width, PAGE.height]} style={st.page}>
         <View style={st.headerRow}>
           <View>
@@ -75,8 +101,8 @@ export function InvoiceDocument(props: InvoiceDocumentProps) {
             {(emisor.phone || emisor.email) ? <Text style={st.meta}>{[emisor.phone, emisor.email].filter(Boolean).join(' · ')}</Text> : null}
           </View>
           <View style={st.docBox}>
-            <Text style={st.docType}>{ecfTypeLabel(ecfType)} (e-CF {ecfType})</Text>
-            <Text style={st.encf}>{eNcf}</Text>
+            <Text style={st.docType}>{docLabel}</Text>
+            {eNcf ? <Text style={st.encf}>{eNcf}</Text> : null}
             <Text style={st.date}>Fecha: {dateStr}</Text>
           </View>
         </View>
@@ -111,6 +137,21 @@ export function InvoiceDocument(props: InvoiceDocumentProps) {
             <Text style={st.bandVal}>{money(total)}</Text>
           </View>
         </View>
+
+        {payments.length ? (
+          <View style={st.payWrap}>
+            <Text style={st.blockLabel}>Pagos registrados</Text>
+            {payments.map((pay, i) => (
+              <View key={i} style={st.payRow}>
+                <Text style={st.pDate}>{dmy(pay.date)}</Text>
+                <Text style={st.pMethod}>{[pay.method, pay.reference].filter(Boolean).join(' · ')}</Text>
+                <Text style={st.pAmount}>{money(pay.amount)}</Text>
+              </View>
+            ))}
+            <View style={st.payTot}><Text style={st.payTotLabel}>Pagado</Text><Text style={st.payTotVal}>{money(amountPaid)}</Text></View>
+            <View style={st.payTot}><Text style={st.payTotLabel}>Balance pendiente</Text><Text style={st.balVal}>{money(balanceDue)}</Text></View>
+          </View>
+        ) : null}
 
         {qrDataUrl ? (
           <View style={st.qrRow}>

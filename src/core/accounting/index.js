@@ -37,6 +37,7 @@ export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from './lrSales.js';
 export { buildSaleEntry, buildCreditNoteEntry, depositApplied } from '../../lib/accounting/sale.js';
+export { resolveInvoiceDoc } from './invoiceDoc.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)
 export { resolveInventory, resolveItemKardex } from './inventory.js';

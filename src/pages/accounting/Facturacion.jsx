@@ -22,7 +22,7 @@ import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, isValidFiscalId,
-  ecfQrUrl, formatEcfDate, parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename,
+  parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -127,6 +127,7 @@ export default function Facturacion() {
   }, [linesQ.data]);
   const postedQuoteIds = useMemo(() => new Set(postingsQ.data.map((p) => p.quoteId).filter(Boolean)), [postingsQ.data]);
   const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
+  const quotesById = useMemo(() => new Map(quotesQ.data.map((q) => [q.id, q])), [quotesQ.data]);
   const [transmitting, setTransmitting] = useState(null);
   const [checking, setChecking] = useState(null);
   const [printing, setPrinting] = useState(null);
@@ -136,11 +137,12 @@ export default function Facturacion() {
   const [printDoc, setPrintDoc] = useState(null);   // { blob, title } | null
   async function printInvoice(rowId) {
     const p = postingById.get(rowId);
-    if (!p || !p.ncf) return;
+    if (!p) return;
     setErr('');
-    const isEcf = /^E\d{2}/.test(p.ncf);
-    // The representación impresa of an e-CF MUST carry the timbre (QR +
-    // código de seguridad), which only exists after signing — transmit first.
+    // A signed e-CF's representación impresa MUST carry the timbre (QR + código
+    // de seguridad), which only exists after signing — transmit first. A plain
+    // sale (no e-NCF) prints fine without it.
+    const isEcf = /^E\d{2}/.test(p.ncf || '');
     if (isEcf && !p.securityCode) {
       setErr(`Transmite ${p.ncf} a la DGII antes de imprimir — la representación impresa requiere el timbre (QR).`);
       return;
@@ -148,25 +150,13 @@ export default function Facturacion() {
     setPrinting(rowId);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
-      const qrUrl = (isEcf && p.securityCode) ? ecfQrUrl({
-        environment: settings?.ecfEnvironment || 'cert', ecfType: p.ecfType || '31',
-        rncEmisor: cleanRnc(settings?.companyRnc), rncComprador: p.rnc, eNcf: p.ncf,
-        total: p.total, fechaEmision: formatEcfDate(p.postedAt),
-        fechaFirma: p.fechaFirma || '', securityCode: p.securityCode,
-      }) : '';
-      const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
-      const blob = await mod.generateInvoicePdf({
-        emisor: {
-          name: settings?.companyName || '', rnc: cleanRnc(settings?.companyRnc),
-          address: settings?.companyAddress, phone: settings?.companyPhone, email: settings?.companyEmail,
-        },
-        comprador: { name: customer?.name, rnc: p.rnc },
-        ecfType: p.ecfType || '31', eNcf: p.ncf, fechaEmision: p.postedAt,
-        items: [{ name: `Venta ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
-        gravado: p.base, itbis: p.itbis, total: p.total, itbisRate: config.itbisRate,
-        securityCode: p.securityCode, qrUrl,
+      const quote = p.quoteId ? quotesById.get(p.quoteId) : null;
+      const props = resolveInvoiceDoc({
+        posting: p, customer, quote, payments: paymentsQ.data, settings, config,
       });
-      setPrintDoc({ blob, title: `Factura ${p.ncf}` });
+      const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
+      const blob = await mod.generateInvoicePdf(props);
+      setPrintDoc({ blob, title: `Factura ${p.ncf || customer?.name || ''}`.trim() });
     } catch (e) {
       setErr(userMessageFor(e));
     } finally {
