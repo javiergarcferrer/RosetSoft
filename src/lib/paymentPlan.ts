@@ -40,6 +40,10 @@ export interface PaymentPlanInstallment {
   amount: number;
   /** Outstanding financed balance AFTER this cuota, USD (last row ⇒ 0). */
   balanceAfter: number;
+  /** Custom-mode only: this stage's share of the total (0–100). */
+  pct?: number;
+  /** Custom-mode only: the stage concept ("A la firma", "A la entrega", …). */
+  label?: string;
 }
 
 export interface PaymentPlanSchedule {
@@ -147,3 +151,72 @@ function clampPct(n: number): number {
   if (!Number.isFinite(v)) return 50;
   return Math.min(100, Math.max(0, v));
 }
+
+/** One stage of a custom (percentage) payment plan, as the dealer enters it. */
+export interface PaymentSplit {
+  /** Share of the total, 0–100. */
+  pct: number;
+  /** Due date as a JS-ms timestamp. */
+  dueAt: number;
+  /** Optional concept ("A la firma", "Al embarque", "A la entrega", …). */
+  label?: string;
+}
+
+/**
+ * Build a CUSTOM staged schedule — N installments each a percent of the total
+ * (e.g. 50 / 20 / 20 / 10), interest-free. Unlike `amortize`, there's no down
+ * payment carved out and no financing: every stage IS an installment covering
+ * the full price. Rounding drift lands on the LAST stage so Σ amount === total.
+ * Pure; pinned by tests/paymentPlan.test.js.
+ */
+export function buildCustomSchedule(
+  { totalUsd, splits }: { totalUsd: number; splits: PaymentSplit[] },
+): PaymentPlanSchedule & { scheduleMode: 'custom' } {
+  const total = Math.max(0, Number(totalUsd) || 0);
+  const rows = (splits || []).filter((s) => s && Number(s.pct) > 0);
+  const count = rows.length || 1;
+
+  const installments: PaymentPlanInstallment[] = [];
+  let allocated = 0;
+  let remaining = total;
+  rows.forEach((s, idx) => {
+    const isLast = idx === count - 1;
+    // The last stage absorbs the rounding drift so the schedule closes to total.
+    const amount = isLast ? cents(total - allocated) : cents((total * clampPct(s.pct)) / 100);
+    allocated = cents(allocated + amount);
+    remaining = cents(remaining - amount);
+    installments.push({
+      n: idx + 1,
+      dueAt: s.dueAt,
+      interest: 0,
+      capital: amount,
+      amount,
+      balanceAfter: remaining < 0 ? 0 : remaining,
+      pct: clampPct(s.pct),
+      label: s.label || '',
+    });
+  });
+
+  return {
+    scheduleMode: 'custom',
+    totalUsd: total,
+    downPaymentPct: 0,
+    downPaymentUsd: 0,
+    financedUsd: total,
+    monthlyRatePct: 0,
+    installmentCount: count,
+    monthlyUsd: installments[0]?.amount ?? 0,
+    installments,
+    totalInterestUsd: 0,
+    totalFinancedToPayUsd: total,
+    grandTotalToPayUsd: total,
+  };
+}
+
+/** A few common staged-payment presets (percentages summing to 100). */
+export const SPLIT_PRESETS: { label: string; pcts: number[] }[] = [
+  { label: '50 / 50', pcts: [50, 50] },
+  { label: '50 / 25 / 25', pcts: [50, 25, 25] },
+  { label: '50 / 20 / 20 / 10', pcts: [50, 20, 20, 10] },
+  { label: '40 / 30 / 30', pcts: [40, 30, 30] },
+];

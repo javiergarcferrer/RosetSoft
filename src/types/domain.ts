@@ -762,6 +762,12 @@ export interface PaymentPlanInstallment {
   balanceAfter: number;
   /** When the dealer marked this cuota paid (JS-ms); null/absent ⇒ pending. */
   paidAt?: number | null;
+  /** The cobro id posted when this cuota was collected (links plan ↔ ledger). */
+  paymentId?: string | null;
+  /** Custom-mode only: this stage's share of the total (0–100). */
+  pct?: number;
+  /** Custom-mode only: the stage concept ("A la firma", "A la entrega", …). */
+  label?: string;
 }
 
 /**
@@ -792,6 +798,10 @@ export interface PaymentPlan {
   firstDueAt?: number | null;
   schedule?: PaymentPlanInstallment[] | null;
 
+  /** How the schedule was generated: 'amortized' (50% down + interest-bearing
+   *  monthly cuotas) or 'custom' (staged percentages of the total, e.g.
+   *  50/20/20/10, interest-free). */
+  scheduleMode?: 'amortized' | 'custom';
   status: 'draft' | 'active' | 'completed' | 'cancelled';
   contractBody?: string | null;
 

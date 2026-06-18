@@ -59,10 +59,13 @@ export function resolvePaymentPlanView(plan, { rate = 0, now = Date.now() } = {}
   const overdueCount = installments.filter((r) => r.isOverdue).length;
   const next = installments.find((r) => !r.isPaid) || null;
 
+  const scheduleMode = plan.scheduleMode === 'custom' ? 'custom' : 'amortized';
+
   return {
     id: plan.id,
     quoteId: plan.quoteId ?? null,
     status: plan.status,
+    scheduleMode,
     rate,
     // Headline figures (USD + DOP).
     totalUsd: plan.totalUsd,

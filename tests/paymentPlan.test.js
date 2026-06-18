@@ -16,7 +16,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { amortize, addMonths } from '../src/lib/paymentPlan.js';
+import { amortize, addMonths, buildCustomSchedule, SPLIT_PRESETS } from '../src/lib/paymentPlan.js';
 
 const FIRST_DUE = Date.parse('2026-07-01T00:00:00-04:00');
 
@@ -93,4 +93,39 @@ test('addMonths clamps the day to the target month length', () => {
   const jan31 = Date.parse('2026-01-31T00:00:00-04:00');
   const feb = new Date(addMonths(jan31, 1));
   assert.equal(feb.getMonth(), 1); // February, not spilled into March
+});
+
+// ---- custom staged schedule (e.g. 50 / 20 / 20 / 10) ----------------------
+
+test('custom split: amounts follow the percentages and sum to total', () => {
+  const splits = [50, 20, 20, 10].map((pct, i) => ({ pct, dueAt: addMonths(FIRST_DUE, i), label: `Etapa ${i + 1}` }));
+  const s = buildCustomSchedule({ totalUsd: 10000, splits });
+  assert.equal(s.scheduleMode, 'custom');
+  assert.equal(s.totalInterestUsd, 0);
+  assert.deepEqual(s.installments.map((r) => r.amount), [5000, 2000, 2000, 1000]);
+  const sum = s.installments.reduce((a, r) => a + r.amount, 0);
+  assert.equal(sum, 10000);
+  assert.equal(s.installments.at(-1).balanceAfter, 0);
+});
+
+test('custom split: rounding drift lands on the last stage', () => {
+  // 33.33% of 100 doesn't divide evenly across three thirds.
+  const splits = [{ pct: 33.33, dueAt: FIRST_DUE }, { pct: 33.33, dueAt: FIRST_DUE }, { pct: 33.34, dueAt: FIRST_DUE }];
+  const s = buildCustomSchedule({ totalUsd: 100, splits });
+  const sum = s.installments.reduce((a, r) => a + r.amount, 0);
+  assert.equal(sum, 100);
+  assert.equal(s.installments.at(-1).balanceAfter, 0);
+});
+
+test('custom split: labels + pct ride on each installment', () => {
+  const s = buildCustomSchedule({ totalUsd: 4000, splits: [{ pct: 50, dueAt: FIRST_DUE, label: 'A la firma' }, { pct: 50, dueAt: FIRST_DUE, label: 'A la entrega' }] });
+  assert.equal(s.installments[0].label, 'A la firma');
+  assert.equal(s.installments[0].pct, 50);
+  assert.equal(s.installments[1].label, 'A la entrega');
+});
+
+test('SPLIT_PRESETS each sum to 100', () => {
+  for (const p of SPLIT_PRESETS) {
+    assert.equal(p.pcts.reduce((a, b) => a + b, 0), 100, `${p.label} must total 100`);
+  }
 });

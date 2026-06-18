@@ -152,11 +152,20 @@ export default function PublicContractView() {
           {/* Financial summary */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Stat label="Total" value={usd(plan.totalUsd)} sub={dop(plan.totalUsd)} />
-            <Stat label={`Inicial (${plan.downPaymentPct}%)`} value={usd(plan.downPaymentUsd)} sub={dop(plan.downPaymentUsd)} />
-            <Stat label="A financiar" value={usd(plan.financedUsd)} sub={dop(plan.financedUsd)} />
-            <Stat label="Tasa mensual" value={`${plan.monthlyRatePct}%`} />
-            <Stat label="Cuota mensual" value={usd(plan.monthlyUsd)} sub={`${plan.installmentCount} cuotas`} />
-            <Stat label="Total a pagar" value={usd(plan.grandTotalToPayUsd)} sub={`Interés ${usd(plan.totalInterestUsd)}`} />
+            {plan.scheduleMode === 'custom' ? (
+              <>
+                <Stat label="Pagos" value={`${plan.installmentCount} etapas`} />
+                <Stat label="Primer pago" value={usd(plan.installments[0]?.amount || 0)} sub={dop(plan.installments[0]?.amount || 0)} />
+              </>
+            ) : (
+              <>
+                <Stat label={`Inicial (${plan.downPaymentPct}%)`} value={usd(plan.downPaymentUsd)} sub={dop(plan.downPaymentUsd)} />
+                <Stat label="A financiar" value={usd(plan.financedUsd)} sub={dop(plan.financedUsd)} />
+                <Stat label="Tasa mensual" value={`${plan.monthlyRatePct}%`} />
+                <Stat label="Cuota mensual" value={usd(plan.monthlyUsd)} sub={`${plan.installmentCount} cuotas`} />
+                <Stat label="Total a pagar" value={usd(plan.grandTotalToPayUsd)} sub={`Interés ${usd(plan.totalInterestUsd)}`} />
+              </>
+            )}
           </div>
 
           {/* Schedule */}
@@ -165,10 +174,11 @@ export default function PublicContractView() {
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide text-ink-500 border-b border-ink-100">
                   <th className="text-left py-2 px-2">#</th>
+                  {plan.scheduleMode === 'custom' ? <th className="text-left py-2 px-2">Concepto</th> : null}
                   <th className="text-left py-2 px-2">Vencimiento</th>
-                  <th className="text-right py-2 px-2">Capital</th>
-                  <th className="text-right py-2 px-2">Interés</th>
-                  <th className="text-right py-2 px-2">Cuota</th>
+                  {plan.scheduleMode === 'custom' ? null : <th className="text-right py-2 px-2">Capital</th>}
+                  {plan.scheduleMode === 'custom' ? null : <th className="text-right py-2 px-2">Interés</th>}
+                  <th className="text-right py-2 px-2">{plan.scheduleMode === 'custom' ? 'Pago' : 'Cuota'}</th>
                   <th className="text-right py-2 px-2">Balance</th>
                 </tr>
               </thead>
@@ -176,9 +186,10 @@ export default function PublicContractView() {
                 {plan.installments.map((r) => (
                   <tr key={r.n} className="border-b border-ink-50">
                     <td className="py-2 px-2 text-ink-500">{r.n}</td>
+                    {plan.scheduleMode === 'custom' ? <td className="py-2 px-2 text-ink-600">{r.label || `Etapa ${r.n}`}{r.pct ? ` · ${r.pct}%` : ''}</td> : null}
                     <td className="py-2 px-2 text-ink-700">{fmtDate(r.dueAt)}</td>
-                    <td className="py-2 px-2 text-right text-ink-700">{usd(r.capital)}</td>
-                    <td className="py-2 px-2 text-right text-ink-700">{usd(r.interest)}</td>
+                    {plan.scheduleMode === 'custom' ? null : <td className="py-2 px-2 text-right text-ink-700">{usd(r.capital)}</td>}
+                    {plan.scheduleMode === 'custom' ? null : <td className="py-2 px-2 text-right text-ink-700">{usd(r.interest)}</td>}
                     <td className="py-2 px-2 text-right font-medium text-ink-900">{usd(r.amount)}</td>
                     <td className="py-2 px-2 text-right text-ink-500">{usd(r.balanceAfter)}</td>
                   </tr>

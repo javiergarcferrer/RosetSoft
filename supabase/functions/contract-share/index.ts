@@ -101,6 +101,7 @@ async function buildBundle(admin: Admin, plan: Row): Promise<Record<string, unkn
       id: plan.id,
       number: plan.number,
       status: plan.status,
+      scheduleMode: plan.schedule_mode === 'custom' ? 'custom' : 'amortized',
       totalUsd: num(plan.total_usd),
       downPaymentPct: num(plan.down_payment_pct),
       downPaymentUsd: num(plan.down_payment_usd),

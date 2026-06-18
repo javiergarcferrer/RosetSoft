@@ -9,6 +9,8 @@ export interface ContractInstallment {
   capital: number;
   interest: number;
   balanceAfter: number;
+  pct?: number;
+  label?: string;
 }
 
 export interface ContractDocumentProps {
@@ -16,6 +18,7 @@ export interface ContractDocumentProps {
   customer: { name?: string; company?: string; address?: string; doc?: string } | null;
   plan: {
     number?: number | null;
+    scheduleMode?: 'amortized' | 'custom';
     totalUsd: number;
     downPaymentPct: number;
     downPaymentUsd: number;
@@ -60,7 +63,7 @@ const st = StyleSheet.create({
   th: { flexDirection: 'row', backgroundColor: C.bgSoft, paddingVertical: 5, paddingHorizontal: 6, marginTop: 18 },
   thCell: { fontFamily: 'Sohne', fontSize: fs(7), color: C.inkMid, letterSpacing: 0.5, textTransform: 'uppercase' },
   tr: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: C.inkLine },
-  cN: { width: 28 }, cDate: { width: 78 },
+  cN: { width: 28 }, cDate: { width: 78 }, cConcept: { flex: 1.4 },
   cNum: { flex: 1, textAlign: 'right' },
   cell: { fontSize: fs(9) },
 
@@ -86,6 +89,7 @@ const d = (ms: number) => {
 };
 
 export function ContractDocument({ emisor, customer, plan, contractBody, rates, signature }: ContractDocumentProps) {
+  const isCustom = plan.scheduleMode === 'custom';
   const title = `Contrato de venta a plazos${plan.number ? ` Nº ${plan.number}` : ''}`;
   return (
     <Document title={`${title}${customer?.name ? ` — ${customer.name}` : ''}`}>
@@ -116,46 +120,64 @@ export function ContractDocument({ emisor, customer, plan, contractBody, rates, 
             <Text style={st.sVal}>{usd(plan.totalUsd)}</Text>
             <Text style={st.sSub}>{dop(plan.totalUsd, rates)}</Text>
           </View>
-          <View style={st.sCell}>
-            <Text style={st.sLabel}>Inicial ({plan.downPaymentPct}%)</Text>
-            <Text style={st.sVal}>{usd(plan.downPaymentUsd)}</Text>
-            <Text style={st.sSub}>{dop(plan.downPaymentUsd, rates)}</Text>
-          </View>
-          <View style={st.sCell}>
-            <Text style={st.sLabel}>A financiar</Text>
-            <Text style={st.sVal}>{usd(plan.financedUsd)}</Text>
-            <Text style={st.sSub}>{dop(plan.financedUsd, rates)}</Text>
-          </View>
-          <View style={st.sCell}>
-            <Text style={st.sLabel}>Tasa mensual</Text>
-            <Text style={st.sVal}>{plan.monthlyRatePct}%</Text>
-          </View>
-          <View style={st.sCell}>
-            <Text style={st.sLabel}>Cuotas</Text>
-            <Text style={st.sVal}>{plan.installmentCount} × {usd(plan.monthlyUsd)}</Text>
-            <Text style={st.sSub}>{dop(plan.monthlyUsd, rates)}/mes</Text>
-          </View>
-          <View style={st.sCell}>
-            <Text style={st.sLabel}>Interés total</Text>
-            <Text style={st.sVal}>{usd(plan.totalInterestUsd)}</Text>
-          </View>
+          {isCustom ? (
+            <>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>Pagos</Text>
+                <Text style={st.sVal}>{plan.installmentCount} etapas</Text>
+              </View>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>Primer pago</Text>
+                <Text style={st.sVal}>{usd(plan.installments[0]?.amount || 0)}</Text>
+                <Text style={st.sSub}>{dop(plan.installments[0]?.amount || 0, rates)}</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>Inicial ({plan.downPaymentPct}%)</Text>
+                <Text style={st.sVal}>{usd(plan.downPaymentUsd)}</Text>
+                <Text style={st.sSub}>{dop(plan.downPaymentUsd, rates)}</Text>
+              </View>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>A financiar</Text>
+                <Text style={st.sVal}>{usd(plan.financedUsd)}</Text>
+                <Text style={st.sSub}>{dop(plan.financedUsd, rates)}</Text>
+              </View>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>Tasa mensual</Text>
+                <Text style={st.sVal}>{plan.monthlyRatePct}%</Text>
+              </View>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>Cuotas</Text>
+                <Text style={st.sVal}>{plan.installmentCount} × {usd(plan.monthlyUsd)}</Text>
+                <Text style={st.sSub}>{dop(plan.monthlyUsd, rates)}/mes</Text>
+              </View>
+              <View style={st.sCell}>
+                <Text style={st.sLabel}>Interés total</Text>
+                <Text style={st.sVal}>{usd(plan.totalInterestUsd)}</Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Schedule */}
         <View style={st.th}>
           <Text style={[st.thCell, st.cN]}>#</Text>
+          {isCustom ? <Text style={[st.thCell, st.cConcept]}>Concepto</Text> : null}
           <Text style={[st.thCell, st.cDate]}>Vencimiento</Text>
-          <Text style={[st.thCell, st.cNum]}>Capital</Text>
-          <Text style={[st.thCell, st.cNum]}>Interés</Text>
-          <Text style={[st.thCell, st.cNum]}>Cuota</Text>
+          {isCustom ? null : <Text style={[st.thCell, st.cNum]}>Capital</Text>}
+          {isCustom ? null : <Text style={[st.thCell, st.cNum]}>Interés</Text>}
+          <Text style={[st.thCell, st.cNum]}>{isCustom ? 'Pago' : 'Cuota'}</Text>
           <Text style={[st.thCell, st.cNum]}>Balance</Text>
         </View>
         {plan.installments.map((r) => (
           <View key={r.n} style={st.tr} wrap={false}>
             <Text style={[st.cell, st.cN]}>{r.n}</Text>
+            {isCustom ? <Text style={[st.cell, st.cConcept]}>{r.label || `Etapa ${r.n}`}{r.pct ? ` · ${r.pct}%` : ''}</Text> : null}
             <Text style={[st.cell, st.cDate]}>{d(r.dueAt)}</Text>
-            <Text style={[st.cell, st.cNum]}>{usd(r.capital)}</Text>
-            <Text style={[st.cell, st.cNum]}>{usd(r.interest)}</Text>
+            {isCustom ? null : <Text style={[st.cell, st.cNum]}>{usd(r.capital)}</Text>}
+            {isCustom ? null : <Text style={[st.cell, st.cNum]}>{usd(r.interest)}</Text>}
             <Text style={[st.cell, st.cNum]}>{usd(r.amount)}</Text>
             <Text style={[st.cell, st.cNum]}>{usd(r.balanceAfter)}</Text>
           </View>

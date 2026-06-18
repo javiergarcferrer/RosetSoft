@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Link2, Download, Check, FileSignature, Save } from 'lucide-react';
+import { Loader2, Link2, Download, Check, FileSignature, Save, Plus, Trash2 } from 'lucide-react';
 import { db, newId } from '../../db/database.js';
 import { collectInstallment } from '../../db/paymentPlans.js';
-import { buildPlanSchedule, resolvePaymentPlanView } from '../../core/quote/index.js';
+import { buildPlanSchedule, buildCustomSchedule, SPLIT_PRESETS, resolvePaymentPlanView } from '../../core/quote/index.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { contractLinkUrl, newShareToken } from '../../lib/contractShare.js';
@@ -10,7 +10,12 @@ import { quoteSlug } from '../../lib/quoteNaming.js';
 import { formatMoney } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 
-const DOWN_PCT = 50; // The dealer's standing policy: always a 50% down payment.
+const DOWN_PCT = 50; // Default down payment for the financed (amortized) mode.
+
+// A fresh custom plan starts as a 50/20/20/10 staged schedule, one month apart.
+function defaultSplits() {
+  return [50, 20, 20, 10].map((pct, i) => ({ pct, dueAt: addMonthsMs(defaultFirstDue(), i), label: '' }));
+}
 
 /**
  * Per-quote payment plan + digital contract (the dealer side).
@@ -26,9 +31,11 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
+    mode: 'amortized', // 'amortized' | 'custom'
     monthlyRatePct: settings?.paymentPlanMonthlyRatePct ?? 2,
     installmentCount: 6,
     firstDueAt: defaultFirstDue(),
+    splits: defaultSplits(),
     contractBody: '',
   });
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
@@ -52,10 +59,16 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
         const row = rows[0] || null;
         setPlan(row);
         if (row) {
+          const isCustom = row.scheduleMode === 'custom';
           setForm({
+            mode: isCustom ? 'custom' : 'amortized',
             monthlyRatePct: row.monthlyRatePct ?? 0,
             installmentCount: row.installmentCount ?? 6,
             firstDueAt: row.firstDueAt ?? defaultFirstDue(),
+            // Rebuild the stage editor from the saved schedule (pct/dueAt/label).
+            splits: isCustom && Array.isArray(row.schedule) && row.schedule.length
+              ? row.schedule.map((r) => ({ pct: r.pct ?? 0, dueAt: r.dueAt ?? defaultFirstDue(), label: r.label ?? '' }))
+              : defaultSplits(),
             contractBody: row.contractBody ?? '',
           });
         }
@@ -66,13 +79,12 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
   }, [quote?.id]);
 
   // Live preview off the form + the quote's current grand total.
-  const preview = useMemo(() => buildPlanSchedule({
-    totalUsd: totalUsd || 0,
-    downPaymentPct: DOWN_PCT,
-    monthlyRatePct: Number(form.monthlyRatePct) || 0,
-    installmentCount: Math.max(1, Number(form.installmentCount) || 1),
-    firstDueAt: form.firstDueAt,
-  }), [totalUsd, form.monthlyRatePct, form.installmentCount, form.firstDueAt]);
+  const preview = useMemo(() => buildScheduleFor(form, totalUsd), [form, totalUsd]);
+  const splitTotalPct = useMemo(
+    () => (form.splits || []).reduce((s, r) => s + (Number(r.pct) || 0), 0),
+    [form.splits],
+  );
+  const splitsValid = Math.abs(splitTotalPct - 100) < 0.01;
 
   // The saved plan, decorated (paid/overdue + DOP) for the signed banner / link.
   const planView = useMemo(() => resolvePaymentPlanView(plan, { rate }), [plan, rate]);
@@ -81,27 +93,26 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
   const dop = (v) => (rate ? formatMoney(v, 'DOP', { DOP: rate }) : '');
 
   function defaultBody() {
-    return form.contractBody || (
-      `El cliente acuerda adquirir los bienes detallados en la cotización Nº ${quote?.number ?? ''} `
-      + `y pagar su valor total mediante un pago inicial del ${DOWN_PCT}% y ${preview.installmentCount} `
-      + `cuotas mensuales con una tasa de interés del ${preview.monthlyRatePct}% mensual, conforme al `
-      + `calendario de pagos detallado en este contrato. La entrega de los bienes se realizará según las `
-      + `condiciones acordadas. El atraso en el pago de cualquier cuota podrá generar cargos por mora.`
-    );
+    if (form.contractBody) return form.contractBody;
+    const head = `El cliente acuerda adquirir los bienes detallados en la cotización Nº ${quote?.number ?? ''} `;
+    const tail = `conforme al calendario de pagos detallado en este contrato. La entrega de los bienes se `
+      + `realizará según las condiciones acordadas. El atraso en el pago de cualquier cuota podrá generar `
+      + `cargos por mora.`;
+    if (form.mode === 'custom') {
+      const pcts = (form.splits || []).map((s) => `${Number(s.pct) || 0}%`).join(' / ');
+      return `${head}y pagar su valor total en ${preview.installmentCount} pagos por etapas (${pcts}), ${tail}`;
+    }
+    return `${head}y pagar su valor total mediante un pago inicial del ${DOWN_PCT}% y ${preview.installmentCount} `
+      + `cuotas mensuales con una tasa de interés del ${preview.monthlyRatePct}% mensual, ${tail}`;
   }
 
   async function persist(patch = {}) {
-    const schedule = buildPlanSchedule({
-      totalUsd: totalUsd || 0,
-      downPaymentPct: DOWN_PCT,
-      monthlyRatePct: Number(form.monthlyRatePct) || 0,
-      installmentCount: Math.max(1, Number(form.installmentCount) || 1),
-      firstDueAt: form.firstDueAt,
-    });
-    // Preserve any per-row paid marks across a re-save (matched by index).
+    const schedule = buildScheduleFor(form, totalUsd);
+    // Preserve any per-row paid marks (+ the linked cobro id) across a re-save,
+    // matched by index so editing the plan doesn't drop collected cuotas.
     const prior = Array.isArray(plan?.schedule) ? plan.schedule : [];
     const installments = schedule.installments.map((r, i) => ({
-      ...r, paidAt: prior[i]?.paidAt ?? null,
+      ...r, paidAt: prior[i]?.paidAt ?? null, paymentId: prior[i]?.paymentId ?? null,
     }));
     const now = Date.now();
     const row = {
@@ -110,8 +121,9 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
       quoteId: quote.id,
       customerId: quote.customerId || null,
       number: quote.number ?? null,
+      scheduleMode: form.mode,
       totalUsd: schedule.totalUsd,
-      downPaymentPct: DOWN_PCT,
+      downPaymentPct: schedule.downPaymentPct,
       downPaymentUsd: schedule.downPaymentUsd,
       financedUsd: schedule.financedUsd,
       monthlyRatePct: schedule.monthlyRatePct,
@@ -138,6 +150,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
 
   async function handleSave() {
     if (save === 'saving') return;
+    if (form.mode === 'custom' && !splitsValid) { setSave('error'); return; }
     setSave('saving');
     try {
       // Default the contract body on first save so the dealer has editable text.
@@ -179,7 +192,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
     }
     setPdf('working');
     try {
-      const view = resolvePaymentPlanView(plan || { ...form, ...preview, schedule: preview.installments, downPaymentPct: DOWN_PCT, totalUsd: preview.totalUsd, downPaymentUsd: preview.downPaymentUsd, financedUsd: preview.financedUsd, status: 'draft' }, { rate });
+      const view = resolvePaymentPlanView(plan || { ...preview, scheduleMode: form.mode, schedule: preview.installments, status: 'draft' }, { rate });
       const { generateContractPdf, downloadBlob } = await safeDynamicImport(() => import('../../pdf/contract/index.js'));
       const blob = await generateContractPdf({
         emisor: { name: settings?.companyName || '', rnc: settings?.companyRnc || '', address: settings?.companyAddress || '' },
@@ -239,35 +252,58 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
           <p className="text-sm text-ink-500">Agrega productos con precio a la cotización para crear un plan de pago.</p>
         ) : (
           <>
-            {/* Parameters */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Field label="Inicial">
-                <div className="input bg-ink-50 cursor-not-allowed">{DOWN_PCT}%</div>
-              </Field>
-              <Field label="Tasa mensual %">
-                <input type="number" min="0" step="0.01" value={form.monthlyRatePct}
-                  onChange={(e) => setForm((f) => ({ ...f, monthlyRatePct: e.target.value }))}
-                  className="input w-full" />
-              </Field>
-              <Field label="Nº de cuotas">
-                <input type="number" min="1" step="1" value={form.installmentCount}
-                  onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
-                  className="input w-full" />
-              </Field>
-              <Field label="Primera cuota">
-                <input type="date" value={toDateInput(form.firstDueAt)}
-                  onChange={(e) => setForm((f) => ({ ...f, firstDueAt: fromDateInput(e.target.value) }))}
-                  className="input w-full" />
-              </Field>
+            {/* Mode toggle */}
+            <div className="inline-flex rounded-lg border border-ink-200 p-0.5 text-sm">
+              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
+                className={`px-3 py-1.5 rounded-md ${form.mode === 'amortized' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
+                Financiado (cuotas + interés)
+              </button>
+              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
+                className={`px-3 py-1.5 rounded-md ${form.mode === 'custom' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
+                Pagos por etapas (%)
+              </button>
             </div>
 
-            {/* Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label="Inicial" value={usd(preview.downPaymentUsd)} sub={dop(preview.downPaymentUsd)} />
-              <Stat label="A financiar" value={usd(preview.financedUsd)} sub={dop(preview.financedUsd)} />
-              <Stat label="Cuota mensual" value={usd(preview.monthlyUsd)} sub={`${preview.installmentCount} cuotas`} />
-              <Stat label="Total a pagar" value={usd(preview.grandTotalToPayUsd)} sub={`Interés ${usd(preview.totalInterestUsd)}`} />
-            </div>
+            {form.mode === 'amortized' ? (
+              <>
+                {/* Amortized parameters */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <Field label="Inicial">
+                    <div className="input bg-ink-50 cursor-not-allowed">{DOWN_PCT}%</div>
+                  </Field>
+                  <Field label="Tasa mensual %">
+                    <input type="number" min="0" step="0.01" value={form.monthlyRatePct}
+                      onChange={(e) => setForm((f) => ({ ...f, monthlyRatePct: e.target.value }))}
+                      className="input w-full" />
+                  </Field>
+                  <Field label="Nº de cuotas">
+                    <input type="number" min="1" step="1" value={form.installmentCount}
+                      onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
+                      className="input w-full" />
+                  </Field>
+                  <Field label="Primera cuota">
+                    <input type="date" value={toDateInput(form.firstDueAt)}
+                      onChange={(e) => setForm((f) => ({ ...f, firstDueAt: fromDateInput(e.target.value) }))}
+                      className="input w-full" />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <Stat label="Inicial" value={usd(preview.downPaymentUsd)} sub={dop(preview.downPaymentUsd)} />
+                  <Stat label="A financiar" value={usd(preview.financedUsd)} sub={dop(preview.financedUsd)} />
+                  <Stat label="Cuota mensual" value={usd(preview.monthlyUsd)} sub={`${preview.installmentCount} cuotas`} />
+                  <Stat label="Total a pagar" value={usd(preview.grandTotalToPayUsd)} sub={`Interés ${usd(preview.totalInterestUsd)}`} />
+                </div>
+              </>
+            ) : (
+              <SplitsEditor
+                splits={form.splits}
+                totalUsd={totalUsd}
+                splitTotalPct={splitTotalPct}
+                splitsValid={splitsValid}
+                usd={usd}
+                onChange={(splits) => setForm((f) => ({ ...f, splits }))}
+              />
+            )}
 
             {/* Contract body */}
             <Field label="Texto del contrato">
@@ -286,9 +322,10 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-ink-500 border-b border-ink-100">
                     <th className="text-left py-1.5 px-2">#</th>
+                    {form.mode === 'custom' ? <th className="text-left py-1.5 px-2">Concepto</th> : null}
                     <th className="text-left py-1.5 px-2">Vence</th>
-                    <th className="text-right py-1.5 px-2">Cuota</th>
-                    <th className="text-right py-1.5 px-2">Interés</th>
+                    <th className="text-right py-1.5 px-2">{form.mode === 'custom' ? 'Pago' : 'Cuota'}</th>
+                    {form.mode === 'custom' ? null : <th className="text-right py-1.5 px-2">Interés</th>}
                     <th className="text-right py-1.5 px-2">Balance</th>
                     {plan ? <th className="text-center py-1.5 px-2">Cobro</th> : null}
                   </tr>
@@ -297,9 +334,10 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                   {(planView?.installments || preview.installments).map((r) => (
                     <tr key={r.n} className={`border-b border-ink-50 ${r.isOverdue ? 'bg-red-50/50' : ''}`}>
                       <td className="py-1.5 px-2 text-ink-500">{r.n}</td>
+                      {form.mode === 'custom' ? <td className="py-1.5 px-2 text-ink-600">{r.label || `Etapa ${r.n}`}{r.pct ? <span className="text-ink-400"> · {r.pct}%</span> : null}</td> : null}
                       <td className="py-1.5 px-2 text-ink-700">{fmtDate(r.dueAt)}</td>
                       <td className="py-1.5 px-2 text-right font-medium text-ink-900">{usd(r.amount)}</td>
-                      <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.interest)}</td>
+                      {form.mode === 'custom' ? null : <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.interest)}</td>}
                       <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.balanceAfter)}</td>
                       {plan ? (
                         <td className="py-1.5 px-2 text-center whitespace-nowrap">
@@ -379,6 +417,99 @@ function Stat({ label, value, sub }) {
       {sub ? <div className="text-[11px] text-ink-400">{sub}</div> : null}
     </div>
   );
+}
+
+// The staged-percentage editor (custom mode): presets + per-row pct/date/label,
+// with a live "must total 100%" indicator.
+function SplitsEditor({ splits, totalUsd, splitTotalPct, splitsValid, usd, onChange }) {
+  const setRow = (i, patch) => onChange(splits.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addRow = () => onChange([...splits, { pct: 0, dueAt: addMonthsMs(splits[splits.length - 1]?.dueAt || defaultFirstDue(), 1), label: '' }]);
+  const removeRow = (i) => onChange(splits.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-ink-500">Plantillas:</span>
+        {SPLIT_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => onChange(p.pcts.map((pct, i) => ({
+              pct, dueAt: addMonthsMs(defaultFirstDue(), i), label: splits[i]?.label || '',
+            })))}
+            className="text-xs px-2 py-1 rounded-md border border-ink-200 text-ink-600 hover:border-brand-300"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {splits.map((r, i) => {
+          const amount = (totalUsd || 0) * (Number(r.pct) || 0) / 100;
+          return (
+            <div key={i} className="flex items-end gap-2">
+              <Field label={i === 0 ? '%' : ''}>
+                <input type="number" min="0" step="1" value={r.pct}
+                  onChange={(e) => setRow(i, { pct: e.target.value })}
+                  className="input w-16" />
+              </Field>
+              <Field label={i === 0 ? 'Vence' : ''}>
+                <input type="date" value={toDateInput(r.dueAt)}
+                  onChange={(e) => setRow(i, { dueAt: fromDateInput(e.target.value) })}
+                  className="input w-full" />
+              </Field>
+              <Field label={i === 0 ? 'Concepto (opcional)' : ''}>
+                <input type="text" value={r.label || ''} placeholder={`Etapa ${i + 1}`}
+                  onChange={(e) => setRow(i, { label: e.target.value })}
+                  className="input w-full" />
+              </Field>
+              <div className="text-sm text-ink-600 w-24 text-right pb-2">{usd(amount)}</div>
+              <button type="button" onClick={() => removeRow(i)} disabled={splits.length <= 1}
+                className="pb-2 text-ink-400 hover:text-red-600 disabled:opacity-30" aria-label="Quitar etapa">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={addRow} className="text-xs text-brand-700 hover:text-brand-900 inline-flex items-center gap-1">
+          <Plus size={13} /> Agregar etapa
+        </button>
+        <span className={`text-xs font-medium ${splitsValid ? 'text-emerald-700' : 'text-red-600'}`}>
+          Suma: {splitTotalPct}% {splitsValid ? '✓' : '(debe ser 100%)'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Build the schedule for the current form, dispatching by mode. Pure-ish (reads
+// only the form + total) — the Model does the math.
+function buildScheduleFor(form, totalUsd) {
+  if (form.mode === 'custom') {
+    return buildCustomSchedule({ totalUsd: totalUsd || 0, splits: form.splits || [] });
+  }
+  return buildPlanSchedule({
+    totalUsd: totalUsd || 0,
+    downPaymentPct: DOWN_PCT,
+    monthlyRatePct: Number(form.monthlyRatePct) || 0,
+    installmentCount: Math.max(1, Number(form.installmentCount) || 1),
+    firstDueAt: form.firstDueAt,
+  });
+}
+
+function addMonthsMs(ms, months) {
+  const d = new Date(ms || Date.now());
+  const day = d.getDate();
+  const t = new Date(d.getTime());
+  t.setDate(1);
+  t.setMonth(t.getMonth() + months);
+  const lastDay = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  t.setDate(Math.min(day, lastDay));
+  return t.getTime();
 }
 
 const VITE_ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {};
