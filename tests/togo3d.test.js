@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { inferTogoForm, inferTogoKind, togoParts, togoMeshFit, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
 import { glbFor, hasTogoGlb } from '../src/assets/togo/togoModels3d.js';
-import { resolveTogoScene } from '../src/core/quote/views/configuratorView.js';
+import { resolveTogoScene, scenePlacementsFromPlaced, compactPlaced } from '../src/core/quote/views/configuratorView.js';
 
 test('inferTogoForm reads arms from the label, then the footprint shape', () => {
   assert.equal(inferTogoForm('Chofesa Togo').armCount, 0);        // fireside / no arms
@@ -124,4 +124,47 @@ test('togoMeshFit normalises HEIGHT with a UNIFORM scale and never distorts the 
 
   // Degenerate height → finite, never NaN/Infinity.
   assert.ok(Number.isFinite(togoMeshFit({ x: 50, y: 0, z: 50 }, 72).s));
+});
+
+test('the 3D mirrors the 2D EXACTLY: flush plan → flush 3D, plan gap → identical 3D gap', () => {
+  // Settee 174×102 + corner 102×102 placed FLUSH (corner at x=174) → centres land
+  // 138 apart = 87+51 = half-widths touching. The 3D never adds space.
+  const flush = resolveTogoScene([
+    { x: 0, y: 0, rot: 0, widthCm: 174, depthCm: 102, label: 'Settee' },
+    { x: 174, y: 0, rot: 0, widthCm: 102, depthCm: 102, label: 'Corner' },
+  ]);
+  assert.equal(flush.overallCm.widthCm, 276);
+  assert.ok(Math.abs((flush.pieces[1].x - flush.pieces[0].x) - 138) < 1e-6, 'flush plan → flush 3D');
+
+  // Same pieces with a 102 cm GAP (corner at x=276 → plan reads 378 wide) → centres
+  // land 240 apart (138 + 102). The 3D faithfully shows the plan's gap, never more.
+  const gapped = resolveTogoScene([
+    { x: 0, y: 0, rot: 0, widthCm: 174, depthCm: 102, label: 'Settee' },
+    { x: 276, y: 0, rot: 0, widthCm: 102, depthCm: 102, label: 'Corner' },
+  ]);
+  assert.equal(gapped.overallCm.widthCm, 378);
+  assert.ok(Math.abs((gapped.pieces[1].x - gapped.pieces[0].x) - 240) < 1e-6, 'plan gap → identical 3D gap');
+});
+
+test('compactPlaced removes the empty strips so a gapped sectional becomes flush', () => {
+  const byId = {
+    settee: { widthCm: 174, depthCm: 102 },
+    corner: { widthCm: 102, depthCm: 102 },
+    sofa: { widthCm: 174, depthCm: 102 },
+  };
+  // The reported L with a 102 cm hole (corner+sofa column parked at x=276 → 378 wide),
+  // as if a middle piece was deleted.
+  const out = compactPlaced([
+    { uid: 1, pieceId: 'settee', x: 0, y: 0, rot: 0 },
+    { uid: 2, pieceId: 'corner', x: 276, y: 0, rot: 0 },
+    { uid: 3, pieceId: 'sofa', x: 276, y: 102, rot: 90 },
+  ], byId);
+  const by = Object.fromEntries(out.map((p) => [p.pieceId, p]));
+  assert.equal(by.settee.x, 0);
+  assert.equal(by.corner.x, 174, 'corner pulled flush against the settee');
+  assert.equal(by.sofa.x, 174, 'the column moved WITH the corner — shape preserved');
+  assert.equal(by.corner.y, 0);
+  assert.equal(by.sofa.y, 102);
+  // Connected now: the plan collapses from 378 → 276 cm wide, no hole.
+  assert.equal(resolveTogoScene(scenePlacementsFromPlaced(out, byId)).overallCm.widthCm, 276);
 });

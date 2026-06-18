@@ -168,6 +168,36 @@ export function clampToPlan(x, y, w, h, planW = PLAN_W_CM, planH = PLAN_H_CM) {
 }
 
 /**
+ * Pull every piece flush — "Conectar piezas". Removes the empty strips BETWEEN
+ * pieces (e.g. the hole a deleted middle piece leaves, which the others don't fill
+ * on their own) so a Togo sectional becomes connected again, WITHOUT changing the
+ * arrangement's shape: it only deletes whitespace, never re-orders pieces. Per
+ * axis, walk pieces in order; whenever a piece starts past the filled run, shift
+ * it — and everything after it — back by that gap. Pure, so it's unit-tested.
+ */
+export function compactPlaced(placed, resolvedById) {
+  const list = placed || [];
+  if (list.length < 2) return list;
+  const boxes = list.map((p) => {
+    const fp = footprintOf(resolvePlacement(p, resolvedById), norm360(p.rot));
+    return { p, w: Number(fp.w) || 0, h: Number(fp.h) || 0, x: Number(p.x) || 0, y: Number(p.y) || 0 };
+  });
+  const squeeze = (posKey, sizeKey) => {
+    const order = [...boxes].sort((a, b) => a[posKey] - b[posKey]);
+    let reach = order[0][posKey], shift = 0;
+    for (const b of order) {
+      const orig = b[posKey];
+      if (orig - reach > 0) shift += orig - reach;   // empty strip before this piece
+      reach = Math.max(reach, orig + b[sizeKey]);
+      b[posKey] = orig - shift;
+    }
+  };
+  squeeze('x', 'w');
+  squeeze('y', 'h');
+  return boxes.map((b) => ({ ...b.p, x: +b.x.toFixed(2), y: +b.y.toFixed(2) }));
+}
+
+/**
  * Build the compound line's COMPONENTS from the placed pieces — one component per
  * piece, each its OWN module (a Togo "complete element"), so the line reads as a
  * MODULAR product (per-component `moduleGroup` is what `isModularLine` keys on —

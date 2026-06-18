@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal, Receipt } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal, Receipt, Magnet } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -9,7 +9,7 @@ import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
-  resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
+  resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced, compactPlaced,
 } from '../../core/quote/index.js';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
@@ -212,6 +212,12 @@ export default function TogoEmbed() {
     setPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
   }, [selectedUid]);
 
+  // Pull every piece flush — closes any empty gap between pieces (e.g. left behind
+  // when a middle piece is deleted) so the sectional reads as one connected sofa.
+  const connectPieces = useCallback(() => {
+    setPlaced((prev) => compactPlaced(prev, resolvedById));
+  }, [resolvedById]);
+
   // Download the plan as CAD (DXF) — opens in AutoCAD and every plan tool. A
   // genuine differentiator: consumer sofa configurators stop at PDF/image, so a
   // designer-grade, real-cm layout handed straight to the customer's architect.
@@ -336,6 +342,7 @@ export default function TogoEmbed() {
                   <span className="text-xs text-ink-500 truncate">{view === '3d' ? 'Arrastra para girar · rueda para acercar' : (vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla')}</span>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button type="button" onClick={connectPieces} disabled={vm.count < 2} className="btn-ghost text-xs disabled:opacity-40" title="Juntar todas las piezas — cierra los espacios vacíos entre módulos"><Magnet size={14} /> Conectar</button>
                   <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
                   <button type="button" onClick={() => setArOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver tu sofá a tamaño real en tu sala (Realidad Aumentada)"><View size={14} /> En tu espacio</button>
                   <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
@@ -377,6 +384,7 @@ export default function TogoEmbed() {
                   <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} aria-hidden />
                   <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-ink-200 bg-surface shadow-pop p-1.5 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
                     <button type="button" onClick={() => { setMoreOpen(false); openMaterial('all'); }} className="btn-ghost justify-start text-sm"><Layers size={15} /> Tela a todas</button>
+                    <button type="button" onClick={() => { setMoreOpen(false); connectPieces(); }} className="btn-ghost justify-start text-sm"><Magnet size={15} /> Conectar piezas</button>
                     <button type="button" onClick={() => { setMoreOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
                     <button type="button" onClick={() => { setMoreOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Plano (DXF)</button>
                     <button type="button" onClick={() => { setMoreOpen(false); setQuoteOpen(true); }} className="btn-ghost justify-start text-sm"><Receipt size={15} /> Resumen</button>
