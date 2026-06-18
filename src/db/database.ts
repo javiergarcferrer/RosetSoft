@@ -1045,6 +1045,11 @@ export async function ensureDefaultProfile(): Promise<string> {
     const adminEmails = Array.isArray(settings?.adminEmails) ? settings!.adminEmails! : [];
     const email = (u.email || '').toLowerCase().trim();
     const isAllowlistedAdmin = !!email && adminEmails.map((e) => String(e).toLowerCase().trim()).includes(email);
+    // "Sign in with Google" users authenticate passwordless every time, so they
+    // never go through the SetPassword gate — the google-api login flow stamps
+    // user_metadata.google_login when it provisions/authenticates them.
+    const meta = (u.user_metadata || {}) as { name?: string; google_login?: boolean };
+    const isGoogleLogin = !!meta.google_login;
 
     const existing = await db.profiles.get(u.id).catch(() => null);
     const now = Date.now();
@@ -1069,7 +1074,8 @@ export async function ensureDefaultProfile(): Promise<string> {
         // function invitation flow) leaves this field null on the
         // initial profile row so the invitee gets routed through the
         // password-setup screen on their first sign-in.
-        passwordSetAt: isAllowlistedAdmin ? now : null,
+        // Google-login users are passwordless → skip that gate too.
+        passwordSetAt: isAllowlistedAdmin || isGoogleLogin ? now : null,
       }).catch(() => {});
     } else {
       // Update lastSignInAt on every sign-in. Two extra behaviors
@@ -1098,6 +1104,11 @@ export async function ensureDefaultProfile(): Promise<string> {
       if (isAllowlistedAdmin && (!existing.active || existing.role !== 'admin')) {
         patch.role = 'admin';
         patch.active = true;
+      }
+      // An invited user who signs in with Google instead of setting a password:
+      // stamp passwordSetAt so the SetPassword gate doesn't strand them.
+      if (isGoogleLogin && !existing.passwordSetAt) {
+        patch.passwordSetAt = now;
       }
       // Surface the failure rather than swallow it — the silent
       // `.catch(() => {})` here previously hid the trigger error

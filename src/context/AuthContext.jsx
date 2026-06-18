@@ -1,11 +1,40 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../db/supabaseClient.js';
+import { supabase, SUPABASE_URL } from '../db/supabaseClient.js';
+import { userMessageFor } from '../lib/errorMessages.js';
 
 const Ctx = createContext(null);
+
+// The google-api login flow bounces back to the app with either a one-time
+// magic-link token (?gl_login=…) to trade for a session, or an error
+// (?gl_error=…). The param may ride the query string OR the hash query
+// (depending on the redirect target), so look in both.
+function readGoogleLoginParams() {
+  if (typeof window === 'undefined') return {};
+  const out = {};
+  const grab = (qs) => {
+    const p = new URLSearchParams(qs);
+    if (p.get('gl_login')) out.token = p.get('gl_login');
+    if (p.get('gl_error')) out.error = p.get('gl_error');
+  };
+  grab(window.location.search);
+  const hash = window.location.hash || '';
+  const qi = hash.indexOf('?');
+  if (qi >= 0) grab(hash.slice(qi + 1));
+  return out;
+}
+function cleanGoogleLoginUrl() {
+  if (typeof window === 'undefined') return;
+  const base = window.location.href.split('#')[0].split('?')[0];
+  window.history.replaceState(null, '', `${base}#/`);
+}
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
+  const initialGoogle = readGoogleLoginParams();
+  const [googleLoginError, setGoogleLoginError] = useState(
+    !initialGoogle.token && initialGoogle.error ? initialGoogle.error : null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -23,10 +52,12 @@ export function AuthProvider({ children }) {
     // session that's about to land — exactly the symptom that broke the
     // invite flow for Teresa. So when we detect callback parameters in
     // the URL we extend the budget and skip the localStorage wipe.
+    const google = readGoogleLoginParams();
     const inAuthCallback = typeof window !== 'undefined' &&
       (window.location.hash.includes('access_token=') ||
        window.location.hash.includes('error=') ||
-       window.location.search.includes('code='));
+       window.location.search.includes('code=') ||
+       !!google.token);
     const fallbackMs = inAuthCallback ? 20000 : 3000;
     const fallback = setTimeout(() => {
       if (!active) return;
@@ -40,6 +71,24 @@ export function AuthProvider({ children }) {
     }, fallbackMs);
     (async () => {
       try {
+        // "Sign in with Google" came back with a one-time token → trade it for
+        // a real session. onAuthStateChange below then sets the session.
+        if (google.token) {
+          const { error } = await supabase.auth.verifyOtp({ token_hash: google.token, type: 'magiclink' });
+          if (!active) return;
+          if (error) {
+            console.warn('[auth] google verifyOtp error', error);
+            setGoogleLoginError(userMessageFor(error));
+          }
+          cleanGoogleLoginUrl();
+          clearTimeout(fallback);
+          // Reflect whatever session verifyOtp established (if any).
+          const { data } = await supabase.auth.getSession();
+          if (!active) return;
+          setSession(data.session || null);
+          setReady(true);
+          return;
+        }
         const { data, error } = await supabase.auth.getSession();
         if (!active) return;
         clearTimeout(fallback);
@@ -64,10 +113,25 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // If the login flow returned only an error (no token), strip it from the URL
+  // once so a refresh doesn't re-show it.
+  useEffect(() => {
+    const g = readGoogleLoginParams();
+    if (!g.token && g.error) cleanGoogleLoginUrl();
+  }, []);
+
   async function signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
+  }
+
+  /** Kick off "Sign in with Google" — full-page redirect to the consent flow. */
+  function signInWithGoogle() {
+    setGoogleLoginError(null);
+    const returnTo = `${window.location.origin}${window.location.pathname}`;
+    const url = `${SUPABASE_URL}/functions/v1/google-api?login=start&returnTo=${encodeURIComponent(returnTo)}`;
+    window.location.assign(url);
   }
 
   async function signUp(email, password) {
@@ -103,6 +167,9 @@ export function AuthProvider({ children }) {
     user: session?.user || null,
     signIn,
     signUp,
+    signInWithGoogle,
+    googleLoginError,
+    clearGoogleLoginError: () => setGoogleLoginError(null),
     signOut,
     forceReset,
   };

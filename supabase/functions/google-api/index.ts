@@ -15,6 +15,21 @@
 //                       code → refresh+access tokens, resolves the account email,
 //                       persists, then 302s back to the app with ?google=connected.
 //
+// "Sign in with Google" (login) — a SECOND purpose for the same OAuth client,
+// kept fully separate from the Gmail/Drive workspace grant above:
+//   GET ?login=start&returnTo=… ← public. Builds a consent URL with MINIMAL
+//                       scopes (openid email profile) + an HMAC-signed `state`
+//                       (no shared CSRF slot → concurrent logins are fine) and
+//                       302s to Google. `returnTo` is origin-allowlisted so a
+//                       crafted link can't redirect the one-time login token to
+//                       an attacker.
+//   GET ?code&state(login) ← the same redirect URI; when `state` is a signed
+//                       login token we verify the Google identity + domain,
+//                       ensure a Supabase auth user, mint a magic-link
+//                       hashed_token and 302 back with ?gl_login=<token>. The SPA
+//                       trades it for a session via verifyOtp. We NEVER store the
+//                       user's Google tokens — login only reads their email.
+//
 // POST body shapes (one per request; admin-gated unless noted):
 //   { saveApp:{clientId,clientSecret} }  (admin) → store the OAuth client creds.
 //   { authorize:{returnTo} }             (admin) → consent URL + CSRF state.
@@ -61,9 +76,20 @@ const SCOPES = [
   'openid',
 ].join(' ');
 
+// Login is identity-only — no Gmail/Drive scopes, no offline access. We just
+// read the verified email; we store nothing.
+const LOGIN_SCOPES = 'openid email profile';
+// A login `state` is self-authenticating (HMAC-signed) rather than a stored
+// one-shot, so it doesn't collide with the admin connect flow's oauth_state and
+// supports many team members logging in at once. This prefix tells the callback
+// "this is a login round-trip, not a workspace connect".
+const LOGIN_STATE_PREFIX = 'lg1.';
+const LOGIN_STATE_TTL_MS = 10 * 60 * 1000; // consent must complete within 10 min
+
 type Attachment = { filename?: string; mimeType?: string; base64?: string };
 type Body = {
   saveApp?: { clientId?: string; clientSecret?: string };
+  saveLogin?: { domain?: string };
   authorize?: { returnTo?: string };
   disconnect?: boolean;
   status?: boolean;
@@ -113,6 +139,66 @@ const asList = (v?: string | string[]): string =>
   (Array.isArray(v) ? v : v ? [v] : []).map((s) => String(s).trim()).filter(Boolean).join(', ');
 /** base64 string → fixed 76-char lines (MIME base64 attachment bodies). */
 const wrap76 = (b64: string): string => b64.replace(/(.{76})/g, '$1\r\n');
+
+// ── login state: HMAC-signed, stateless ────────────────────────────────────
+function b64UrlToBytes(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function hmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
+  );
+}
+/** Sign a small JSON payload → `lg1.<b64url(json)>.<b64url(sig)>`. */
+async function signLoginState(secret: string, payload: Record<string, unknown>): Promise<string> {
+  const body = toB64Url(strToB64(JSON.stringify(payload)));
+  const key = await hmacKey(secret);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body)));
+  return `${LOGIN_STATE_PREFIX}${body}.${toB64Url(bytesToB64(sig))}`;
+}
+/** Verify + decode a login state; null if tampered, malformed, or expired. */
+async function verifyLoginState(secret: string, state: string): Promise<Record<string, unknown> | null> {
+  if (!state.startsWith(LOGIN_STATE_PREFIX)) return null;
+  const rest = state.slice(LOGIN_STATE_PREFIX.length);
+  const dot = rest.lastIndexOf('.');
+  if (dot < 0) return null;
+  const body = rest.slice(0, dot);
+  const sig = rest.slice(dot + 1);
+  try {
+    const key = await hmacKey(secret);
+    const ok = await crypto.subtle.verify('HMAC', key, b64UrlToBytes(sig), new TextEncoder().encode(body));
+    if (!ok) return null;
+    const payload = JSON.parse(new TextDecoder().decode(b64UrlToBytes(body))) as Record<string, unknown>;
+    const exp = Number(payload.exp || 0);
+    if (!exp || Date.now() > exp) return null;
+    return payload;
+  } catch { return null; }
+}
+
+const originOf = (raw?: string | null): string => {
+  if (!raw) return '';
+  try { return new URL(raw).origin; } catch { return ''; }
+};
+
+/**
+ * The app origins a login token may be redirected back to. Derived (zero-config)
+ * from the origin the admin connected Google from (google_oauth_config
+ * .oauth_return_to) — that browser proved it's the real app — plus localhost for
+ * dev. An unrecognised returnTo is refused so a crafted link can't steal the
+ * one-time login token.
+ */
+async function allowedLoginOrigins(admin: Admin): Promise<Set<string>> {
+  const set = new Set<string>(['http://localhost:5173', 'http://localhost:3000']);
+  const { data } = await admin
+    .from('google_oauth_config').select('oauth_return_to').eq('profile_id', TEAM).maybeSingle();
+  const o = originOf(data?.oauth_return_to);
+  if (o) set.add(o);
+  return set;
+}
 
 /** Build a base64url-encoded RFC 5322 message (gmail.send `raw`). */
 function buildRawMessage(opts: {
@@ -259,6 +345,88 @@ Deno.serve(async (req) => {
     const state = u.searchParams.get('state') || '';
     const oauthErr = u.searchParams.get('error') || '';
 
+    // ── "Sign in with Google" — START the login consent (public) ─────────────
+    if (u.searchParams.get('login') === 'start') {
+      const rawReturn = u.searchParams.get('returnTo') || '';
+      const ret = originOf(rawReturn);
+      const origins = await allowedLoginOrigins(admin);
+      if (!ret || !origins.has(ret)) return json({ error: 'returnTo no permitido' }, 400);
+      const lback = (q: string) => Response.redirect(`${rawReturn}${rawReturn.includes('?') ? '&' : '?'}${q}`, 302);
+      const { data: cfg } = await admin
+        .from('google_oauth_config').select('client_id').eq('profile_id', TEAM).maybeSingle();
+      if (!cfg?.client_id) return lback(`gl_error=${encodeURIComponent('Acceso con Google no disponible — conéctalo en Integraciones.')}`);
+      const loginState = await signLoginState(SERVICE_ROLE_KEY, {
+        t: 'login', r: rawReturn, exp: Date.now() + LOGIN_STATE_TTL_MS, n: crypto.randomUUID(),
+      });
+      const url = new URL(AUTHORIZE);
+      url.searchParams.set('client_id', cfg.client_id);
+      url.searchParams.set('redirect_uri', redirectUri);
+      url.searchParams.set('response_type', 'code');
+      url.searchParams.set('scope', LOGIN_SCOPES);
+      url.searchParams.set('access_type', 'online');     // identity only — no refresh token
+      url.searchParams.set('prompt', 'select_account');
+      url.searchParams.set('include_granted_scopes', 'true');
+      url.searchParams.set('state', loginState);
+      return Response.redirect(url.toString(), 302);
+    }
+
+    // ── "Sign in with Google" — CALLBACK (state is a signed login token) ──────
+    if (state.startsWith(LOGIN_STATE_PREFIX)) {
+      const payload = await verifyLoginState(SERVICE_ROLE_KEY, state);
+      // returnTo inside the payload was origin-checked at start AND is HMAC-protected.
+      const loginReturn = String(payload?.r || '') || SUPABASE_URL;
+      const lback = (q: string) => Response.redirect(`${loginReturn}${loginReturn.includes('?') ? '&' : '?'}${q}`, 302);
+      const fail = (m: string) => lback(`gl_error=${encodeURIComponent(m.slice(0, 160))}`);
+      if (oauthErr) return fail(oauthErr);
+      if (!payload) return fail('Enlace de acceso vencido. Intenta de nuevo.');
+      if (!code) return fail('missing_code');
+      try {
+        const { data: cfg } = await admin
+          .from('google_oauth_config').select('client_id, client_secret').eq('profile_id', TEAM).maybeSingle();
+        if (!cfg?.client_id || !cfg?.client_secret) return fail('Acceso con Google no disponible.');
+        const tr = await fetch(TOKEN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: cfg.client_id, client_secret: cfg.client_secret,
+            grant_type: 'authorization_code', redirect_uri: redirectUri, code,
+          }),
+        });
+        const td = await tr.json().catch(() => ({}));
+        if (!tr.ok || !td?.access_token) throw new Error(td?.error_description || td?.error || `token ${tr.status}`);
+
+        const me = await fetch(USERINFO, { headers: { Authorization: `Bearer ${td.access_token}` } });
+        const md = await me.json().catch(() => ({}));
+        const email = String(md?.email || '').toLowerCase().trim();
+        const verified = md?.verified_email !== false;   // userinfo: verified_email boolean
+        const name = String(md?.name || '').trim();
+        if (!email || !verified) return fail('No se pudo verificar tu correo de Google.');
+
+        // Domain gate: settings.google_login_domain, else the connected account's domain.
+        const { data: s } = await admin
+          .from('settings').select('google_login_domain, google_email').eq('profile_id', TEAM).maybeSingle();
+        const configured = String(s?.google_login_domain || '').trim().toLowerCase().replace(/^@/, '');
+        const fallback = (String(s?.google_email || '').split('@')[1] || '').toLowerCase().trim();
+        const allowed = configured || fallback;
+        if (!allowed) return fail('El acceso con Google no está habilitado. Configúralo en Integraciones.');
+        if ((email.split('@')[1] || '') !== allowed) return fail(`Solo cuentas @${allowed} pueden entrar con Google.`);
+
+        // Ensure the auth user exists (idempotent). user_metadata.google_login lets
+        // the app skip the SetPassword gate — these users sign in passwordless.
+        await admin.auth.admin.createUser({
+          email, email_confirm: true, user_metadata: { google_login: true, name },
+        }).catch(() => { /* already registered — proceed to mint a session */ });
+
+        // Mint a one-time magic-link token; the SPA trades it for a session via verifyOtp.
+        const { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
+        const hashed = link?.properties?.hashed_token;
+        if (linkErr || !hashed) throw new Error(linkErr?.message || 'No se pudo iniciar sesión.');
+        return lback(`gl_login=${encodeURIComponent(hashed)}`);
+      } catch (e) {
+        return fail(String((e as Error)?.message || e));
+      }
+    }
+
     const { data: cfg } = await admin
       .from('google_oauth_config')
       .select('client_id, client_secret, oauth_state, oauth_return_to')
@@ -351,6 +519,16 @@ Deno.serve(async (req) => {
     if (upErr) return json({ ok: false, error: upErr.message });
     await admin.from('settings').update({ google_client_id: clientId }).eq('profile_id', TEAM);
     return json({ ok: true, redirectUri });
+  }
+
+  // ── saveLogin: which email domain may "Sign in with Google" (admin) ────────
+  if (body.saveLogin) {
+    const err = await requireAdmin();
+    if (err) return json({ ok: false, error: err }, 403);
+    const domain = String(body.saveLogin.domain || '').trim().toLowerCase().replace(/^@/, '');
+    const { error: upErr } = await admin.from('settings').update({ google_login_domain: domain }).eq('profile_id', TEAM);
+    if (upErr) return json({ ok: false, error: upErr.message });
+    return json({ ok: true });
   }
 
   // ── authorize: build the consent URL + a one-shot CSRF state (admin) ───────

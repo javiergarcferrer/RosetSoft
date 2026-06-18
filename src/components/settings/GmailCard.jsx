@@ -12,7 +12,7 @@ import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { supabase, SUPABASE_URL } from '../../db/supabaseClient.js';
-import { saveGoogleConfig, connectGoogle, disconnectGoogle } from '../../lib/google.js';
+import { saveGoogleConfig, connectGoogle, disconnectGoogle, saveGoogleLoginDomain } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
 // The OAuth redirect URI the admin must register in the Google Cloud OAuth
@@ -31,8 +31,28 @@ export default function GmailCard() {
   const [state, setState] = useState('idle'); // idle | connecting
   const [msg, setMsg] = useState(null); // { ok, text }
   const [copied, setCopied] = useState(false);
+  // "Sign in with Google" allowed domain. Empty ⇒ falls back to the connected
+  // account's domain server-side; the placeholder shows that fallback.
+  const [loginDomain, setLoginDomain] = useState(settings?.googleLoginDomain || '');
+  const [domainState, setDomainState] = useState('idle'); // idle | saving | saved
+  const fallbackDomain = (email.split('@')[1] || '').toLowerCase();
 
   useEffect(() => { setClientId(settings?.googleClientId || ''); }, [settings?.googleClientId]);
+  useEffect(() => { setLoginDomain(settings?.googleLoginDomain || ''); }, [settings?.googleLoginDomain]);
+
+  const saveLoginDomain = useCallback(async () => {
+    setDomainState('saving');
+    setMsg(null);
+    try {
+      await saveGoogleLoginDomain(loginDomain.trim().replace(/^@/, ''));
+      setDomainState('saved');
+      await refreshSettings?.();
+      setTimeout(() => setDomainState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (e) {
+      setDomainState('idle');
+      setMsg({ ok: false, text: userMessageFor(e) });
+    }
+  }, [loginDomain, refreshSettings]);
 
   // Read the OAuth round-trip result the function appended to the hash
   // (#/integraciones?google=connected | ?google_error=…), surface it, clean URL.
@@ -150,6 +170,30 @@ export default function GmailCard() {
           {connected && (
             <button type="button" className="btn-ghost min-h-[44px]" onClick={disconnect}>Desconectar</button>
           )}
+        </div>
+
+        {/* Sign in with Google — domain allow-list */}
+        <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
+          <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Acceso con Google (login)</div>
+          <p className="text-xs text-ink-500 mb-2">
+            Habilita el botón “Continuar con Google” en la pantalla de inicio para tu equipo. Solo entran
+            las cuentas de Google de este dominio; en su primer acceso quedan <em>pendientes de aprobación</em>.
+            Déjalo vacío para usar el dominio de la cuenta conectada{fallbackDomain ? <> (<code>{fallbackDomain}</code>)</> : null}.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              className="input flex-1"
+              placeholder={fallbackDomain || 'p. ej. alcover.do'}
+              value={loginDomain}
+              onChange={(e) => setLoginDomain(e.target.value)}
+              autoCapitalize="off" autoCorrect="off" spellCheck={false}
+            />
+            <button type="button" className="btn-ghost shrink-0 min-h-[44px]" onClick={saveLoginDomain} disabled={domainState === 'saving'}>
+              {domainState === 'saving' ? <RefreshCw size={14} className="animate-spin" /> : domainState === 'saved' ? <Check size={14} /> : null}
+              {domainState === 'saved' ? 'Guardado' : 'Guardar'}
+            </button>
+          </div>
         </div>
 
         {/* Redirect URI to register in Google Cloud */}

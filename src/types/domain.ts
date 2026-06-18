@@ -255,6 +255,10 @@ export interface Settings {
   /** The Drive "RosetSoft" workspace folder id we file per-importation
    *  subfolders under (created on first use). */
   googleDriveRootFolderId?: string;
+  /** "Sign in with Google" allow-list: only emails on this domain (e.g.
+   *  "alcover.do") may use the Login page's Google button. Empty ⇒ the
+   *  google-api function falls back to the connected account's domain. */
+  googleLoginDomain?: string;
   /** Webhook handshake string shown in Settings to paste into the Meta portal
    *  (not a secret — it only gates webhook REGISTRATION; payloads are
    *  authenticated by the app-secret HMAC signature). */

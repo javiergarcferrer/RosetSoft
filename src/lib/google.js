@@ -28,6 +28,11 @@ export async function saveGoogleConfig({ clientId, clientSecret }) {
   return invokeGoogle({ saveApp: { clientId, clientSecret } });
 }
 
+/** Set which email domain may "Sign in with Google" (empty ⇒ connected-account domain). */
+export async function saveGoogleLoginDomain(domain) {
+  return invokeGoogle({ saveLogin: { domain } });
+}
+
 /** Start the consent flow → returns the Google authorization URL to redirect to. */
 export async function connectGoogle({ returnTo } = {}) {
   const data = await invokeGoogle({ authorize: { returnTo } });
