@@ -184,6 +184,10 @@ export default function Facturacion() {
   // live query refetches; the manual Transmitir button stays the retry path.
   async function transmitPosting(p) {
     if (!p || !p.ncf) return;
+    // Never re-sign/re-send an e-NCF already transmitted or accepted — that
+    // would duplicate one fiscal number at the DGII. A 'pending' (auto-transmit
+    // not yet attempted or previously failed) is the legitimate retry path.
+    if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') return;
     setErr('');
     // Pre-flight: only a well-formed e-NCF can be signed (a manual NCF would
     // burn a DGII rejection), and signing needs the cert + the emisor RNC.
@@ -395,6 +399,13 @@ export default function Facturacion() {
         return;
       }
       const ncf = assigned ? assigned.eNcf : manualNcf;
+      // On the manual-NCF fallback, trust the typed e-NCF's own type prefix over
+      // the RNC-derived guess: the stored ecfType drives the e-CF payload's
+      // TipoeCF and the QR consulta path on transmit, so it must never disagree
+      // with the number actually issued (a 31 payload on an E32 number is a DGII
+      // rejection). A legacy non-e NCF (parseENcf → null) keeps the guess and is
+      // never transmitted anyway.
+      const ecfTypeForNcf = (!assigned && parseENcf(ncf)?.type) || ecfType;
       const built = buildSaleEntry({
         newId, config, postedAt,
         sale: {
@@ -410,7 +421,7 @@ export default function Facturacion() {
         lines: built.lines,
         posting: {
           id, profileId: scope, quoteId: quote.id, customerId: quote.customerId,
-          postedAt, ncf, rnc, ecfType,
+          postedAt, ncf, rnc, ecfType: ecfTypeForNcf,
           ecfStatus: assigned ? 'pending' : '',
           ecfExpiresAt: assigned?.expiresAt ?? null,
           base: book.base, itbis: book.itbis, total: book.total,
