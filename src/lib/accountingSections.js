@@ -51,6 +51,7 @@ export const ACCOUNTING_SECTIONS = [
   ] },
   { key: 'banca', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
+    { to: '/accounting/planes-de-pago', label: 'Planes de pago' },
     { to: '/accounting/conciliacion', label: 'Conciliación' },
   ] },
   { key: 'nomina', label: 'Nómina', icon: Wallet, tabs: [

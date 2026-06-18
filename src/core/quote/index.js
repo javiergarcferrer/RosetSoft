@@ -54,7 +54,7 @@ export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } 
 export { resolveOrderRegistration } from './views/registration.js';
 // Payment plan + contract VM (the amortized schedule decorated with paid/overdue
 // + DOP figures + signed state); the schedule math is lib/paymentPlan.
-export { resolvePaymentPlanView, buildPlanSchedule } from './views/paymentPlan.js';
+export { resolvePaymentPlanView, buildPlanSchedule, resolvePaymentPlanFollowUp } from './views/paymentPlan.js';
 export { amortize, addMonths } from '../../lib/paymentPlan.js';
 export { resolveWarehouseOrder } from './views/warehouseOrder.js';
 // Togo plan configurator VM (drag-and-drop top-down → a modular quote line),

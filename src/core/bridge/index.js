@@ -54,6 +54,36 @@ export function quoteToSale({ quote, lines, rate, hasFiscalId, settings = null }
 }
 
 /**
+ * PROCESS — Cobro de cuota: a payment-plan installment (CRM, priced in USD) →
+ * the Accounting cobro input, converted to DOP at `rate`. When the quote is
+ * already invoiced (`salesPostingId` given) the cobro is allocated to that
+ * invoice; otherwise it's an unallocated ADVANCE the receivables FIFO applies
+ * once the sale is invoiced (advances are allowed before invoicing). The shape
+ * is exactly what `buildPaymentEntry` / the payments row consume — the books
+ * never see the plan itself. Pure.
+ *
+ * @returns {{ direction, partyType, partyId, amount, method, reference, allocations }}
+ */
+export function planInstallmentToCobro({
+  plan, installment, rate, method = 'bank', salesPostingId = null, reference = null,
+}) {
+  const r = Number(rate) || 0;
+  const amount = round2(Number(installment?.amount || 0) * r);
+  const ref = (reference
+    || `Cuota ${installment?.n ?? ''}/${plan?.installmentCount ?? ''} · Plan ${plan?.number ?? ''}`
+  ).replace(/\s+/g, ' ').trim();
+  return {
+    direction: 'in',
+    partyType: 'customer',
+    partyId: plan?.customerId || null,
+    amount,
+    method,
+    reference: ref,
+    allocations: salesPostingId && amount > 0 ? [{ docId: salesPostingId, amount }] : [],
+  };
+}
+
+/**
  * PROCESS — Estado de factura: the accounting sale postings → the ONE fact the
  * CRM side may know about a quote's invoicing: that it was invoiced, under
  * which NCF, and where the e-CF stands. Read-only and one-directional (books →

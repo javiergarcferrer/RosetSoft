@@ -101,6 +101,54 @@ export function resolvePaymentPlanView(plan, { rate = 0, now = Date.now() } = {}
   };
 }
 
+/**
+ * Collections board projection: every active plan with an outstanding balance,
+ * decorated for the Contabilidad follow-up surface. Pure — the page fetches the
+ * plans + customers and passes them in.
+ *
+ * @param {object} opts { plans, customersById (Map), rate, now }
+ * @returns { rows, totals } — rows sorted by the most urgent (overdue, then
+ *   soonest due); each row carries the decorated plan view + customer + the
+ *   next-due / overdue summary.
+ */
+export function resolvePaymentPlanFollowUp({ plans = [], customersById = null, rate = 0, now = Date.now() } = {}) {
+  const rows = plans
+    .map((plan) => {
+      const view = resolvePaymentPlanView(plan, { rate, now });
+      if (!view) return null;
+      const customer = customersById ? customersById.get(plan.customerId) || null : null;
+      return {
+        planId: plan.id,
+        quoteId: plan.quoteId ?? null,
+        number: plan.number ?? null,
+        customer,
+        customerName: customer?.name || '—',
+        view,
+        outstandingUsd: view.outstandingUsd,
+        outstandingDop: view.outstandingDop,
+        paidUsd: view.paidUsd,
+        overdueCount: view.overdueCount,
+        nextDue: view.nextDue,
+        isSigned: view.isSigned,
+        status: view.status,
+      };
+    })
+    .filter((r) => r && r.status !== 'cancelled' && r.outstandingUsd > 0.005)
+    .sort((a, b) => {
+      // Overdue first, then by soonest next due date.
+      if ((b.overdueCount > 0) !== (a.overdueCount > 0)) return b.overdueCount - a.overdueCount;
+      return (a.nextDue?.dueAt || Infinity) - (b.nextDue?.dueAt || Infinity);
+    });
+
+  const totals = {
+    count: rows.length,
+    outstandingUsd: round2(rows.reduce((s, r) => s + r.outstandingUsd, 0)),
+    outstandingDop: round2(rows.reduce((s, r) => s + r.outstandingDop, 0)),
+    overdueCount: rows.reduce((s, r) => s + r.overdueCount, 0),
+  };
+  return { rows, totals };
+}
+
 function round2(n) {
   return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 }

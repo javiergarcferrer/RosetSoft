@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Link2, Download, Check, FileSignature, Save } from 'lucide-react';
 import { db, newId } from '../../db/database.js';
+import { collectInstallment } from '../../db/paymentPlans.js';
 import { buildPlanSchedule, resolvePaymentPlanView } from '../../core/quote/index.js';
+import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { contractLinkUrl, newShareToken } from '../../lib/contractShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
@@ -32,8 +34,12 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
   const [copy, setCopy] = useState('idle'); // idle | done
   const [pdf, setPdf] = useState('idle');   // idle | working | error
+  const [collecting, setCollecting] = useState(0); // installment n being collected (0 = none)
+  const [collectErr, setCollectErr] = useState('');
 
   const rate = effectiveDopRate(settings);
+  const scope = quote?.profileId || 'team';
+  const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   // Load the existing plan for this quote (if any) and seed the form from it.
   useEffect(() => {
@@ -191,14 +197,22 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
     }
   }
 
-  async function toggleInstallmentPaid(n) {
-    if (!plan) return;
-    const schedule = (plan.schedule || []).map((r) => (
-      r.n === n ? { ...r, paidAt: r.paidAt ? null : Date.now() } : r
-    ));
-    const row = { ...plan, schedule, updatedAt: Date.now() };
-    await db.paymentPlans.put(row);
-    setPlan(row);
+  // Collect a cuota: post a real cobro to the ledger (allocated to the quote's
+  // invoice, or an advance if not yet invoiced) and stamp the installment paid.
+  // Shared with the Contabilidad collections board via db/paymentPlans.
+  async function collectCuota(n) {
+    if (!plan || collecting) return;
+    setCollecting(n);
+    setCollectErr('');
+    try {
+      const row = await collectInstallment({ plan, installmentN: n, config, scope, rate });
+      setPlan(row);
+    } catch (e) {
+      console.error('[PaymentPlanCard] collect failed:', e);
+      setCollectErr('No se pudo registrar el cobro.');
+    } finally {
+      setCollecting(0);
+    }
   }
 
   if (loading) {
@@ -276,7 +290,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                     <th className="text-right py-1.5 px-2">Cuota</th>
                     <th className="text-right py-1.5 px-2">Interés</th>
                     <th className="text-right py-1.5 px-2">Balance</th>
-                    {plan ? <th className="text-center py-1.5 px-2">Pagada</th> : null}
+                    {plan ? <th className="text-center py-1.5 px-2">Cobro</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -288,8 +302,16 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                       <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.interest)}</td>
                       <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.balanceAfter)}</td>
                       {plan ? (
-                        <td className="py-1.5 px-2 text-center">
-                          <input type="checkbox" checked={!!r.isPaid} onChange={() => toggleInstallmentPaid(r.n)} aria-label={`Cuota ${r.n} pagada`} />
+                        <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                          {r.isPaid ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><Check size={13} /> {fmtDate(r.paidAt)}</span>
+                          ) : (
+                            <button type="button" onClick={() => collectCuota(r.n)} disabled={collecting === r.n}
+                              className="text-xs text-brand-700 hover:text-brand-900 inline-flex items-center gap-1">
+                              {collecting === r.n ? <Loader2 size={12} className="animate-spin" /> : null}
+                              Registrar cobro
+                            </button>
+                          )}
                         </td>
                       ) : null}
                     </tr>
@@ -297,6 +319,12 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                 </tbody>
               </table>
             </div>
+            {collectErr && <p role="alert" className="text-xs text-red-600">{collectErr}</p>}
+            {plan && planView?.paidCount > 0 ? (
+              <p className="text-[11px] text-ink-400">
+                Cobrado {usd(planView.paidUsd)} · pendiente {usd(planView.outstandingUsd)}. Cada cobro se registra en Contabilidad (Cuentas por cobrar).
+              </p>
+            ) : null}
 
             {/* Signed banner */}
             {planView?.isSigned ? (
