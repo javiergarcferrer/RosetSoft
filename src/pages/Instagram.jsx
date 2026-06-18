@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
-import { useMediaQuery } from '../components/Layout.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
 import { resolveSocialPulse, resolveIgStudio } from '../core/jarvis/index.js';
@@ -49,10 +48,6 @@ export default function Instagram() {
   const { settings } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
   const username = settings?.metaSocialIgUsername;
-  // Desktop keeps the swipe/snap board deck; phones drop horizontal scrolling
-  // entirely and render just the active board, switched by the bottom bar (the
-  // swipe deck leaked sideways and fought the vertical scroll — see render).
-  const isDesktop = useMediaQuery('(min-width: 768px)');
 
   // Two independent reads, kept apart so one failing never blanks the other.
   const [snap, setSnap] = useState({ raw: null, error: null, at: null });
@@ -196,8 +191,8 @@ export default function Instagram() {
     };
   }, [linked, anyData]);
 
-  // One board's content — the single render path shared by the desktop swipe
-  // deck and the mobile single-board view, so the two can never drift.
+  // One board's content — the single render path used by every panel of the
+  // swipe deck (desktop and mobile share it, so they can never drift).
   const renderBoard = (sec) => (
     <>
       {sec.id === 'resumen' && (
@@ -324,10 +319,14 @@ export default function Instagram() {
           ) : (
             <div className="card card-pad text-sm text-ink-400">Leyendo Instagram…</div>
           )
-        ) : isDesktop ? (
-          // Desktop: the swipe/snap board deck. Each board clips its own
-          // horizontal overflow (overflow-x-hidden) so nothing leaks into the
-          // deck's horizontal scroll and knocks the snap off-center.
+        ) : (
+          // The swipe/snap board deck — ONE path for every viewport. Swipe (or
+          // tap a tab / the bottom bar) to page between boards; the observer
+          // below keeps the active tab synced to whichever board is centered.
+          // Each board clips its OWN horizontal overflow (overflow-x-hidden) so
+          // nothing leaks into the deck's horizontal scroll and knocks the snap
+          // off-center, and HIDES its vertical scrollbar — the visible gutter
+          // was reading as a grey line clipping the right edge of the boards.
           <div
             ref={deckRef}
             className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [overscroll-behavior:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -335,23 +334,13 @@ export default function Instagram() {
             {sections.map((sec) => (
               <section
                 key={sec.id}
-                className="min-w-0 h-full shrink-0 basis-full snap-start overflow-y-auto overflow-x-hidden overscroll-contain pb-4 [scroll-snap-stop:always]"
+                className="min-w-0 h-full shrink-0 basis-full snap-start overflow-y-auto overflow-x-hidden overscroll-contain pb-4 [scroll-snap-stop:always] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 aria-label={sec.label}
               >
                 {renderBoard(sec)}
               </section>
             ))}
           </div>
-        ) : (
-          // Mobile: NO horizontal scroll — render only the active board, full
-          // width, vertical scroll only. The bottom bar is the switcher.
-          <section
-            key={sections[active]?.id}
-            className="min-w-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-4"
-            aria-label={sections[active]?.label}
-          >
-            {sections[active] && renderBoard(sections[active])}
-          </section>
         )}
 
         {st && Object.keys(st.errors).length > 0 && active === 0 && (
