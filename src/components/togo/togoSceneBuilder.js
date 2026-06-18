@@ -80,17 +80,17 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
     color: base,
     roughness: opts.roughness ?? 0.85,             // matte cloth
     metalness: 0,                                  // dielectric — never plastic/metal
-    // Velvet = a full sheen lobe whose tint is the FABRIC's own hue (NOT white):
-    // it glows in-colour at grazing angles (retroreflective Togo look) instead of
-    // washing to a pale film, and reads as real velvet rather than flat fabric.
-    sheen: opts.sheen ?? 1.0,
+    // A moderate sheen lobe tinted to the FABRIC's own hue (NOT white): velvet
+    // glow at grazing angles without washing the colour to a pale film. Kept
+    // moderate (not maxed) so it reads as velvet but doesn't lighten the body.
+    sheen: opts.sheen ?? 0.7,
     sheenRoughness: opts.sheenRoughness ?? 0.6,
     sheenColor: new THREE.Color(opts.sheenColor ?? base),
     // A thin clearcoat lobe for coated finishes (leather) — off by default so
     // matte/cloth finishes pay nothing. Layers on top of the sheen.
     clearcoat: opts.clearcoat ?? 0,
     clearcoatRoughness: opts.clearcoatRoughness ?? 0.4,
-    envMapIntensity: opts.envMapIntensity ?? 0.9,
+    envMapIntensity: opts.envMapIntensity ?? 0.7,
   });
   if (tex) {
     tex.colorSpace = THREE.SRGBColorSpace;        // base colour is sRGB
@@ -125,16 +125,34 @@ export function sampleSwatchColor(image) {
     if (!ctx) return null;
     ctx.drawImage(image, 0, 0, w, h);
     const { data } = ctx.getImageData(0, 0, w, h);
-    let lr = 0, lg = 0, lb = 0, n = 0;                 // accumulate in LINEAR light
-    const x0 = Math.floor(w * 0.22), x1 = Math.floor(w * 0.96);
-    const y0 = Math.floor(h * 0.08), y1 = Math.floor(h * 0.92);
+    const x0 = Math.floor(w * 0.18), x1 = Math.floor(w * 0.97);
+    const y0 = Math.floor(h * 0.06), y1 = Math.floor(h * 0.94);
+    // Pass 1 — gather opaque-pixel luminances to find the swatch's MEDIAN tone.
+    const lums = [];
     for (let y = y0; y < y1; y++) {
       for (let x = x0; x < x1; x++) {
         const i = (y * w + x) * 4;
-        const R = data[i], G = data[i + 1], B = data[i + 2];
         if (data[i + 3] < 8) continue;
+        lums.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
+      }
+    }
+    if (!lums.length) return null;
+    lums.sort((a, b) => a - b);
+    const med = lums[lums.length >> 1];
+    // Pass 2 — average (in LINEAR light) only the MATTE MIDTONES around the median.
+    // Velvet swatches are shot with a bright diagonal sheen fold; that fold is a
+    // specular highlight, NOT the fabric colour, and averaging it in is exactly
+    // what made deep colours sample out pale. Reject it (and the deep shadow
+    // folds) by keeping a band around the median → the true diffuse colour.
+    const lo = Math.max(14, med * 0.5), hi = Math.min(240, med * 1.28);
+    let lr = 0, lg = 0, lb = 0, n = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * w + x) * 4;
+        if (data[i + 3] < 8) continue;
+        const R = data[i], G = data[i + 1], B = data[i + 2];
         const lum = 0.2126 * R + 0.7152 * G + 0.0722 * B;
-        if (lum < 28 || lum > 232) continue;           // drop letter strip + extremes
+        if (lum < lo || lum > hi) continue;
         lr += S2L(R); lg += S2L(G); lb += S2L(B); n++;
       }
     }
@@ -271,7 +289,11 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   const envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
 
-  const key = new THREE.DirectionalLight(0xffffff, 2.0);
+  // Colour-accurate product lighting: let the RoomEnvironment IBL do most of the
+  // work and keep the key gentle, so a dark/saturated swatch renders at its TRUE
+  // depth. A hot key (we had 2.0) over-lit everything and washed deep velvets out
+  // to a pale, milky tint — the "colours render too light" complaint.
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
   key.position.set(radius * 0.8, radius * 1.6, radius * 0.9);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -280,7 +302,7 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   key.shadow.bias = -0.0004;
   key.shadow.radius = 6;
   scene.add(key);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 0.5));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 0.25));
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(radius * 12, radius * 12),

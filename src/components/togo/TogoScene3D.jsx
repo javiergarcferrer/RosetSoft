@@ -21,9 +21,9 @@ async function loaderFor(ext) {
 // glTF/Collada return a wrapper with `.scene`; OBJ/FBX/3DS return the Object3D.
 const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
 
-// The default fabric finish (the material editor overrides these live) — a full
-// velvet sheen lobe over matte cloth (see makeFabricMaterial).
-const DEFAULT_FINISH = { sheen: 1.0, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
+// The default fabric finish (the material editor overrides these live) — a
+// moderate velvet sheen lobe over matte cloth (see makeFabricMaterial).
+const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 
 /**
  * The Togo 3D visualizer — a real-time three.js view of the SAME placed layout
