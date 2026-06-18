@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { classOf, postableAccounts } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
@@ -216,7 +217,22 @@ export default function Suppliers() {
       {!suppliersQ.loaded ? <ListLoading /> : suppliersQ.data.length === 0 ? (
         <EmptyState icon={Truck} title="Sin proveedores" description="Agrega tu primer proveedor." />
       ) : (
-        <div className="card overflow-hidden">
+        <>
+        {/* Mobile cards — whole card taps through to edit */}
+        <RowCards
+          rows={suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => ({
+            key: s.id,
+            title: s.name,
+            sub: KIND_LABEL[s.kind] || s.kind,
+            onClick: () => openEdit(s),
+            kv: [
+              ['RNC / Cédula', s.rnc || '—'],
+              ['Cuenta', s.defaultAccountCode ? (acctByCode.get(s.defaultAccountCode)?.name || s.defaultAccountCode) : '—'],
+              ['Retención', [s.retainIsr && 'ISR', s.retainItbis && 'ITBIS'].filter(Boolean).join(' + ') || '—'],
+            ],
+          }))}
+        />
+        <div className="card overflow-hidden hidden md:block">
           <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
             <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
           </div>
@@ -246,6 +262,7 @@ export default function Suppliers() {
             </table>
           </div>
         </div>
+        </>
       )}
     </AccountingGate>
   );

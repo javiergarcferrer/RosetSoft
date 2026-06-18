@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { ECF_TYPES, ecfTypeLabel, sequenceState } from '../../core/accounting/index.js';
@@ -129,7 +130,27 @@ export default function ECFSequences() {
         <EmptyState icon={Hash} title="Sin secuencias"
           description="Carga los rangos de e-NCF que la DGII te autorizó." />
       ) : (
-        <div className="card overflow-hidden">
+        <>
+        {/* Mobile cards — whole card taps through to edit */}
+        <RowCards
+          rows={rows.map((s) => {
+            const st = sequenceState(s);
+            const status = !s.active ? 'Inactiva' : st.expired ? 'Vencida' : st.exhausted ? 'Agotada' : 'Activa';
+            return {
+              key: s.id,
+              title: `${s.ecfType} · ${ecfTypeLabel(s.ecfType)}`,
+              right: status,
+              sub: `Rango ${s.seqFrom}–${s.seqTo}`,
+              onClick: () => openEdit(s),
+              kv: [
+                ['Próximo e-NCF', st.nextENcf || '—'],
+                ['Restan', st.remaining],
+                ['Vence', s.expiresAt ? formatDate(s.expiresAt) : '—'],
+              ],
+            };
+          })}
+        />
+        <div className="card overflow-hidden hidden md:block">
           <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
             <ColumnsMenu columns={columns} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
           </div>
@@ -160,6 +181,7 @@ export default function ECFSequences() {
           </table>
           </div>
         </div>
+        </>
       )}
     </AccountingGate>
   );
