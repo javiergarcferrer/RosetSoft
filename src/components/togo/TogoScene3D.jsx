@@ -21,8 +21,9 @@ async function loaderFor(ext) {
 // glTF/Collada return a wrapper with `.scene`; OBJ/FBX/3DS return the Object3D.
 const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
 
-// The default fabric finish (the material editor overrides these live).
-const DEFAULT_FINISH = { sheen: 0.6, sheenRoughness: 0.55, roughness: 0.82, repeat: 3, normalScale: 0.45 };
+// The default fabric finish (the material editor overrides these live) — a full
+// velvet sheen lobe over matte cloth (see makeFabricMaterial).
+const DEFAULT_FINISH = { sheen: 1.0, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 
 /**
  * The Togo 3D visualizer — a real-time three.js view of the SAME placed layout
@@ -164,8 +165,11 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.92;
+      // Khronos PBR Neutral (r162+): 1:1 on base colour/hue/saturation, so a
+      // swatch renders at its TRUE colour. ACESFilmic lightened + desaturated
+      // everything — the "colours look consistently lighter" complaint.
+      renderer.toneMapping = THREE.NeutralToneMapping;
+      renderer.toneMappingExposure = 1.0;
       renderer.domElement.style.display = 'block';
       renderer.domElement.style.outline = 'none';
       mount.appendChild(renderer.domElement);

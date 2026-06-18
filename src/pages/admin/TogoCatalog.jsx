@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { Sofa, Upload, UploadCloud, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2, Box } from 'lucide-react';
+import { Sofa, Upload, UploadCloud, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2, Box, RotateCw } from 'lucide-react';
 import { togoEmbedSnippet, togoEmbedUrl } from '../../lib/togoEmbed.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
@@ -278,6 +278,7 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
     if (prev) removeTogoMesh(prev);
   };
   const toggleAxis = () => db.togoModels.update(card.id, { meshUpAxis: card.meshUpAxis === 'z' ? 'y' : 'z', updatedAt: Date.now() });
+  const rotate90 = () => db.togoModels.update(card.id, { meshRotateY: ((Number(card.meshRotateY) || 0) + 90) % 360, updatedAt: Date.now() });
   const ACCEPT_3D = '.fbx,.glb,.gltf,.obj,.dae,.3ds';
 
   const openPicker = () => { onNeedCatalog(); setEditing(true); };
@@ -354,6 +355,9 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
             <Box size={11} className="shrink-0" /> {card.meshUrl ? 'Modelo 3D cargado' : 'Geometría generada'}
           </span>
           <div className="flex items-center gap-1 shrink-0">
+            {card.meshUrl && (
+              <button type="button" onClick={rotate90} className="btn-ghost text-[11px]" title="Girar 90° para orientar el frente como en el plano"><RotateCw size={12} /></button>
+            )}
             {card.meshUrl && (
               <button type="button" onClick={toggleAxis} className="btn-ghost text-[11px]" title="Si el modelo aparece acostado, cambia el eje vertical">Eje {card.meshUpAxis === 'z' ? 'Z' : 'Y'}</button>
             )}

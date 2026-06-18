@@ -12,7 +12,13 @@
  * (the dealer's pCon/OFML channel), swap the per-piece build for a glTF load —
  * the layout/material wiring here is unchanged.
  */
-import { togoParts, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
+import { togoParts, togoMeshFit, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
+
+// sRGB ↔ linear-light transfer (the exact IEC 61966-2-1 curve). Used to average
+// swatch pixels in LINEAR light (gamma-correct) so the sampled colour isn't
+// biased lighter — averaging sRGB bytes directly is a classic "too light" error.
+const S2L = (b) => { const c = b / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const L2S = (l) => { const c = l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055; return Math.round(Math.min(1, Math.max(0, c)) * 255); };
 
 // Default Togo upholstery when no fabric is picked — a warm, mid neutral that
 // reads as fabric under the studio IBL (not flat plastic).
@@ -72,19 +78,19 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
   const base = new THREE.Color(opts.color ?? (tex ? 0xffffff : DEFAULT_COLOR));
   const mat = new THREE.MeshPhysicalMaterial({
     color: base,
-    roughness: opts.roughness ?? 0.82,
-    metalness: 0,
-    sheen: opts.sheen ?? 0.5,
-    sheenRoughness: opts.sheenRoughness ?? 0.55,
-    // Tint the sheen lobe toward the FABRIC colour (not white): coloured velvet
-    // keeps its saturation at grazing angles instead of washing out to a pale
-    // film — the single biggest cause of the "flat pale plastic" look.
+    roughness: opts.roughness ?? 0.85,             // matte cloth
+    metalness: 0,                                  // dielectric — never plastic/metal
+    // Velvet = a full sheen lobe whose tint is the FABRIC's own hue (NOT white):
+    // it glows in-colour at grazing angles (retroreflective Togo look) instead of
+    // washing to a pale film, and reads as real velvet rather than flat fabric.
+    sheen: opts.sheen ?? 1.0,
+    sheenRoughness: opts.sheenRoughness ?? 0.6,
     sheenColor: new THREE.Color(opts.sheenColor ?? base),
     // A thin clearcoat lobe for coated finishes (leather) — off by default so
     // matte/cloth finishes pay nothing. Layers on top of the sheen.
     clearcoat: opts.clearcoat ?? 0,
     clearcoatRoughness: opts.clearcoatRoughness ?? 0.4,
-    envMapIntensity: opts.envMapIntensity ?? 0.85,
+    envMapIntensity: opts.envMapIntensity ?? 0.9,
   });
   if (tex) {
     tex.colorSpace = THREE.SRGBColorSpace;        // base colour is sRGB
@@ -119,7 +125,7 @@ export function sampleSwatchColor(image) {
     if (!ctx) return null;
     ctx.drawImage(image, 0, 0, w, h);
     const { data } = ctx.getImageData(0, 0, w, h);
-    let r = 0, g = 0, b = 0, n = 0;
+    let lr = 0, lg = 0, lb = 0, n = 0;                 // accumulate in LINEAR light
     const x0 = Math.floor(w * 0.22), x1 = Math.floor(w * 0.96);
     const y0 = Math.floor(h * 0.08), y1 = Math.floor(h * 0.92);
     for (let y = y0; y < y1; y++) {
@@ -129,11 +135,13 @@ export function sampleSwatchColor(image) {
         if (data[i + 3] < 8) continue;
         const lum = 0.2126 * R + 0.7152 * G + 0.0722 * B;
         if (lum < 28 || lum > 232) continue;           // drop letter strip + extremes
-        r += R; g += G; b += B; n++;
+        lr += S2L(R); lg += S2L(G); lb += S2L(B); n++;
       }
     }
     if (!n) return null;
-    return (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n);
+    // Encode the linear average back to an sRGB hex; THREE.Color reads it as sRGB
+    // and decodes once → the material's working colour is the true linear mean.
+    return (L2S(lr / n) << 16) | (L2S(lg / n) << 8) | L2S(lb / n);
   } catch { return null; }
 }
 
@@ -141,8 +149,9 @@ export function sampleSwatchColor(image) {
  * Drop a loaded REAL model (a pCon export — GLB/OBJ/FBX/DAE/3DS, already
  * tessellated) into a piece group: clone it, upholster every mesh in the piece's
  * fabric material (so "drag a fabric" works exactly like in pCon), apply the
- * descriptor's unit scale + axis/facing fixups, then recentre on XZ and sit it
- * on the floor — so the export's own origin/scale/up-axis don't matter.
+ * descriptor's axis/facing fixups, FIT it to the plan tile, then recentre on its
+ * footprint and sit it on the floor — so the export's own origin/scale/up-axis
+ * don't matter and the piece lands EXACTLY where the 2D plan shows it.
  */
 function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
   const clone = object.clone(true);
@@ -156,31 +165,40 @@ function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
       o.receiveShadow = true;
     }
   });
-  if (desc?.upAxis === 'z') clone.rotation.x = -Math.PI / 2;       // CAD Z-up → three Y-up
+  // Orientation fixups. The FBX/glTF loader ALREADY applies the file's up-axis,
+  // so these are MANUAL overrides: stand up a mis-tagged Z-up export, then spin
+  // the open front toward the viewer.
+  if (desc?.upAxis === 'z') clone.rotation.x = -Math.PI / 2;
   if (desc?.rotateY) clone.rotation.y += (desc.rotateY * Math.PI) / 180;
 
   const wrap = new THREE.Group();
   wrap.add(clone);
-  wrap.updateMatrixWorld(true);
-  let box = new THREE.Box3().setFromObject(wrap);
-  // Scale: an explicit unit scale (drawing units → cm), else AUTO-FIT by HEIGHT
-  // to the Togo's uniform ~72 cm. EVERY Togo piece is the same height, so fitting
-  // by height (not the horizontal footprint) makes an uploaded settee and corner
-  // come out the SAME height — and matches the procedural pieces. Fitting by
-  // footprint tied height to width, so wide pieces towered over narrow ones. This
-  // still absorbs mm/cm/m export units (it's a ratio). `piece` kept for the call.
-  let scale = Number(desc?.scale) || 0;
-  if (!(scale > 0)) {
-    const size = box.getSize(new THREE.Vector3());
-    scale = TOGO_HEIGHT_CM / (size.y || TOGO_HEIGHT_CM);
+  clone.updateMatrixWorld(true);
+
+  // A dealer-set unit scale opts out of tile-fit: scale uniformly, recentre, floor.
+  if (Number(desc?.scale) > 0) {
+    clone.scale.multiplyScalar(desc.scale);
+    clone.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(wrap);
+    const c = box.getCenter(new THREE.Vector3());
+    wrap.position.set(-c.x, -box.min.y, -c.z);
+    pieceGroup.add(wrap);
+    return;
   }
-  clone.scale.multiplyScalar(scale);
-  wrap.updateMatrixWorld(true);
-  box = new THREE.Box3().setFromObject(wrap);
-  const c = box.getCenter(new THREE.Vector3());
-  wrap.position.x -= c.x;
-  wrap.position.z -= c.z;
-  wrap.position.y -= box.min.y;
+
+  // 2D↔3D PARITY: fit the mesh to its plan tile (footprint = widthCm×depthCm,
+  // height = Togo height) so an uploaded piece lands on the SAME tile as the 2D
+  // plan, regardless of the FBX's units/pivot/proportions. The wrapper is
+  // axis-aligned, so its scale fits in WORLD axes; togoMeshFit also tells us when
+  // to spin 90° (a mesh authored across its tile) so it isn't squashed.
+  const size0 = new THREE.Box3().setFromObject(clone).getSize(new THREE.Vector3());
+  const fit = togoMeshFit(size0, piece?.widthCm, piece?.depthCm, TOGO_HEIGHT_CM);
+  if (fit.rotate90) clone.rotation.y += Math.PI / 2;
+  clone.updateMatrixWorld(true);
+  const c = new THREE.Box3().setFromObject(clone).getCenter(new THREE.Vector3());
+  clone.position.sub(c);                          // centre the mesh on the wrapper origin
+  wrap.scale.set(fit.sx, fit.sy, fit.sz);         // → footprint widthCm×depthCm, height = Togo
+  wrap.position.set(0, TOGO_HEIGHT_CM / 2, 0);    // content is centred → lift half-height to the floor
   pieceGroup.add(wrap);
 }
 

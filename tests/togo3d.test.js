@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { inferTogoForm, inferTogoKind, togoParts, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
+import { inferTogoForm, inferTogoKind, togoParts, togoMeshFit, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
 import { glbFor, hasTogoGlb } from '../src/assets/togo/togoModels3d.js';
 import { resolveTogoScene } from '../src/core/quote/views/configuratorView.js';
 
@@ -104,4 +104,31 @@ test('resolveTogoScene recentres the layout on the origin with the right overall
 
   // Empty plan → safe zeros, never NaN.
   assert.deepEqual(resolveTogoScene([]).overallCm, { widthCm: 0, depthCm: 0 });
+});
+
+test('togoMeshFit pins 2D↔3D parity: an uploaded mesh fills its plan tile at the Togo height', () => {
+  // A settee mesh measured 174(W)×72(H)×102(D) onto a 174×102 tile → identity.
+  let f = togoMeshFit({ x: 174, y: 72, z: 102 }, 174, 102, 72);
+  assert.equal(f.rotate90, false);
+  assert.ok(Math.abs(f.sx - 1) < 1e-6 && Math.abs(f.sy - 1) < 1e-6 && Math.abs(f.sz - 1) < 1e-6);
+
+  // Same mesh exported SIDEWAYS (footprint 102×174) onto the 174×102 tile → it
+  // auto-rotates 90°, then fills the tile EXACTLY instead of being squashed.
+  f = togoMeshFit({ x: 102, y: 72, z: 174 }, 174, 102, 72);
+  assert.equal(f.rotate90, true);
+  assert.ok(Math.abs(f.sx - 1) < 1e-6 && Math.abs(f.sz - 1) < 1e-6, 'fills the tile after the 90°');
+
+  // Height ALWAYS normalises to the Togo height — every uploaded piece, any
+  // footprint, comes out the same height (the bug where settees towered).
+  f = togoMeshFit({ x: 200, y: 50, z: 100 }, 174, 102, 72);
+  assert.ok(Math.abs(f.sy * 50 - 72) < 1e-6, 'height → 72 regardless of footprint');
+
+  // A mesh authored in METRES (0.01×) still fits — it's a ratio, units cancel.
+  f = togoMeshFit({ x: 1.74, y: 0.72, z: 1.02 }, 174, 102, 72);
+  assert.ok(Math.abs(f.sx * 1.74 - 174) < 1e-4 && Math.abs(f.sz * 1.02 - 102) < 1e-4);
+
+  // No footprint (untracked) → uniform scale by height, never NaN.
+  f = togoMeshFit({ x: 80, y: 36, z: 80 }, 0, 0, 72);
+  assert.equal(f.rotate90, false);
+  assert.ok(Math.abs(f.sx - f.sy) < 1e-9 && Math.abs(f.sy - f.sz) < 1e-9 && Math.abs(f.sy * 36 - 72) < 1e-6);
 });

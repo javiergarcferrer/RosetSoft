@@ -119,3 +119,34 @@ export function inferTogoKind(label = '', widthCm = 0, depthCm = 0) {
 
 /** The overall built height (cm) of any Togo piece — the backrest top. */
 export const TOGO_HEIGHT_CM = BACK_TOP;
+
+/**
+ * Fit an arbitrary uploaded mesh onto a plan tile — the 2D↔3D PARITY math, pure
+ * so it's unit-testable. Given the mesh's measured world bounding-box `size`
+ * (after the loader's up-axis correction) and the plan tile (widthCm × depthCm),
+ * returns how to make the mesh occupy that tile EXACTLY at the Togo height:
+ *   • `rotate90` — spin 90° about Y first when the mesh's longer horizontal axis
+ *     lies ACROSS the tile's longer axis (a piece authored "sideways"), so we
+ *     align long-to-long instead of squashing it.
+ *   • `sx,sy,sz` — per-WORLD-axis scales (apply on the axis-aligned wrapper, after
+ *     the optional 90°) so footprint = widthCm×depthCm and height = heightCm.
+ * This is what guarantees an uploaded piece lands on the same tile as the 2D plan
+ * (footprint-center pivot on the floor), regardless of the FBX's own units, pivot
+ * or proportions. Falls back to a uniform height-fit when there's no footprint.
+ */
+export function togoMeshFit(size, widthCm, depthCm, heightCm = TOGO_HEIGHT_CM) {
+  const sx0 = Math.max(1e-6, Number(size?.x) || 0);
+  const sy0 = Math.max(1e-6, Number(size?.y) || 0);
+  const sz0 = Math.max(1e-6, Number(size?.z) || 0);
+  const W = Math.max(0, Number(widthCm) || 0);
+  const D = Math.max(0, Number(depthCm) || 0);
+  const H = Math.max(1, Number(heightCm) || TOGO_HEIGHT_CM);
+  if (!(W > 0 && D > 0)) {
+    const s = H / sy0;                                   // no footprint → uniform by height
+    return { rotate90: false, sx: s, sy: s, sz: s };
+  }
+  const rotate90 = (sx0 >= sz0) !== (W >= D);            // align the longer axes
+  const fx = rotate90 ? sz0 : sx0;                       // world-X extent after the optional 90°
+  const fz = rotate90 ? sx0 : sz0;                       // world-Z extent
+  return { rotate90, sx: W / fx, sy: H / sy0, sz: D / fz };
+}
