@@ -204,17 +204,19 @@ function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
     return;
   }
 
-  // 2D↔3D PARITY: fit the mesh to its plan tile (footprint = widthCm×depthCm,
-  // height = Togo height) so an uploaded piece lands on the SAME tile as the 2D
-  // plan, regardless of the FBX's units/pivot/proportions. The wrapper is
-  // axis-aligned, so its scale fits in WORLD axes. Orientation is left as authored.
+  // Normalise to the Togo height with a UNIFORM scale: show the dealer's model at
+  // its TRUE proportions (a square-footprint corner stays square), just sized to
+  // the common ~72 cm height and dropped on its footprint centre at the plan
+  // position. A per-axis "fit to tile" squashed any mesh whose footprint didn't
+  // exactly match the catalogue width×depth — that's what turned the square corner
+  // rectangular. `piece` kept for the call site / future footprint sanity checks.
   const box0 = new THREE.Box3().setFromObject(clone);
   const size0 = box0.getSize(new THREE.Vector3());
   const c = box0.getCenter(new THREE.Vector3());
-  const fit = togoMeshFit(size0, piece?.widthCm, piece?.depthCm, TOGO_HEIGHT_CM);
+  const { s } = togoMeshFit(size0, TOGO_HEIGHT_CM);
   clone.position.sub(c);                          // centre the mesh on the wrapper origin
-  wrap.scale.set(fit.sx, fit.sy, fit.sz);         // → footprint widthCm×depthCm, height = Togo
-  wrap.position.set(0, TOGO_HEIGHT_CM / 2, 0);    // content is centred → lift half-height to the floor
+  wrap.scale.setScalar(s);                        // uniform — never distorts the footprint
+  wrap.position.set(0, (size0.y * s) / 2, 0);     // content is centred → lift half-height to the floor
   pieceGroup.add(wrap);
 }
 

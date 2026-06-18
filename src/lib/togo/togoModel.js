@@ -121,27 +121,19 @@ export function inferTogoKind(label = '', widthCm = 0, depthCm = 0) {
 export const TOGO_HEIGHT_CM = BACK_TOP;
 
 /**
- * Fit an arbitrary uploaded mesh onto a plan tile — the 2D↔3D PARITY math, pure
- * so it's unit-testable. Given the mesh's measured world bounding-box `size`
- * (after the loader's up-axis correction) and the plan tile (widthCm × depthCm),
- * returns the per-WORLD-axis scales (applied on the axis-aligned wrapper) that
- * make the mesh occupy that tile EXACTLY at the Togo height: footprint =
- * widthCm×depthCm, height = heightCm. That's what makes an uploaded piece land
- * on the SAME tile as the 2D plan — its footprint edges line up with the plan
- * instead of drifting — regardless of the FBX's own units, pivot or proportions.
- * Orientation is left untouched (the loader/author already set it). Falls back to
- * a uniform height-fit when there's no footprint.
+ * UNIFORM scale for an uploaded mesh: normalise its HEIGHT to the Togo's uniform
+ * ~72 cm and keep the mesh's TRUE proportions, so it's unit-testable. Given the
+ * mesh's measured world bounding-box `size` (after the loader's up-axis
+ * correction), returns a single scalar `s` taking it to `heightCm`. Every piece
+ * comes out the same height WITHOUT distorting its footprint — a square-footprint
+ * corner stays square; we never squash a mesh per-axis to force it into the
+ * catalogue's nominal width×depth (that per-axis "fit to tile" is exactly what
+ * turned the square corner rectangular). It's a ratio, so it also absorbs
+ * whatever unit (mm/cm/m) the FBX was exported in. The View drops the scaled mesh
+ * on its footprint centre at the plan position.
  */
-export function togoMeshFit(size, widthCm, depthCm, heightCm = TOGO_HEIGHT_CM) {
-  const sx0 = Math.max(1e-6, Number(size?.x) || 0);
+export function togoMeshFit(size, heightCm = TOGO_HEIGHT_CM) {
   const sy0 = Math.max(1e-6, Number(size?.y) || 0);
-  const sz0 = Math.max(1e-6, Number(size?.z) || 0);
-  const W = Math.max(0, Number(widthCm) || 0);
-  const D = Math.max(0, Number(depthCm) || 0);
   const H = Math.max(1, Number(heightCm) || TOGO_HEIGHT_CM);
-  if (!(W > 0 && D > 0)) {
-    const s = H / sy0;                       // no footprint → uniform by height
-    return { sx: s, sy: s, sz: s };
-  }
-  return { sx: W / sx0, sy: H / sy0, sz: D / sz0 };
+  return { s: H / sy0 };
 }

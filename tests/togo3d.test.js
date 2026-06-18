@@ -106,27 +106,22 @@ test('resolveTogoScene recentres the layout on the origin with the right overall
   assert.deepEqual(resolveTogoScene([]).overallCm, { widthCm: 0, depthCm: 0 });
 });
 
-test('togoMeshFit pins 2D↔3D parity: an uploaded mesh fills its plan tile at the Togo height', () => {
-  // A settee mesh measured 174(W)×72(H)×102(D) onto a 174×102 tile → identity,
-  // so a correctly-proportioned model is NOT distorted.
-  let f = togoMeshFit({ x: 174, y: 72, z: 102 }, 174, 102, 72);
-  assert.ok(Math.abs(f.sx - 1) < 1e-6 && Math.abs(f.sy - 1) < 1e-6 && Math.abs(f.sz - 1) < 1e-6);
+test('togoMeshFit normalises HEIGHT with a UNIFORM scale and never distorts the footprint', () => {
+  // ONE scalar to the Togo height (72/144 = 0.5), applied to every axis — so a
+  // SQUARE-footprint corner stays square. This is the corner-turns-rectangular
+  // fix: there is no per-axis term that could squash X≠Z.
+  let f = togoMeshFit({ x: 102, y: 144, z: 102 }, 72);
+  assert.ok(Math.abs(f.s - 0.5) < 1e-9);
 
-  // The footprint lands EXACTLY on the tile (the location fix): a mesh 0.5×/2×
-  // off in plan still ends up widthCm×depthCm so its edges line up with the plan.
-  f = togoMeshFit({ x: 87, y: 72, z: 204 }, 174, 102, 72);
-  assert.ok(Math.abs(f.sx * 87 - 174) < 1e-6 && Math.abs(f.sz * 204 - 102) < 1e-6);
+  // A rectangular mesh keeps its TRUE footprint aspect (same scalar on x and z) —
+  // we don't force it into the catalogue width×depth.
+  f = togoMeshFit({ x: 200, y: 72, z: 100 }, 72);
+  assert.ok(Math.abs(f.s - 1) < 1e-9, 'height already 72 → scale 1, footprint left at its true 200×100');
 
-  // Height ALWAYS normalises to the Togo height — every uploaded piece, any
-  // footprint, comes out the same height (the bug where settees towered).
-  f = togoMeshFit({ x: 200, y: 50, z: 100 }, 174, 102, 72);
-  assert.ok(Math.abs(f.sy * 50 - 72) < 1e-6, 'height → 72 regardless of footprint');
+  // It's a ratio → absorbs export units (metres here): 0.72 m tall → ×100.
+  f = togoMeshFit({ x: 1.02, y: 0.72, z: 1.02 }, 72);
+  assert.ok(Math.abs(f.s - 100) < 1e-6);
 
-  // A mesh authored in METRES (0.01×) still fits — it's a ratio, units cancel.
-  f = togoMeshFit({ x: 1.74, y: 0.72, z: 1.02 }, 174, 102, 72);
-  assert.ok(Math.abs(f.sx * 1.74 - 174) < 1e-4 && Math.abs(f.sz * 1.02 - 102) < 1e-4);
-
-  // No footprint (untracked) → uniform scale by height, never NaN.
-  f = togoMeshFit({ x: 80, y: 36, z: 80 }, 0, 0, 72);
-  assert.ok(Math.abs(f.sx - f.sy) < 1e-9 && Math.abs(f.sy - f.sz) < 1e-9 && Math.abs(f.sy * 36 - 72) < 1e-6);
+  // Degenerate height → finite, never NaN/Infinity.
+  assert.ok(Number.isFinite(togoMeshFit({ x: 50, y: 0, z: 50 }, 72).s));
 });
