@@ -45,6 +45,12 @@ verify_jwt = false
 [functions.quote-share]
 verify_jwt = false
 
+# contract-share backs the public, signable contract link (#/contrato/<token>).
+# Public (logged-out) like quote-share: gates on the secret token, runs with the
+# service role, archives the signature + signed PDF.
+[functions.contract-share]
+verify_jwt = false
+
 # hl-track verifies the caller's JWT itself (same reason as bpd-rate) and
 # proxies Hapag-Lloyd's Track & Trace API, keeping HL_CLIENT_ID/SECRET
 # server-side.

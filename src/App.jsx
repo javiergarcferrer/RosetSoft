@@ -26,6 +26,7 @@ import DataDeletion from './pages/DataDeletion.jsx';
 import Settings from './pages/Settings.jsx';
 import Integrations from './pages/Integrations.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
+import PublicContractView from './pages/PublicContractView.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 // Accounting + admin pages are code-split: the CRM bundle (what every seller
@@ -350,6 +351,12 @@ export default function App() {
               bare `/q/:token` form (older links) still resolves. */}
           <Route path="/q/:token" element={<PublicQuoteView />} />
           <Route path="/q/:slug/:token" element={<PublicQuoteView />} />
+          {/* Public, logged-out contract signing view (#/contrato/:token). Like
+              the quote link it lives OUTSIDE RequireAuth and is pinned light; the
+              `contract-share` Edge Function serves the bundle + records the
+              signature. The optional `:slug` segment is cosmetic. */}
+          <Route path="/contrato/:token" element={<PublicContractView />} />
+          <Route path="/contrato/:slug/:token" element={<PublicContractView />} />
           {/* Public, logged-out storefront ("Tienda"). Like the quote link it
               lives OUTSIDE RequireAuth so a customer never hits the login wall;
               the `store` Edge Function serves a public-safe, margin-free catalog. */}

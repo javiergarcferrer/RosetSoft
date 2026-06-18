@@ -164,6 +164,9 @@ export interface Settings {
   dopRateMode?: DopRateMode | string;
   defaultMarginPct?: number;
   defaultDiscountPct?: number;
+  /** Default monthly interest rate (%) prefilled on a new payment plan; the
+   *  dealer can override it per plan. See `lib/paymentPlan` + PaymentPlanCard. */
+  paymentPlanMonthlyRatePct?: number;
   quoteTerms?: string;
   /** Named terms templates the dealer applies to a quote with one tap (the
    *  NotesAndTermsCard picker writes the chosen body into `quote.terms`).
@@ -739,6 +742,69 @@ export interface Payment {
   allocations?: { docId: string; docType?: string; amount: number }[];
   notes?: string;
   journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** One amortized installment of a payment plan (mirrors lib/paymentPlan). */
+export interface PaymentPlanInstallment {
+  /** 1-based installment index. */
+  n: number;
+  /** Due date as a JS-ms timestamp. */
+  dueAt: number;
+  /** Interest portion of the cuota, USD. */
+  interest: number;
+  /** Principal portion of the cuota, USD. */
+  capital: number;
+  /** Total cuota (capital + interest), USD. */
+  amount: number;
+  /** Outstanding financed balance after this cuota, USD. */
+  balanceAfter: number;
+  /** When the dealer marked this cuota paid (JS-ms); null/absent ⇒ pending. */
+  paidAt?: number | null;
+}
+
+/**
+ * A per-quote payment plan AND its signable digital contract (1:1 with a quote).
+ *
+ * The dealer finances a quote as a 50% down payment + N equal monthly cuotas at
+ * `monthlyRatePct` (the schedule is built by `lib/paymentPlan: amortize`). The
+ * same row backs the public contract link: `shareToken`/`shareEnabled` gate a
+ * tokenized `#/contrato/<token>` page (served by the `contract-share` Edge
+ * Function) where the client reads the terms + schedule and signs; the drawn
+ * signature (`signatureImageId` → images) and the rendered signed PDF
+ * (`signedPdfPath`, `documents` bucket) are archived. All money is USD (shown in
+ * DOP at the live rate, like quotes).
+ */
+export interface PaymentPlan {
+  id: string;
+  profileId: string;
+  quoteId?: string | null;
+  customerId?: string | null;
+  number?: number | null;
+
+  totalUsd: number;
+  downPaymentPct: number;
+  downPaymentUsd: number;
+  financedUsd: number;
+  monthlyRatePct: number;
+  installmentCount: number;
+  firstDueAt?: number | null;
+  schedule?: PaymentPlanInstallment[] | null;
+
+  status: 'draft' | 'active' | 'completed' | 'cancelled';
+  contractBody?: string | null;
+
+  shareToken?: string | null;
+  shareEnabled?: boolean;
+
+  signedAt?: number | null;
+  signerName?: string | null;
+  signerDoc?: string | null;
+  signatureImageId?: string | null;
+  signedPdfPath?: string | null;
+  signedIp?: string | null;
+
   createdAt?: number;
   updatedAt?: number;
 }

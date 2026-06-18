@@ -41,6 +41,7 @@ import { SendQuoteModal } from '../components/quote-builder/WhatsAppChip.jsx';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 import ShipmentTracking from '../components/ShipmentTracking.jsx';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
+import PaymentPlanCard from '../components/quote-builder/PaymentPlanCard.jsx';
 import PrintPdfModal from '../components/PrintPdfModal.jsx';
 import CatalogPicker from '../components/quote-builder/CatalogPicker.jsx';
 import InventoryPicker from '../components/quote-builder/InventoryPicker.jsx';
@@ -958,6 +959,17 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               embedded inline in the editor, where it sat between the line items
               and Notas and got in the way while quoting. */}
           <NotesAndTermsCard quote={quote} settings={settings} onUpdateQuote={hx(updateQuote)} />
+          {/* Per-quote payment plan + digital contract (50% down + financed
+              cuotas, a signable public link). Not for company/house quotes —
+              those are internal store-stock orders, never a financed sale. */}
+          {!isCompanyQuote && (
+            <PaymentPlanCard
+              quote={quote}
+              customer={customer}
+              settings={settings}
+              totalUsd={totals.grandTotal}
+            />
+          )}
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
           {quote.orderId && <ShipmentTracking orderId={quote.orderId} />}

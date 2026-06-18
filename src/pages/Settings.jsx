@@ -185,6 +185,10 @@ export default function Settings() {
                 <div className="label">ITBIS</div>
                 <div className="input bg-ink-50 text-ink-500 cursor-not-allowed">18% (fijo)</div>
               </div>
+              <div>
+                <div className="label">Tasa mensual plan de pago %</div>
+                <input className="input" type="number" min="0" step="0.01" inputMode="decimal" enterKeyHint="done" value={local.paymentPlanMonthlyRatePct ?? 2} onChange={(e) => set('paymentPlanMonthlyRatePct', Math.max(0, Number(e.target.value) || 0))} />
+              </div>
               <QuoteTermsPresets local={local} set={set} />
               <div className="sm:col-span-2">
                 <div className="label">Pie de página (en cada página del PDF)</div>

@@ -31,6 +31,7 @@ import type {
   ImportExpediente,
   ECFSequence,
   Payment,
+  PaymentPlan,
   FiscalPeriod,
   Employee,
   PayrollRun,
@@ -109,6 +110,7 @@ const TABLES = {
   importExpedientes: { db: 'import_expedientes', pk: 'id' },
   ecfSequences:       { db: 'ecf_sequences',       pk: 'id' },
   payments:           { db: 'payments',            pk: 'id' },
+  paymentPlans:       { db: 'payment_plans',       pk: 'id' },
   fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
   employees:          { db: 'employees',           pk: 'id' },
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
@@ -163,6 +165,7 @@ export interface TableRowMap {
   importExpedientes: ImportExpediente;
   ecfSequences: ECFSequence;
   payments: Payment;
+  paymentPlans: PaymentPlan;
   fiscalPeriods: FiscalPeriod;
   employees: Employee;
   payrollRuns: PayrollRun;
