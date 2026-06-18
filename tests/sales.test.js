@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { resolveAccountingConfig } from '../src/lib/accounting/config.js';
-import { buildSaleEntry, depositApplied } from '../src/lib/accounting/sale.js';
+import { buildSaleEntry, buildCreditNoteEntry, depositApplied } from '../src/lib/accounting/sale.js';
 import { debitTotal, creditTotal } from '../src/lib/accounting/ledger.js';
 import { resolveSales607, resolveItbisLiquidation } from '../src/core/accounting/sales607.js';
 
@@ -58,6 +58,50 @@ test('buildSaleEntry refuses a zero-amount sale', () => {
   assert.throws(() => buildSaleEntry({
     newId: ids(), config, sale: { id: 'sp4', base: 0, itbis: 0 },
   }), /monto a facturar/);
+});
+
+/* ---------------------------- nota de crédito --------------------------- */
+
+test('buildCreditNoteEntry (full cancel) exactly mirrors the sale asiento', () => {
+  const sale = buildSaleEntry({
+    newId: ids(), config,
+    sale: { id: 'sp1', customerId: 'c1', base: 10000, itbis: 1800, deposit: 5000, ncf: 'E310000000001' },
+  });
+  const nc = buildCreditNoteEntry({
+    newId: ids(), config,
+    note: { id: 'nc1', customerId: 'c1', base: 10000, itbis: 1800, depositToRestore: 5000, ncf: 'E340000000001' },
+  });
+  // Balanced, and every sale debit is now an NC credit of the same size.
+  assert.equal(debitTotal(nc.lines), creditTotal(nc.lines));
+  assert.equal(debitTotal(nc.lines), 11800);
+  assert.equal(nc.lines.find((l) => l.accountCode === M.salesLocal).debit, 10000);
+  assert.equal(nc.lines.find((l) => l.accountCode === M.itbisPayable).debit, 1800);
+  assert.equal(nc.lines.find((l) => l.accountCode === M.customerDeposits).credit, 5000);
+  assert.equal(nc.lines.find((l) => l.accountCode === M.accountsReceivable).credit, 6800);
+  // Net of sale + NC is zero per account.
+  const net = new Map();
+  for (const l of [...sale.lines, ...nc.lines]) {
+    net.set(l.accountCode, (net.get(l.accountCode) || 0) + (l.debit || 0) - (l.credit || 0));
+  }
+  for (const v of net.values()) assert.equal(Math.round(v * 100) / 100, 0);
+});
+
+test('buildCreditNoteEntry (partial, no deposit) credits revenue + ITBIS against CxC', () => {
+  const { lines } = buildCreditNoteEntry({
+    newId: ids(), config,
+    note: { id: 'nc2', customerId: 'c1', base: 2500, itbis: 450, ncf: 'E340000000002' },
+  });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  assert.equal(lines.find((l) => l.accountCode === M.salesLocal).debit, 2500);
+  assert.equal(lines.find((l) => l.accountCode === M.itbisPayable).debit, 450);
+  assert.equal(lines.find((l) => l.accountCode === M.accountsReceivable).credit, 2950);
+  assert.equal(lines.find((l) => l.accountCode === M.customerDeposits), undefined);
+});
+
+test('buildCreditNoteEntry refuses a zero-amount note', () => {
+  assert.throws(() => buildCreditNoteEntry({
+    newId: ids(), config, note: { id: 'nc3', base: 0, itbis: 0 },
+  }), /acreditar/);
 });
 
 /* -------------------------------- 607 ----------------------------------- */

@@ -25,8 +25,23 @@ export interface EcfItemInput {
   amount: number;
 }
 
+export interface EcfReferenceInput {
+  /** The e-NCF this nota de crédito/débito modifies (NCFModificado). */
+  ncfModificado: string;
+  /** Emission date of the modified e-CF (ms); DGII FechaNCFModificado. */
+  fechaNcfModificado?: number | null;
+  /**
+   * RazónModificación / CodigoModificacion: 1 = anulación total, 2 = corrige
+   * texto, 3 = corrige montos, 4 = reemplazo contingencia, 5 = ref. consumo
+   * electrónica. A straight cancel is 1; a partial credit is 3.
+   */
+  codigoModificacion?: number;
+  /** RNC of the other contributor, when it differs from the buyer. */
+  rncOtroContribuyente?: string;
+}
+
 export interface EcfPayloadInput {
-  ecfType: string;          // '31' | '32'
+  ecfType: string;          // '31' | '32' | '34'
   eNcf: string;             // E31...
   sequenceExpiresAt?: number | null;
   emisor: { rnc: string; name: string; commercialName?: string; address?: string };
@@ -40,19 +55,33 @@ export interface EcfPayloadInput {
   fechaEmision?: number;    // ms; default now
   /** 1 = contado, 2 = crédito. */
   tipoPago?: number;
+  /**
+   * The modified-document reference — REQUIRED for a nota de crédito (34) /
+   * débito (33), which exist only to modify a prior e-CF. Omitted for 31/32.
+   */
+  referencia?: EcfReferenceInput | null;
 }
+
+/** e-CF types that modify a prior comprobante and so carry InformacionReferencia. */
+const REFERENCING_TYPES = new Set(['33', '34']);
 
 /**
  * Build the nested e-CF object. Type 31 carries the Comprador block (buyer's
  * RNC + razón social) and REQUIRES the buyer's fiscal id — throws without it,
  * so a bad 31 fails at build time, not as a DGII rejection after the e-NCF was
- * burned. Type 32 (consumo) omits the block unless a buyer is known.
+ * burned. Type 32 (consumo) omits the block unless a buyer is known. Types
+ * 33/34 (nota de débito/crédito) REQUIRE the InformacionReferencia pointing at
+ * the e-NCF they modify — throws without it, same fail-fast rationale.
  */
 export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown> {
   const rate = input.itbisRate ?? 18;
   const buyerRnc = input.comprador?.rnc?.replace(/\D/g, '') || '';
   if (input.ecfType === '31' && !buyerRnc) {
     throw new Error('La factura de crédito fiscal (tipo 31) requiere el RNC/cédula del comprador.');
+  }
+  const referencing = REFERENCING_TYPES.has(input.ecfType);
+  if (referencing && !input.referencia?.ncfModificado) {
+    throw new Error('La nota de crédito/débito requiere el e-NCF que modifica (NCFModificado).');
   }
   const encab: Record<string, unknown> = {
     Version: '1.0',
@@ -81,11 +110,25 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
   };
 
   // Comprador: required for 31 (validated above); included for 32 only if we
-  // have a buyer.
+  // have a buyer. A 34 crediting a 31 carries the same buyer.
   if (input.ecfType === '31' || buyerRnc) {
     encab.Comprador = {
       ...(buyerRnc ? { RNCComprador: buyerRnc } : {}),
       ...(input.comprador?.name ? { RazonSocialComprador: input.comprador.name } : {}),
+    };
+  }
+
+  // InformacionReferencia: the modified-document pointer for 33/34.
+  if (referencing && input.referencia) {
+    encab.InformacionReferencia = {
+      NCFModificado: input.referencia.ncfModificado,
+      ...(input.referencia.rncOtroContribuyente
+        ? { RNCOtroContribuyente: input.referencia.rncOtroContribuyente.replace(/\D/g, '') }
+        : {}),
+      ...(input.referencia.fechaNcfModificado != null
+        ? { FechaNCFModificado: formatEcfDate(input.referencia.fechaNcfModificado) }
+        : {}),
+      CodigoModificacion: input.referencia.codigoModificacion ?? 1,
     };
   }
 

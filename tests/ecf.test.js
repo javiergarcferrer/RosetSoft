@@ -129,6 +129,56 @@ test('buildEcfPayload (31) THROWS without the buyer RNC — fail at build, not a
   }), /RNC/);
 });
 
+test('buildEcfPayload (34 nota de crédito) carries InformacionReferencia + CodigoModificacion', () => {
+  const p = buildEcfPayload({
+    ecfType: '34', eNcf: 'E340000000007',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    comprador: { rnc: '101010101', name: 'CLIENTE SRL' },
+    items: [{ name: 'Anulación venta E310000000001', qty: 1, unitPrice: 10000, amount: 10000 }],
+    gravado: 10000, itbis: 1800, total: 11800,
+    referencia: { ncfModificado: 'E310000000001', fechaNcfModificado: Date.UTC(2026, 5, 1, 12), codigoModificacion: 1 },
+  }).ECF;
+  assert.equal(p.Encabezado.IdDoc.TipoeCF, '34');
+  assert.equal(p.Encabezado.InformacionReferencia.NCFModificado, 'E310000000001');
+  assert.equal(p.Encabezado.InformacionReferencia.FechaNCFModificado, '01-06-2026');
+  assert.equal(p.Encabezado.InformacionReferencia.CodigoModificacion, 1);
+  // The credited buyer rides along just like the original 31.
+  assert.equal(p.Encabezado.Comprador.RNCComprador, '101010101');
+});
+
+test('buildEcfPayload (34) defaults CodigoModificacion to 1 (anulación total)', () => {
+  const p = buildEcfPayload({
+    ecfType: '34', eNcf: 'E340000000008',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    comprador: { rnc: '101010101', name: 'CLIENTE SRL' },
+    items: [{ name: 'x', qty: 1, unitPrice: 100, amount: 100 }],
+    gravado: 100, itbis: 18, total: 118,
+    referencia: { ncfModificado: 'E310000000002' },
+  }).ECF;
+  assert.equal(p.Encabezado.InformacionReferencia.CodigoModificacion, 1);
+});
+
+test('buildEcfPayload (34) THROWS without the modified e-NCF — fail at build, not at the DGII', () => {
+  assert.throws(() => buildEcfPayload({
+    ecfType: '34', eNcf: 'E340000000009',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    comprador: { rnc: '101010101', name: 'CLIENTE SRL' },
+    items: [{ name: 'x', qty: 1, unitPrice: 100, amount: 100 }],
+    gravado: 100, itbis: 18, total: 118,
+  }), /NCFModificado/);
+});
+
+test('buildEcfPayload (31/32) never emit InformacionReferencia', () => {
+  const p31 = buildEcfPayload({
+    ecfType: '31', eNcf: 'E310000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    comprador: { rnc: '101010101', name: 'CLIENTE SRL' },
+    items: [{ name: 'x', qty: 1, unitPrice: 100, amount: 100 }],
+    gravado: 100, itbis: 18, total: 118,
+  }).ECF;
+  assert.equal(p31.Encabezado.InformacionReferencia, undefined);
+});
+
 test('buildEcfPayload carries TipoPago: 1 contado (default), 2 crédito', () => {
   const base = {
     ecfType: '32', eNcf: 'E320000000001',

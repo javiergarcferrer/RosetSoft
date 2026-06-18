@@ -36,7 +36,7 @@ export { dgii606Txt, dgii607Txt, dgiiPeriod, dgiiTxtFilename, collectionSplit } 
 export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from './lrSales.js';
-export { buildSaleEntry, depositApplied } from '../../lib/accounting/sale.js';
+export { buildSaleEntry, buildCreditNoteEntry, depositApplied } from '../../lib/accounting/sale.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)
 export { resolveInventory, resolveItemKardex } from './inventory.js';

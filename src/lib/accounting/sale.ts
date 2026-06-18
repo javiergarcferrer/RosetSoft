@@ -79,3 +79,82 @@ export function buildSaleEntry({
     lines,
   });
 }
+
+export interface CreditNotePostInput {
+  /** The credit-note sales_posting id (refId of the asiento). */
+  id: string;
+  quoteId?: string | null;
+  customerId?: string | null;
+  /** Credited base (DOP) — the original base for a full cancel, a slice for a partial. */
+  base: number;
+  /** Credited ITBIS (DOP). */
+  itbis: number;
+  /**
+   * Deposit liability to RESTORE (becomes refundable to the customer); the rest
+   * of the credit clears the receivable. A full cancel passes the deposit that
+   * was applied to the original sale, so this asiento exactly mirrors it.
+   */
+  depositToRestore?: number;
+  /** The credit note's own e-NCF (E34…). */
+  ncf?: string | null;
+  memo?: string;
+}
+
+/**
+ * Build the nota de crédito asiento — the mirror of `buildSaleEntry` for the
+ * credited amount. Reverses revenue + ITBIS por pagar, restoring the deposit
+ * liability (refundable) and/or clearing the receivable:
+ *
+ *   Debit  Ventas locales            base       (un-recognizes revenue)
+ *   Debit  ITBIS por pagar           itbis      (un-owes the tax)
+ *   Credit Cobros anticipados        depositToRestore   (now refundable)
+ *   Credit Cuentas por cobrar        total − depositToRestore
+ *
+ * For a full cancel: base/itbis = the original sale's, depositToRestore = the
+ * deposit applied → this exactly unwinds buildSaleEntry. For a partial credit
+ * with no deposit involvement: depositToRestore = 0 → it all lands on CxC
+ * (a credit balance there is the refund the customer is owed). Pure.
+ */
+export function buildCreditNoteEntry({
+  newId, config, note, postedAt,
+}: {
+  newId: () => string;
+  config: ResolvedAccountingConfig;
+  note: CreditNotePostInput;
+  postedAt?: number;
+}): { entry: JournalEntry; lines: JournalLine[] } {
+  const base = round2(note.base);
+  const itbis = round2(note.itbis || 0);
+  const total = round2(base + itbis);
+  if (total <= 0) throw new Error('La nota de crédito no tiene monto a acreditar.');
+  const restore = depositApplied(note.depositToRestore || 0, total);
+  const receivable = round2(total - restore);
+
+  const lines: DraftLine[] = [];
+  lines.push({ accountCode: requireAccount(config, 'salesLocal'), debit: base });
+  if (itbis > 0) {
+    lines.push({ accountCode: requireAccount(config, 'itbisPayable'), debit: itbis });
+  }
+  if (restore > 0) {
+    lines.push({ accountCode: requireAccount(config, 'customerDeposits'), credit: restore });
+  }
+  if (receivable > 0) {
+    lines.push({
+      accountCode: requireAccount(config, 'accountsReceivable'),
+      credit: receivable,
+      thirdPartyType: note.customerId ? 'customer' : null,
+      thirdPartyId: note.customerId || null,
+      ncf: note.ncf || null,
+    });
+  }
+
+  return buildJournalEntry({
+    newId,
+    postedAt,
+    source: 'sale',
+    memo: note.memo || 'Nota de crédito',
+    refTable: 'sales_postings',
+    refId: note.id,
+    lines,
+  });
+}
