@@ -411,7 +411,28 @@ function Regalia({ scope, config, employees, runs }) {
       </div>
       {existing && !err && <p className="text-sm text-ink-500">La regalía de {year} ya fue registrada (#{existing.number}).</p>}
       {err && <p className="text-sm text-rose-600">{err}</p>}
-      <div className="overflow-x-auto">
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3">
+        {rows.map(({ e, earned, r }) => (
+          <div key={e.id} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1.5">
+            <div className="font-medium text-ink-900">{e.name}</div>
+            <label className="flex items-center justify-between gap-2 text-xs text-ink-600">Salario del año
+              <NumIn value={ytd[e.id] ?? ''} onChange={(v) => setYtd((m) => ({ ...m, [e.id]: v }))} placeholder={String(earned)} className="w-36" />
+            </label>
+            <div className="grid grid-cols-3 gap-x-2 text-xs text-ink-600">
+              <span>Regalía <span className="tabular-nums font-medium text-ink-900">{formatDop(r.amount)}</span></span>
+              <span>Exento <span className="tabular-nums">{formatDop(r.isrExempt)}</span></span>
+              <span>Gravado <span className="tabular-nums">{formatDop(r.isrTaxable)}</span></span>
+            </div>
+          </div>
+        ))}
+        <div className="rounded-lg border border-ink-200 bg-ink-100/60 px-3 py-2 text-xs font-semibold flex justify-between gap-2">
+          <span>{rows.length} empleados</span>
+          <span>Total: <span className="tabular-nums">{formatDop(total)}</span></span>
+        </div>
+      </div>
+      {/* Desktop table */}
+      <div className="hidden sm:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
             <tr>
@@ -464,7 +485,30 @@ function Vacaciones({ employees }) {
       <p className="text-xs text-ink-400">
         Vacaciones (Art. 177): 14 días laborables de 1 a 5 años de servicio, 18 días a partir de 5 años. Salario diario = salario ÷ 23.83. La antigüedad se calcula desde la fecha de ingreso del empleado.
       </p>
-      <div className="overflow-x-auto">
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3">
+        {rows.map(({ e, years, defDays, daily, pay }) => (
+          <div key={e.id} className="rounded-lg border border-ink-100 bg-ink-50/50 px-3 py-2.5 space-y-1.5">
+            <div className="flex justify-between items-baseline gap-2 flex-wrap">
+              <span className="font-medium text-ink-900">{e.name}</span>
+              <span className="text-xs text-ink-500 tabular-nums">{e.hireAt ? `${years.toFixed(1)} años` : '—'}</span>
+            </div>
+            <label className="flex items-center justify-between gap-2 text-xs text-ink-600">Días
+              <NumIn value={days[e.id] ?? ''} onChange={(v) => setDays((m) => ({ ...m, [e.id]: v }))} placeholder={String(defDays)} className="w-20" />
+            </label>
+            <div className="grid grid-cols-2 gap-x-4 text-xs text-ink-600">
+              <span>Salario diario <span className="tabular-nums">{formatDop(daily)}</span></span>
+              <span>A pagar <span className="tabular-nums font-medium text-ink-900">{formatDop(pay)}</span></span>
+            </div>
+          </div>
+        ))}
+        <div className="rounded-lg border border-ink-200 bg-ink-100/60 px-3 py-2 text-xs font-semibold flex justify-between gap-2">
+          <span>{rows.length} empleados</span>
+          <span>Total: <span className="tabular-nums">{formatDop(total)}</span></span>
+        </div>
+      </div>
+      {/* Desktop table */}
+      <div className="hidden sm:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
             <tr>
