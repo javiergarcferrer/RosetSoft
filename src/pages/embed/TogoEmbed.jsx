@@ -113,18 +113,37 @@ export default function TogoEmbed() {
     return map;
   }, [models]);
 
+  // The TRUE footprint of each uploaded mesh (url → {widthCm, depthCm}), measured
+  // by the 3D once it loads. A dealer's FBX can disagree with the catalogue dims
+  // (e.g. a "102×102" corner whose mesh is actually deeper); using the real
+  // footprint keeps the plan, the placement and the 3D in agreement — and lets a
+  // non-square piece ROTATE correctly instead of leaving dead space in a wrong
+  // square tile.
+  const [meshDims, setMeshDims] = useState({});
+  const onMeshFootprint = useCallback((url, dims) => {
+    if (!url || !(dims?.widthCm > 0) || !(dims?.depthCm > 0)) return;
+    setMeshDims((prev) => {
+      const cur = prev[url];
+      if (cur && Math.abs(cur.widthCm - dims.widthCm) < 0.5 && Math.abs(cur.depthCm - dims.depthCm) < 0.5) return prev;
+      return { ...prev, [url]: dims };
+    });
+  }, []);
+
   const resolvedById = useMemo(() => {
     const o = {};
     for (const m of models) {
+      const real = m.mesh?.url ? meshDims[m.mesh.url] : null;   // measured mesh footprint wins
       o[m.id] = {
-        id: m.id, label: m.name, widthCm: m.widthCm, depthCm: m.depthCm,
+        id: m.id, label: m.name,
+        widthCm: real?.widthCm ?? m.widthCm,
+        depthCm: real?.depthCm ?? m.depthCm,
         unitPrice: m.priceUsd, root: m.family?.root || m.root || null,
         offeredKeys: m.offeredFabricKeys || [],
         mesh: m.mesh || null,
       };
     }
     return o;
-  }, [models]);
+  }, [models, meshDims]);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
   const scene3d = useMemo(() => resolveTogoScene(scenePlacementsFromPlaced(placed, resolvedById)), [placed, resolvedById]);
@@ -302,7 +321,7 @@ export default function TogoEmbed() {
       selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
       placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
       hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
-      onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
+      onRotatePiece={rotatePiece} onDeletePiece={deletePiece} onMeshFootprint={onMeshFootprint}
     />
   );
   // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
@@ -598,11 +617,11 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
  *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
 function CanvasArea({
   view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed,
-  onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
+  onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece, onMeshFootprint,
 }) {
   const [hoveredUid, setHoveredUid] = useState(null);
   if (view === '3d') {
-    return <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
+    return <TogoScene3D scene3d={scene3d} material={material} onMeshFootprint={onMeshFootprint} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
   }
   const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
   const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };

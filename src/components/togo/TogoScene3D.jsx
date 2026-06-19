@@ -3,6 +3,7 @@ import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { glbForPiece } from '../../assets/togo/togoModels3d.js';
 import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup, makeQuiltNormalMap, sampleSwatchColor } from './togoSceneBuilder.js';
+import { TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
 
 // Pick the three.js loader for a model URL by extension, loaded on demand (so a
 // scene with no real models pulls in no loader at all). pCon exports OBJ/FBX/
@@ -45,7 +46,7 @@ const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repea
  * (pCon/OFML export → GLB/OBJ/FBX) drops in per kind via the manifest with the
  * material + layout wiring unchanged.
  */
-export default function TogoScene3D({ scene3d, material, autoRotate = true, className = '' }) {
+export default function TogoScene3D({ scene3d, material, autoRotate = true, className = '', onMeshFootprint }) {
   const mountRef = useRef(null);
   const api = useRef(null);          // three objects, kept across renders
   const [failed, setFailed] = useState(false);  // WebGL/three unavailable → fallback
@@ -53,6 +54,8 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
   sceneRef.current = scene3d;
   const finishRef = useRef(material);
   finishRef.current = material;
+  const onMeasureRef = useRef(onMeshFootprint);   // report each mesh's TRUE footprint up
+  onMeasureRef.current = onMeshFootprint;
 
   const rebuild = useCallback(async () => {
     const l = api.current;
@@ -87,7 +90,21 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
           const loader = await loaderFor(ext);
           if (!loader) return;
           const object = normalizeLoaded(ext, await loader.loadAsync(desc.url));
-          if (object) l.modelCache.set(desc.url, { object, desc });
+          if (object) {
+            l.modelCache.set(desc.url, { object, desc });
+            // Report the mesh's TRUE footprint (its width×depth at the normalised
+            // Togo height) so the plan + placement use the real dimensions, not the
+            // catalogue's. A corner whose mesh isn't square then rotates correctly
+            // instead of leaving dead space inside a wrong square tile.
+            try {
+              object.updateMatrixWorld(true);
+              const sz = new l.THREE.Box3().setFromObject(object).getSize(new l.THREE.Vector3());
+              if (onMeasureRef.current && sz.x > 0 && sz.y > 0 && sz.z > 0) {
+                const k = TOGO_HEIGHT_CM / sz.y;
+                onMeasureRef.current(desc.url, { widthCm: +(sz.x * k).toFixed(1), depthCm: +(sz.z * k).toFixed(1) });
+              }
+            } catch { /* best-effort measurement */ }
+          }
         } catch { /* missing/unreadable → procedural */ }
       }),
     ]);
