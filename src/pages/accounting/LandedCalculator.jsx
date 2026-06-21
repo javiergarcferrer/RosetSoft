@@ -231,7 +231,33 @@ export default function LandedCalculator() {
             <div className="card-header"><h2><Package size={15} className="inline -mt-0.5 mr-1.5" />Mercancía (FOB en USD)</h2>
               <button type="button" onClick={addLine} className="card-header-action"><Plus size={13} /> Línea</button>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: stacked cards (the desktop table scrolls sideways on phones) */}
+            <div className="md:hidden p-3 space-y-2">
+              {lines.map((l) => (
+                <div key={l.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <input className="input flex-1" placeholder="Artículo" value={l.name} onChange={(e) => patchLine(l.id, { name: e.target.value })} />
+                    <button type="button" onClick={() => delLine(l.id)} className="btn-icon-danger" aria-label="Eliminar"><Trash2 size={14} /></button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="text-[11px] text-ink-400">Cant.
+                      <input className="input w-full text-right tabular-nums mt-0.5" type="number" inputMode="decimal" min="0" value={l.qty} onChange={(e) => patchLine(l.id, { qty: Number(e.target.value) })} /></label>
+                    <label className="text-[11px] text-ink-400">FOB unit.
+                      <input className="input w-full text-right tabular-nums mt-0.5" type="number" inputMode="decimal" min="0" value={l.unitCost} onChange={(e) => patchLine(l.id, { unitCost: Number(e.target.value) })} /></label>
+                    <label className="text-[11px] text-ink-400">HS
+                      <select className="input w-full mt-0.5" value={l.hsCode || ''} onChange={(e) => patchLine(l.id, { hsCode: e.target.value })}>
+                        {FURNITURE_HS.map((h) => <option key={h.code} value={h.code}>{h.code}</option>)}
+                      </select></label>
+                    <label className="text-[11px] text-ink-400">m³ total
+                      <input className="input w-full text-right tabular-nums mt-0.5" type="number" inputMode="decimal" min="0" value={l.cbm} onChange={(e) => patchLine(l.id, { cbm: Number(e.target.value) })} /></label>
+                    <label className="text-[11px] text-ink-400">kg total
+                      <input className="input w-full text-right tabular-nums mt-0.5" type="number" inputMode="decimal" min="0" value={l.weightKg} onChange={(e) => patchLine(l.id, { weightKg: Number(e.target.value) })} /></label>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop: dense table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="table min-w-[640px]">
                 <thead>
                   <tr>
@@ -270,7 +296,40 @@ export default function LandedCalculator() {
             <div className="card-header"><h2><Ship size={15} className="inline -mt-0.5 mr-1.5" />Costos del embarque (USD)</h2>
               <button type="button" onClick={addCost} className="card-header-action"><Plus size={13} /> Costo</button>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: stacked cards (the desktop table scrolls sideways on phones) */}
+            <div className="md:hidden p-3 space-y-2">
+              {costs.map((c) => {
+                const def = COST_BUCKETS.find((b) => b.key === c.bucket);
+                const ignored = (c.bucket === 'freight' && incotermDef.freightIncluded) || (c.bucket === 'insurance' && incotermDef.insuranceIncluded) || incotermDef.importCleared;
+                return (
+                  <div key={c.id} className={`rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2 ${ignored ? 'opacity-45' : ''}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        <select className="input w-full" value={c.bucket} onChange={(e) => patchCost(c.id, { bucket: e.target.value })}>
+                          {COST_BUCKETS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+                        </select>
+                        {ignored && <span className="block text-[10px] text-ink-400 mt-0.5">Ya incluido en el precio ({incotermDef.code})</span>}
+                      </div>
+                      <button type="button" onClick={() => delCost(c.id)} className="btn-icon-danger" aria-label="Eliminar"><Trash2 size={14} /></button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[11px] text-ink-400">Monto
+                        <input className="input w-full text-right tabular-nums mt-0.5" type="number" inputMode="decimal" min="0" value={c.amount} onChange={(e) => patchCost(c.id, { amount: Number(e.target.value) })} /></label>
+                      <label className="text-[11px] text-ink-400">ITBIS
+                        {def?.kind === 'local'
+                          ? <input className="input w-full text-right tabular-nums mt-0.5" type="number" inputMode="decimal" min="0" value={c.itbis || 0} onChange={(e) => patchCost(c.id, { itbis: Number(e.target.value) })} />
+                          : <div className="input w-full text-right text-[11px] text-ink-300 mt-0.5">—</div>}</label>
+                      <label className="text-[11px] text-ink-400 col-span-2">Reparto
+                        <select className="input w-full mt-0.5" value={c.allocation} onChange={(e) => patchCost(c.id, { allocation: e.target.value })}>
+                          {ALLOCATION_METHODS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                        </select></label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop: dense table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="table min-w-[640px]">
                 <thead>
                   <tr>
