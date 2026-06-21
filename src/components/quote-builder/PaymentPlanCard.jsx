@@ -252,14 +252,20 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
           <p className="text-sm text-ink-500">Agrega productos con precio a la cotización para crear un plan de pago.</p>
         ) : (
           <>
-            {/* Mode toggle */}
-            <div className="inline-flex rounded-lg border border-ink-200 p-0.5 text-sm">
-              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
-                className={`px-3 py-1.5 rounded-md ${form.mode === 'amortized' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
+            {/* Mode toggle — iOS-style sliding pill */}
+            <div className="relative inline-flex w-full max-w-md rounded-full bg-ink-100 p-1 text-sm" role="tablist">
+              <span
+                aria-hidden
+                className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-brand-grad shadow-glow transition-transform duration-300 ease-out ${form.mode === 'custom' ? 'translate-x-full' : 'translate-x-0'}`}
+              />
+              <button type="button" role="tab" aria-selected={form.mode === 'amortized'}
+                onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
+                className={`relative z-10 flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${form.mode === 'amortized' ? 'text-white' : 'text-ink-600'}`}>
                 Financiado (cuotas + interés)
               </button>
-              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
-                className={`px-3 py-1.5 rounded-md ${form.mode === 'custom' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
+              <button type="button" role="tab" aria-selected={form.mode === 'custom'}
+                onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
+                className={`relative z-10 flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${form.mode === 'custom' ? 'text-white' : 'text-ink-600'}`}>
                 Pagos por etapas (%)
               </button>
             </div>
