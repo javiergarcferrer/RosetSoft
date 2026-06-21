@@ -49,6 +49,15 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [], pr
 
   const openPost = useCallback(async (item) => {
     setSelected(item);
+    // Mentions are other accounts' posts that tagged us — we don't own them, so
+    // the owner-only insights/comments endpoints reject the media id ("object
+    // does not exist / missing permissions"). Show the post + a note instead of
+    // firing two calls that can only fail; the permalink still opens it on IG.
+    if (item.isMention) {
+      setInsights({ loading: false, rows: [], error: 'Las métricas solo están disponibles en tus publicaciones.' });
+      setComments({ loading: false, rows: [], error: 'No puedes moderar los comentarios de una mención.' });
+      return;
+    }
     setInsights({ loading: true, rows: [], error: null });
     setComments({ loading: true, rows: [], error: null });
     const [iRes, cRes] = await Promise.all([

@@ -199,7 +199,10 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
       ago: agoLabel(at, now),
     };
   });
-  const mentions = (s.mentions || []).map((m) => mediaItem(m, now));
+  // Mentions are OTHER accounts' posts that tagged us — we don't own them, so
+  // per-post insights and comment moderation are off-limits (the Graph API
+  // 404s them). Flag them so the drill-down skips those owner-only calls.
+  const mentions = (s.mentions || []).map((m) => ({ ...mediaItem(m, now), isMention: true }));
 
   // Top posts by engagement — the leaderboard beside the chronological grid.
   const topPosts = [...grid].sort((a, b) => b.engagement - a.engagement).slice(0, 3);
