@@ -132,9 +132,9 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [], pr
 
   return (
     <div className="card lg:flex lg:h-full lg:flex-col">
-      <div className="card-header lg:shrink-0">
+      <div className="card-header flex-wrap gap-y-2 lg:flex-nowrap lg:shrink-0">
         <span className="flex items-center gap-2 font-medium"><Images size={15} /> Contenido</span>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {mentions.length > 0 && (
             <div className="inline-flex rounded-full border border-ink-200 bg-ink-100 p-1 text-xs" role="tablist" aria-label="Vista de contenido">
               {[['posts', 'Publicaciones'], ['mentions', 'Menciones']].map(([id, label]) => {

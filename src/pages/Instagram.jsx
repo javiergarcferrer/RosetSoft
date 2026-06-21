@@ -163,11 +163,20 @@ export default function Instagram() {
   // sticky topbar sits above us; JARVIS could hard-code 100dvh, we can't). ─
   const shellRef = useRef(null);
   const [shellH, setShellH] = useState(null);
+  // The deck's exact pixel width — each board is sized to THIS, not to a
+  // percentage flex-basis. iOS Safari resolves `flex-basis:100%` on shrink-0
+  // children of a horizontal scroll container against the SCROLLABLE width
+  // (N boards), so every board came out a viewport too wide and its content
+  // (post text, the chart, the Publicar button) was hard-clipped at the screen
+  // edge instead of fitting. An explicit px width pins each board to one screen.
+  const [deckW, setDeckW] = useState(null);
   useLayoutEffect(() => {
     if (!linked) return undefined;
     const measure = () => {
       const el = shellRef.current;
       if (!el) return;
+      const deck = deckRef.current;
+      if (deck) setDeckW(deck.clientWidth);
       const top = el.getBoundingClientRect().top;
       // Sum the bottom padding of every wrapper between the shell and the app
       // scroll container (<main>): the shell sits at the end of those padded
@@ -335,6 +344,7 @@ export default function Instagram() {
               <section
                 key={sec.id}
                 className="min-w-0 h-full shrink-0 basis-full snap-start overflow-y-auto overflow-x-hidden overscroll-contain pb-4 [scroll-snap-stop:always] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                style={deckW ? { flexBasis: `${deckW}px`, width: `${deckW}px`, maxWidth: `${deckW}px` } : undefined}
                 aria-label={sec.label}
               >
                 {renderBoard(sec)}
