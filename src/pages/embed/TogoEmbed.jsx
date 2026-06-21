@@ -19,6 +19,14 @@ import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
 
+// Force a stored plan SVG (square viewBox) to STRETCH to fill its footprint tile,
+// so a non-square footprint (e.g. the measured corner) shows no letterbox white
+// space — which otherwise swings to the side when the piece is rotated.
+const fillSvg = (svg) =>
+  (typeof svg === 'string' && svg.startsWith('<svg') && !svg.includes('preserveAspectRatio'))
+    ? svg.replace('<svg', '<svg preserveAspectRatio="none"')
+    : svg;
+
 // The material editor's finish presets — physically-based fabric looks that
 // re-skin the 3D visualizer live (roughness + the sheen lobe that makes fabric
 // read as fabric). Fabric/colour stay per-piece (the swatch picker); the finish
@@ -100,7 +108,11 @@ export default function TogoEmbed() {
   const rates = data?.rates || { USD: 1, DOP: 60 };
   const models = useMemo(() => (data?.models || []).filter((m) => m.svg), [data]);
   const materials = useMemo(() => data?.materials || [], [data]);
-  const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m.svg])), [models]);
+  // The stored plan SVG has a SQUARE viewBox; force it to STRETCH to its footprint
+  // tile (preserveAspectRatio="none") instead of letterboxing. Without this, a
+  // piece whose real footprint isn't square (e.g. the measured corner) leaves white
+  // bars that swing to the side when the piece is rotated.
+  const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, fillSvg(m.svg)])), [models]);
 
   // Per-model family (grades + retail prices) so a fabric pick reprices exactly
   // like the internal configurator (productForGrade), keyed by family root.
