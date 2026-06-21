@@ -22,6 +22,40 @@ async function loaderFor(ext) {
 // glTF/Collada return a wrapper with `.scene`; OBJ/FBX/3DS return the Object3D.
 const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
 
+// The piece's FLOOR footprint (width×depth at the normalised Togo height), NOT the
+// full bounding box. A Togo backrest rolls/leans BACK, so the full box is deeper
+// than where the module actually sits — measuring only the lower body (under the
+// backrest roll) gives the real footprint the plan should reserve and where
+// neighbours abut, trimming that dead space. Falls back to the full box if the
+// slice is degenerate. Returns null when unmeasurable.
+function measureFloorFootprint(THREE, object, heightCm) {
+  object.updateMatrixWorld(true);
+  const full = new THREE.Box3().setFromObject(object);
+  const size = full.getSize(new THREE.Vector3());
+  if (!(size.y > 0) || !(size.x > 0) || !(size.z > 0)) return null;
+  const k = heightCm / size.y;                       // same scale placeRealModel applies (by full height)
+  const cut = full.min.y + size.y * 0.4;             // below the leaning backrest roll
+  const v = new THREE.Vector3();
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, n = 0;
+  object.traverse((o) => {
+    const pos = o.isMesh && o.geometry && o.geometry.attributes && o.geometry.attributes.position;
+    if (!pos) return;
+    o.updateWorldMatrix(true, false);
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      if (v.y > cut) continue;
+      if (v.x < minX) minX = v.x;
+      if (v.x > maxX) maxX = v.x;
+      if (v.z < minZ) minZ = v.z;
+      if (v.z > maxZ) maxZ = v.z;
+      n++;
+    }
+  });
+  const w = (n >= 8 && maxX > minX) ? (maxX - minX) : size.x;   // fall back to full extent
+  const d = (n >= 8 && maxZ > minZ) ? (maxZ - minZ) : size.z;
+  return { widthCm: +(w * k).toFixed(1), depthCm: +(d * k).toFixed(1) };
+}
+
 // The default fabric finish (the material editor overrides these live) — a
 // moderate velvet sheen lobe over matte cloth (see makeFabricMaterial).
 const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
@@ -92,17 +126,13 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
           const object = normalizeLoaded(ext, await loader.loadAsync(desc.url));
           if (object) {
             l.modelCache.set(desc.url, { object, desc });
-            // Report the mesh's TRUE footprint (its width×depth at the normalised
-            // Togo height) so the plan + placement use the real dimensions, not the
-            // catalogue's. A corner whose mesh isn't square then rotates correctly
-            // instead of leaving dead space inside a wrong square tile.
+            // Report the mesh's FLOOR footprint (its real seat/base width×depth)
+            // so the plan + placement use the ACTUAL footprint, not the full
+            // bounding box — a backrest that rolls back no longer inflates the
+            // depth, and a non-square corner rotates without dead space.
             try {
-              object.updateMatrixWorld(true);
-              const sz = new l.THREE.Box3().setFromObject(object).getSize(new l.THREE.Vector3());
-              if (onMeasureRef.current && sz.x > 0 && sz.y > 0 && sz.z > 0) {
-                const k = TOGO_HEIGHT_CM / sz.y;
-                onMeasureRef.current(desc.url, { widthCm: +(sz.x * k).toFixed(1), depthCm: +(sz.z * k).toFixed(1) });
-              }
+              const fp = measureFloorFootprint(l.THREE, object, TOGO_HEIGHT_CM);
+              if (onMeasureRef.current && fp && fp.widthCm > 0 && fp.depthCm > 0) onMeasureRef.current(desc.url, fp);
             } catch { /* best-effort measurement */ }
           }
         } catch { /* missing/unreadable → procedural */ }
