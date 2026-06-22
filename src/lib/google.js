@@ -122,3 +122,14 @@ export async function driveSearch(q, pageSize) {
 export async function driveRecent(pageSize) {
   return invokeGoogle({ driveRecent: { pageSize } });
 }
+
+/** The Drive web URL for a folder id (no round-trip — Drive's stable folder URL). */
+export function driveFolderUrl(id) {
+  return id ? `https://drive.google.com/drive/folders/${id}` : '';
+}
+
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+/** Is this Drive file a folder? */
+export function isDriveFolder(file) {
+  return file?.mimeType === FOLDER_MIME;
+}

@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  Landmark, Plug,
+  Landmark, Plug, HardDrive,
 } from 'lucide-react';
 import TogoIcon from './icons/TogoIcon.jsx';
 import WhatsAppIcon from './icons/WhatsAppIcon.jsx';
@@ -84,6 +84,7 @@ const ADMIN_GROUP = {
       match: ['/inventario/existencias', '/inventario/lifestylegarden'],
     },
     { to: '/accounting/dashboard', label: 'Contabilidad', icon: Landmark },
+    { to: '/drive', label: 'Drive', icon: HardDrive },
   ],
 };
 

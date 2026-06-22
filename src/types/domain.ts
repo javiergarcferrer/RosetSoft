@@ -132,6 +132,14 @@ export interface ExchangeRate {
   updatedAt: number | null;
 }
 
+/** A pinned Google Drive folder — a quick-access shortcut on the "Mi Drive"
+ *  page. `url` is the Drive web link (derived from the folder id). */
+export interface DrivePin {
+  id: string;
+  name: string;
+  url?: string;
+}
+
 export interface Settings {
   profileId: string;
   companyName?: string;
@@ -258,6 +266,8 @@ export interface Settings {
   /** The Drive "RosetSoft" workspace folder id we file per-importation
    *  subfolders under (created on first use). */
   googleDriveRootFolderId?: string;
+  /** Team-pinned Drive folders for quick access on the "Mi Drive" page. */
+  googleDrivePins?: DrivePin[];
   /** "Sign in with Google" allow-list: only emails on this domain (e.g.
    *  "alcover.do") may use the Login page's Google button. Empty ⇒ the
    *  google-api function falls back to the connected account's domain. */

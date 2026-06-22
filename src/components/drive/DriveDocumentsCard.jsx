@@ -152,7 +152,7 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
         {err && <p className="text-sm text-rose-600 mt-2">{err}</p>}
       </div>
 
-      <DrivePickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={pickFromDrive} picking={busy} />
+      <DrivePickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={pickFromDrive} picking={busy} pins={settings?.googleDrivePins || []} />
 
       {preview && (
         <Modal open onClose={() => setPreview(null)} title={preview.name} size="lg">

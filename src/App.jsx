@@ -25,6 +25,7 @@ import PublicStore from './pages/PublicStore.jsx';
 import DataDeletion from './pages/DataDeletion.jsx';
 import Settings from './pages/Settings.jsx';
 import Integrations from './pages/Integrations.jsx';
+import Drive from './pages/Drive.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import PublicContractView from './pages/PublicContractView.jsx';
 import NotFound from './pages/NotFound.jsx';
@@ -268,6 +269,7 @@ function ProtectedApp() {
             <Route path="containers/:containerId" element={<Navigate to="/orders" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="integraciones" element={<Integrations />} />
+            <Route path="drive" element={<Drive />} />
             {/* Admin-only — the components themselves render a friendly
                 "Acceso restringido" empty state when an employee navigates
                 here, so we don't have to redirect at the route level. */}

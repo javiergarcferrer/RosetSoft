@@ -4,7 +4,8 @@
 // under it where its documents are filed, and files can be attached from Drive
 // elsewhere in the app.
 import { useCallback, useState } from 'react';
-import { HardDrive, RefreshCw, FolderPlus, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { HardDrive, RefreshCw, FolderPlus, ExternalLink, FolderOpen } from 'lucide-react';
 import SettingsSection from './SettingsSection.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { driveEnsureRoot } from '../../lib/google.js';
@@ -53,9 +54,12 @@ export default function GoogleDriveCard() {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               <HardDrive size={15} />
-              <span>Conectado{email ? ` como ${email}` : ''}.</span>
+              <span className="flex-1">Conectado{email ? ` como ${email}` : ''}.</span>
+              <Link to="/drive" className="inline-flex items-center gap-1 text-xs font-medium text-emerald-800 hover:underline">
+                <FolderOpen size={13} /> Abrir Mi Drive
+              </Link>
             </div>
 
             <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">

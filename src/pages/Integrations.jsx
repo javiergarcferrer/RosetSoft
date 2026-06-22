@@ -72,7 +72,7 @@ export default function Integrations() {
     },
     {
       id: 'drive', icon: HardDrive, name: 'Google Drive',
-      desc: 'Documentos y carpetas por importación en la nube.',
+      desc: 'Explora Drive, fija carpetas y archiva documentos por importación.',
       connected: !!settings?.googleConnectedAt,
       config: <GoogleDriveCard />,
     },
