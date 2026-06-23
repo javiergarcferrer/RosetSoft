@@ -33,6 +33,19 @@ async function loadObject(url) {
   return obj ? { THREE, obj } : null;
 }
 
+const objCache = new Map();   // url → Promise<{ THREE, obj }>  (kept: the top-down renderer clones it)
+
+/** Load a mesh once and KEEP it (the plan extraction and the top-down render both
+ *  clone from this single source). Rejects on an unreadable/unsupported mesh. */
+export function loadMeshObject(url) {
+  if (!url) return Promise.reject(new Error('no mesh url'));
+  if (objCache.has(url)) return objCache.get(url);
+  const p = loadObject(url).then((l) => { if (!l) throw new Error('unsupported mesh'); return l; });
+  p.catch(() => objCache.delete(url));
+  objCache.set(url, p);
+  return p;
+}
+
 // Lower-body triangles projected to the ground plane, in cm. `upAxis` says which
 // axis is vertical ('y' default, 'z' for some CAD exports). Same height-normalised
 // scale the 3D placement uses, so plan cm == 3D cm.
@@ -82,20 +95,14 @@ export function loadMeshPlan(url, { upAxis = 'y' } = {}) {
   const key = `${url}|${upAxis}`;
   if (cache.has(key)) return cache.get(key);
   const p = (async () => {
-    const loaded = await loadObject(url);
-    if (!loaded) throw new Error('unsupported mesh');
-    const { THREE, obj } = loaded;
-    try {
-      let tris = floorTriangles(THREE, obj, upAxis, 0.4);
-      let plan = meshPlanFromTriangles(tris);
-      // A degenerate lower slice (a flat-on-the-floor export) → fall back to the
-      // whole silhouette so we still get a real footprint.
-      if (!plan.svg) { tris = floorTriangles(THREE, obj, upAxis, 1.0); plan = meshPlanFromTriangles(tris); }
-      if (!plan.svg) throw new Error('no plan geometry');
-      return { svg: plan.svg, widthCm: plan.widthCm, depthCm: plan.depthCm };
-    } finally {
-      obj.traverse?.((o) => { o.geometry?.dispose?.(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m?.dispose?.()); });
-    }
+    const { THREE, obj } = await loadMeshObject(url);   // shared, cached (not disposed)
+    let tris = floorTriangles(THREE, obj, upAxis, 0.4);
+    let plan = meshPlanFromTriangles(tris);
+    // A degenerate lower slice (a flat-on-the-floor export) → fall back to the
+    // whole silhouette so we still get a real footprint.
+    if (!plan.svg) { tris = floorTriangles(THREE, obj, upAxis, 1.0); plan = meshPlanFromTriangles(tris); }
+    if (!plan.svg) throw new Error('no plan geometry');
+    return { svg: plan.svg, widthCm: plan.widthCm, depthCm: plan.depthCm };
   })();
   p.catch(() => cache.delete(key));   // let a transient failure retry next mount
   cache.set(key, p);

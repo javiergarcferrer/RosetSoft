@@ -7,7 +7,7 @@ import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
-import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
+import { useMeshPlans, useTopDownTiles } from '../../components/togo/useMeshPlans.js';
 import { togoQuickStarts } from '../../lib/togo/quickStarts.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
@@ -188,6 +188,17 @@ export default function TogoEmbed() {
     }
     return o;
   }, [models, meshPlans]);
+
+  // Realistic top-down renders (the FBX shot from above with shadows) for the tiles
+  // of the pieces actually on the plan — sized from the mesh-measured footprint.
+  const topDownEntries = useMemo(() => {
+    const used = new Set(placed.map((p) => p.pieceId));
+    return models.filter((m) => m.mesh?.url && used.has(m.id)).map((m) => ({
+      id: m.id, url: m.mesh.url, upAxis: m.mesh.upAxis, rotateY: m.mesh.rotateY, scale: m.mesh.scale,
+      widthCm: resolvedById[m.id]?.widthCm, depthCm: resolvedById[m.id]?.depthCm,
+    }));
+  }, [models, placed, resolvedById]);
+  const topDownById = useTopDownTiles(topDownEntries);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
   const scene3d = useMemo(() => resolveTogoScene(scenePlacementsFromPlaced(placed, resolvedById)), [placed, resolvedById]);
@@ -378,7 +389,7 @@ export default function TogoEmbed() {
   );
   const canvas = (
     <CanvasArea
-      view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById}
+      view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById} topDownById={topDownById}
       selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
       placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
       hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
@@ -708,7 +719,7 @@ function EmptyPlanStart({ quickStarts, onQuickStart }) {
 }
 
 function CanvasArea({
-  view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed,
+  view, vm, scene3d, material, svgById, topDownById = {}, selectedUid, setSelectedUid, codeByUid, placed,
   onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
   quickStarts = [], onQuickStart,
 }) {
@@ -755,7 +766,15 @@ function CanvasArea({
               style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
             >
               <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : linked ? 'ring-2 ring-brand-300 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
-              <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
+              {topDownById[t.pieceId]?.dataUrl ? (
+                // Realistic top-down render of the mesh; sized a touch larger than the
+                // footprint so its soft contact shadow isn't clipped, centred + rotated.
+                <img src={topDownById[t.pieceId].dataUrl} alt="" draggable={false}
+                  className="absolute top-1/2 left-1/2 max-w-none pointer-events-none select-none"
+                  style={{ width: t.innerWPx * topDownById[t.pieceId].margin, height: t.innerHPx * topDownById[t.pieceId].margin, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} />
+              ) : (
+                <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
+              )}
               <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
                 {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
                 {t.dimsLabel}
