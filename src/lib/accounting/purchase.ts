@@ -20,6 +20,58 @@ function payRole(method: PaymentMethod): string {
   return 'bank';
 }
 
+/** Raw line as the Compras form holds it (qty/cost may be empty-string inputs). */
+export interface PurchaseLineInput {
+  id?: string;
+  itemId?: string | null;
+  name?: string;
+  reference?: string;
+  qty?: number | string | null;
+  cost?: number | string | null;
+}
+
+export interface ResolvedPurchaseLine {
+  id: string;
+  itemId: string | null;
+  name: string;
+  reference: string;
+  qty: number;
+  cost: number;
+  /** Kardex IN unit cost = cost / qty (4 dp, matching the expediente). */
+  unitCost: number;
+}
+
+/**
+ * Resolve a goods purchase's article lines into the per-line kardex unit cost +
+ * the invoice base. Each line's NET `cost` capitalizes into inventory; the
+ * invoice `base` the asiento debits is Σ(line cost). Blank lines (no item, no
+ * name, no qty, no cost) are dropped so a half-filled form row is ignored.
+ * Money is clamped at 0 and rounded to cents; the unit cost keeps 4 dp. Pure —
+ * the single source the form preview, the asiento base and the kardex INs read.
+ */
+export function resolvePurchaseLines(
+  lines: readonly PurchaseLineInput[] | null | undefined,
+): { lines: ResolvedPurchaseLine[]; base: number; qty: number } {
+  const resolved: ResolvedPurchaseLine[] = (lines || [])
+    .map((l) => {
+      const qty = round2(Math.max(0, Number(l?.qty) || 0));
+      const cost = round2(Math.max(0, Number(l?.cost) || 0));
+      return {
+        id: l?.id || '',
+        itemId: l?.itemId || null,
+        name: (l?.name || '').trim(),
+        reference: (l?.reference || '').trim(),
+        qty,
+        cost,
+        unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
+      };
+    })
+    .filter((l) => l.itemId || l.name || l.qty > 0 || l.cost > 0);
+  const base = round2(resolved.reduce((s, l) => s + l.cost, 0));
+  const qty = round2(resolved.reduce((s, l) => s + l.qty, 0));
+  return { lines: resolved, base, qty };
+}
+
 export interface PurchasePostInput {
   id: string;
   supplierId?: string | null;

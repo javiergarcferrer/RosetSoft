@@ -965,8 +965,24 @@ export interface InventoryMovement {
 export type PurchaseKind = 'goods' | 'asset' | 'service';
 
 /**
+ * One article line of a goods purchase invoice — the item received + qty + the
+ * total DOP cost (ex-ITBIS) for the line. `cost / qty` is the kardex IN unit
+ * cost. A line with no `itemId` but a `name` is created in inventory on save
+ * (matched/deduped by sku + name, like the expediente).
+ */
+export interface PurchaseLine {
+  id: string;
+  itemId?: string | null;
+  name: string;
+  reference?: string;
+  qty: number;
+  /** Total DOP cost for this line, net of ITBIS (the value that capitalizes). */
+  cost: number;
+}
+
+/**
  * A purchase (Compra). Posts a balanced asiento (source='purchase'); a goods
- * purchase also creates an inventory IN movement. Amounts are DOP.
+ * purchase also creates an inventory IN movement per line. Amounts are DOP.
  */
 export interface Purchase {
   id: string;
@@ -979,9 +995,14 @@ export interface Purchase {
   kind: PurchaseKind;
   /** For asset/service kind: the account debited. Goods use the inventory account. */
   accountCode?: string | null;
-  /** For goods: the inventory item received + qty (drives the kardex IN). */
+  /** Legacy single-item goods receipt (itemId + qty). Superseded by `lines`. */
   itemId?: string | null;
   qty: number;
+  /** Goods invoice article lines — the kardex IN is one movement per line.
+   *  `base` is their summed cost. Empty for asset/service purchases. */
+  lines?: PurchaseLine[];
+  /** Optional link to the import expediente this local invoice belongs to. */
+  expedienteId?: string | null;
   base: number;
   itbis: number;
   itbisCreditable?: boolean;

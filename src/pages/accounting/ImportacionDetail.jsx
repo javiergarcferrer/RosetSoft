@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2, Pencil } from 'lucide-react';
+import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2, Pencil, ShoppingCart } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -21,6 +21,8 @@ import {
   resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal, resolveKardex,
 } from '../../core/accounting/index.js';
 import { TEMPLATE_KEY } from './ExpedienteForm.jsx';
+
+const KIND_LABEL = { goods: 'Mercancía', asset: 'Activo fijo', service: 'Servicio' };
 
 /** One KPI tile of the expediente's landed-cost band. */
 function Stat({ label, value, accent }) {
@@ -163,6 +165,7 @@ export default function ImportacionDetail() {
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   const expQ = useLiveQueryStatus(() => db.importExpedientes.get(id), [id], null);
+  const linkedPurchasesQ = useLiveQueryStatus(() => db.purchases.where('expedienteId').equals(id).toArray(), [id], []);
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const itemsQ = useLiveQueryStatus(() => db.inventoryItems.where('profileId').equals(scope).toArray(), [scope], []);
   const containersQ = useLiveQueryStatus(() => db.containers.where('profileId').equals(scope).toArray(), [scope], []);
@@ -188,6 +191,27 @@ export default function ImportacionDetail() {
     () => jLinesQ.data.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)),
     [jLinesQ.data],
   );
+
+  // Local purchase invoices the team linked to this expediente (Compras → enlazar).
+  // A reference list only: each compra carries its own asiento + kardex; this
+  // just makes the link visible from the file it belongs to.
+  const linkedCompras = useMemo(() => {
+    const supById = new Map(suppliersQ.data.map((s) => [s.id, s]));
+    const rows = linkedPurchasesQ.data
+      .slice()
+      .sort((a, b) => (b.purchaseAt || 0) - (a.purchaseAt || 0))
+      .map((p) => ({
+        id: p.id,
+        number: p.number ?? null,
+        date: p.purchaseAt,
+        supplierName: (p.supplierId ? supById.get(p.supplierId)?.name : '') || '—',
+        ncf: p.ncf || '',
+        kind: KIND_LABEL[p.kind] || p.kind,
+        articles: p.lines?.length ? p.lines.length : (p.kind === 'goods' && p.itemId ? 1 : 0),
+        total: (p.base || 0) + (p.itbis || 0),
+      }));
+    return { rows, total: rows.reduce((s, c) => s + c.total, 0) };
+  }, [linkedPurchasesQ.data, suppliersQ.data]);
 
   // Customizable columns (Shopify "Columnas") — persisted per browser. The
   // per-factura líneas tables all share ONE choice (one hook); the cost sheet
@@ -469,6 +493,47 @@ export default function ImportacionDetail() {
           </>
         )}
       </div>
+
+      {/* Compras enlazadas — local invoices the team tied to this expediente */}
+      {linkedCompras.rows.length > 0 && (
+        <div className="card overflow-hidden mt-4">
+          <div className="card-header">
+            <h2 className="inline-flex items-center gap-1.5"><ShoppingCart size={14} /> Compras enlazadas</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="table min-w-[560px]">
+              <thead>
+                <tr>
+                  <th className="whitespace-nowrap">Fecha</th>
+                  <th>Proveedor</th>
+                  <th className="whitespace-nowrap">Tipo</th>
+                  <th className="whitespace-nowrap">NCF</th>
+                  <th className="text-right whitespace-nowrap">Artículos</th>
+                  <th className="text-right whitespace-nowrap">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linkedCompras.rows.map((c) => (
+                  <tr key={c.id}>
+                    <td className="text-ink-500 whitespace-nowrap">{formatDate(c.date)}</td>
+                    <td className="min-w-0">{c.supplierName}</td>
+                    <td className="text-ink-600 whitespace-nowrap">{c.kind}</td>
+                    <td className="tabular-nums text-ink-500 whitespace-nowrap">{c.ncf || '—'}</td>
+                    <td className="text-right tabular-nums whitespace-nowrap">{c.articles || '—'}</td>
+                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(c.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-ink-200 font-semibold">
+                  <td colSpan={5}>{linkedCompras.rows.length} compra{linkedCompras.rows.length === 1 ? '' : 's'}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(linkedCompras.total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Documentos en Google Drive — one folder per importation */}
       <DriveDocumentsCard
