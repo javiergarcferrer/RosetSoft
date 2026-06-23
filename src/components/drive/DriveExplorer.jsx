@@ -6,35 +6,49 @@
 // `onTogglePin` is passed, each folder (and the current one) carries a pin
 // toggle so the team can favourite it for quick access. All data comes from
 // lib/google; the caller gates on a connected Google account.
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, Folder, FileText, Loader2, ChevronRight, Home, Pin, ExternalLink } from 'lucide-react';
-import { driveList, driveSearch, driveFolderUrl, isDriveFolder } from '../../lib/google.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Search, Folder, FileText, Loader2, ChevronRight, Home, Pin, ExternalLink, HardDrive } from 'lucide-react';
+import { driveList, driveSearch, driveSharedDrives, driveFolderUrl, isDriveFolder, FOLDER_MIME } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatDate } from '../../lib/format.js';
 
-const ROOT = { id: 'root', name: 'Mi unidad' };
+// The synthetic top level: My Drive sits beside each Shared Drive (Team Drive)
+// as a navigable entry point — Drive's `'root'` alias only covers My Drive.
+const HOME = { id: 'home', name: 'Drive' };
+const MY_DRIVE = { id: 'root', name: 'Mi unidad', mimeType: FOLDER_MIME };
 
 export default function DriveExplorer({ onFile, pins = [], onTogglePin, busy = false }) {
-  const [trail, setTrail] = useState([ROOT]); // breadcrumb stack
+  const [trail, setTrail] = useState([HOME]); // breadcrumb stack
   const [needle, setNeedle] = useState('');
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const reqRef = useRef(0); // drops stale responses when navigating quickly
 
   const current = trail[trail.length - 1];
   const searching = needle.trim().length > 0;
   const pinnedIds = useMemo(() => new Set(pins.map((p) => p.id)), [pins]);
 
   const load = useCallback(async () => {
+    const seq = ++reqRef.current;
     setLoading(true);
     setErr('');
     try {
-      const data = searching ? await driveSearch(needle.trim()) : await driveList(current.id);
-      setFiles(data?.files || []);
+      let next;
+      if (searching) {
+        next = (await driveSearch(needle.trim()))?.files || [];
+      } else if (current.id === HOME.id) {
+        // Home: My Drive + each shared drive, presented as folders to descend into.
+        const drives = (await driveSharedDrives())?.drives || [];
+        next = [MY_DRIVE, ...drives.map((d) => ({ id: d.id, name: d.name, mimeType: FOLDER_MIME, sharedDrive: true }))];
+      } else {
+        next = (await driveList(current.id))?.files || [];
+      }
+      if (seq === reqRef.current) setFiles(next); // ignore a superseded response
     } catch (e) {
-      setErr(userMessageFor(e));
+      if (seq === reqRef.current) setErr(userMessageFor(e));
     } finally {
-      setLoading(false);
+      if (seq === reqRef.current) setLoading(false);
     }
   }, [searching, needle, current.id]);
 
@@ -50,7 +64,7 @@ export default function DriveExplorer({ onFile, pins = [], onTogglePin, busy = f
 
   const openFolder = (f) => { setNeedle(''); setTrail((t) => [...t, { id: f.id, name: f.name }]); };
   const goTo = (idx) => { setNeedle(''); setTrail((t) => t.slice(0, idx + 1)); };
-  const jumpPin = (pin) => { setNeedle(''); setTrail([ROOT, { id: pin.id, name: pin.name }]); };
+  const jumpPin = (pin) => { setNeedle(''); setTrail([HOME, { id: pin.id, name: pin.name }]); };
   const togglePin = (f) =>
     onTogglePin?.({ id: f.id, name: f.name, url: f.webViewLink || driveFolderUrl(f.id) });
 
@@ -119,7 +133,7 @@ export default function DriveExplorer({ onFile, pins = [], onTogglePin, busy = f
                   onClick={() => (folder ? openFolder(f) : onFile?.(f))}
                   className="flex min-w-0 flex-1 items-center gap-2.5 text-left disabled:opacity-50"
                 >
-                  {folder ? <Folder size={15} className="shrink-0 text-brand-500" /> : <FileText size={15} className="shrink-0 text-ink-400" />}
+                  {f.sharedDrive ? <HardDrive size={15} className="shrink-0 text-brand-500" /> : folder ? <Folder size={15} className="shrink-0 text-brand-500" /> : <FileText size={15} className="shrink-0 text-ink-400" />}
                   <span className="min-w-0 flex-1 truncate text-sm text-ink-800">{f.name}</span>
                   {f.modifiedTime && <span className="shrink-0 text-[11px] text-ink-400">{formatDate(Date.parse(f.modifiedTime))}</span>}
                 </button>

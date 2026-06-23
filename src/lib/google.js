@@ -123,13 +123,18 @@ export async function driveRecent(pageSize) {
   return invokeGoogle({ driveRecent: { pageSize } });
 }
 
+/** List the shared drives (Team Drives) the connected account can see; returns { drives }. */
+export async function driveSharedDrives() {
+  return invokeGoogle({ driveSharedDrives: true });
+}
+
 /** The Drive web URL for a folder id (no round-trip — Drive's stable folder URL). */
 export function driveFolderUrl(id) {
   return id ? `https://drive.google.com/drive/folders/${id}` : '';
 }
 
-const FOLDER_MIME = 'application/vnd.google-apps.folder';
-/** Is this Drive file a folder? */
+export const FOLDER_MIME = 'application/vnd.google-apps.folder';
+/** Is this Drive file a folder (or a shared-drive root, which we tag as one)? */
 export function isDriveFolder(file) {
   return file?.mimeType === FOLDER_MIME;
 }

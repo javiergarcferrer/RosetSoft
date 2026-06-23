@@ -40,9 +40,10 @@
 //   { driveEnsureRoot:{name?} }          → find/create the workspace root folder.
 //   { driveCreateFolder:{name,parentId?} } → create a subfolder, return id+link.
 //   { driveUpload:{folderId,filename,mimeType,base64} } → upload one file.
-//   { driveList:{folderId} }             → list a folder's files.
-//   { driveSearch:{q,pageSize?} }        → search Drive by name.
+//   { driveList:{folderId} }             → list a folder's files (incl. shared drives).
+//   { driveSearch:{q,pageSize?} }        → search Drive by name (across all drives).
 //   { driveRecent:{pageSize?} }          → recently-modified files (the picker).
+//   { driveSharedDrives:true }           → list the shared drives (Team Drives).
 //
 // Access tokens last ~1h and are refreshed from the refresh token on demand.
 
@@ -65,6 +66,9 @@ const DRIVE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const DEFAULT_ROOT = 'RosetSoft';
+// Query params that make files.list see SHARED DRIVES (Team Drives), not just
+// My Drive; `supportsAllDrives` also lets create/copy/upload/delete target them.
+const ALL_DRIVES = 'includeItemsFromAllDrives=true&supportsAllDrives=true';
 
 // One consent covers both surfaces. gmail.send (send-only, no inbox read),
 // full drive (browse + create + upload — drive.file alone can't see files the
@@ -111,6 +115,7 @@ type Body = {
   driveList?: { folderId?: string };
   driveSearch?: { q?: string; pageSize?: number };
   driveRecent?: { pageSize?: number };
+  driveSharedDrives?: boolean;
 };
 
 type Admin = SupabaseClient;
@@ -304,7 +309,7 @@ async function ensureRoot(admin: Admin, token: string, name = DEFAULT_ROOT): Pro
   const cached = s?.google_drive_root_folder_id || '';
   if (cached) {
     try {
-      const meta = await driveFetch(token, `${DRIVE}/files/${cached}?fields=id,trashed,webViewLink`);
+      const meta = await driveFetch(token, `${DRIVE}/files/${cached}?fields=id,trashed,webViewLink&supportsAllDrives=true`);
       if (meta?.id && !meta.trashed) return { id: meta.id, url: meta.webViewLink || '' };
     } catch { /* cached id gone — recreate below */ }
   }
@@ -621,9 +626,9 @@ Deno.serve(async (req) => {
       const parentId = body.driveCreateFolder.parentId || (await ensureRoot(admin, token)).id;
       // Reuse an existing same-named folder under the parent (idempotent).
       const q = `mimeType='${FOLDER_MIME}' and name='${escapeQ(name)}' and trashed=false and '${parentId}' in parents`;
-      const found = await driveFetch(token, `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id,webViewLink)&pageSize=1`);
+      const found = await driveFetch(token, `${DRIVE}/files?q=${encodeURIComponent(q)}&fields=files(id,webViewLink)&pageSize=1&${ALL_DRIVES}`);
       if (found?.files?.[0]?.id) return json({ ok: true, id: found.files[0].id, url: found.files[0].webViewLink || '' });
-      const created = await driveFetch(token, `${DRIVE}/files?fields=id,webViewLink`, {
+      const created = await driveFetch(token, `${DRIVE}/files?fields=id,webViewLink&supportsAllDrives=true`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
@@ -642,7 +647,7 @@ Deno.serve(async (req) => {
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
         `--${boundary}\r\nContent-Type: ${up.mimeType || 'application/octet-stream'}\r\n` +
         `Content-Transfer-Encoding: base64\r\n\r\n${(up.base64 || '').replace(/\s+/g, '')}\r\n--${boundary}--`;
-      const r = await fetch(`${DRIVE_UPLOAD}?uploadType=multipart&fields=id,name,webViewLink`, {
+      const r = await fetch(`${DRIVE_UPLOAD}?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
         body: multipart,
@@ -659,7 +664,7 @@ Deno.serve(async (req) => {
       const parents = body.driveCopy.folderId ? [body.driveCopy.folderId] : [(await ensureRoot(admin, token)).id];
       const meta: Record<string, unknown> = { parents };
       if (body.driveCopy.name) meta.name = body.driveCopy.name;
-      const d = await driveFetch(token, `${DRIVE}/files/${fileId}/copy?fields=id,name,webViewLink`, {
+      const d = await driveFetch(token, `${DRIVE}/files/${fileId}/copy?fields=id,name,webViewLink&supportsAllDrives=true`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(meta),
@@ -671,7 +676,7 @@ Deno.serve(async (req) => {
     if (body.driveDelete) {
       const fileId = String(body.driveDelete.fileId || '').trim();
       if (!fileId) return json({ ok: false, error: 'Falta el archivo' }, 400);
-      const r = await fetch(`${DRIVE}/files/${fileId}`, {
+      const r = await fetch(`${DRIVE}/files/${fileId}?supportsAllDrives=true`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -683,6 +688,12 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    // ── Drive: list shared drives (Team Drives) — explorer entry points ──────
+    if (body.driveSharedDrives) {
+      const d = await driveFetch(token, `${DRIVE}/drives?pageSize=100&fields=drives(id,name)`);
+      return json({ ok: true, drives: d.drives || [] });
+    }
+
     // ── Drive: list a folder ─────────────────────────────────────────────────
     if (body.driveList) {
       const folderId = String(body.driveList.folderId || '').trim();
@@ -690,7 +701,7 @@ Deno.serve(async (req) => {
       const q = `'${escapeQ(folderId)}' in parents and trashed=false`;
       const d = await driveFetch(
         token,
-        `${DRIVE}/files?q=${encodeURIComponent(q)}&orderBy=folder,name&pageSize=200&fields=files(id,name,mimeType,iconLink,webViewLink,modifiedTime,size)`,
+        `${DRIVE}/files?q=${encodeURIComponent(q)}&orderBy=folder,name&pageSize=200&fields=files(id,name,mimeType,iconLink,webViewLink,modifiedTime,size)&${ALL_DRIVES}`,
       );
       return json({ ok: true, files: d.files || [] });
     }
@@ -702,7 +713,7 @@ Deno.serve(async (req) => {
       const q = `name contains '${escapeQ(needle)}' and trashed=false`;
       const d = await driveFetch(
         token,
-        `${DRIVE}/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime desc&pageSize=${pageSize}&fields=files(id,name,mimeType,iconLink,webViewLink,modifiedTime,size)`,
+        `${DRIVE}/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime desc&pageSize=${pageSize}&fields=files(id,name,mimeType,iconLink,webViewLink,modifiedTime,size)&corpora=allDrives&${ALL_DRIVES}`,
       );
       return json({ ok: true, files: d.files || [] });
     }
@@ -712,7 +723,7 @@ Deno.serve(async (req) => {
       const pageSize = Math.min(Math.max(Number(body.driveRecent.pageSize) || 25, 1), 100);
       const d = await driveFetch(
         token,
-        `${DRIVE}/files?q=${encodeURIComponent('trashed=false')}&orderBy=modifiedTime desc&pageSize=${pageSize}&fields=files(id,name,mimeType,iconLink,webViewLink,modifiedTime,size)`,
+        `${DRIVE}/files?q=${encodeURIComponent('trashed=false')}&orderBy=modifiedTime desc&pageSize=${pageSize}&fields=files(id,name,mimeType,iconLink,webViewLink,modifiedTime,size)&corpora=allDrives&${ALL_DRIVES}`,
       );
       return json({ ok: true, files: d.files || [] });
     }
