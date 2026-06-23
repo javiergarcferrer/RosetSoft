@@ -19,12 +19,14 @@ import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
 
-// Force a stored plan SVG (square viewBox) to STRETCH to fill its footprint tile,
-// so a non-square footprint (e.g. the measured corner) shows no letterbox white
-// space — which otherwise swings to the side when the piece is rotated.
+// Force a stored plan SVG to FILL its footprint tile. The stored SVGs carry only a
+// (square) viewBox — no width/height — so the browser renders them square and
+// top-anchored, leaving a strip at the bottom of a non-square tile that swings to
+// the side when the piece is rotated. width/height 100% makes the element fill the
+// tile; preserveAspectRatio="none" stretches the drawing to fill it (no letterbox).
 const fillSvg = (svg) =>
   (typeof svg === 'string' && svg.startsWith('<svg') && !svg.includes('preserveAspectRatio'))
-    ? svg.replace('<svg', '<svg preserveAspectRatio="none"')
+    ? svg.replace('<svg', '<svg preserveAspectRatio="none" width="100%" height="100%"')
     : svg;
 
 // The material editor's finish presets — physically-based fabric looks that
@@ -108,11 +110,7 @@ export default function TogoEmbed() {
   const rates = data?.rates || { USD: 1, DOP: 60 };
   const models = useMemo(() => (data?.models || []).filter((m) => m.svg), [data]);
   const materials = useMemo(() => data?.materials || [], [data]);
-  // The stored plan SVG has a SQUARE viewBox; force it to STRETCH to its footprint
-  // tile (preserveAspectRatio="none") instead of letterboxing. Without this, a
-  // piece whose real footprint isn't square (e.g. the measured corner) leaves white
-  // bars that swing to the side when the piece is rotated.
-  const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, fillSvg(m.svg)])), [models]);
+  const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m.svg])), [models]);
 
   // Per-model family (grades + retail prices) so a fabric pick reprices exactly
   // like the internal configurator (productForGrade), keyed by family root.
@@ -673,7 +671,7 @@ function CanvasArea({
               style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
             >
               <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : linked ? 'ring-2 ring-brand-300 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
-              <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: svgById[t.pieceId] }} />
+              <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
               <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
                 {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
                 {t.dimsLabel}
