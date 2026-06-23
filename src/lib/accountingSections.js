@@ -38,19 +38,17 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
     { to: '/accounting/importaciones/calculadora', label: 'Calculadora de costos' },
-    // Proveedores lives here, not under Gastos: an importer's suppliers are the
-    // foreign exporter on the factura + the local 606 cost agents on the
-    // expediente, so this is where the dealer reaches for them.
-    { to: '/accounting/suppliers', label: 'Proveedores' },
   ] },
   // Inventario left Contabilidad — it's a standalone section now (see
   // lib/access.js ADMIN_GROUP) while the accounting engine is in testing.
-  // Compras y gastos — ONE pane. Mercancía, activos y gastos son todos facturas
-  // de proveedor; se registran y listan juntas (filtro por tipo) y el 606 (tab
-  // in-page) las declara todas. `extraMatch` mantiene encendido el centro en los
-  // paths viejos que ahora renderizan la misma página.
+  // Compras y gastos — the supplier hub. Every supplier invoice (mercancía,
+  // activos, gastos) registers + lists here (filtro por tipo); el 606 (tab
+  // in-page) las declara todas; y los Proveedores viven junto a las facturas que
+  // se les registran. `extraMatch` mantiene encendido el centro en los paths
+  // viejos que ahora renderizan la misma página.
   { key: 'gastos', label: 'Compras y gastos', icon: Receipt, tabs: [
     { to: '/accounting/compras-gastos', label: 'Compras y gastos' },
+    { to: '/accounting/suppliers', label: 'Proveedores' },
   ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
   { key: 'banca', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },

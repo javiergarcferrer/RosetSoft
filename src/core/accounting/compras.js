@@ -5,6 +5,7 @@
 // discriminated by `nature` (gasto · mercancía · activo), with the nature /
 // supplier / date / free-text filters the pane applies. Pure: no React, no db.
 import { round2 } from '../../lib/accounting/ledger.js';
+import { tipo606For, DGII_606_TIPO_LABEL } from './expenses.js';
 
 /** The three natures of a supplier invoice. `gasto` covers expenses AND the
  *  legacy service purchases; `mercancía` lands in inventory; `activo` capitalizes
@@ -184,16 +185,27 @@ export function resolvePurchaseExpenseDetail({ purchase, expense, suppliers, acc
   });
 
   const exp = doc.expedienteId ? expById.get(doc.expedienteId) : null;
+  const supplier = doc.supplierId ? supById.get(doc.supplierId) : null;
+  const tipo606 = tipo606For(doc, source);
+  const paymentMethod = doc.paymentMethod || (purchase ? 'credit' : 'bank');
+  const paid = !!doc.paidAt;
   return {
     id: doc.id, source, nature, natureLabel: NATURE_LABEL[nature],
     number: doc.number ?? null, date,
     supplierId: doc.supplierId || null,
-    supplierName: (doc.supplierId ? supById.get(doc.supplierId)?.name : '') || '',
+    supplierName: supplier?.name || '',
+    supplierRnc: supplier?.rnc || '',
     accountCode: doc.accountCode || '', accountName, destination,
     description: doc.description || '',
-    ncf: doc.ncf || '',
-    payment: doc.paymentMethod || (purchase ? 'credit' : 'bank'),
-    paymentLabel: PAY_LABEL[doc.paymentMethod] || doc.paymentMethod || '',
+    ncf: doc.ncf || '', ncfType: doc.ncfType || '',
+    tipo606, tipo606Label: DGII_606_TIPO_LABEL[tipo606] || tipo606,
+    payment: paymentMethod,
+    paymentLabel: PAY_LABEL[paymentMethod] || paymentMethod || '',
+    paid,
+    paidAt: doc.paidAt || null,
+    // A non-credit invoice settles on posting; a credit one is "por pagar"
+    // until the cuentas module records its payment.
+    paymentStatus: paid ? 'paid' : (paymentMethod === 'credit' ? 'unpaid' : 'paid'),
     expediente: exp ? { id: exp.id, label: expLabel(exp) } : null,
     base, itbis, retIsr, retItbis,
     total: round2(base + itbis),

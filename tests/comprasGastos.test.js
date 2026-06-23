@@ -100,6 +100,11 @@ test('resolvePurchaseExpenseDetail: mercancía purchase → lines + money + inve
   assert.equal(d.lines[0].name, 'Sofá Togo');   // current item name wins over the stored line name
   assert.equal(d.lines[0].unitCost, 15000);
   assert.equal(d.lines[1].inInventory, false);  // free-text line, item since deleted
+  // Document header fields
+  assert.equal(d.supplierRnc, '00112345678');
+  assert.equal(d.tipo606, '09');                 // goods → costo de venta
+  assert.equal(d.tipo606Label, 'Compras y gastos que formarán parte del costo de venta');
+  assert.equal(d.paymentStatus, 'unpaid');       // credit, not yet paid → por pagar
 });
 
 test('resolvePurchaseExpenseDetail: gasto → no inventory, net nets the retentions', () => {
@@ -112,6 +117,8 @@ test('resolvePurchaseExpenseDetail: gasto → no inventory, net nets the retenti
   assert.equal(d.destination, '6-02-007-01-03-00 · TELEFONO E INTERNET');
   assert.equal(d.total, 1180);
   assert.equal(d.net, 1026); // 1000 + 180 − 100 − 54
+  assert.equal(d.tipo606, '02');         // class-6 service account → trabajos/suministros/servicios
+  assert.equal(d.paymentStatus, 'paid'); // bank → settles on posting
 });
 
 test('resolvePurchaseExpenseDetail: returns null when neither row exists', () => {

@@ -52,7 +52,7 @@ export function resolveExpensesList({ expenses, suppliers, accounts, start, end,
  * A default the accountant can refine in the DGII tool; the heavy cases
  * (inventory vs. services vs. assets) are derived from real data.
  */
-function tipo606For(doc, source) {
+export function tipo606For(doc, source) {
   if (source === 'purchase') {
     if (doc.kind === 'goods') return '09';
     if (doc.kind === 'asset') return '10';
@@ -66,6 +66,22 @@ function tipo606For(doc, source) {
   if (code.startsWith('1')) return '10';
   return '02';
 }
+
+/** DGII 606 casilla 3 — the official "Tipo de Bienes y Servicios Comprados"
+ *  names for the codes `tipo606For` derives. */
+export const DGII_606_TIPO_LABEL = {
+  '01': 'Gastos de personal',
+  '02': 'Gastos por trabajos, suministros y servicios',
+  '03': 'Arrendamientos',
+  '04': 'Gastos de activos fijos',
+  '05': 'Gastos de representación',
+  '06': 'Otras deducciones admitidas',
+  '07': 'Gastos financieros',
+  '08': 'Gastos extraordinarios',
+  '09': 'Compras y gastos que formarán parte del costo de venta',
+  '10': 'Adquisiciones de activos',
+  '11': 'Gastos de seguros',
+};
 
 function row606(doc, dateField, suppliersById, source) {
   const s = doc.supplierId ? suppliersById.get(doc.supplierId) : null;
