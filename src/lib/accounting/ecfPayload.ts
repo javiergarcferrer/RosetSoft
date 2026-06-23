@@ -23,6 +23,8 @@ export interface EcfItemInput {
   unitPrice: number;
   /** Line amount (qty × unitPrice), DOP. */
   amount: number;
+  /** DGII-required item classifier: 1 = bien (default), 2 = servicio. */
+  indicadorBienoServicio?: number;
 }
 
 export interface EcfReferenceInput {
@@ -136,6 +138,9 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
     NumeroLinea: i + 1,
     IndicadorFacturacion: 1, // gravado 18%
     NombreItem: it.name,
+    // DGII-required classifier; furniture is a good (1), services are 2. Sits
+    // between NombreItem and CantidadItem per the e-CF XSD field order.
+    IndicadorBienoServicio: it.indicadorBienoServicio ?? 1,
     CantidadItem: it.qty,
     PrecioUnitarioItem: round2(it.unitPrice),
     MontoItem: round2(it.amount),

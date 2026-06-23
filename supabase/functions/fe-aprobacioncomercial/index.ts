@@ -69,7 +69,21 @@ Deno.serve(async (req: Request) => {
       return json({ estado: 'Error', mensaje: 'Aprobación comercial no reconocida.' }, 400);
     }
 
-    // Acknowledge receipt. (Persisting to the DB is a follow-up.)
+    // Best-effort archive of the received commercial approval (non-blocking).
+    const pick = (re: RegExp) => (re.exec(xmlContent)?.[1] || '').trim();
+    const eNcfIn = pick(/<eNCF>\s*([^<]+)<\/eNCF>/i);
+    if (eNcfIn) {
+      try {
+        await supa.from('ecf_commercial_approvals').insert({
+          id: crypto.randomUUID(), profile_id: profileId, e_ncf: eNcfIn,
+          rnc_emisor: pick(/<RNCEmisor>\s*(\d+)/i) || null,
+          rnc_comprador: pick(/<RNCComprador>\s*(\d+)/i) || null,
+          estado: pick(/<Estado>\s*(\d+)/i) || null,
+          motivo_rechazo: pick(/<DetalleMotivoRechazo>\s*([^<]*)<\/DetalleMotivoRechazo>/i) || null,
+          xml: xmlContent,
+        });
+      } catch { /* non-blocking */ }
+    }
     return json({ estado: 'OK' });
   } catch (e) {
     return json({ estado: 'Error', mensaje: `aprobacioncomercial: ${e}` }, 500);

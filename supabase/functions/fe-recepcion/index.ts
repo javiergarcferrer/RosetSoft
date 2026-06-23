@@ -81,6 +81,11 @@ Deno.serve(async (req: Request) => {
       xmlContent = parsed?.xmlContent || rawBody;
     }
 
+    // Identify the document for dedup + archival (best-effort regex extraction).
+    const pick = (re: RegExp) => (re.exec(xmlContent)?.[1] || '').trim();
+    const eNcfIn = pick(/<eNCF>\s*([^<]+)<\/eNCF>/i);
+    const rncEmisorIn = pick(/<RNCEmisor>\s*(\d+)\s*<\/RNCEmisor>/i);
+
     // 3) Decide the acuse status. Default Recibido; flag No Recibido + a code on
     //    a bad signature or a buyer RNC that isn't us. (Duplicate detection,
     //    NoReceivedCode 3, needs persistence — a follow-up.)
@@ -102,9 +107,31 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Reject a document we've already received (NoReceivedCode 3 — Envío duplicado).
+    if (!code && eNcfIn && rncEmisorIn) {
+      const { data: dup } = await supa.from('ecf_received')
+        .select('id').eq('profile_id', profileId).eq('rnc_emisor', rncEmisorIn).eq('e_ncf', eNcfIn).maybeSingle();
+      if (dup) {
+        status = ReceivedStatus['e-CF No Recibido'];
+        code = NoReceivedCode['Envío duplicado'];
+      }
+    }
+
     // 4) Build the ARECF (unsigned) and XAdES-sign it with our certificate.
     const arecf = sr.getECFDataFromXML(xmlContent, ourRnc, status, code);
     const signedArecf = new (dgii as any).Signature(certs.key, certs.cert).signXml(arecf);
+
+    // Best-effort archive — never block the acuse on a write failure.
+    if (eNcfIn) {
+      try {
+        await supa.from('ecf_received').insert({
+          id: crypto.randomUUID(), profile_id: profileId, e_ncf: eNcfIn,
+          tipo_ecf: pick(/<TipoeCF>\s*(\d+)/i) || null, rnc_emisor: rncEmisorIn || null,
+          rnc_comprador: ourRnc || null, monto_total: Number(pick(/<MontoTotal>\s*([\d.]+)/i)) || null,
+          estado: status, codigo_no_recibido: code || null, xml: xmlContent,
+        });
+      } catch { /* duplicate or write error — non-blocking */ }
+    }
     return xmlResponse(signedArecf);
   } catch (e) {
     return json({ ok: false, error: `recepcion: ${e}` }, 500);

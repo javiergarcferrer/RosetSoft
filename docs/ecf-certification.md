@@ -36,14 +36,14 @@ out of this diff's scope but recommended).
 |---|---|---|---|
 | reqs, 1, 13–14 | RNC/OFV/Alta NCF/cert; sign postulación + DJ | ✅ have / DGII *App Firma Digital* | — |
 | 2, 4 | Issue e-CF XML → sign → send → poll TrackId | ✅ done (untested vs CerteCF) | `ecf-send`, `lib/accounting/ecfPayload.ts` |
-| 2 | Generate the **prescribed test-set** XMLs, all emitted types | ⬜ TODO | task #6 |
-| 3 | Generate **Aprobación/Rechazo Comercial** (outbound) + send | ⬜ TODO | task #5 |
+| 2 | Generate the **prescribed test-set** XMLs, all emitted types | ⚠️ 31/32/34 + required `IndicadorBienoServicio` done; Excel-driven harness gated on the DGII set | task #6 |
+| 3 | Generate **Aprobación/Rechazo Comercial** (outbound) + send | ✅ built + tested | task #5 |
 | 5–6 | Representación impresa PDF (QR + código, ≤10MB, layout) | ⚠️ exists, needs spec check | `pdf/accounting/InvoiceDocument.tsx`, `core/accounting/invoiceDoc.js` |
 | 1, 8, 9 | **Autenticación** service (semilla → token) | ✅ built | `functions/fe-autenticacion` |
 | 9 | **Recepción** service (inbound e-CF → signed ARECF) | ✅ built | `functions/fe-recepcion` |
 | 10–11 | **Aprobación comercial** inbound (respond OK/Error) | ✅ built | `functions/fe-aprobacioncomercial` |
 | 1 | Host `soft.alcover.do/fe/*` routing | ✅ built | `vercel.json` + `config.toml` |
-| 9–11 | Persist received e-CFs / approvals (business, not cert-gating) | ⬜ TODO | task #7 |
+| 9–11 | Persist received e-CFs / approvals (business, not cert-gating) | ✅ built (`ecf_received`, `ecf_commercial_approvals`) | task #7 |
 
 ## Routing
 
@@ -67,20 +67,35 @@ needs them).
 
 ## Remaining work
 
-1. **Outbound commercial approval** (#5): a Model that builds the ACECF for
-   approving/rejecting a received e-CF (`genrateACECFXml` / `IACECF`) + a send
-   path via `ECF.sendCommercialApproval`, with a test. Cert step 3.
-2. **Issuer test-set harness** (#6): confirm every e-CF type Alcover emits
-   (31/32/34 today — likely +33 nota débito; 41/43 only if it self-issues for
-   purchases), extend `buildEcfPayload` for the missing ones, and add a path
-   that emits XML from DGII's prescribed Excel set (exact fields/order), not
-   only from quotes. Cert step 2.
-3. **Persistence** (#7): additive migrations for received e-CFs + commercial
-   approvals so the inbox can show them and `fe-recepcion` can detect duplicates
-   (NoReceivedCode 3). Not required to PASS cert, but needed operationally.
-4. **Representación impresa** (#7): validate `InvoiceDocument` against the
-   *Informe Técnico* layout (mandatory fields per type, QR, código de
-   seguridad, ≤10MB). Cert steps 5–6.
+**Done** (in-sandbox, verified by tests):
+- **#5 outbound commercial approval** — `buildCommercialApproval` Model + `ecf-send`
+  `op:'approve'` (→ `ECF.sendCommercialApproval`) + `sendCommercialApproval` client
+  wrapper. `tests/ecfCommercial.test.js`. Cert step 3.
+- **#6 types + required item field** — emitted set fixed at **31/32/34** (the
+  dealer's sell-side); `buildEcfPayload` now carries the DGII-required
+  `IndicadorBienoServicio` per item (1=bien default, 2=servicio), in XSD order,
+  pinned in `tests/ecf.test.js`.
+- **#7 persistence** — `ecf_received` + `ecf_commercial_approvals`
+  (migration `20260809000000`). `fe-recepcion` archives inbound e-CFs and rejects
+  duplicates (NoReceivedCode 3); `fe-aprobacioncomercial` archives approvals.
+  Both writes are best-effort — they never block the DGII acuse/response.
+
+**Gated on the live cert** (not buildable from the sandbox — needs DGII creds /
+the test set / CerteCF responses):
+- **Issuer test-set harness** (#6): emit XML from DGII's prescribed Excel set
+  (exact fields/order). The Excel is only handed over after the postulación
+  validates, so this waits for that step.
+- **Representación impresa** (#7): validate `InvoiceDocument` against the *Informe
+  Técnico* layout (mandatory fields per type, QR, código, ≤10MB). Cert steps 5–6.
+- **Full schema completeness**: optional/conditional e-CF fields beyond the
+  required set are validated against TesteCF — the documented design stance for
+  `buildEcfPayload`. The receptor wire-format unknowns (token envelope, multipart
+  field names, ARECF signature root) likewise resolve on first CerteCF contact.
+
+A future **UI** to browse the receptor inbox (`ecf_received` /
+`ecf_commercial_approvals`) is not wired yet — the tables + archival exist; a
+Contabilidad page can read them when desired (add them to `db/database.ts`
+`TABLES`).
 
 ## CerteCF validation plan (the closing loop — run on the deployed app)
 

@@ -189,3 +189,21 @@ test('buildEcfPayload carries TipoPago: 1 contado (default), 2 crédito', () => 
   assert.equal(buildEcfPayload(base).ECF.Encabezado.IdDoc.TipoPago, 1);
   assert.equal(buildEcfPayload({ ...base, tipoPago: 2 }).ECF.Encabezado.IdDoc.TipoPago, 2);
 });
+
+test('buildEcfPayload items carry IndicadorBienoServicio (1=bien default, 2=servicio) in XSD order', () => {
+  const p = buildEcfPayload({
+    ecfType: '32', eNcf: 'E320000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    items: [
+      { name: 'Sofá', qty: 1, unitPrice: 1000, amount: 1000 },
+      { name: 'Instalación', qty: 1, unitPrice: 500, amount: 500, indicadorBienoServicio: 2 },
+    ],
+    gravado: 1500, itbis: 270, total: 1770,
+  }).ECF;
+  assert.equal(p.DetallesItems.Item[0].IndicadorBienoServicio, 1); // bien (default)
+  assert.equal(p.DetallesItems.Item[1].IndicadorBienoServicio, 2); // servicio
+  // XSD order: IndicadorBienoServicio sits between NombreItem and CantidadItem.
+  const keys = Object.keys(p.DetallesItems.Item[0]);
+  assert.ok(keys.indexOf('IndicadorBienoServicio') > keys.indexOf('NombreItem'));
+  assert.ok(keys.indexOf('IndicadorBienoServicio') < keys.indexOf('CantidadItem'));
+});
