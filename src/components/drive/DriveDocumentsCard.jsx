@@ -14,8 +14,8 @@ import { useApp } from '../../context/AppContext.jsx';
 import { driveCreateFolder, driveUploadBlob, driveList, driveCopy } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatDate } from '../../lib/format.js';
-import Modal from '../Modal.jsx';
 import DrivePickerModal from './DrivePickerModal.jsx';
+import DriveFilePreview from './DriveFilePreview.jsx';
 
 export default function DriveDocumentsCard({ folderId, folderUrl, folderName, parentId, onFolderSaved }) {
   const { settings } = useApp();
@@ -154,21 +154,7 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
 
       <DrivePickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={pickFromDrive} picking={busy} pins={settings?.googleDrivePins || []} />
 
-      {preview && (
-        <Modal open onClose={() => setPreview(null)} title={preview.name} size="lg">
-          <iframe
-            title={preview.name}
-            src={`https://drive.google.com/file/d/${preview.id}/preview`}
-            className="h-[70vh] w-full rounded-lg border border-ink-100"
-            allow="autoplay"
-          />
-          <div className="mt-2 text-right">
-            <a href={preview.webViewLink || '#'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline">
-              <ExternalLink size={12} /> Abrir en Drive
-            </a>
-          </div>
-        </Modal>
-      )}
+      {preview && <DriveFilePreview file={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

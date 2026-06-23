@@ -12,8 +12,8 @@ import { Link } from 'react-router-dom';
 import { HardDrive, Folder, ExternalLink, X, Pin, Lock } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
-import Modal from '../components/Modal.jsx';
 import DriveExplorer from '../components/drive/DriveExplorer.jsx';
+import DriveFilePreview from '../components/drive/DriveFilePreview.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { driveFolderUrl } from '../lib/google.js';
 import { userMessageFor } from '../lib/errorMessages.js';
@@ -129,21 +129,7 @@ export default function Drive() {
         </div>
       )}
 
-      {preview && (
-        <Modal open onClose={() => setPreview(null)} title={preview.name} size="lg">
-          <iframe
-            title={preview.name}
-            src={`https://drive.google.com/file/d/${preview.id}/preview`}
-            className="h-[70vh] w-full rounded-lg border border-ink-100"
-            allow="autoplay"
-          />
-          <div className="mt-2 text-right">
-            <a href={preview.webViewLink || '#'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline">
-              <ExternalLink size={12} /> Abrir en Drive
-            </a>
-          </div>
-        </Modal>
-      )}
+      {preview && <DriveFilePreview file={preview} onClose={() => setPreview(null)} />}
     </>
   );
 }
