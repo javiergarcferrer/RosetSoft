@@ -311,6 +311,7 @@ function ProtectedApp() {
                 working. */}
             <Route path="accounting/compras-gastos" element={<AccountingComprasGastos />} />
             <Route path="accounting/compras-gastos/nuevo" element={<AccountingComprasGastoEditor />} />
+            <Route path="accounting/compras-gastos/:id/editar" element={<AccountingComprasGastoEditor />} />
             <Route path="accounting/compras-gastos/:id" element={<AccountingComprasGastoDetail />} />
             <Route path="accounting/expenses" element={<AccountingComprasGastos />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />

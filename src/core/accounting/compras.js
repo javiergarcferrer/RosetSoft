@@ -6,6 +6,7 @@
 // supplier / date / free-text filters the pane applies. Pure: no React, no db.
 import { round2 } from '../../lib/accounting/ledger.js';
 import { tipo606For, DGII_606_TIPO_LABEL } from './expenses.js';
+import { costLabel } from '../../lib/accounting/expediente.js';
 
 /** The three natures of a supplier invoice. `gasto` covers expenses AND the
  *  legacy service purchases; `mercancía` lands in inventory; `activo` capitalizes
@@ -110,19 +111,49 @@ export function resolvePurchasesExpenses({
     };
   };
 
+  // Import-file cost-sheet rows: read-only outflows that live ON a POSTED
+  // expediente (they capitalize into landed inventory cost, so they're not
+  // editable here — a click opens the expediente). Surfaced so every cash
+  // outflow shows in one place WITHOUT re-entering them as standalone gastos.
+  const fromExpedienteCost = (e) => {
+    if (e.status !== 'posted' && !e.liquidatedAt) return [];
+    return (e.costs || []).map((c, i) => {
+      const total = round2(c.amount || 0);
+      const itbis = round2(c.itbis || 0);
+      const label = c.label || costLabel(c);
+      return {
+        id: `expcost-${e.id}-${c.id || i}`, source: 'expediente-cost', nature: 'expediente',
+        doc: null, readOnly: true,
+        date: e.liquidatedAt || e.createdAt || 0,
+        supplierId: c.supplierId || null,
+        supplierName: (c.supplierId ? supById.get(c.supplierId)?.name : '') || '',
+        accountCode: '', accountName: '',
+        destination: label, description: label,
+        ncf: c.ncf || '', articles: 0,
+        expedienteId: e.id, expedienteLabel: expLabel(e),
+        base: round2(total - itbis), itbis, retIsr: 0, retItbis: 0, total,
+        payment: c.paymentMethod || 'credit', paymentLabel: PAY_LABEL[c.paymentMethod] || c.paymentMethod || '',
+      };
+    });
+  };
+
   const q = (query || '').trim().toLowerCase();
   const wantNature = nature && nature !== 'all' ? nature : '';
 
   // Everything in the window + supplier + query (BEFORE the nature filter) — the
   // base for both the per-nature chip counts and the filtered rows.
-  const base = [...(expenses || []).map(fromExpense), ...(purchases || []).map(fromPurchase)]
+  const base = [
+    ...(expenses || []).map(fromExpense),
+    ...(purchases || []).map(fromPurchase),
+    ...(expedientes || []).flatMap(fromExpedienteCost),
+  ]
     .filter((r) => inWindow(r.date, start, end))
     .filter((r) => !supplierId || r.supplierId === supplierId)
     .filter((r) => !q || [r.supplierName, r.ncf, r.accountName, r.description, r.expedienteLabel]
       .some((v) => (v || '').toLowerCase().includes(q)));
 
   const counts = base.reduce((acc, r) => { acc[r.nature] = (acc[r.nature] || 0) + 1; return acc; },
-    { gasto: 0, mercancia: 0, activo: 0 });
+    { gasto: 0, mercancia: 0, activo: 0, expediente: 0 });
   counts.all = base.length;
 
   const rows = base

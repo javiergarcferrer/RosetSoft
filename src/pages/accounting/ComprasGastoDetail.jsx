@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock } from 'lucide-react';
+import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -12,7 +12,8 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatDop, formatDate } from '../../lib/format.js';
-import { resolvePurchaseExpenseDetail, resolveKardex, debitTotal, creditTotal } from '../../core/accounting/index.js';
+import { reverseComprasGastoPosting } from '../../lib/comprasGastosDoc.js';
+import { resolvePurchaseExpenseDetail, debitTotal, creditTotal } from '../../core/accounting/index.js';
 
 const NATURE_BADGE = {
   gasto: 'bg-ink-100 text-ink-600',
@@ -92,31 +93,9 @@ export default function ComprasGastoDetail() {
     setErr('');
     setDeleting(true);
     try {
-      let touched = [];
-      if (detail.source === 'purchase') {
-        const moves = (await db.inventoryMovements.where('refId').equals(doc.id).toArray()).filter((m) => m.refTable === 'purchases');
-        touched = [...new Set(moves.map((m) => m.itemId).filter(Boolean))];
-        if (doc.journalEntryId) {
-          const jl = await db.journalLines.where('entryId').equals(doc.journalEntryId).toArray();
-          await db.journalLines.bulkDelete(jl.map((l) => l.id));
-          await db.journalEntries.delete(doc.journalEntryId);
-        }
-        await db.inventoryMovements.bulkDelete(moves.map((m) => m.id));
-        for (const itemId of touched) {
-          const remaining = await db.inventoryMovements.where('itemId').equals(itemId).toArray();
-          if (!remaining.length) { await db.inventoryItems.delete(itemId); continue; }
-          const k = resolveKardex(remaining);
-          await db.inventoryItems.update(itemId, { qtyOnHand: k.qty, avgCost: k.avgCost });
-        }
-        await db.purchases.delete(doc.id);
-      } else {
-        if (doc.journalEntryId) {
-          const jl = await db.journalLines.where('entryId').equals(doc.journalEntryId).toArray();
-          await db.journalLines.bulkDelete(jl.map((l) => l.id));
-          await db.journalEntries.delete(doc.journalEntryId);
-        }
-        await db.expenses.delete(doc.id);
-      }
+      const { touched } = await reverseComprasGastoPosting({ id: doc.id, source: detail.source, journalEntryId: doc.journalEntryId });
+      if (detail.source === 'purchase') await db.purchases.delete(doc.id);
+      else await db.expenses.delete(doc.id);
       if (touched.length) syncShopify(touched).catch(() => {});
       navigate('/accounting/compras-gastos');
     } catch (ex) {
@@ -140,10 +119,16 @@ export default function ComprasGastoDetail() {
       <div className="card overflow-hidden">
         {/* Action + status bar */}
         <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-2.5 border-b border-ink-100 bg-ink-50/40">
-          <button type="button" onClick={reverseDoc} disabled={deleting}
-            className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 disabled:opacity-50">
-            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} <span className="hidden sm:inline">Eliminar</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => navigate(`/accounting/compras-gastos/${id}/editar`)}
+              className="btn-secondary">
+              <Pencil size={14} /> <span className="hidden sm:inline">Editar</span>
+            </button>
+            <button type="button" onClick={reverseDoc} disabled={deleting}
+              className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 disabled:opacity-50">
+              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} <span className="hidden sm:inline">Eliminar</span>
+            </button>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="status-pill status-pill-active">Publicado</span>
             {d.paymentStatus === 'paid' ? (

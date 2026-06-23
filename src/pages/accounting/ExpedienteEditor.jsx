@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Shield, Ship } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -57,8 +57,9 @@ export default function ExpedienteEditor() {
       </>
     );
   }
-  // A posted expediente is read-only — only drafts are editable here.
-  if (existing && existing.status !== 'draft') return <Navigate to={backTo} replace />;
+  // Both drafts AND posted expedientes are editable here: editing a posted one
+  // reverses its liquidación asiento + kardex and re-posts, preserving the
+  // number (see ExpedienteForm.post → reverseExpedientePosting).
 
   return (
     <>

@@ -138,3 +138,49 @@ test('supplier + date-window + query filters', () => {
   const bySupplierName = resolvePurchasesExpenses({ expenses: EXPENSES, purchases: PURCHASES, suppliers: SUPPLIERS, query: 'claro' });
   assert.deepEqual(bySupplierName.rows.map((x) => x.id).sort(), ['e1', 'p3']);
 });
+
+test('surfaces POSTED-expediente cost-sheet rows (read-only, linked, nature=expediente)', () => {
+  const expedientes = [{
+    id: 'x9', number: 12, bl: 'BL999', status: 'posted', liquidatedAt: 2500,
+    costs: [
+      { id: 'c1', concept: 'transporte', supplierId: 's1', ncf: 'B0200000099', amount: 1180, itbis: 180, paymentMethod: 'bank' },
+      { id: 'c2', concept: 'agenciamiento', label: 'Agente aduanal', amount: 500, itbis: 0, paymentMethod: 'credit' },
+    ],
+  }];
+  const r = resolvePurchasesExpenses({ expenses: [], purchases: [], suppliers: SUPPLIERS, accounts: ACCOUNTS, expedientes });
+  assert.equal(r.count, 2);
+  assert.equal(r.counts.expediente, 2);
+
+  const t = r.rows.find((x) => x.id === 'expcost-x9-c1');
+  assert.equal(t.source, 'expediente-cost');
+  assert.equal(t.nature, 'expediente');
+  assert.equal(t.readOnly, true);
+  assert.equal(t.expedienteId, 'x9');
+  assert.equal(t.expedienteLabel, '#12 · BL999');
+  assert.equal(t.supplierName, 'Claro');
+  assert.equal(t.ncf, 'B0200000099');
+  assert.equal(t.total, 1180);
+  assert.equal(t.itbis, 180);
+  assert.equal(t.base, 1000);                    // gross − itbis
+  assert.equal(t.destination, 'Transporte terrestre');
+
+  const a = r.rows.find((x) => x.id === 'expcost-x9-c2');
+  assert.equal(a.destination, 'Agente aduanal'); // custom label wins over the concept
+  assert.equal(a.total, 500);
+});
+
+test('DRAFT expedientes contribute no cost rows (no asiento yet)', () => {
+  const expedientes = [{ id: 'xd', number: 1, status: 'draft', costs: [{ id: 'c', concept: 'transporte', amount: 100, itbis: 0 }] }];
+  const r = resolvePurchasesExpenses({ expenses: [], purchases: [], suppliers: SUPPLIERS, expedientes });
+  assert.equal(r.count, 0);
+  assert.equal(r.counts.expediente, 0);
+});
+
+test('the Expediente nature filters to cost rows only; chip counts stay over the full set', () => {
+  const expedientes = [{ id: 'x9', number: 12, status: 'posted', liquidatedAt: 2500, costs: [{ id: 'c1', concept: 'transporte', amount: 100, itbis: 0 }] }];
+  const r = resolvePurchasesExpenses({ expenses: EXPENSES, purchases: PURCHASES, suppliers: SUPPLIERS, accounts: ACCOUNTS, expedientes, nature: 'expediente' });
+  assert.equal(r.count, 1);
+  assert.equal(r.rows[0].id, 'expcost-x9-c1');
+  assert.equal(r.counts.all, 5);   // 4 docs + 1 cost row, unaffected by the filter
+  assert.equal(r.counts.expediente, 1);
+});

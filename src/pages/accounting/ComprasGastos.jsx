@@ -27,6 +27,7 @@ const NATURE_BADGE = {
   gasto: 'bg-ink-100 text-ink-600',
   mercancia: 'bg-emerald-50 text-emerald-700',
   activo: 'bg-sky-50 text-sky-700',
+  expediente: 'bg-violet-50 text-violet-700',
 };
 
 function ymd(ts) {
@@ -35,7 +36,7 @@ function ymd(ts) {
 }
 
 function NatureBadge({ nature }) {
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${NATURE_BADGE[nature] || NATURE_BADGE.gasto}`}>{NATURE_LABEL[nature] || nature}</span>;
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${NATURE_BADGE[nature] || NATURE_BADGE.gasto}`}>{nature === 'expediente' ? 'Expediente' : (NATURE_LABEL[nature] || nature)}</span>;
 }
 
 /**
@@ -166,17 +167,19 @@ export default function ComprasGastos() {
   const [listQuery, setListQuery] = useState('');
   const [txtErr, setTxtErr] = useState('');
 
-  // Registration is its own full-page document now. Legacy deep-links
-  // (?new=gasto&amount&itbis&desc — the commission-payout handoff) redirect to
-  // the editor, carrying their seed params.
+  // Register + edit are the full-page document editor now. Legacy deep-links
+  // (?new=…, the commission-payout handoff; ?edit=… from older detail buttons)
+  // redirect there carrying their seed params.
   const newParam = params.get('new');
+  const editParam = params.get('edit');
   useEffect(() => {
+    if (editParam) { navigate(`/accounting/compras-gastos/${editParam}/editar`, { replace: true }); return; }
     if (!newParam) return;
     const tipo = NATURES.some((n) => n.key === newParam) ? newParam : 'gasto';
     const qs = new URLSearchParams({ tipo });
     for (const k of ['amount', 'itbis', 'desc']) { const v = params.get(k); if (v != null) qs.set(k, v); }
     navigate(`/accounting/compras-gastos/nuevo?${qs.toString()}`, { replace: true });
-  }, [newParam]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [newParam, editParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const win = periodWindow(from, to);
   const list = useMemo(() => resolvePurchasesExpenses({
@@ -210,7 +213,10 @@ export default function ComprasGastos() {
     downloadText(dgiiTxtFilename('606', settings?.companyRnc, period), dgii606Txt({ rows: form606.rows, rncEmisor: settings?.companyRnc, period }));
   }
 
-  const natureChips = [{ key: 'all', label: 'Todo' }, ...NATURES];
+  const natureChips = [{ key: 'all', label: 'Todo' }, ...NATURES, { key: 'expediente', label: 'Expediente' }];
+  // Expediente cost rows are read-only and live on the import file — a click
+  // opens the expediente, not a compra/gasto detail (they aren't editable here).
+  const rowHref = (r) => (r.source === 'expediente-cost' ? `/accounting/importaciones/${r.expedienteId}` : `/accounting/compras-gastos/${r.id}`);
 
   return (
     <AccountingGate title="Compras y gastos">
@@ -258,7 +264,7 @@ export default function ComprasGastos() {
           <RowCards
             rows={list.rows.map((r) => ({
               key: r.id,
-              to: `/accounting/compras-gastos/${r.id}`,
+              to: rowHref(r),
               title: r.supplierName || '—',
               right: formatDop(r.total),
               sub: <span className="inline-flex items-center gap-1.5"><NatureBadge nature={r.nature} />{r.destination}</span>,
@@ -291,8 +297,8 @@ export default function ComprasGastos() {
                   <tbody>
                     {list.rows.map((r) => (
                       <tr key={r.id} tabIndex={0}
-                        onClick={() => navigate(`/accounting/compras-gastos/${r.id}`)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/accounting/compras-gastos/${r.id}`); }}
+                        onClick={() => navigate(rowHref(r))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(rowHref(r)); }}
                         className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
                         {listCols.cols.map((col) => <td key={col.key} className={col.tdClass || ''}>{col.cell({ r })}</td>)}
                       </tr>
