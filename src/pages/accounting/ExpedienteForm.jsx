@@ -14,6 +14,7 @@ import { groupFamilies, catalogSellingPrice } from '../../lib/catalog.js';
 import {
   resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
 } from '../../core/accounting/index.js';
+import { reverseExpedientePosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -325,6 +326,16 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     if (t.cif <= 0) { setErr('Agrega al menos una línea con valor FOB.'); return; }
     setSaving(true);
     try {
+      // Editing a POSTED expediente = re-liquidar: reverse the prior asiento +
+      // kardex first (keeping any solely-minted items so the re-post can re-add
+      // them), then re-post below preserving the same id + number.
+      const isRepost = !!existing?.journalEntryId;
+      let priorTouched = [];
+      if (isRepost) {
+        const rev = await reverseExpedientePosting({ id: existing.id, journalEntryId: existing.journalEntryId, keepOrphanItems: true });
+        priorTouched = rev.touched;
+      }
+
       // Free-text lines first become real inventory items, so the kardex IN and
       // the stored expediente both point at them — entry never blocks on
       // pre-creating artículos. Identity is MODEL + VARIANT: a Ligne Roset
@@ -398,16 +409,25 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         });
         const it = itemById.get(l.itemId);
         if (it) {
-          const avg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, l.landedUnitCost);
-          const patch = { qtyOnHand: (it.qtyOnHand || 0) + l.qty, avgCost: avg };
           // Backfill the catalog price onto an existing item that never carried
           // one (newly-minted items already have it). A dealer-set price wins.
           const price = priceByItem.get(l.itemId);
-          if (price != null && it.sellingPrice == null) patch.sellingPrice = price;
-          await db.inventoryItems.update(l.itemId, patch);
+          if (isRepost) {
+            // Re-liquidar: qty/avg come from the full recompute below (the
+            // expediente may not be chronologically last); only the price here.
+            if (price != null && it.sellingPrice == null) await db.inventoryItems.update(l.itemId, { sellingPrice: price });
+          } else {
+            const avg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, l.landedUnitCost);
+            const patch = { qtyOnHand: (it.qtyOnHand || 0) + l.qty, avgCost: avg };
+            if (price != null && it.sellingPrice == null) patch.sellingPrice = price;
+            await db.inventoryItems.update(l.itemId, patch);
+          }
         }
         touched.push(l.itemId);
       }
+      // Re-liquidar: recompute every touched item (prior ∪ new) from ALL its
+      // movements, since the re-posted lines may not be chronologically last.
+      if (isRepost) await recomputeItems([...priorTouched, ...touched]);
       if (touched.length) syncShopify(touched).catch(() => {});
       await archiveFacturasToDrive(id, savedNumber, rowFields.bl, driveFolder?.id || existing?.driveFolderId);
       if (!existing) clearDraftStorage();
@@ -666,11 +686,15 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <button type="button" onClick={saveDraft} disabled={saving} className="btn-secondary">
-            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar borrador
-          </button>
+          {/* "Guardar borrador" is hidden when re-liquidating a POSTED expediente:
+              saving it as a draft would un-post it without reversing the asiento. */}
+          {!existing?.journalEntryId && (
+            <button type="button" onClick={saveDraft} disabled={saving} className="btn-secondary">
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Guardar borrador
+            </button>
+          )}
           <button type="button" onClick={post} disabled={saving} className="btn-primary">
-            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Contabilizar expediente
+            {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {existing?.journalEntryId ? 'Re-liquidar expediente' : 'Contabilizar expediente'}
           </button>
         </div>
       </div>

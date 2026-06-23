@@ -17,8 +17,9 @@ import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { driveDelete } from '../../lib/google.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
+import { reverseExpedientePosting } from '../../lib/comprasGastosDoc.js';
 import {
-  resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal, resolveKardex,
+  resolveExpedienteDetail, resolveAccountingConfig, debitTotal, creditTotal,
   resolvePurchasesExpenses, NATURE_LABEL,
 } from '../../core/accounting/index.js';
 import { TEMPLATE_KEY } from './ExpedienteForm.jsx';
@@ -286,34 +287,10 @@ export default function ImportacionDetail() {
     setErr('');
     setDeleting(true);
     try {
-      // The kardex IN movements this expediente posted (refTable/refId tag).
-      const expMoves = (await db.inventoryMovements.where('refId').equals(e.id).toArray())
-        .filter((m) => m.refTable === 'import_expedientes');
-      const touched = [...new Set(expMoves.map((m) => m.itemId).filter(Boolean))];
-
-      // 1. The asiento — lines first, then the entry (mirror the quote cascade).
-      if (e.journalEntryId) {
-        const jl = await db.journalLines.where('entryId').equals(e.journalEntryId).toArray();
-        await db.journalLines.bulkDelete(jl.map((l) => l.id));
-        await db.journalEntries.delete(e.journalEntryId);
-      }
-      // 2. This expediente's kardex movements.
-      await db.inventoryMovements.bulkDelete(expMoves.map((m) => m.id));
-      // 3. Recompute each touched item from what's LEFT (self-heals the
-      //    denormalized qty/avg the weighted-average IN had advanced). If an
-      //    item has NO movements left, this expediente was its sole source —
-      //    it was minted by the import, so remove the orphaned product too
-      //    instead of leaving a phantom zero-stock SKU in inventario.
-      for (const itemId of touched) {
-        const remaining = await db.inventoryMovements.where('itemId').equals(itemId).toArray();
-        if (!remaining.length) {
-          await db.inventoryItems.delete(itemId);
-          continue;
-        }
-        const k = resolveKardex(remaining);
-        await db.inventoryItems.update(itemId, { qtyOnHand: k.qty, avgCost: k.avgCost });
-      }
-      // 4. The expediente itself.
+      // Reverse the liquidación asiento + kardex INs (shared with the editor's
+      // re-liquidar). Orphan items minted only by this import are removed.
+      const { touched } = await reverseExpedientePosting({ id: e.id, journalEntryId: e.journalEntryId });
+      // The expediente itself goes last (idempotent retry on a mid-way failure).
       await db.importExpedientes.delete(e.id);
       // 5. Its Google Drive folder + documents (best-effort — a Drive blip must
       //    not block the accounting reversal that already succeeded).
@@ -335,11 +312,9 @@ export default function ImportacionDetail() {
         subtitle={`${formatDate(meta.date)}${meta.bl ? ` · BL ${meta.bl}` : ''}${isDraft ? ' · Borrador (sin contabilizar)' : ''}`}
         actions={(
           <div className="flex items-center gap-2">
-            {isDraft && (
-              <button type="button" onClick={() => navigate(`/accounting/importaciones/${expQ.data.id}/editar`)} className="btn-primary">
-                <Pencil size={14} /> Editar / Contabilizar
-              </button>
-            )}
+            <button type="button" onClick={() => navigate(`/accounting/importaciones/${expQ.data.id}/editar`)} className="btn-primary">
+              <Pencil size={14} /> {isDraft ? 'Editar / Contabilizar' : 'Editar'}
+            </button>
             <button type="button" onClick={useAsTemplate} className="btn-secondary">
               <Copy size={14} /> Usar como plantilla
             </button>

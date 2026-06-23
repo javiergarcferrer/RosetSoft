@@ -482,7 +482,7 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
       // the SAME document id + number so the 606 and the ledger keep continuity.
       let priorTouched = [];
       if (editDoc) {
-        const r = await reverseComprasGastoPosting({ id, source: editDoc.source, journalEntryId: editDoc.journalEntryId });
+        const r = await reverseComprasGastoPosting({ id, source: editDoc.source, journalEntryId: editDoc.journalEntryId, keepOrphanItems: true });
         priorTouched = r.touched;
       }
 
