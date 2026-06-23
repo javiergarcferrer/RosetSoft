@@ -1,5 +1,5 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Receipt, Plus, Loader2, Check, X, Download, Search, Trash2, FileText } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -20,11 +20,12 @@ import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
 import {
-  resolvePurchasesExpenses, resolve606, NATURES, NATURE_LABEL,
+  resolvePurchasesExpenses, resolve606, NATURES, NATURE_LABEL, purchaseNature,
   buildExpenseEntry, buildPurchaseEntry, computeExpenseTaxes, resolvePurchaseLines,
   resolveAccountingConfig, classOf, postableAccounts, weightedAverageIn,
   dgii606Txt, dgiiPeriod, dgiiTxtFilename,
 } from '../../core/accounting/index.js';
+import { reverseComprasGastoPosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
 const PAY_LABEL = { cash: 'Efectivo', bank: 'Banco', card: 'Tarjeta', credit: 'Crédito' };
 const NATURE_BADGE = {
@@ -168,6 +169,15 @@ export default function ComprasGastos() {
   const [from, setFrom] = useState(() => isoDate(new Date(today.getFullYear(), today.getMonth(), 1).getTime()));
   const [to, setTo] = useState(() => isoDate(today.getTime()));
   const [showForm, setShowForm] = useState(!!params.get('new'));
+  const editId = params.get('edit');
+  const editDoc = useMemo(() => {
+    if (!editId) return null;
+    const p = purchasesQ.data.find((x) => x.id === editId);
+    if (p) return { source: 'purchase', ...p, nature: purchaseNature(p.kind) };
+    const e = expensesQ.data.find((x) => x.id === editId);
+    if (e) return { source: 'expense', ...e, nature: 'gasto' };
+    return null;
+  }, [editId, purchasesQ.data, expensesQ.data]);
   const [nature, setNature] = useState('all');
   const [supplierFilter, setSupplierFilter] = useState('');
   const [listQuery, setListQuery] = useState('');
@@ -245,13 +255,14 @@ export default function ComprasGastos() {
         </div>
       )}
 
-      {showForm && loaded && (
+      {(showForm || editDoc) && loaded && (
         <UnifiedDocForm
+          key={editDoc?.id || 'new'}
           scope={scope} config={config} suppliers={suppliersQ.data} suppliersById={suppliersById}
           accounts={accountsQ.data} items={itemsQ.data} expedientes={expedientesQ.data}
-          initialNature={seedNature}
+          initialNature={seedNature} editDoc={editDoc}
           initial={{ description: params.get('desc') || '', base: params.get('amount') || '', itbis: params.get('itbis') ?? '' }}
-          onClose={() => setShowForm(false)} />
+          onClose={() => { if (editDoc) navigate('/accounting/compras-gastos'); else setShowForm(false); }} />
       )}
 
       {!loaded ? <ListLoading /> : tab === 'list' ? (
@@ -368,13 +379,24 @@ const expOptLabel = (e) => `#${e.number ?? ''}${e.bl ? ` · ${e.bl}` : ''}`.trim
  * IN each). A gasto writes to `expenses`; mercancía/activo to `purchases`. Any
  * nature can link to an import expediente. ITBIS + retentions follow the base.
  */
-function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, items, expedientes, initialNature, initial, onClose }) {
-  const [form, setForm] = useState({
+function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, items, expedientes, initialNature, initial, editDoc, onClose }) {
+  const [form, setForm] = useState(() => (editDoc ? {
+    nature: editDoc.nature, supplierId: editDoc.supplierId || '',
+    date: isoDate(editDoc.source === 'purchase' ? editDoc.purchaseAt : editDoc.expenseAt),
+    ncf: editDoc.ncf || '', ncfType: editDoc.ncfType || '',
+    accountCode: editDoc.accountCode || '', expedienteId: editDoc.expedienteId || '',
+    description: editDoc.description || '',
+    base: editDoc.nature === 'mercancia' ? '' : String(editDoc.base ?? ''),
+    itbis: String(editDoc.itbis ?? ''), retIsr: String(editDoc.retentionIsr ?? ''),
+    retItbis: String(editDoc.retentionItbis ?? ''), paymentMethod: editDoc.paymentMethod || 'bank',
+  } : {
     nature: initialNature || 'gasto', supplierId: '', date: isoDate(Date.now()), ncf: '', ncfType: '',
     accountCode: '', expedienteId: '', description: initial?.description || '',
     base: initial?.base || '', itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
-  });
-  const [lines, setLines] = useState([blankLine()]);
+  }));
+  const [lines, setLines] = useState(() => (editDoc?.nature === 'mercancia' && editDoc.lines?.length
+    ? editDoc.lines.map((l) => ({ id: l.id || newId(), itemId: l.itemId || '', name: l.name || '', reference: l.reference || '', qty: String(l.qty ?? ''), cost: String(l.cost ?? '') }))
+    : [blankLine()]));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -400,8 +422,12 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
   }
   // Mercancía has no base input (it's Σ líneas) → recompute the suggested taxes
   // whenever the líneas/supplier move. Gasto/activo recompute on the base input.
+  // On an EDIT we keep the stored taxes on first render — only recompute once the
+  // user actually changes the líneas/supplier.
+  const skipFirstTaxCalc = useRef(!!editDoc);
   useEffect(() => {
     if (!goods) return;
+    if (skipFirstTaxCalc.current) { skipFirstTaxCalc.current = false; return; }
     setForm((f) => ({ ...f, ...recompute(lineRes.base, suppliersById.get(f.supplierId)) }));
   }, [goods, lineRes.base, form.supplierId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -440,13 +466,21 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
     }
     setSaving(true);
     try {
-      const id = newId();
+      const id = editDoc ? editDoc.id : newId();
       const postedAt = parseISODate(form.date);
       const expedienteId = form.expedienteId || null;
       const common = {
         supplierId: form.supplierId || null, base, itbis,
         retentionIsr: retIsr, retentionItbis: retItbis, paymentMethod: form.paymentMethod, ncf: form.ncf,
       };
+
+      // Editar = reverse the prior posting (asiento + kardex), then re-post with
+      // the SAME document id + number so the 606 and the ledger keep continuity.
+      let priorTouched = [];
+      if (editDoc) {
+        const r = await reverseComprasGastoPosting({ id, source: editDoc.source, journalEntryId: editDoc.journalEntryId });
+        priorTouched = r.touched;
+      }
 
       if (nature === 'gasto') {
         const built = buildExpenseEntry({
@@ -455,28 +489,31 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
         });
         await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
         await db.journalLines.bulkPut(built.lines);
-        await assignSequenceNumber({
-          table: 'expenses', profileId: scope, start: 1,
-          build: (n) => ({
-            id, profileId: scope, number: n, supplierId: form.supplierId || null, expenseAt: postedAt,
-            ncf: form.ncf, ncfType: form.ncfType, accountCode: form.accountCode, description: form.description,
-            expedienteId, base, itbis, itbisCreditable: true, retentionIsr: retIsr, retentionItbis: retItbis,
-            paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
-            journalEntryId: built.entry.id,
-          }),
-        });
+        const row = {
+          id, profileId: scope, supplierId: form.supplierId || null, expenseAt: postedAt,
+          ncf: form.ncf, ncfType: form.ncfType, accountCode: form.accountCode, description: form.description,
+          expedienteId, base, itbis, itbisCreditable: true, retentionIsr: retIsr, retentionItbis: retItbis,
+          paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
+          journalEntryId: built.entry.id,
+        };
+        if (editDoc) await db.expenses.put({ ...row, number: editDoc.number });
+        else await assignSequenceNumber({ table: 'expenses', profileId: scope, start: 1, build: (n) => ({ ...row, number: n }) });
         onClose();
         return;
       }
 
       // mercancía / activo → purchases
       const kind = goods ? 'goods' : 'asset';
+      // For a goods EDIT, read items AFTER the reverse so the costing is correct.
+      const baseItems = (editDoc && goods)
+        ? await db.inventoryItems.where('profileId').equals(scope).toArray()
+        : items;
       let storedLines = [];
-      let itemById = new Map(items.map((i) => [i.id, i]));
+      let itemById = new Map(baseItems.map((i) => [i.id, i]));
       if (goods) {
         const newItems = [];
         const variantKey = (sku, name) => JSON.stringify([(sku || '').trim(), (name || '').trim()]);
-        const idByVariant = new Map(items.map((i) => [variantKey(i.sku, i.name), i.id]));
+        const idByVariant = new Map(baseItems.map((i) => [variantKey(i.sku, i.name), i.id]));
         storedLines = lineRes.lines.map((l) => {
           const row = { id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty, cost: l.cost };
           if (l.itemId || !l.name) return row;
@@ -488,7 +525,7 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
           return { ...row, itemId: newItemId };
         });
         if (newItems.length) await db.inventoryItems.bulkPut(newItems);
-        itemById = new Map([...items, ...newItems].map((i) => [i.id, i]));
+        itemById = new Map([...baseItems, ...newItems].map((i) => [i.id, i]));
       }
 
       const built = buildPurchaseEntry({
@@ -497,17 +534,17 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
       });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
-      await assignSequenceNumber({
-        table: 'purchases', profileId: scope, start: 1,
-        build: (n) => ({
-          id, profileId: scope, number: n, supplierId: form.supplierId || null, purchaseAt: postedAt,
-          ncf: form.ncf, ncfType: '', kind, accountCode: goods ? null : form.accountCode, description: form.description,
-          itemId: null, qty: goods ? lineRes.qty : 0, lines: storedLines, expedienteId,
-          base, itbis, itbisCreditable: true, retentionIsr: retIsr, retentionItbis: retItbis,
-          paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
-          journalEntryId: built.entry.id,
-        }),
-      });
+      const prow = {
+        id, profileId: scope, supplierId: form.supplierId || null, purchaseAt: postedAt,
+        ncf: form.ncf, ncfType: '', kind, accountCode: goods ? null : form.accountCode, description: form.description,
+        itemId: null, qty: goods ? lineRes.qty : 0, lines: storedLines, expedienteId,
+        base, itbis, itbisCreditable: true, retentionIsr: retIsr, retentionItbis: retItbis,
+        paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
+        journalEntryId: built.entry.id,
+      };
+      if (editDoc) await db.purchases.put({ ...prow, number: editDoc.number });
+      else await assignSequenceNumber({ table: 'purchases', profileId: scope, start: 1, build: (n) => ({ ...prow, number: n }) });
+
       if (goods) {
         for (const l of storedLines) {
           const unitCost = l.qty > 0 ? Math.round((l.cost / l.qty) * 10000) / 10000 : 0;
@@ -516,14 +553,20 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
             id: newId(), profileId: scope, itemId: l.itemId, type: 'in', qty: l.qty, unitCost,
             movedAt: postedAt, refTable: 'purchases', refId: id, journalEntryId: built.entry.id,
           });
-          const it = itemById.get(l.itemId);
-          if (it) {
-            const newAvg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, unitCost);
-            const newQty = (it.qtyOnHand || 0) + l.qty;
-            await db.inventoryItems.update(l.itemId, { qtyOnHand: newQty, avgCost: newAvg });
-            itemById.set(l.itemId, { ...it, qtyOnHand: newQty, avgCost: newAvg });
+          if (!editDoc) {
+            // Create: a new purchase is chronologically last → incremental avg.
+            const it = itemById.get(l.itemId);
+            if (it) {
+              const newAvg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, unitCost);
+              const newQty = (it.qtyOnHand || 0) + l.qty;
+              await db.inventoryItems.update(l.itemId, { qtyOnHand: newQty, avgCost: newAvg });
+              itemById.set(l.itemId, { ...it, qtyOnHand: newQty, avgCost: newAvg });
+            }
           }
         }
+        // Edit: the edited doc may not be chronologically last → recompute every
+        // touched item (prior + new) from ALL its movements.
+        if (editDoc) await recomputeItems([...priorTouched, ...storedLines.map((l) => l.itemId)]);
       }
       onClose();
     } catch (e) {
@@ -539,19 +582,23 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
   return (
     <div className="card p-4 mb-4 border-ink-300 min-w-0">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-display font-semibold">Nueva compra o gasto</h3>
+        <h3 className="font-display font-semibold">{editDoc ? `Editar ${NATURE_LABEL[editDoc.nature]?.toLowerCase() || 'compra o gasto'}${editDoc.number != null ? ` #${editDoc.number}` : ''}` : 'Nueva compra o gasto'}</h3>
         <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
       </div>
 
-      {/* Nature toggle — the one decision that shapes the form */}
-      <div className="inline-flex rounded-lg border border-ink-200 p-0.5 mb-3 bg-ink-50/40">
+      {/* Nature toggle — the one decision that shapes the form. Locked on edit:
+          changing it would move the doc between the expenses/purchases tables. */}
+      <div className="inline-flex rounded-lg border border-ink-200 p-0.5 mb-1 bg-ink-50/40">
         {NATURES.map((n) => (
-          <button key={n.key} type="button" onClick={() => setNature(n.key)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${nature === n.key ? 'bg-surface shadow-xs font-medium text-ink-800' : 'text-ink-500 hover:text-ink-700'}`}>
+          <button key={n.key} type="button" onClick={() => setNature(n.key)} disabled={!!editDoc}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${nature === n.key ? 'bg-surface shadow-xs font-medium text-ink-800' : 'text-ink-500 hover:text-ink-700'}`}>
             {n.label}
           </button>
         ))}
       </div>
+      {editDoc
+        ? <p className="text-[11px] text-ink-400 mb-3">El tipo no cambia al editar — para cambiarlo, elimina y crea de nuevo.</p>
+        : <div className="mb-3" />}
 
       <div className="grid sm:grid-cols-2 gap-3 max-w-3xl">
         <select value={form.supplierId} onChange={(e) => onSupplier(e.target.value)} className={field}>
@@ -672,7 +719,7 @@ function UnifiedDocForm({ scope, config, suppliers, suppliersById, accounts, ite
           )}
         </div>
         <button type="button" onClick={save} disabled={saving} className="btn-primary">
-          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} {editDoc ? 'Guardar cambios' : 'Registrar'}
         </button>
       </div>
       {err && <p className="text-sm text-rose-600 mt-2">{err}</p>}
