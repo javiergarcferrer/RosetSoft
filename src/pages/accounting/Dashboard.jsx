@@ -30,8 +30,8 @@ const QUICK_ACTIONS = [
   { label: 'Factura', to: '/accounting/facturacion', icon: FileText },
   { label: 'Cobro', to: '/accounting/cuentas?new=in', icon: ArrowDownCircle },
   { label: 'Pago', to: '/accounting/cuentas?new=out', icon: ArrowUpCircle },
-  { label: 'Gasto', to: '/accounting/compras-gastos?new=gasto', icon: Receipt },
-  { label: 'Compra', to: '/accounting/compras-gastos?new=mercancia', icon: ShoppingCart },
+  { label: 'Gasto', to: '/accounting/compras-gastos/nuevo?tipo=gasto', icon: Receipt },
+  { label: 'Compra', to: '/accounting/compras-gastos/nuevo?tipo=mercancia', icon: ShoppingCart },
   { label: 'Expediente', to: '/accounting/importaciones/nuevo', icon: Ship },
   { label: 'Asiento', to: '/accounting/ledger?new=1', icon: BookOpen },
 ];

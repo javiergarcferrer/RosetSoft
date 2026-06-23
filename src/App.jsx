@@ -51,6 +51,7 @@ const AccountingStatements = lazyPage(() => import('./pages/accounting/Statement
 const AccountingSettings = lazyPage(() => import('./pages/accounting/AccountingSettings.jsx'));
 const AccountingComprasGastos = lazyPage(() => import('./pages/accounting/ComprasGastos.jsx'));
 const AccountingComprasGastoDetail = lazyPage(() => import('./pages/accounting/ComprasGastoDetail.jsx'));
+const AccountingComprasGastoEditor = lazyPage(() => import('./pages/accounting/ComprasGastoEditor.jsx'));
 const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.jsx'));
 const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturacion.jsx'));
 const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
@@ -309,6 +310,7 @@ function ProtectedApp() {
                 the same page so old bookmarks + deep-links (handoffs) keep
                 working. */}
             <Route path="accounting/compras-gastos" element={<AccountingComprasGastos />} />
+            <Route path="accounting/compras-gastos/nuevo" element={<AccountingComprasGastoEditor />} />
             <Route path="accounting/compras-gastos/:id" element={<AccountingComprasGastoDetail />} />
             <Route path="accounting/expenses" element={<AccountingComprasGastos />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />

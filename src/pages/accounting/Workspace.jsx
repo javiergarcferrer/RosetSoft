@@ -847,7 +847,7 @@ function ExpenseLink({ amountUsd, desc, settings }) {
   const dop = Math.round(amountUsd * rate * 100) / 100;
   return (
     <Link
-      to={`/accounting/compras-gastos?new=gasto&amount=${dop}&itbis=0&desc=${encodeURIComponent(desc)}`}
+      to={`/accounting/compras-gastos/nuevo?tipo=gasto&amount=${dop}&itbis=0&desc=${encodeURIComponent(desc)}`}
       className="btn-ghost text-xs whitespace-nowrap"
       title="Registrar el gasto de esta comisión (monto al tipo de cambio actual)"
     >

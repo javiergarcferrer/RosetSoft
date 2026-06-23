@@ -90,8 +90,8 @@ export const QUICK_CREATE = [
     { label: 'Calculadora de costo en destino', to: '/accounting/importaciones/calculadora' },
   ] },
   { group: 'Proveedores', items: [
-    { label: 'Gasto', to: '/accounting/compras-gastos?new=gasto' },
-    { label: 'Compra de mercancía', to: '/accounting/compras-gastos?new=mercancia' },
+    { label: 'Gasto', to: '/accounting/compras-gastos/nuevo?tipo=gasto' },
+    { label: 'Compra de mercancía', to: '/accounting/compras-gastos/nuevo?tipo=mercancia' },
     { label: 'Pago', to: '/accounting/cuentas?new=out' },
   ] },
   { group: 'Empleados', items: [
