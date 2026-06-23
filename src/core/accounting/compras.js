@@ -137,3 +137,69 @@ export function resolvePurchasesExpenses({
 
   return { rows, totals, count: rows.length, counts };
 }
+
+/**
+ * Full drill-down of ONE compra/gasto (whichever of `purchase` / `expense` is
+ * present) for the detail page: the unified header fields, the money breakdown
+ * (base · ITBIS · retenciones · total · neto), the linked expediente, and — for
+ * a mercancía purchase — its article lines dressed with current item names + the
+ * kardex unit cost. `reversesInventory` flags the natures whose delete must also
+ * undo a kardex IN. Pure; returns null when neither row exists.
+ */
+export function resolvePurchaseExpenseDetail({ purchase, expense, suppliers, accounts, items, expedientes } = {}) {
+  const doc = purchase || expense;
+  if (!doc) return null;
+  const supById = new Map((suppliers || []).map((s) => [s.id, s]));
+  const nameByCode = new Map((accounts || []).map((a) => [a.code, a.name]));
+  const itemById = new Map((items || []).map((i) => [i.id, i]));
+  const expById = new Map((expedientes || []).map((e) => [e.id, e]));
+
+  const source = purchase ? 'purchase' : 'expense';
+  const nature = purchase ? purchaseNature(purchase.kind) : 'gasto';
+  const date = purchase ? (purchase.purchaseAt || 0) : (expense.expenseAt || 0);
+
+  const base = round2(doc.base || 0);
+  const itbis = round2(doc.itbis || 0);
+  const retIsr = round2(doc.retentionIsr || 0);
+  const retItbis = round2(doc.retentionItbis || 0);
+
+  const accountName = doc.accountCode ? (nameByCode.get(doc.accountCode) || '') : '';
+  const articles = purchase ? (purchase.lines?.length ? purchase.lines.length : (purchase.kind === 'goods' && purchase.itemId ? 1 : 0)) : 0;
+  const destination = nature === 'mercancia'
+    ? `Inventario${articles ? ` · ${articles} artículo${articles === 1 ? '' : 's'}` : ''}`
+    : (doc.accountCode ? accountLabel(doc.accountCode, accountName) : (doc.description || NATURE_LABEL[nature]));
+
+  const lines = (purchase?.lines || []).map((l) => {
+    const item = l.itemId ? itemById.get(l.itemId) : null;
+    const qty = round2(Math.max(0, Number(l.qty) || 0));
+    const cost = round2(Math.max(0, Number(l.cost) || 0));
+    return {
+      id: l.id,
+      name: item?.name || l.name || '—',
+      reference: item?.sku || l.reference || '',
+      inInventory: !!item,
+      qty, cost,
+      unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
+    };
+  });
+
+  const exp = doc.expedienteId ? expById.get(doc.expedienteId) : null;
+  return {
+    id: doc.id, source, nature, natureLabel: NATURE_LABEL[nature],
+    number: doc.number ?? null, date,
+    supplierId: doc.supplierId || null,
+    supplierName: (doc.supplierId ? supById.get(doc.supplierId)?.name : '') || '',
+    accountCode: doc.accountCode || '', accountName, destination,
+    description: doc.description || '',
+    ncf: doc.ncf || '',
+    payment: doc.paymentMethod || (purchase ? 'credit' : 'bank'),
+    paymentLabel: PAY_LABEL[doc.paymentMethod] || doc.paymentMethod || '',
+    expediente: exp ? { id: exp.id, label: expLabel(exp) } : null,
+    base, itbis, retIsr, retItbis,
+    total: round2(base + itbis),
+    net: round2(base + itbis - retIsr - retItbis),
+    lines,
+    reversesInventory: nature === 'mercancia',
+    journalEntryId: doc.journalEntryId || null,
+  };
+}

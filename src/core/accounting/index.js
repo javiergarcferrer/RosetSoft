@@ -28,7 +28,7 @@ export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/exp
 
 // ── compras y gastos (unified pane): the merged + filterable list VM + natures
 export {
-  resolvePurchasesExpenses, purchaseNature, NATURES, NATURE_LABEL,
+  resolvePurchasesExpenses, resolvePurchaseExpenseDetail, purchaseNature, NATURES, NATURE_LABEL,
 } from './compras.js';
 
 // ── sales (Facturación) ViewModels + the DGII 607 + IT-1 liquidation

@@ -1,6 +1,6 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Receipt, Plus, Loader2, Check, X, Download, Search, Trash2, FileText } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -147,6 +147,7 @@ function TotalsFoot({ cols, label, footCtx }) {
  */
 export default function ComprasGastos() {
   const { profileId, settings } = useApp();
+  const navigate = useNavigate();
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
@@ -261,6 +262,7 @@ export default function ComprasGastos() {
           <RowCards
             rows={list.rows.map((r) => ({
               key: r.id,
+              to: `/accounting/compras-gastos/${r.id}`,
               title: r.supplierName || '—',
               right: formatDop(r.total),
               sub: <span className="inline-flex items-center gap-1.5"><NatureBadge nature={r.nature} />{r.destination}</span>,
@@ -292,7 +294,12 @@ export default function ComprasGastos() {
                   </thead>
                   <tbody>
                     {list.rows.map((r) => (
-                      <tr key={r.id}>{listCols.cols.map((col) => <td key={col.key} className={col.tdClass || ''}>{col.cell({ r })}</td>)}</tr>
+                      <tr key={r.id} tabIndex={0}
+                        onClick={() => navigate(`/accounting/compras-gastos/${r.id}`)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/accounting/compras-gastos/${r.id}`); }}
+                        className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
+                        {listCols.cols.map((col) => <td key={col.key} className={col.tdClass || ''}>{col.cell({ r })}</td>)}
+                      </tr>
                     ))}
                   </tbody>
                   <tfoot><TotalsFoot cols={listCols.cols} label={`${list.count} movimientos`} footCtx={{ totals: list.totals }} /></tfoot>

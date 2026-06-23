@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolvePurchasesExpenses, purchaseNature } from '../src/core/accounting/compras.js';
+import { resolvePurchasesExpenses, resolvePurchaseExpenseDetail, purchaseNature } from '../src/core/accounting/compras.js';
 
 const SUPPLIERS = [
   { id: 's1', name: 'Claro', rnc: '101010101' },
@@ -75,6 +75,47 @@ test('nature filter narrows rows but counts stay over the unfiltered set', () =>
   assert.deepEqual(r.rows.map((x) => x.id).sort(), ['e1', 'p3']);
   assert.equal(r.counts.all, 4);       // chip counts unaffected by the nature filter
   assert.equal(r.counts.mercancia, 1);
+});
+
+test('resolvePurchaseExpenseDetail: mercancía purchase → lines + money + inventory flag', () => {
+  const purchase = {
+    id: 'p1', number: 3, supplierId: 's2', purchaseAt: 2000, ncf: 'B0200000001', kind: 'goods',
+    base: 45000, itbis: 8100, retentionIsr: 0, retentionItbis: 0, paymentMethod: 'credit', expedienteId: 'x1',
+    lines: [{ id: 'l1', itemId: 'i1', name: 'Sofá', reference: '141', qty: 2, cost: 30000 }, { id: 'l2', itemId: null, name: 'Puff', reference: '', qty: 3, cost: 15000 }],
+  };
+  const d = resolvePurchaseExpenseDetail({
+    purchase, suppliers: SUPPLIERS, accounts: ACCOUNTS, expedientes: EXPEDIENTES,
+    items: [{ id: 'i1', name: 'Sofá Togo', sku: '141' }],
+  });
+  assert.equal(d.source, 'purchase');
+  assert.equal(d.nature, 'mercancia');
+  assert.equal(d.reversesInventory, true);
+  assert.equal(d.supplierName, 'Mueblería RD');
+  assert.equal(d.destination, 'Inventario · 2 artículos');
+  assert.equal(d.expediente.id, 'x1');
+  assert.equal(d.expediente.label, '#7 · MAEU123');
+  assert.equal(d.total, 53100);
+  assert.equal(d.net, 53100);
+  assert.equal(d.lines.length, 2);
+  assert.equal(d.lines[0].name, 'Sofá Togo');   // current item name wins over the stored line name
+  assert.equal(d.lines[0].unitCost, 15000);
+  assert.equal(d.lines[1].inInventory, false);  // free-text line, item since deleted
+});
+
+test('resolvePurchaseExpenseDetail: gasto → no inventory, net nets the retentions', () => {
+  const expense = { id: 'e9', supplierId: 's1', expenseAt: 1000, ncf: 'B01', accountCode: '6-02-007-01-03-00', description: 'Honorarios', base: 1000, itbis: 180, retentionIsr: 100, retentionItbis: 54, paymentMethod: 'bank' };
+  const d = resolvePurchaseExpenseDetail({ expense, suppliers: SUPPLIERS, accounts: ACCOUNTS });
+  assert.equal(d.source, 'expense');
+  assert.equal(d.nature, 'gasto');
+  assert.equal(d.reversesInventory, false);
+  assert.equal(d.lines.length, 0);
+  assert.equal(d.destination, '6-02-007-01-03-00 · TELEFONO E INTERNET');
+  assert.equal(d.total, 1180);
+  assert.equal(d.net, 1026); // 1000 + 180 − 100 − 54
+});
+
+test('resolvePurchaseExpenseDetail: returns null when neither row exists', () => {
+  assert.equal(resolvePurchaseExpenseDetail({ suppliers: SUPPLIERS }), null);
 });
 
 test('supplier + date-window + query filters', () => {
