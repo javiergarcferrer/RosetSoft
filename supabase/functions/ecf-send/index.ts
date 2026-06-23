@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
   const payload = body.payload;
   const eNcf = String(body.eNcf || '');
   const trackIdIn = String(body.trackId || '');
-  if (op === 'send' && (!payload || !eNcf)) return json({ ok: false, error: 'payload + eNcf required' }, 400);
+  if ((op === 'send' || op === 'approve') && (!payload || !eNcf)) return json({ ok: false, error: 'payload + eNcf required' }, 400);
   if (op === 'status' && !trackIdIn) return json({ ok: false, error: 'trackId required' }, 400);
 
   const profileId = body.profileId || 'team';
@@ -124,6 +124,16 @@ Deno.serve(async (req: Request) => {
     const xml = transformer.json2xml(payload);
     const signature = new (dgii as any).Signature(certs.key, certs.cert);
     const signedXml = signature.signXml(xml);
+
+    // Commercial approval (ACECF): sign + send via the dedicated DGII service.
+    // The approver is the comprador, so the file is named with THEIR RNC.
+    if (op === 'approve') {
+      const rncComprador = String(payload?.ACECF?.DetalleAprobacionComercial?.RNCComprador || '');
+      const response = await ecf.sendCommercialApproval(signedXml, `${rncComprador}${eNcf}.xml`);
+      const estado = response?.estado || response?.data?.estado || response?.status || '';
+      return json({ ok: true, estado, response });
+    }
+
     const fechaFirma = fechaFirmaNow();
 
     const fileName = `${rncEmisor}${eNcf}.xml`;

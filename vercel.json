@@ -3,6 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/fe/autenticacion/api/:path*", "destination": "https://jwgrjrjlhaedfathltxc.supabase.co/functions/v1/fe-autenticacion/:path*" },
+    { "source": "/fe/recepcion/api/:path*", "destination": "https://jwgrjrjlhaedfathltxc.supabase.co/functions/v1/fe-recepcion/:path*" },
+    { "source": "/fe/aprobacioncomercial/api/:path*", "destination": "https://jwgrjrjlhaedfathltxc.supabase.co/functions/v1/fe-aprobacioncomercial/:path*" },
     { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
   ],
   "headers": [
