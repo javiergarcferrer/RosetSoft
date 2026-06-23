@@ -1,14 +1,15 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Check, X, Plus, Trash2, FileText, Upload, Ship, Receipt, History, Sparkles, Save } from 'lucide-react';
+import { Loader2, Check, Plus, Trash2, Upload, Ship, Receipt, History, Sparkles, Save } from 'lucide-react';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { formatDop } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { parseInvoicePdf } from '../../lib/loadRosetInvoice.js';
-import { driveCreateFolder, driveUploadBlob } from '../../lib/google.js';
+import { driveCreateFolder, driveUploadBlob, driveEmptyFolder } from '../../lib/google.js';
 import SearchPicker from '../../components/SearchPicker.jsx';
+import DriveDocumentsCard from '../../components/drive/DriveDocumentsCard.jsx';
 import { groupFamilies, catalogSellingPrice } from '../../lib/catalog.js';
 import {
   resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
@@ -24,6 +25,9 @@ const field = 'input';
 const num = 'input w-28 text-right tabular-nums';
 
 const draftKey = (scope) => `rosetsoft.importacionDraft.${scope}`;
+// A brand-new draft's Drive folder id, parked here so it survives a reload and is
+// recycled (emptied + reused) across discarded drafts instead of orphaning.
+const draftFolderKey = (scope) => `rosetsoft.importacionDraftFolder.${scope}`;
 export const TEMPLATE_KEY = (scope) => `rosetsoft.importacionTemplate.${scope}`;
 
 /** Seed the form from an EXISTING draft expediente being resumed (Editar). Its
@@ -84,7 +88,7 @@ function Stat({ label, value, accent }) {
  * and focuses it; the half-entered form autosaves as a draft and a saved
  * expediente can seed a new one as a template.
  */
-export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, existing = null, onClose }) {
+export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, existing = null }) {
   const navigate = useNavigate();
   // Invoice PDFs the user imported, kept to upload into the expediente's Drive
   // folder on save (keyed by factura id so a re-import replaces). Drive archival
@@ -111,6 +115,32 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
   const [pdfNote, setPdfNote] = useState(null); // { fid, matched, toCreate }
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  // ── Drive folder lifecycle ──────────────────────────────────────────────
+  // A NEW draft's documents folder is created lazily on the first attachment and
+  // parked in localStorage so it survives a reload AND is recycled if the draft
+  // is discarded ("Empezar en blanco" empties it but keeps its id) — abandoned
+  // drafts never pile up folders in Drive. An EXISTING expediente already owns
+  // its folder on the row, so attachments persist straight onto it.
+  const [driveFolder, setDriveFolder] = useState(() => {
+    if (existing) return existing.driveFolderId ? { id: existing.driveFolderId, url: existing.driveFolderUrl || '' } : null;
+    try { const raw = localStorage.getItem(draftFolderKey(scope)); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  });
+  const handleFolderSaved = ({ id, url }) => {
+    const f = { id, url: url || '' };
+    setDriveFolder(f);
+    if (existing) db.importExpedientes.update(existing.id, { driveFolderId: id, driveFolderUrl: url || '' }).catch(() => { /* persists on save too */ });
+    else { try { localStorage.setItem(draftFolderKey(scope), JSON.stringify(f)); } catch { /* quota — best-effort */ } }
+  };
+  /** Clear both the autosaved form draft and the parked folder id (a SAVED
+   *  expediente owns its folder now, so it must no longer be a free placeholder). */
+  const clearDraftStorage = () => {
+    try { localStorage.removeItem(draftKey(scope)); localStorage.removeItem(draftFolderKey(scope)); } catch { /* best-effort */ }
+  };
+  // Bumped on "Empezar en blanco" to remount the documents card so it re-lists
+  // the recycled folder once it's been emptied (its id stays the same, so the
+  // card wouldn't otherwise refetch).
+  const [docsNonce, setDocsNonce] = useState(0);
 
   // ── nested immutable updaters ───────────────────────────────────────────
   const patchEmb = (eid, patch) => setEmbs((es) => es.map((e) => (e.id === eid ? { ...e, ...patch } : e)));
@@ -150,6 +180,14 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
 
   function resetForm() {
     try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ }
+    // Recycle a brand-new draft's Drive folder: empty its contents but KEEP its
+    // id (in state + draftFolderKey) so the fresh draft reuses the now-empty
+    // folder instead of orphaning it. An existing expediente's folder is never
+    // touched — it's a posted/owned file, not a recyclable placeholder.
+    if (!existing && driveFolder?.id) {
+      driveEmptyFolder(driveFolder.id).catch(() => { /* best-effort */ }).finally(() => setDocsNonce((n) => n + 1));
+    }
+    facturaFilesRef.current.clear();
     setHead(defaults);
     setEmbs([blankEmbarque()]);
     setCosts([]);
@@ -268,13 +306,13 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       } else {
         const rec = await assignSequenceNumber({
           table: 'importExpedientes', profileId: scope, start: 1,
-          build: (n) => ({ id: newId(), profileId: scope, number: n, ...rowFields, createdAt: Date.now() }),
+          build: (n) => ({ id: newId(), profileId: scope, number: n, ...rowFields, driveFolderId: driveFolder?.id || '', driveFolderUrl: driveFolder?.url || '', createdAt: Date.now() }),
         });
         savedId = rec.id;
         savedNumber = rec.number;
       }
-      await archiveFacturasToDrive(savedId, savedNumber, rowFields.bl, existing?.driveFolderId);
-      if (!existing) { try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ } }
+      await archiveFacturasToDrive(savedId, savedNumber, rowFields.bl, driveFolder?.id || existing?.driveFolderId);
+      if (!existing) clearDraftStorage();
       navigate(`/accounting/importaciones/${savedId}`);
     } catch (e) {
       setErr(userMessageFor(e));
@@ -346,7 +384,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       } else {
         const rec = await assignSequenceNumber({
           table: 'importExpedientes', profileId: scope, start: 1,
-          build: (n) => ({ id, profileId: scope, number: n, ...rowFields, createdAt: Date.now() }),
+          build: (n) => ({ id, profileId: scope, number: n, ...rowFields, driveFolderId: driveFolder?.id || '', driveFolderUrl: driveFolder?.url || '', createdAt: Date.now() }),
         });
         savedNumber = rec.number;
       }
@@ -371,8 +409,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         touched.push(l.itemId);
       }
       if (touched.length) syncShopify(touched).catch(() => {});
-      await archiveFacturasToDrive(id, savedNumber, rowFields.bl, existing?.driveFolderId);
-      if (!existing) { try { localStorage.removeItem(draftKey(scope)); } catch { /* best-effort */ } }
+      await archiveFacturasToDrive(id, savedNumber, rowFields.bl, driveFolder?.id || existing?.driveFolderId);
+      if (!existing) clearDraftStorage();
       navigate(`/accounting/importaciones/${id}`);
     } catch (e) {
       setErr(userMessageFor(e));
@@ -387,14 +425,14 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       .map((i) => ({ id: i.id, label: i.name, sublabel: i.sku || '' })),
     [items],
   );
+  // The Drive folder's display name: a saved expediente uses its number + BL; a
+  // brand-new draft stays "(borrador)" until it's saved and numbered.
+  const folderName = existing
+    ? `Importación ${existing.number != null ? `#${existing.number}` : ''}${existing.bl ? ` — BL ${existing.bl}` : ''}`.trim() || 'Importación'
+    : 'Importación (borrador)';
 
   return (
     <div className="card p-4 mb-4 border-ink-300">
-      <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
-        <h3 className="font-display font-semibold inline-flex items-center gap-2 min-w-0 truncate"><FileText size={16} className="shrink-0" /> Nuevo expediente de importación</h3>
-        <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
-      </div>
-
       {seededFrom && (
         <div className="flex flex-wrap items-center gap-2 mb-3 rounded-lg bg-sky-50 border border-sky-200 px-3 py-2 text-xs text-sky-800">
           {seededFrom === 'template'
@@ -599,6 +637,17 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           </div>
         )}
       </div>
+
+      {/* Documentos en Google Drive — folder created on the first attachment,
+          recycled (emptied + reused) if the draft is discarded. */}
+      <DriveDocumentsCard
+        key={docsNonce}
+        folderId={driveFolder?.id || ''}
+        folderUrl={driveFolder?.url || ''}
+        folderName={folderName}
+        createOnAttach
+        onFolderSaved={handleFolderSaved}
+      />
 
       {/* Cuadre vs DUA + save */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-3 border-t border-ink-100">

@@ -17,7 +17,7 @@ import { formatDate } from '../../lib/format.js';
 import DrivePickerModal from './DrivePickerModal.jsx';
 import DriveFilePreview from './DriveFilePreview.jsx';
 
-export default function DriveDocumentsCard({ folderId, folderUrl, folderName, parentId, onFolderSaved }) {
+export default function DriveDocumentsCard({ folderId, folderUrl, folderName, parentId, createOnAttach = false, onFolderSaved }) {
   const { settings } = useApp();
   const connected = !!settings?.googleConnectedAt;
   const fileInputRef = useRef(null);
@@ -46,50 +46,61 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
 
   useEffect(() => { if (connected && folderId) refresh(folderId); }, [connected, folderId, refresh]);
 
+  /** The folder to act on — lazily creating one (and handing its id/url back via
+   *  onFolderSaved) on first use, so a `createOnAttach` caller can defer the
+   *  folder until the first document instead of reserving it up front. */
+  const ensureFolder = useCallback(async () => {
+    if (folderId) return folderId;
+    const data = await driveCreateFolder({ name: folderName || 'Documentos', parentId });
+    await onFolderSaved?.({ id: data.id, url: data.url || '' });
+    return data.id;
+  }, [folderId, folderName, parentId, onFolderSaved]);
+
   const createFolder = useCallback(async () => {
     setBusy(true);
     setErr('');
     try {
-      const data = await driveCreateFolder({ name: folderName || 'Documentos', parentId });
-      await onFolderSaved?.({ id: data.id, url: data.url || '' });
-      await refresh(data.id);
+      const id = await ensureFolder();
+      await refresh(id);
     } catch (e) {
       setErr(userMessageFor(e));
     } finally {
       setBusy(false);
     }
-  }, [folderName, parentId, onFolderSaved, refresh]);
+  }, [ensureFolder, refresh]);
 
   const onPickFile = useCallback(async (e) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-picking the same file
-    if (!file || !folderId) return;
+    if (!file) return;
     setBusy(true);
     setErr('');
     try {
-      await driveUploadBlob({ folderId, filename: file.name, blob: file });
-      await refresh(folderId);
+      const fid = await ensureFolder();
+      await driveUploadBlob({ folderId: fid, filename: file.name, blob: file });
+      await refresh(fid);
     } catch (ex) {
       setErr(userMessageFor(ex));
     } finally {
       setBusy(false);
     }
-  }, [folderId, refresh]);
+  }, [ensureFolder, refresh]);
 
   const pickFromDrive = useCallback(async (file) => {
-    if (!folderId || !file?.id) return;
+    if (!file?.id) return;
     setBusy(true);
     setErr('');
     try {
-      await driveCopy({ fileId: file.id, folderId, name: file.name });
+      const fid = await ensureFolder();
+      await driveCopy({ fileId: file.id, folderId: fid, name: file.name });
       setPickerOpen(false);
-      await refresh(folderId);
+      await refresh(fid);
     } catch (ex) {
       setErr(userMessageFor(ex));
     } finally {
       setBusy(false);
     }
-  }, [folderId, refresh]);
+  }, [ensureFolder, refresh]);
 
   return (
     <div className="card overflow-hidden mt-4">
@@ -110,7 +121,7 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
             <Link to="/integraciones" className="underline font-medium text-ink-700">Configuración → Integraciones</Link>{' '}
             para guardar los documentos de esta importación en la nube.
           </p>
-        ) : !folderId ? (
+        ) : !folderId && !createOnAttach ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-ink-500">Crea una carpeta en Drive para archivar los documentos de esta importación (BL, factura, DUA, etc.).</p>
             <button type="button" onClick={createFolder} disabled={busy} className="btn-secondary">
@@ -119,6 +130,9 @@ export default function DriveDocumentsCard({ folderId, folderUrl, folderName, pa
           </div>
         ) : (
           <div className="space-y-3">
+            {!folderId && (
+              <p className="text-xs text-ink-400">La carpeta de Drive se crea al adjuntar el primer documento (BL, factura, DUA…).</p>
+            )}
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy} className="btn-secondary">
                 {busy ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />} Subir archivo

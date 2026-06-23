@@ -88,7 +88,7 @@ export const QUICK_CREATE = [
     { label: 'Cobro', to: '/accounting/cuentas?new=in' },
   ] },
   { group: 'Importaciones', items: [
-    { label: 'Expediente de importación', to: '/accounting/importaciones?new=1' },
+    { label: 'Expediente de importación', to: '/accounting/importaciones/nuevo' },
     { label: 'Calculadora de costo en destino', to: '/accounting/importaciones/calculadora' },
   ] },
   { group: 'Proveedores', items: [

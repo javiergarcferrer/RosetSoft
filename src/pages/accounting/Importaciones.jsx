@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Shield, Ship, FileText, Container, Calculator } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -13,8 +13,7 @@ import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
-import { resolveImportacionesList, resolveAccountingConfig } from '../../core/accounting/index.js';
-import ExpedienteForm from './ExpedienteForm.jsx';
+import { resolveImportacionesList } from '../../core/accounting/index.js';
 
 /** A small "Borrador" tag for work-in-progress (un-posted) expedientes. */
 function DraftPill() {
@@ -154,33 +153,18 @@ const LEGACY_COLS_STORAGE_KEY = 'rs.importaciones.historico.cols.v1';
  * single liquidations stay on a read-only Histórico tab.
  */
 export default function Importaciones() {
-  const { profileId, currentProfile, settings } = useApp();
+  const { profileId, currentProfile } = useApp();
   const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
   const scope = profileId || 'team';
-  const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
   const navigate = useNavigate();
 
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const itemsQ = useLiveQueryStatus(() => db.inventoryItems.where('profileId').equals(scope).toArray(), [scope], []);
-  const ordersQ = useLiveQueryStatus(() => db.orders.where('profileId').equals(scope).toArray(), [scope], []);
   const containersQ = useLiveQueryStatus(() => db.containers.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = importsQ.loaded && suppliersQ.loaded && itemsQ.loaded && expedientesQ.loaded;
 
-  const [params] = useSearchParams();
-  // ?edit=<id> resumes a saved draft (from its detail page) in the form.
-  const editId = params.get('edit') || '';
-  const editing = useMemo(
-    () => (editId ? (expedientesQ.data || []).find((e) => e.id === editId) || null : null),
-    [editId, expedientesQ.data],
-  );
-  const [showExpediente, setShowExpediente] = useState(!!params.get('new'));
-  const formOpen = showExpediente || !!editId;
-  // Catalog + materials drive the imported pieces' selling price (reference +
-  // fabric → grade → list price). Loaded only while the expediente form is open.
-  const productsQ = useLiveQueryStatus(() => (formOpen ? db.products.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, formOpen], []);
-  const materialsQ = useLiveQueryStatus(() => (formOpen ? db.materials.where('profileId').equals(scope).toArray() : Promise.resolve([])), [scope, formOpen], []);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('expedientes');
   const [filters, setFilters] = useState({});
@@ -228,16 +212,9 @@ export default function Importaciones() {
         actions={(
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => navigate('/accounting/importaciones/calculadora')} className="btn-secondary"><Calculator size={15} /> <span className="hidden sm:inline">Calculadora</span></button>
-            <button type="button" onClick={() => setShowExpediente((v) => !v)} className="btn-primary"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
+            <button type="button" onClick={() => navigate('/accounting/importaciones/nuevo')} className="btn-primary"><FileText size={15} /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span></button>
           </div>
         )} />
-
-      {formOpen && loaded && (!editId || editing) && (
-        <ExpedienteForm key={editId || 'new'} scope={scope} config={config} settings={settings} suppliers={suppliersQ.data} items={itemsQ.data}
-          orders={ordersQ.data || []} containers={containersQ.data || []}
-          products={productsQ.data || []} materials={materialsQ.data || []} existing={editing}
-          onClose={() => { setShowExpediente(false); if (editId) navigate('/accounting/importaciones'); }} />
-      )}
 
       {!loaded ? <ListLoading /> : empty ? (
         <EmptyState icon={Ship} title="Sin importaciones" description="Registra un expediente con “Nuevo expediente”." />

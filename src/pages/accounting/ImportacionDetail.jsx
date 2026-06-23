@@ -269,7 +269,7 @@ export default function ImportacionDetail() {
       })),
     };
     try { localStorage.setItem(TEMPLATE_KEY(scope), JSON.stringify(template)); } catch { /* best-effort */ }
-    navigate('/accounting/importaciones?new=1');
+    navigate('/accounting/importaciones/nuevo');
   }
 
   /** Delete this expediente and undo everything its save posted: the asiento
@@ -336,7 +336,7 @@ export default function ImportacionDetail() {
         actions={(
           <div className="flex items-center gap-2">
             {isDraft && (
-              <button type="button" onClick={() => navigate(`/accounting/importaciones?edit=${expQ.data.id}`)} className="btn-primary">
+              <button type="button" onClick={() => navigate(`/accounting/importaciones/${expQ.data.id}/editar`)} className="btn-primary">
                 <Pencil size={14} /> Editar / Contabilizar
               </button>
             )}

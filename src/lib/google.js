@@ -108,6 +108,17 @@ export async function driveDelete(fileId) {
   return invokeGoogle({ driveDelete: { fileId } });
 }
 
+/**
+ * Empty a folder — delete every file inside it but KEEP the folder itself, so its
+ * id can be reused. Used to recycle an abandoned import draft's folder. Each
+ * delete is best-effort; a single failure never rejects the whole sweep.
+ */
+export async function driveEmptyFolder(folderId) {
+  if (!folderId) return;
+  const data = await driveList(folderId);
+  await Promise.all((data?.files || []).map((f) => driveDelete(f.id).catch(() => {})));
+}
+
 /** List a folder's files; returns { files }. */
 export async function driveList(folderId) {
   return invokeGoogle({ driveList: { folderId } });
