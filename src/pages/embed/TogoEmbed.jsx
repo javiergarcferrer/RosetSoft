@@ -7,7 +7,7 @@ import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
-import { loadMeshPlan } from '../../lib/togo/meshPlanCache.js';
+import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced, compactPlaced,
@@ -29,29 +29,6 @@ const fillSvg = (svg) =>
   (typeof svg === 'string' && svg.startsWith('<svg') && !svg.includes('preserveAspectRatio'))
     ? svg.replace('<svg', '<svg preserveAspectRatio="none" width="100%" height="100%"')
     : svg;
-
-// Load each mesh-backed model's FBX once and derive its top-down plan + footprint
-// (meshToPlan) keyed by model id — the FBX is the single source for 2D and 3D. The
-// stored DWG plan is only the fallback shown while the mesh loads (or if it can't
-// be read).
-function useMeshPlans(models) {
-  const [plans, setPlans] = useState({});
-  useEffect(() => {
-    let alive = true;
-    for (const m of (models || [])) {
-      const url = m.mesh?.url;
-      if (!url) continue;
-      loadMeshPlan(url, { upAxis: m.mesh.upAxis || 'y' })
-        .then((plan) => {
-          if (!alive || !plan?.svg) return;
-          setPlans((prev) => (prev[m.id]?.svg === plan.svg ? prev : { ...prev, [m.id]: plan }));
-        })
-        .catch(() => { /* keep the stored fallback */ });
-    }
-    return () => { alive = false; };
-  }, [models]);
-  return plans;
-}
 
 // The material editor's finish presets — physically-based fabric looks that
 // re-skin the 3D visualizer live (roughness + the sheen lobe that makes fabric
@@ -139,7 +116,8 @@ export default function TogoEmbed() {
   // the FBX (`useMeshPlans` → meshToPlan): the 2D tile is literally the model seen
   // from above, so it can never disagree with the 3D. The mesh loads async, so
   // until it resolves we fall back to the stored plan/dims.
-  const meshPlans = useMeshPlans(models);
+  const meshEntries = useMemo(() => models.map((m) => ({ id: m.id, url: m.mesh?.url, upAxis: m.mesh?.upAxis })), [models]);
+  const meshPlans = useMeshPlans(meshEntries);
   const svgById = useMemo(
     () => Object.fromEntries(models.map((m) => [m.id, meshPlans[m.id]?.svg || m.svg])),
     [models, meshPlans],

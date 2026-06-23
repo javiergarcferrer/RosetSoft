@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { Sofa, Upload, UploadCloud, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2, Box } from 'lucide-react';
+import { Sofa, Upload, UploadCloud, Loader2, Trash2, Check, AlertCircle, Shield, Sparkles, Code2, Copy, ExternalLink, Link2, Box, RefreshCw } from 'lucide-react';
 import { togoEmbedSnippet, togoEmbedUrl } from '../../lib/togoEmbed.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { uploadTogoMesh, removeTogoMesh } from '../../db/togoMeshUpload.js';
+import { loadMeshPlan } from '../../lib/togo/meshPlanCache.js';
 import { groupFamilies } from '../../lib/catalog.js';
 import { resolveTogoModelCards, togoPickerFamilies } from '../../core/quote/index.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
@@ -117,31 +118,55 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
   const [name, setName] = useState('');
   const [root, setRoot] = useState('');
   const [saving, setSaving] = useState(false);
+  const [meshUrl, setMeshUrl] = useState(null);   // set when the source is a 3D model
+  const [upAxis, setUpAxis] = useState('y');
 
   const onFile = useCallback(async (file) => {
     if (!file) return;
     setError(null); setBusy(true); setPlan(null);
-    if (!/\.dwg$/i.test(file.name)) { setError('El archivo debe ser un .dwg de AutoCAD.'); setBusy(false); return; }
+    setMeshUrl((prev) => { if (prev) removeTogoMesh(prev); return null; });   // drop an orphan from a re-pick
+    const is3d = /\.(fbx|glb|gltf|obj|dae|3ds)$/i.test(file.name);
+    const isDwg = /\.dwg$/i.test(file.name);
+    if (!is3d && !isDwg) { setError('Sube un modelo 3D (.fbx, .glb…) o un .dwg de AutoCAD.'); setBusy(false); return; }
     try {
-      const buf = await file.arrayBuffer();
-      // The 6 MB libredwg WASM loads lazily, only on the first real conversion.
-      const mod = await safeDynamicImport(() => import('../../lib/togo/dwgToPlan.js'));
-      const res = await mod.dwgToPlan(buf);
-      if (!res.svg || res.warning === 'no-geometry') {
-        setError('No se encontró geometría de planta en el DWG (capa “Mobilier 2D”).');
-      } else {
-        setPlan(res);
-        // A parsed plan means the dealer is about to bind → warm the catalog now.
+      if (is3d) {
+        // FBX-first: upload the mesh and derive BOTH the plan and the footprint
+        // straight from it — one source for the 2D tile and the 3D view.
+        const url = await uploadTogoMesh(file);
+        const p = await loadMeshPlan(url, { upAxis: 'y' });
+        setMeshUrl(url); setUpAxis('y'); setPlan(p);
         onNeedCatalog();
-        if (!name) setName(file.name.replace(/\.dwg$/i, '').replace(/[_-]+/g, ' ').trim());
+        if (!name) setName(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim());
+      } else {
+        const buf = await file.arrayBuffer();
+        // The 6 MB libredwg WASM loads lazily, only on a real DWG conversion.
+        const mod = await safeDynamicImport(() => import('../../lib/togo/dwgToPlan.js'));
+        const res = await mod.dwgToPlan(buf);
+        if (!res.svg || res.warning === 'no-geometry') {
+          setError('No se encontró geometría de planta en el DWG (capa “Mobilier 2D”).');
+        } else {
+          setPlan(res);
+          onNeedCatalog();
+          if (!name) setName(file.name.replace(/\.dwg$/i, '').replace(/[_-]+/g, ' ').trim());
+        }
       }
     } catch (e) {
-      console.error('[togo] dwg conversion failed', e);
-      setError('No se pudo leer el DWG. ¿Es un AutoCAD 2013+ válido?');
+      console.error('[togo] model conversion failed', e);
+      setError(is3d ? 'No se pudo leer el modelo 3D.' : 'No se pudo leer el DWG. ¿Es un AutoCAD 2013+ válido?');
     } finally {
       setBusy(false);
     }
   }, [name, onNeedCatalog]);
+
+  // The mesh sometimes exports lying on its side; flip the vertical axis and
+  // re-derive the plan from the same upload.
+  const flipAxis = async () => {
+    if (!meshUrl || busy) return;
+    const next = upAxis === 'z' ? 'y' : 'z';
+    setBusy(true);
+    try { const p = await loadMeshPlan(meshUrl, { upAxis: next }); setUpAxis(next); setPlan(p); }
+    catch { /* keep current */ } finally { setBusy(false); }
+  };
 
   const save = async () => {
     if (!plan || !name.trim() || saving) return;
@@ -151,9 +176,10 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
         id: newId(), profileId, name: name.trim(),
         productRoot: root || null, productReference: null,
         widthCm: plan.widthCm, depthCm: plan.depthCm, svg: plan.svg,
+        meshUrl: meshUrl || null, meshUpAxis: meshUrl ? upAxis : null, meshScale: null, meshRotateY: 0,
         sortOrder: nextSort, active: true, createdAt: Date.now(), updatedAt: Date.now(),
       });
-      setPlan(null); setName(''); setRoot('');
+      setPlan(null); setName(''); setRoot(''); setMeshUrl(null); setUpAxis('y');
       if (fileRef.current) fileRef.current.value = '';
     } finally {
       setSaving(false);
@@ -170,11 +196,11 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
         onClick={() => fileRef.current?.click()}
         className="rounded-xl border-2 border-dashed border-ink-200 hover:border-brand-300 hover:bg-brand-50/40 transition-colors px-4 py-8 text-center cursor-pointer"
       >
-        <input ref={fileRef} type="file" accept=".dwg" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+        <input ref={fileRef} type="file" accept=".fbx,.glb,.gltf,.obj,.dae,.3ds,.dwg" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
         {busy ? (
-          <span className="inline-flex items-center gap-2 text-sm text-ink-500"><Loader2 size={16} className="animate-spin" /> Convirtiendo…</span>
+          <span className="inline-flex items-center gap-2 text-sm text-ink-500"><Loader2 size={16} className="animate-spin" /> Procesando…</span>
         ) : (
-          <span className="text-sm text-ink-500">Arrastra un <b>.dwg</b> aquí o haz clic para elegirlo</span>
+          <span className="text-sm text-ink-500">Arrastra un <b>modelo 3D (.fbx)</b> aquí o haz clic para elegirlo<br /><span className="text-[11px] text-ink-400">El plano 2D y la huella se generan del modelo. (También acepta .dwg)</span></span>
         )}
       </div>
 
@@ -188,8 +214,12 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="shrink-0 w-32 h-32 rounded-lg bg-ink-50 text-ink-700 p-2 grid place-items-center" dangerouslySetInnerHTML={{ __html: plan.svg }} />
           <div className="flex-1 space-y-2.5 min-w-0">
-            <div className="text-[11px] text-ink-500 tabular-nums">
-              Huella detectada: <b className="text-ink-700">{plan.widthCm}×{plan.depthCm} cm</b>
+            <div className="text-[11px] text-ink-500 tabular-nums flex items-center gap-2 flex-wrap">
+              <span>Huella detectada: <b className="text-ink-700">{plan.widthCm}×{plan.depthCm} cm</b></span>
+              {meshUrl && <span className="text-emerald-600">· desde modelo 3D</span>}
+              {meshUrl && (
+                <button type="button" onClick={flipAxis} disabled={busy} className="btn-ghost text-[11px] py-0 h-6 disabled:opacity-50" title="Si el plano se ve girado, cambia el eje vertical">Eje {upAxis === 'z' ? 'Z' : 'Y'}</button>
+              )}
               {plan.warning === 'fallback-layer' && <span className="text-amber-600"> · sin capa “Mobilier 2D”, se usó otra capa 2D</span>}
             </div>
             <div>
@@ -267,7 +297,13 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
     try {
       const prev = card.meshUrl;
       const url = await uploadTogoMesh(file);
-      await db.togoModels.update(card.id, { meshUrl: url, meshScale: null, meshUpAxis: card.meshUpAxis || 'y', meshRotateY: card.meshRotateY || 0, updatedAt: Date.now() });
+      const upAxis = card.meshUpAxis || 'y';
+      const plan = await loadMeshPlan(url, { upAxis });   // the FBX is the plan + footprint source
+      await db.togoModels.update(card.id, {
+        meshUrl: url, meshScale: null, meshUpAxis: upAxis, meshRotateY: card.meshRotateY || 0,
+        ...(plan?.svg ? { svg: plan.svg, widthCm: plan.widthCm, depthCm: plan.depthCm } : {}),
+        updatedAt: Date.now(),
+      });
       if (prev) removeTogoMesh(prev);
     } catch (err) { setMeshErr(err?.message || 'No se pudo subir el modelo 3D.'); }
     finally { setMeshBusy(false); }
@@ -277,7 +313,27 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
     await db.togoModels.update(card.id, { meshUrl: null, updatedAt: Date.now() });
     if (prev) removeTogoMesh(prev);
   };
-  const toggleAxis = () => db.togoModels.update(card.id, { meshUpAxis: card.meshUpAxis === 'z' ? 'y' : 'z', updatedAt: Date.now() });
+  // Flipping the vertical axis changes which plane is the floor → re-derive the plan.
+  const toggleAxis = async () => {
+    if (!card.meshUrl || meshBusy) return;
+    const next = card.meshUpAxis === 'z' ? 'y' : 'z';
+    setMeshBusy(true); setMeshErr(null);
+    try {
+      const plan = await loadMeshPlan(card.meshUrl, { upAxis: next });
+      await db.togoModels.update(card.id, { meshUpAxis: next, ...(plan?.svg ? { svg: plan.svg, widthCm: plan.widthCm, depthCm: plan.depthCm } : {}), updatedAt: Date.now() });
+    } catch (err) { setMeshErr(err?.message || 'No se pudo regenerar.'); } finally { setMeshBusy(false); }
+  };
+  // Refresh the stored 2D plan + footprint from the current mesh (one click for the
+  // models uploaded before the plan was mesh-derived).
+  const regenPlan = async () => {
+    if (!card.meshUrl || meshBusy) return;
+    setMeshBusy(true); setMeshErr(null);
+    try {
+      const plan = await loadMeshPlan(card.meshUrl, { upAxis: card.meshUpAxis || 'y' });
+      if (plan?.svg) await db.togoModels.update(card.id, { svg: plan.svg, widthCm: plan.widthCm, depthCm: plan.depthCm, updatedAt: Date.now() });
+      else setMeshErr('El modelo no produjo una planta.');
+    } catch (err) { setMeshErr(err?.message || 'No se pudo regenerar la planta.'); } finally { setMeshBusy(false); }
+  };
   const ACCEPT_3D = '.fbx,.glb,.gltf,.obj,.dae,.3ds';
 
   const openPicker = () => { onNeedCatalog(); setEditing(true); };
@@ -355,7 +411,10 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
           </span>
           <div className="flex items-center gap-1 shrink-0">
             {card.meshUrl && (
-              <button type="button" onClick={toggleAxis} className="btn-ghost text-[11px]" title="Si el modelo aparece acostado, cambia el eje vertical">Eje {card.meshUpAxis === 'z' ? 'Z' : 'Y'}</button>
+              <button type="button" onClick={regenPlan} disabled={meshBusy} className="btn-ghost text-[11px] disabled:opacity-50" title="Regenerar el plano 2D y la huella desde el modelo 3D"><RefreshCw size={12} /> Planta</button>
+            )}
+            {card.meshUrl && (
+              <button type="button" onClick={toggleAxis} disabled={meshBusy} className="btn-ghost text-[11px] disabled:opacity-50" title="Si el modelo aparece acostado, cambia el eje vertical">Eje {card.meshUpAxis === 'z' ? 'Z' : 'Y'}</button>
             )}
             <label className="btn-ghost text-[11px] cursor-pointer">
               {meshBusy ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />} {card.meshUrl ? 'Reemplazar' : 'Subir 3D'}

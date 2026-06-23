@@ -16,6 +16,7 @@ import {
   resolveTogoDxf, placementsFromPlaced,
 } from '../core/quote/index.js';
 import EmptyState from '../components/EmptyState.jsx';
+import { useMeshPlans, applyMeshPlans } from '../components/togo/useMeshPlans.js';
 
 // A small read-only render of the visitor's plan (cm → px at THUMB_SCALE).
 const THUMB_SCALE = 0.3;
@@ -48,7 +49,16 @@ export default function TogoRequests() {
     [profileId], [],
   );
 
-  const { families, resolvedById, svgById } = useMemo(() => resolveTogoModels(models, products), [models, products]);
+  const base = useMemo(() => resolveTogoModels(models, products), [models, products]);
+  const families = base.families;
+  // Same FBX-derived plan the customer built with (the embed), so the dealer's
+  // preview, totals and manufacturing DXF match the mesh — not the stale DWG plan.
+  const meshEntries = useMemo(() => models.map((m) => ({ id: m.id, url: m.meshUrl, upAxis: m.meshUpAxis })), [models]);
+  const meshPlans = useMeshPlans(meshEntries);
+  const { svgById, resolvedById } = useMemo(
+    () => applyMeshPlans(meshPlans, base.svgById, base.resolvedById),
+    [meshPlans, base],
+  );
   const rates = useMemo(() => effectiveRates(settings), [settings]);
 
   const pending = useMemo(
