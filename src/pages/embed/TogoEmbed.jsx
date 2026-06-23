@@ -116,7 +116,14 @@ export default function TogoEmbed() {
   // the FBX (`useMeshPlans` → meshToPlan): the 2D tile is literally the model seen
   // from above, so it can never disagree with the 3D. The mesh loads async, so
   // until it resolves we fall back to the stored plan/dims.
-  const meshEntries = useMemo(() => models.map((m) => ({ id: m.id, url: m.mesh?.url, upAxis: m.mesh?.upAxis })), [models]);
+  // Load a mesh only once its piece is actually on the plan — the palette uses the
+  // light stored thumbnail, so a visitor never pulls FBX bytes for a piece they
+  // don't place. The tile shows the stored fallback for the instant it takes the
+  // mesh to resolve, then swaps to the exact top-down silhouette.
+  const meshEntries = useMemo(() => {
+    const used = new Set(placed.map((p) => p.pieceId));
+    return models.filter((m) => m.mesh?.url && used.has(m.id)).map((m) => ({ id: m.id, url: m.mesh.url, upAxis: m.mesh.upAxis }));
+  }, [models, placed]);
   const meshPlans = useMeshPlans(meshEntries);
   const svgById = useMemo(
     () => Object.fromEntries(models.map((m) => [m.id, meshPlans[m.id]?.svg || m.svg])),
