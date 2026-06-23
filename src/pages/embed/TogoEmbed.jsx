@@ -134,6 +134,30 @@ export default function TogoEmbed() {
     return map;
   }, [models]);
 
+  // Resume the in-progress build across reloads/returns — a faster end-to-end flow
+  // (a customer doesn't rebuild from scratch). Third-party-iframe storage may be
+  // blocked, so everything is guarded; restored rows are filtered to models that
+  // still exist. Cleared when the plan is emptied or the request is sent.
+  const buildKey = useMemo(() => `togo:build:${data?.storeName || 'default'}`, [data?.storeName]);
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !models.length) return;
+    restoredRef.current = true;
+    try {
+      const saved = JSON.parse(localStorage.getItem(buildKey) || 'null');
+      const ids = new Set(models.map((m) => m.id));
+      const rows = (Array.isArray(saved?.placed) ? saved.placed : []).filter((p) => p && ids.has(p.pieceId));
+      if (rows.length) setPlaced(rows);
+    } catch { /* blocked / corrupt → start fresh */ }
+  }, [models, buildKey]);
+  useEffect(() => {
+    if (!restoredRef.current) return;   // never write before the first restore attempt
+    try {
+      if (placed.length) localStorage.setItem(buildKey, JSON.stringify({ placed, at: Date.now() }));
+      else localStorage.removeItem(buildKey);
+    } catch { /* ignore */ }
+  }, [placed, buildKey]);
+
   const resolvedById = useMemo(() => {
     const o = {};
     for (const m of models) {
