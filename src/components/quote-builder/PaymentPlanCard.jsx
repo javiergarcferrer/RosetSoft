@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Link2, Download, Check, FileSignature, Save, Plus, Trash2, ChevronDown, Undo2 } from 'lucide-react';
+import { Loader2, Link2, Download, Check, FileSignature, Save, Plus, Trash2, ChevronDown, Undo2, FileText, AlertTriangle } from 'lucide-react';
 import { db, newId } from '../../db/database.js';
 import { collectInstallment, uncollectInstallment } from '../../db/paymentPlans.js';
 import { buildPlanSchedule, buildCustomSchedule, SPLIT_PRESETS, resolvePaymentPlanView } from '../../core/quote/index.js';
@@ -91,6 +91,24 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
 
   // The saved plan, decorated (paid/overdue + DOP) for the signed banner / link.
   const planView = useMemo(() => resolvePaymentPlanView(plan, { rate }), [plan, rate]);
+
+  // Has the form diverged from the saved plan? Drives the "unsaved changes" hint
+  // (the schedule table reflects the SAVED plan until you save, so the paid-mark
+  // mapping for collections never breaks).
+  const dirty = useMemo(() => {
+    if (!plan) return false;
+    if (form.mode !== (plan.scheduleMode === 'custom' ? 'custom' : 'amortized')) return true;
+    if ((form.contractBody || '') !== (plan.contractBody || '')) return true;
+    if (form.mode === 'amortized') {
+      return Number(form.monthlyRatePct) !== Number(plan.monthlyRatePct)
+        || Number(form.installmentCount) !== Number(plan.installmentCount)
+        || form.firstDueAt !== plan.firstDueAt;
+    }
+    const saved = Array.isArray(plan.schedule) ? plan.schedule : [];
+    if ((form.splits || []).length !== saved.length) return true;
+    return form.splits.some((s, i) => Number(s.pct) !== Number(saved[i]?.pct)
+      || s.dueAt !== saved[i]?.dueAt || (s.label || '') !== (saved[i]?.label || ''));
+  }, [plan, form]);
 
   const usd = (v) => formatMoney(v, 'USD');
   const dop = (v) => (rate ? formatMoney(v, 'DOP', { DOP: rate }) : '');
@@ -278,6 +296,17 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
   }
 
   const noTotal = !(totalUsd > 0);
+  const isCustom = form.mode === 'custom';
+  const isSigned = !!planView?.isSigned;
+  // Headline figures + schedule rows: the SAVED plan once one exists (so paid
+  // marks + collection mapping hold), the live form preview before that.
+  const summary = plan ? planView : preview;
+  const rows = planView?.installments || preview.installments;
+  const status = statusMeta(planView);
+  const financedToPay = Number(planView?.financedToPayUsd || 0);
+  const progressPct = financedToPay > 0
+    ? Math.min(100, Math.round((Number(planView?.paidUsd || 0) / financedToPay) * 100))
+    : 0;
 
   return (
     <section className="card">
@@ -290,10 +319,11 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
       >
         <h2 className="flex items-center gap-2"><FileSignature size={15} className="text-brand-500" aria-hidden /> Plan de pago y contrato</h2>
         <div className="flex items-center gap-2">
-          {planView?.isSigned ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><Check size={13} /> Firmado</span>
-          ) : plan ? (
-            <span className="text-[11px] text-ink-400">Plan guardado</span>
+          {plan ? (
+            <>
+              <span className="hidden sm:inline text-[11px] text-ink-400 tabular-nums">{usd(summary.grandTotalToPayUsd)}</span>
+              <StatusPill status={status} />
+            </>
           ) : null}
           <ChevronDown size={16} className={`text-ink-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden />
         </div>
@@ -301,55 +331,72 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
 
       {!open ? null : loading ? (
         <div className="p-5 flex items-center gap-2 text-ink-500 text-sm"><Loader2 size={15} className="animate-spin" /> Cargando plan de pago…</div>
-      ) : (
-      <div className="p-5 space-y-5">
-        {noTotal ? (
+      ) : noTotal ? (
+        <div className="p-5">
           <p className="text-sm text-ink-500">Agrega productos con precio a la cotización para crear un plan de pago.</p>
-        ) : (
-          <>
-            {/* Mode toggle */}
+        </div>
+      ) : (
+        <div className="p-5 space-y-6">
+          {/* ── Summary: status + total + collection progress ───────────── */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill status={status} />
+                {isSigned ? (
+                  <span className="text-[11px] text-ink-500">
+                    Firmado por <strong className="text-ink-700">{planView.signerName}</strong>
+                    {planView.signedAt ? ` · ${fmtDate(planView.signedAt)}` : ''}
+                    {planView.signerDoc ? ` · ${planView.signerDoc}` : ''}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-2 text-2xl font-bold text-ink-900 tabular-nums leading-none">{usd(summary.grandTotalToPayUsd)}</div>
+              {rate ? <div className="mt-0.5 text-xs text-ink-400 tabular-nums">{dop(summary.grandTotalToPayUsd)}</div> : null}
+              <p className="mt-1.5 text-[11px] text-ink-500">{breakdownLine(form, summary, usd)}</p>
+            </div>
+
+            {plan && rows.length ? (
+              <div className="w-full sm:w-56">
+                <div className="flex items-baseline justify-between text-[11px] text-ink-500 mb-1">
+                  <span>{planView.paidCount}/{rows.length} cuotas cobradas</span>
+                  <span className="tabular-nums">{usd(planView.paidUsd)} / {usd(financedToPay)}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-ink-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-brand-500 transition-[width] duration-300" style={{ width: `${progressPct}%` }} />
+                </div>
+                {planView.overdueCount > 0 ? (
+                  <p className="mt-1 text-[11px] font-medium text-red-600">{planView.overdueCount} {planView.overdueCount === 1 ? 'cuota vencida' : 'cuotas vencidas'}</p>
+                ) : planView.outstandingUsd > 0.005 ? (
+                  <p className="mt-1 text-[11px] text-ink-400">Pendiente {usd(planView.outstandingUsd)}</p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-emerald-600">Cuotas saldadas</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          {/* ── Condiciones: mode + parameters ─────────────────────────── */}
+          <section className="space-y-3 border-t border-ink-100 pt-5">
+            <SectionTitle>Condiciones</SectionTitle>
+            {isSigned ? (
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" aria-hidden />
+                Este plan ya está firmado. Cambiar las condiciones puede invalidar el contrato acordado con el cliente.
+              </p>
+            ) : null}
+
             <div className="inline-flex rounded-lg border border-ink-200 p-0.5 text-sm">
               <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
-                className={`px-3 py-1.5 rounded-md ${form.mode === 'amortized' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
+                className={`px-3 py-1.5 rounded-md transition-colors ${!isCustom ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
                 Financiado (cuotas + interés)
               </button>
               <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
-                className={`px-3 py-1.5 rounded-md ${form.mode === 'custom' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
+                className={`px-3 py-1.5 rounded-md transition-colors ${isCustom ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
                 Pagos por etapas (%)
               </button>
             </div>
 
-            {form.mode === 'amortized' ? (
-              <>
-                {/* Amortized parameters */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <Field label="Inicial">
-                    <div className="input bg-ink-50 cursor-not-allowed">{DOWN_PCT}%</div>
-                  </Field>
-                  <Field label="Tasa mensual %">
-                    <input type="number" min="0" step="0.01" value={form.monthlyRatePct}
-                      onChange={(e) => setForm((f) => ({ ...f, monthlyRatePct: e.target.value }))}
-                      className="input w-full" />
-                  </Field>
-                  <Field label="Nº de cuotas">
-                    <input type="number" min="1" step="1" value={form.installmentCount}
-                      onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
-                      className="input w-full" />
-                  </Field>
-                  <Field label="Primera cuota">
-                    <input type="date" value={toDateInput(form.firstDueAt)}
-                      onChange={(e) => setForm((f) => ({ ...f, firstDueAt: fromDateInput(e.target.value) }))}
-                      className="input w-full" />
-                  </Field>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <Stat label="Inicial" value={usd(preview.downPaymentUsd)} sub={dop(preview.downPaymentUsd)} />
-                  <Stat label="A financiar" value={usd(preview.financedUsd)} sub={dop(preview.financedUsd)} />
-                  <Stat label="Cuota mensual" value={usd(preview.monthlyUsd)} sub={`${preview.installmentCount} cuotas`} />
-                  <Stat label="Total a pagar" value={usd(preview.grandTotalToPayUsd)} sub={`Interés ${usd(preview.totalInterestUsd)}`} />
-                </div>
-              </>
-            ) : (
+            {isCustom ? (
               <SplitsEditor
                 splits={form.splits}
                 totalUsd={totalUsd}
@@ -358,113 +405,90 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                 usd={usd}
                 onChange={(splits) => setForm((f) => ({ ...f, splits }))}
               />
-            )}
-
-            {/* Contract body */}
-            <Field label="Texto del contrato">
-              <textarea
-                rows={4}
-                value={form.contractBody}
-                placeholder={defaultBody()}
-                onChange={(e) => setForm((f) => ({ ...f, contractBody: e.target.value }))}
-                className="input w-full resize-y text-sm"
-              />
-            </Field>
-
-            {/* Schedule */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-wide text-ink-500 border-b border-ink-100">
-                    <th className="text-left py-1.5 px-2">#</th>
-                    {form.mode === 'custom' ? <th className="text-left py-1.5 px-2">Concepto</th> : null}
-                    <th className="text-left py-1.5 px-2">Vence</th>
-                    <th className="text-right py-1.5 px-2">{form.mode === 'custom' ? 'Pago' : 'Cuota'}</th>
-                    {form.mode === 'custom' ? null : <th className="text-right py-1.5 px-2">Interés</th>}
-                    <th className="text-right py-1.5 px-2">Balance</th>
-                    {plan ? <th className="text-center py-1.5 px-2">Cobro</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(planView?.installments || preview.installments).map((r) => (
-                    <tr key={r.n} className={`border-b border-ink-50 ${r.isOverdue ? 'bg-red-50/50' : ''}`}>
-                      <td className="py-1.5 px-2 text-ink-500">{r.n}</td>
-                      {form.mode === 'custom' ? <td className="py-1.5 px-2 text-ink-600">{r.label || `Etapa ${r.n}`}{r.pct ? <span className="text-ink-400"> · {r.pct}%</span> : null}</td> : null}
-                      <td className="py-1.5 px-2 text-ink-700">{fmtDate(r.dueAt)}</td>
-                      <td className="py-1.5 px-2 text-right font-medium text-ink-900">{usd(r.amount)}</td>
-                      {form.mode === 'custom' ? null : <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.interest)}</td>}
-                      <td className="py-1.5 px-2 text-right text-ink-500">{usd(r.balanceAfter)}</td>
-                      {plan ? (
-                        <td className="py-1.5 px-2 text-center whitespace-nowrap">
-                          {r.isPaid ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                              <Check size={13} /> {fmtDate(r.paidAt)}
-                              <button type="button" onClick={() => uncollectCuota(r.n)} disabled={uncollecting === r.n}
-                                className="ml-0.5 text-ink-400 hover:text-red-600 disabled:opacity-40"
-                                title="Deshacer cobro" aria-label="Deshacer cobro">
-                                {uncollecting === r.n ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
-                              </button>
-                            </span>
-                          ) : (
-                            <button type="button" onClick={() => collectCuota(r.n)} disabled={collecting === r.n}
-                              className="text-xs text-brand-700 hover:text-brand-900 inline-flex items-center gap-1">
-                              {collecting === r.n ? <Loader2 size={12} className="animate-spin" /> : null}
-                              Registrar cobro
-                            </button>
-                          )}
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {collectErr && <p role="alert" className="text-xs text-red-600">{collectErr}</p>}
-            {plan && planView?.paidCount > 0 ? (
-              <p className="text-[11px] text-ink-400">
-                Cobrado {usd(planView.paidUsd)} · pendiente {usd(planView.outstandingUsd)}. Cada cobro se registra en Contabilidad (Cuentas por cobrar).
-              </p>
-            ) : null}
-
-            {/* Signed banner */}
-            {planView?.isSigned ? (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm text-emerald-800">
-                Firmado por <strong>{planView.signerName}</strong>
-                {planView.signedAt ? ` el ${fmtDate(planView.signedAt)}` : ''}
-                {planView.signerDoc ? ` · ${planView.signerDoc}` : ''}.
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Field label="Inicial">
+                  <div className="input bg-ink-50 cursor-not-allowed text-ink-500">{DOWN_PCT}%</div>
+                </Field>
+                <Field label="Tasa mensual %">
+                  <input type="number" min="0" step="0.01" value={form.monthlyRatePct}
+                    onChange={(e) => setForm((f) => ({ ...f, monthlyRatePct: e.target.value }))}
+                    className="input w-full" />
+                </Field>
+                <Field label="Nº de cuotas">
+                  <input type="number" min="1" step="1" value={form.installmentCount}
+                    onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
+                    className="input w-full" />
+                </Field>
+                <Field label="Primera cuota">
+                  <input type="date" value={toDateInput(form.firstDueAt)}
+                    onChange={(e) => setForm((f) => ({ ...f, firstDueAt: fromDateInput(e.target.value) }))}
+                    className="input w-full" />
+                </Field>
               </div>
-            ) : null}
+            )}
+          </section>
 
-            {/* Actions */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <button type="button" onClick={handleSave} disabled={save === 'saving'} className="btn-brand">
-                {save === 'saving' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                {save === 'saved' ? 'Guardado' : 'Guardar plan'}
+          {/* ── Calendario: schedule + collections ─────────────────────── */}
+          <section className="space-y-2 border-t border-ink-100 pt-5">
+            <SectionTitle hint={!plan ? 'Guarda el plan para registrar cobros' : null}>Calendario de pagos</SectionTitle>
+            {plan && dirty ? (
+              <p className="text-[11px] text-amber-700">Tienes cambios sin guardar. Guarda el plan para actualizar el calendario.</p>
+            ) : null}
+            <ScheduleTable
+              rows={rows}
+              isCustom={isCustom}
+              canCollect={!!plan}
+              collecting={collecting}
+              uncollecting={uncollecting}
+              onCollect={collectCuota}
+              onUncollect={uncollectCuota}
+              usd={usd}
+            />
+            {collectErr ? <p role="alert" className="text-xs text-red-600">{collectErr}</p> : null}
+          </section>
+
+          {/* ── Contrato: collapsed by default, sensible default text ───── */}
+          <section className="border-t border-ink-100 pt-5">
+            <ContractDisclosure
+              value={form.contractBody}
+              placeholder={defaultBody()}
+              onChange={(v) => setForm((f) => ({ ...f, contractBody: v }))}
+            />
+          </section>
+
+          {/* ── Acciones ───────────────────────────────────────────────── */}
+          <section className="border-t border-ink-100 pt-5 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={handleSave} disabled={save === 'saving' || (isCustom && !splitsValid)} className="btn-brand">
+                {save === 'saving' ? <Loader2 size={14} className="animate-spin" /> : save === 'saved' ? <Check size={14} /> : <Save size={14} />}
+                {save === 'saved' ? 'Guardado' : plan ? 'Guardar cambios' : 'Guardar plan'}
               </button>
-              <button type="button" onClick={handleCopyLink} className="btn-ghost" disabled={!plan && save !== 'saved'}>
+              <button type="button" onClick={handleCopyLink} className="btn-ghost">
                 {copy === 'done' ? <Check size={14} /> : <Link2 size={14} />}
-                {copy === 'done' ? 'Enlace copiado' : 'Copiar enlace del contrato'}
+                {copy === 'done' ? 'Enlace copiado' : 'Compartir contrato'}
               </button>
               <button type="button" onClick={handleDownloadPdf} disabled={pdf === 'working'} className="btn-ghost">
                 {pdf === 'working' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                {planView?.isSigned ? 'Descargar firmado' : 'Descargar PDF'}
+                {isSigned ? 'Descargar firmado' : 'Descargar PDF'}
               </button>
               {plan ? (
                 <button type="button" onClick={deletePlan} disabled={deleting}
                   className="btn-ghost ml-auto text-red-600 hover:bg-red-50">
                   {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  Eliminar plan
+                  Eliminar
                 </button>
               ) : null}
-              {save === 'error' && <span role="alert" className="text-xs text-red-600">No se pudo guardar.</span>}
-              {pdf === 'error' && <span role="alert" className="text-xs text-red-600">No se pudo generar el PDF.</span>}
             </div>
+            {save === 'error' ? (
+              <p role="alert" className="text-xs text-red-600">{isCustom && !splitsValid ? 'Los porcentajes deben sumar 100% antes de guardar.' : 'No se pudo guardar.'}</p>
+            ) : null}
+            {pdf === 'error' ? <p role="alert" className="text-xs text-red-600">No se pudo generar el PDF.</p> : null}
             <p className="text-[11px] text-ink-400">
-              Guarda el plan, copia el enlace y envíaselo al cliente. Él podrá ver el contrato y firmarlo desde su teléfono; la firma queda archivada aquí.
+              Comparte el enlace para que el cliente revise y firme el contrato desde su teléfono; la firma queda archivada aquí. Cada cobro se registra en Contabilidad (Cuentas por cobrar).
             </p>
-          </>
-        )}
-      </div>
+          </section>
+        </div>
       )}
     </section>
   );
@@ -479,12 +503,124 @@ function Field({ label, children }) {
   );
 }
 
-function Stat({ label, value, sub }) {
+function SectionTitle({ children, hint }) {
   return (
-    <div className="rounded-lg border border-ink-100 bg-surface px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-ink-500">{label}</div>
-      <div className="text-sm font-bold text-ink-900 mt-0.5">{value}</div>
-      {sub ? <div className="text-[11px] text-ink-400">{sub}</div> : null}
+    <div className="flex items-baseline justify-between gap-2">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-500">{children}</h3>
+      {hint ? <span className="text-[11px] text-ink-400">{hint}</span> : null}
+    </div>
+  );
+}
+
+// The plan's at-a-glance status chip — Borrador → Guardado/Activo → Firmado →
+// Completado, with "Con atrasos" surfacing overdue cuotas.
+function statusMeta(pv) {
+  if (!pv) return { label: 'Borrador', cls: 'bg-ink-100 text-ink-500' };
+  if (pv.status === 'completed') return { label: 'Completado', cls: 'bg-emerald-100 text-emerald-700' };
+  if (pv.isSigned) return { label: 'Firmado', cls: 'bg-emerald-100 text-emerald-700' };
+  if (pv.overdueCount > 0) return { label: 'Con atrasos', cls: 'bg-red-100 text-red-700' };
+  if (pv.paidCount > 0) return { label: 'Activo', cls: 'bg-brand-100 text-brand-700' };
+  return { label: 'Guardado', cls: 'bg-ink-100 text-ink-600' };
+}
+
+function StatusPill({ status }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${status.cls}`}>
+      {status.label}
+    </span>
+  );
+}
+
+// One-line composition of the plan, so the headline total never needs the old
+// four-tile stat grid (which duplicated the schedule).
+function breakdownLine(form, s, usd) {
+  if (form.mode === 'custom') {
+    return `${s.installmentCount} ${s.installmentCount === 1 ? 'pago' : 'pagos'} por etapas · total ${usd(s.totalUsd)}`;
+  }
+  return `${s.downPaymentPct}% inicial (${usd(s.downPaymentUsd)}) · ${s.installmentCount} ${s.installmentCount === 1 ? 'cuota' : 'cuotas'} de ${usd(s.monthlyUsd)} · interés ${usd(s.totalInterestUsd)} (${s.monthlyRatePct}%/mes)`;
+}
+
+// The payment schedule: the live preview before a plan is saved, and the saved
+// schedule (with per-cuota collect / undo) once it exists.
+function ScheduleTable({ rows, isCustom, canCollect, collecting, uncollecting, onCollect, onUncollect, usd }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wide text-ink-500 border-b border-ink-100">
+            <th className="text-left py-1.5 px-2 font-medium">#</th>
+            {isCustom ? <th className="text-left py-1.5 px-2 font-medium">Concepto</th> : null}
+            <th className="text-left py-1.5 px-2 font-medium">Vence</th>
+            <th className="text-right py-1.5 px-2 font-medium">{isCustom ? 'Pago' : 'Cuota'}</th>
+            {isCustom ? null : <th className="text-right py-1.5 px-2 font-medium">Interés</th>}
+            <th className="text-right py-1.5 px-2 font-medium">Balance</th>
+            {canCollect ? <th className="text-center py-1.5 px-2 font-medium">Cobro</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.n} className={`border-b border-ink-50 last:border-0 ${r.isOverdue ? 'bg-red-50/40' : ''}`}>
+              <td className="py-1.5 px-2 text-ink-500 tabular-nums">{r.n}</td>
+              {isCustom ? <td className="py-1.5 px-2 text-ink-600">{r.label || `Etapa ${r.n}`}{r.pct ? <span className="text-ink-400"> · {r.pct}%</span> : null}</td> : null}
+              <td className="py-1.5 px-2 whitespace-nowrap">
+                <span className={r.isOverdue && !r.isPaid ? 'text-red-600 font-medium' : 'text-ink-700'}>{fmtDate(r.dueAt)}</span>
+                {r.state === 'due-soon' && !r.isPaid ? <span className="ml-1 text-[10px] text-amber-600">pronto</span> : null}
+              </td>
+              <td className="py-1.5 px-2 text-right font-medium text-ink-900 tabular-nums">{usd(r.amount)}</td>
+              {isCustom ? null : <td className="py-1.5 px-2 text-right text-ink-500 tabular-nums">{usd(r.interest)}</td>}
+              <td className="py-1.5 px-2 text-right text-ink-500 tabular-nums">{usd(r.balanceAfter)}</td>
+              {canCollect ? (
+                <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                  {r.isPaid ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                      <Check size={13} /> {fmtDate(r.paidAt)}
+                      <button type="button" onClick={() => onUncollect(r.n)} disabled={uncollecting === r.n}
+                        className="ml-0.5 text-ink-400 hover:text-red-600 disabled:opacity-40"
+                        title="Deshacer cobro" aria-label="Deshacer cobro">
+                        {uncollecting === r.n ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                      </button>
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => onCollect(r.n)} disabled={collecting === r.n}
+                      className="inline-flex items-center gap-1 rounded-md border border-ink-200 px-2 py-0.5 text-xs font-medium text-brand-700 hover:border-brand-300 hover:bg-brand-50 disabled:opacity-40">
+                      {collecting === r.n ? <Loader2 size={12} className="animate-spin" /> : null}
+                      Cobrar
+                    </button>
+                  )}
+                </td>
+              ) : null}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// The contract text, collapsed by default behind a preview — it defaults
+// sensibly, so most dealers never need to open it.
+function ContractDisclosure({ value, placeholder, onChange }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setShow((s) => !s)}
+        className="flex w-full items-center justify-between gap-2 text-left" aria-expanded={show}>
+        <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+          <FileText size={13} aria-hidden /> Texto del contrato
+        </span>
+        <ChevronDown size={14} className={`text-ink-400 transition-transform ${show ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {show ? (
+        <textarea
+          rows={5}
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className="input w-full resize-y text-sm mt-2"
+        />
+      ) : (
+        <p className="mt-1.5 text-[11px] text-ink-400 line-clamp-2">{value || placeholder}</p>
+      )}
     </div>
   );
 }
