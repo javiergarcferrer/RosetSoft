@@ -88,10 +88,9 @@ function familyFor(root: string | null, products: Row[], retail: (n: number) => 
 }
 
 async function loadContext(admin: Admin) {
-  const [settingsRes, modelsRes, productsRes, materialsRes, fabricsRes] = await Promise.all([
+  const [settingsRes, modelsRes, materialsRes, fabricsRes] = await Promise.all([
     admin.from('settings').select('*').eq('profile_id', TEAM_PROFILE_ID).maybeSingle(),
     admin.from('togo_models').select('*').eq('profile_id', TEAM_PROFILE_ID),
-    admin.from('products').select('reference, name, price_usd, dimensions').eq('profile_id', TEAM_PROFILE_ID),
     admin.from('materials').select('id, name, grade, category, composition, price, price_unit, colors, not_in_pricelist_at, discontinued_at').eq('profile_id', TEAM_PROFILE_ID),
     admin.from('model_fabrics').select('id, pattern_names').eq('profile_id', TEAM_PROFILE_ID),
   ]);
@@ -102,7 +101,26 @@ async function loadContext(admin: Admin) {
   const models = ((modelsRes.data || []) as Row[])
     .filter((m) => m.active !== false && m.svg)
     .sort((a, b) => num(a.sort_order) - num(b.sort_order));
-  const products = (productsRes.data || []) as Row[];
+
+  // Load ONLY the catalogue SKUs under the active models' roots. The products
+  // table is 27k+ rows; an UNFILTERED select silently caps at PostgREST's
+  // 1000-row default, so any model whose SKUs sort past the first 1000 lost its
+  // price entirely (the "sin precio" bug). The roots are 8-digit prefixes (≈23
+  // graded SKUs each) → a tiny, complete result. Sanitised to alphanumerics so a
+  // stray root can't break out of the PostgREST or() filter.
+  const roots = [...new Set(
+    models.map((m) => String(m.product_root || '')).filter((r) => /^[A-Za-z0-9]+$/.test(r)),
+  )];
+  let products: Row[] = [];
+  if (roots.length) {
+    const { data } = await admin
+      .from('products')
+      .select('reference, name, price_usd, dimensions')
+      .eq('profile_id', TEAM_PROFILE_ID)
+      .or(roots.map((r) => `reference.like.${r}*`).join(','));
+    products = (data || []) as Row[];
+  }
+
   const materials = (materialsRes.data || []) as Row[];
   const fabrics = (fabricsRes.data || []) as Row[];
   return { settings, rates, marginPct, models, products, materials, fabrics };
