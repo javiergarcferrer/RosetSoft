@@ -27,3 +27,18 @@ export async function checkEcfStatus({ trackId, profileId }) {
   }
   return data;
 }
+
+/**
+ * Sign + transmit a commercial approval/rejection (ACECF) for an e-CF we
+ * received. `payload` is the `buildCommercialApproval` result; `eNcf` is the
+ * approved document's e-NCF. Resolves to { estado }.
+ */
+export async function sendCommercialApproval({ payload, eNcf, profileId }) {
+  const { data, error } = await supabase.functions.invoke('ecf-send', {
+    body: { op: 'approve', payload, eNcf, profileId },
+  });
+  if (error || !data?.ok) {
+    throw new Error(data?.error || error?.message || 'Error transmitiendo la aprobación comercial.');
+  }
+  return data;
+}

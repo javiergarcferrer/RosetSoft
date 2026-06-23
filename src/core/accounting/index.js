@@ -69,6 +69,7 @@ export {
   sequenceState, pickSequence, padSeq, ecfQrUrl,
 } from '../../lib/accounting/ecf.js';
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';
+export { buildCommercialApproval, formatEcfDateTime, ACECF_ESTADO } from '../../lib/accounting/ecfCommercial.js';
 
 // ── fiscal jurisdiction PLUGIN seam — the country-agnostic engine reads the
 // active plugin (DGII today) for the tax name/rate, fiscal-id format, e-CF

@@ -174,3 +174,21 @@ verify_jwt = false
 # its ensureCron action self-registers that cron job.
 [functions.ig-publish-worker]
 verify_jwt = false
+
+# ── DGII e-CF RECEPTOR services (certification steps 8–11) ──────────────────
+# The three web services DGII validates to certify us as a RECEPTOR (the
+# inbound half of e-CF, the part ecf-send does NOT do). DGII / other emisores
+# call them server-to-server with NO Supabase JWT, so the gateway check must be
+# off; auth is the semilla→token flow itself (fe-autenticacion mints the token,
+# fe-recepcion / fe-aprobacioncomercial verify it). Exposed publicly at
+# soft.alcover.do/fe/* via the Vercel rewrites in vercel.json. All three read
+# the team .p12 from the write-only ecf_credentials table via the service role,
+# exactly like ecf-send. See docs/ecf-certification.md.
+[functions.fe-autenticacion]
+verify_jwt = false
+
+[functions.fe-recepcion]
+verify_jwt = false
+
+[functions.fe-aprobacioncomercial]
+verify_jwt = false
