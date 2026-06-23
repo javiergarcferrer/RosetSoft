@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Receipt, FileWarning,
   AlertTriangle, BookOpen, Landmark, Ship, Boxes, Percent, Gauge,
+  FileText, ShoppingCart, CalendarClock, Lock, CheckCircle2, ListChecks,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -19,10 +20,31 @@ import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar, Waterfall, AgingBars, CountUp } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
-  resolveAccountingDashboard, resolvePeriod, resolveComparativeKpis,
+  resolveAccountingDashboard, resolveAccountingCockpit, resolvePeriod, resolveComparativeKpis,
   resolveSalesSegmented, resolveMonthlyComparative, resolveExpenseComparative,
   resolveImportPanel,
 } from '../../core/accounting/index.js';
+
+// Cockpit quick-create actions (QBO "+ Nuevo"): the daily create flows, one tap.
+const QUICK_ACTIONS = [
+  { label: 'Factura', to: '/accounting/facturacion', icon: FileText },
+  { label: 'Cobro', to: '/accounting/cuentas?new=in', icon: ArrowDownCircle },
+  { label: 'Pago', to: '/accounting/cuentas?new=out', icon: ArrowUpCircle },
+  { label: 'Gasto', to: '/accounting/compras-gastos?new=gasto', icon: Receipt },
+  { label: 'Compra', to: '/accounting/compras-gastos?new=mercancia', icon: ShoppingCart },
+  { label: 'Expediente', to: '/accounting/importaciones/nuevo', icon: Ship },
+  { label: 'Asiento', to: '/accounting/ledger?new=1', icon: BookOpen },
+];
+// Action-center severity skins + the icon per action kind.
+const SEV_SKIN = {
+  danger: 'bg-rose-50 text-rose-800 border-rose-200',
+  warn: 'bg-amber-50 text-amber-800 border-amber-200',
+  info: 'bg-ink-50 text-ink-700 border-ink-200',
+};
+const ACTION_ICON = {
+  ecfSeq: FileWarning, ecf: FileWarning, deadline: CalendarClock,
+  payable: ArrowUpCircle, receivable: ArrowDownCircle, invoice: FileText, periodClose: Lock,
+};
 
 // Chart palette — drawn from the app's warm tokens (ink/brand) + a few accents.
 // Centralized here so the incoming design system can retune the dashboard hues
@@ -200,6 +222,24 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   return to ? <Link to={to} className="block active:scale-[0.99] transition-transform min-w-0">{body}</Link> : body;
 }
 
+/** The human label for one cockpit action (the VM returns structured data; the
+ *  View owns the money/date formatting + the copy). */
+function actionText(a) {
+  switch (a.kind) {
+    case 'ecfSeq':
+      if (a.seqKind === 'none') return `Sin secuencia e-NCF utilizable para ${a.name} — autoriza un rango`;
+      if (a.seqKind === 'low') return `Quedan ${a.remaining} e-NCF de ${a.name}`;
+      return `La secuencia e-NCF de ${a.name} vence el ${formatDate(a.expiresAt)}`;
+    case 'ecf': return `${a.count} e-CF por transmitir a la DGII`;
+    case 'deadline': return `${a.name} vence ${a.daysLeft === 0 ? 'hoy' : a.daysLeft === 1 ? 'mañana' : `en ${a.daysLeft} días`} · ${a.periodLabel}`;
+    case 'payable': return `${formatDop(a.amount)} en cuentas por pagar vencidas`;
+    case 'receivable': return `${formatDop(a.amount)} en cuentas por cobrar vencidas`;
+    case 'invoice': return `${a.count} cotización${a.count === 1 ? '' : 'es'} aceptada${a.count === 1 ? '' : 's'} por facturar`;
+    case 'periodClose': return `Cierra ${a.label} — el mes anterior sigue abierto`;
+    default: return '';
+  }
+}
+
 /**
  * Resumen del negocio — the accounting home, in the QuickBooks "Business
  * overview" shape: a grid of live financial widgets (flujo de caja, gastos,
@@ -208,7 +248,7 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
  * on accounting/admin.
  */
 export default function AccountingDashboard() {
-  const { profileId, profiles } = useApp();
+  const { profileId, profiles, settings } = useApp();
   const scope = profileId || 'team';
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
@@ -224,6 +264,7 @@ export default function AccountingDashboard() {
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope], []);
   const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
+  const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && salesQ.loaded;
 
   const today = useMemo(() => new Date(), []);
@@ -244,6 +285,14 @@ export default function AccountingDashboard() {
     ecfSequences: ecfSeqQ.data, customersById, suppliersById,
     monthStart: period.start, monthEnd: period.end,
   }), [accountsQ.data, entriesQ.data, linesQ.data, salesQ.data, purchasesQ.data, expensesQ.data, paymentsQ.data, importsQ.data, expedientesQ.data, ecfSeqQ.data, customersById, suppliersById, period]);
+
+  // Cockpit — "as of today", independent of the period selector (deadlines,
+  // period-close and the action center don't re-frame when you step the period).
+  const cockpit = useMemo(() => resolveAccountingCockpit({
+    settings, fiscalPeriods: periodsQ.data, quotes: quotesQ.data, salesPostings: salesQ.data,
+    payments: paymentsQ.data, purchases: purchasesQ.data, expenses: expensesQ.data,
+    customersById, suppliersById, ecfSequences: ecfSeqQ.data, now: today.getTime(),
+  }), [settings, periodsQ.data, quotesQ.data, salesQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById, ecfSeqQ.data, today]);
 
   // Comparative layer: KPIs vs período anterior + vs año pasado.
   const kpis = useMemo(() => resolveComparativeKpis({
@@ -312,6 +361,74 @@ export default function AccountingDashboard() {
 
       {!loaded ? <ListLoading /> : (
         <div className="space-y-4 min-w-0">
+          {/* Cockpit — the command center, always "as of today": one-tap quick
+              create, the prioritized action center (what needs doing now), and
+              the fiscal calendar + period-close status. */}
+          <div className="space-y-3">
+            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {QUICK_ACTIONS.map((a) => (
+                <Link key={a.label} to={a.to}
+                  className="inline-flex items-center gap-2 shrink-0 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-sm font-medium text-ink-700 shadow-xs hover:border-ink-300 hover:bg-ink-50 active:scale-[0.99] transition-all">
+                  <span className="icon-tile tint-ink w-6 h-6 rounded-md"><a.icon size={13} /></span>{a.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-3 min-w-0">
+              {/* Action center */}
+              <div className="card p-4 lg:col-span-2 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h2 className="eyebrow font-semibold text-ink-700 inline-flex items-center gap-1.5"><ListChecks size={14} /> Pendientes</h2>
+                  {cockpit.counts.danger > 0 && <span className="chip bg-rose-100 text-rose-700">{cockpit.counts.danger} urgente{cockpit.counts.danger === 1 ? '' : 's'}</span>}
+                </div>
+                {cockpit.actions.length === 0 ? (
+                  <div className="flex items-center justify-center gap-2 text-sm text-emerald-700 py-8"><CheckCircle2 size={16} /> Todo al día — sin pendientes.</div>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {cockpit.actions.map((a) => {
+                      const Icon = ACTION_ICON[a.kind] || AlertTriangle;
+                      return (
+                        <li key={a.id}>
+                          <Link to={a.to} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm shadow-xs hover:shadow-sm transition-shadow ${SEV_SKIN[a.severity]}`}>
+                            <Icon size={15} className="shrink-0" />
+                            <span className="min-w-0 flex-1 break-words">{actionText(a)}</span>
+                            <span className="shrink-0 opacity-50">→</span>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              {/* Fiscal calendar + period close */}
+              <div className="card p-4 min-w-0 flex flex-col">
+                <CardHead title="Calendario fiscal" to="/accounting/impuestos" action="DGII →" />
+                <ul className="space-y-1">
+                  {cockpit.deadlines.map((dl) => (
+                    <li key={dl.code}>
+                      <Link to={dl.to} className="flex items-center gap-2.5 -mx-1 px-1 py-1.5 rounded-lg hover:bg-ink-50/60 transition-colors min-w-0">
+                        <span className={`w-10 text-center shrink-0 tabular-nums font-semibold text-sm ${dl.severity === 'danger' ? 'text-rose-600' : dl.severity === 'warn' ? 'text-amber-600' : 'text-ink-400'}`}>{dl.daysLeft}d</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm text-ink-700 truncate">{dl.label}</span>
+                          <span className="block text-[11px] text-ink-400">{dl.periodLabel}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-auto pt-3 border-t border-ink-100 flex items-center justify-between gap-2 text-sm">
+                  <span className="text-ink-500 inline-flex items-center gap-1.5 shrink-0"><Lock size={13} /> Cierre</span>
+                  {cockpit.periodClose.prevClosed ? (
+                    <span className="text-emerald-700 inline-flex items-center gap-1 min-w-0 truncate"><CheckCircle2 size={13} className="shrink-0" /> {cockpit.periodClose.prevLabel} cerrado</span>
+                  ) : (
+                    <Link to="/accounting/periodos" className="text-amber-700 font-medium hover:underline truncate">Cerrar {cockpit.periodClose.prevLabel} →</Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Comparative KPI scorecards — the monitor layer: the period's
               headline figures, each against the previous period AND the same
               period last year. */}
@@ -337,30 +454,6 @@ export default function AccountingDashboard() {
               </div>
             ))}
           </div>
-          {/* Urgent flags float to the top. */}
-          {(d.ecfPending > 0 || d.overdue > 0 || d.ecfSeqAlerts.length > 0) && (
-            <div className="flex flex-wrap gap-2">
-              {d.ecfSeqAlerts.map((a) => (
-                <Link key={a.type} to="/accounting/ecf" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
-                  <FileWarning size={14} className="shrink-0" />
-                  {a.kind === 'none' && `Sin secuencia e-NCF utilizable para ${a.label} — autoriza un rango`}
-                  {a.kind === 'low' && `Quedan ${a.remaining} e-NCF de ${a.label}`}
-                  {a.kind === 'expiring' && `La secuencia e-NCF de ${a.label} vence el ${formatDate(a.expiresAt)}`}
-                </Link>
-              ))}
-              {d.ecfPending > 0 && (
-                <Link to="/accounting/facturacion" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
-                  <FileWarning size={14} className="shrink-0" /> {d.ecfPending} e-CF pendientes de transmitir a la DGII
-                </Link>
-              )}
-              {d.overdue > 0 && (
-                <Link to="/accounting/cuentas" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 font-medium shadow-xs transition-shadow hover:shadow-sm">
-                  <AlertTriangle size={14} className="shrink-0" /> {formatDop(d.overdue)} en cuentas vencidas (+90 días)
-                </Link>
-              )}
-            </div>
-          )}
-
           {/* Business-overview widgets — row 1: flujo · gastos · P&L. */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
             {/* Flujo de caja */}

@@ -49,7 +49,7 @@ export const dgiiPlugin: FiscalPlugin = {
       code: '606',
       label: 'Compras y gastos (606)',
       description: 'Comprobantes de proveedores del mes',
-      to: '/accounting/expenses?tab=606',
+      to: '/accounting/compras-gastos?tab=606',
       kind: 'purchases',
       dueDay: 15, // envío 606 vence el 15 del mes siguiente
     },

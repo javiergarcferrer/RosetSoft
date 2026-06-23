@@ -87,6 +87,9 @@ export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 // ── dashboard KPIs
 export { resolveAccountingDashboard } from './dashboard.js';
 
+// ── cockpit (command center): today-scoped deadlines + period close + actions
+export { resolveAccountingCockpit } from './cockpit.js';
+
 // ── panel analytics (comparative periods, segmentation, 360° roll-ups)
 export {
   resolvePeriod, stepPeriodRef, deltaPct, resolveComparativeKpis,
