@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Link2, Download, Check, FileSignature, Save, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Link2, Download, Check, FileSignature, Save, Plus, Trash2, ChevronDown, Undo2 } from 'lucide-react';
 import { db, newId } from '../../db/database.js';
-import { collectInstallment } from '../../db/paymentPlans.js';
+import { collectInstallment, uncollectInstallment } from '../../db/paymentPlans.js';
 import { buildPlanSchedule, buildCustomSchedule, SPLIT_PRESETS, resolvePaymentPlanView } from '../../core/quote/index.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
@@ -28,6 +28,7 @@ function defaultSplits() {
  * persists to the `payment_plans` table keyed on this quote.
  */
 export default function PaymentPlanCard({ quote, customer, settings, totalUsd }) {
+  const [open, setOpen] = useState(false); // collapsed by default — only usable when opened.
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
@@ -42,7 +43,9 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
   const [copy, setCopy] = useState('idle'); // idle | done
   const [pdf, setPdf] = useState('idle');   // idle | working | error
   const [collecting, setCollecting] = useState(0); // installment n being collected (0 = none)
+  const [uncollecting, setUncollecting] = useState(0); // installment n being undone (0 = none)
   const [collectErr, setCollectErr] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const rate = effectiveDopRate(settings);
   const scope = quote?.profileId || 'team';
@@ -228,44 +231,90 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
     }
   }
 
-  if (loading) {
-    return (
-      <section className="card card-pad">
-        <div className="flex items-center gap-2 text-ink-500 text-sm"><Loader2 size={15} className="animate-spin" /> Cargando plan de pago…</div>
-      </section>
-    );
+  // Undo a cuota collected by accident: reverses the cobro (deletes its asiento
+  // + payment row) and clears the paid mark. See db/paymentPlans.
+  async function uncollectCuota(n) {
+    if (!plan || uncollecting) return;
+    if (!confirm('¿Deshacer este cobro? Se eliminarán el pago y su asiento contable.')) return;
+    setUncollecting(n);
+    setCollectErr('');
+    try {
+      const row = await uncollectInstallment({ plan, installmentN: n });
+      setPlan(row);
+    } catch (e) {
+      console.error('[PaymentPlanCard] uncollect failed:', e);
+      setCollectErr('No se pudo deshacer el cobro.');
+    } finally {
+      setUncollecting(0);
+    }
+  }
+
+  // Delete the whole plan (e.g. when testing). Cobros already posted are NOT
+  // reverted here — undo them first if you need their asientos gone.
+  async function deletePlan() {
+    if (!plan || deleting) return;
+    const hasPaid = (plan.schedule || []).some((r) => r.paidAt);
+    const msg = hasPaid
+      ? 'Este plan tiene cobros registrados. Al eliminarlo, esos cobros y sus asientos NO se revierten (deshazlos antes si hace falta). ¿Eliminar el plan de pago?'
+      : '¿Eliminar el plan de pago de este presupuesto? Esta acción no se puede deshacer.';
+    if (!confirm(msg)) return;
+    setDeleting(true);
+    try {
+      await db.paymentPlans.delete(plan.id);
+      setPlan(null);
+      setForm({
+        mode: 'amortized',
+        monthlyRatePct: settings?.paymentPlanMonthlyRatePct ?? 2,
+        installmentCount: 6,
+        firstDueAt: defaultFirstDue(),
+        splits: defaultSplits(),
+        contractBody: '',
+      });
+    } catch (e) {
+      console.error('[PaymentPlanCard] delete failed:', e);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const noTotal = !(totalUsd > 0);
 
   return (
     <section className="card">
-      <div className="card-header">
+      {/* Collapsible header — the plan/contract editor is only usable once opened. */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={`card-header w-full text-left ${open ? '' : 'border-b-0'}`}
+      >
         <h2 className="flex items-center gap-2"><FileSignature size={15} className="text-brand-500" aria-hidden /> Plan de pago y contrato</h2>
-        {planView?.isSigned ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><Check size={13} /> Firmado</span>
-        ) : null}
-      </div>
+        <div className="flex items-center gap-2">
+          {planView?.isSigned ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><Check size={13} /> Firmado</span>
+          ) : plan ? (
+            <span className="text-[11px] text-ink-400">Plan guardado</span>
+          ) : null}
+          <ChevronDown size={16} className={`text-ink-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden />
+        </div>
+      </button>
 
+      {!open ? null : loading ? (
+        <div className="p-5 flex items-center gap-2 text-ink-500 text-sm"><Loader2 size={15} className="animate-spin" /> Cargando plan de pago…</div>
+      ) : (
       <div className="p-5 space-y-5">
         {noTotal ? (
           <p className="text-sm text-ink-500">Agrega productos con precio a la cotización para crear un plan de pago.</p>
         ) : (
           <>
-            {/* Mode toggle — iOS-style sliding pill */}
-            <div className="relative inline-flex w-full max-w-md rounded-full bg-ink-100 p-1 text-sm" role="tablist">
-              <span
-                aria-hidden
-                className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full bg-brand-grad shadow-glow transition-transform duration-300 ease-out ${form.mode === 'custom' ? 'translate-x-full' : 'translate-x-0'}`}
-              />
-              <button type="button" role="tab" aria-selected={form.mode === 'amortized'}
-                onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
-                className={`relative z-10 flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${form.mode === 'amortized' ? 'text-white' : 'text-ink-600'}`}>
+            {/* Mode toggle */}
+            <div className="inline-flex rounded-lg border border-ink-200 p-0.5 text-sm">
+              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
+                className={`px-3 py-1.5 rounded-md ${form.mode === 'amortized' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
                 Financiado (cuotas + interés)
               </button>
-              <button type="button" role="tab" aria-selected={form.mode === 'custom'}
-                onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
-                className={`relative z-10 flex-1 rounded-full px-3 py-1.5 font-medium transition-colors ${form.mode === 'custom' ? 'text-white' : 'text-ink-600'}`}>
+              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
+                className={`px-3 py-1.5 rounded-md ${form.mode === 'custom' ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
                 Pagos por etapas (%)
               </button>
             </div>
@@ -348,7 +397,14 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                       {plan ? (
                         <td className="py-1.5 px-2 text-center whitespace-nowrap">
                           {r.isPaid ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><Check size={13} /> {fmtDate(r.paidAt)}</span>
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                              <Check size={13} /> {fmtDate(r.paidAt)}
+                              <button type="button" onClick={() => uncollectCuota(r.n)} disabled={uncollecting === r.n}
+                                className="ml-0.5 text-ink-400 hover:text-red-600 disabled:opacity-40"
+                                title="Deshacer cobro" aria-label="Deshacer cobro">
+                                {uncollecting === r.n ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                              </button>
+                            </span>
                           ) : (
                             <button type="button" onClick={() => collectCuota(r.n)} disabled={collecting === r.n}
                               className="text-xs text-brand-700 hover:text-brand-900 inline-flex items-center gap-1">
@@ -393,6 +449,13 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
                 {pdf === 'working' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                 {planView?.isSigned ? 'Descargar firmado' : 'Descargar PDF'}
               </button>
+              {plan ? (
+                <button type="button" onClick={deletePlan} disabled={deleting}
+                  className="btn-ghost ml-auto text-red-600 hover:bg-red-50">
+                  {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  Eliminar plan
+                </button>
+              ) : null}
               {save === 'error' && <span role="alert" className="text-xs text-red-600">No se pudo guardar.</span>}
               {pdf === 'error' && <span role="alert" className="text-xs text-red-600">No se pudo generar el PDF.</span>}
             </div>
@@ -402,6 +465,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
           </>
         )}
       </div>
+      )}
     </section>
   );
 }

@@ -56,3 +56,47 @@ export async function collectInstallment({ plan, installmentN, config, scope, ra
   await db.paymentPlans.put(row);
   return row;
 }
+
+/**
+ * Undo a collected installment (marked by accident): reverse the cobro by
+ * deleting its journal entry + lines and the payment row, then clear the paid
+ * marks on the installment. Mirrors the asiento cascade used elsewhere. Returns
+ * the updated plan row.
+ *
+ * @param {object} args
+ * @param {object} args.plan   the payment_plans row.
+ * @param {number} args.installmentN  the 1-based cuota to un-collect.
+ */
+export async function uncollectInstallment({ plan, installmentN }) {
+  if (!plan) throw new Error('Plan no encontrado.');
+  const schedule = Array.isArray(plan.schedule) ? plan.schedule : [];
+  const installment = schedule.find((r) => r.n === installmentN);
+  if (!installment) throw new Error('Cuota no encontrada.');
+  if (!installment.paidAt) return plan; // nothing to undo.
+
+  // Reverse the cobro: delete its asiento (lines first, then entry) and the
+  // payment row. Idempotent — a missing payment/entry just skips that step.
+  const paymentId = installment.paymentId;
+  if (paymentId) {
+    const payment = await db.payments.get(paymentId);
+    if (payment?.journalEntryId) {
+      const lines = await db.journalLines.where('entryId').equals(payment.journalEntryId).toArray();
+      await db.journalLines.bulkDelete(lines.map((l) => l.id));
+      await db.journalEntries.delete(payment.journalEntryId);
+    }
+    await db.payments.delete(paymentId);
+  }
+
+  const nextSchedule = schedule.map((r) => (
+    r.n === installmentN ? { ...r, paidAt: null, paymentId: null } : r
+  ));
+  const anyPaid = nextSchedule.some((r) => r.paidAt);
+  const row = {
+    ...plan,
+    schedule: nextSchedule,
+    status: anyPaid ? 'active' : 'draft',
+    updatedAt: Date.now(),
+  };
+  await db.paymentPlans.put(row);
+  return row;
+}

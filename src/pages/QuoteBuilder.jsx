@@ -907,6 +907,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               — note onToggleGroupOptional is intentionally NOT wrapped, as
               before. */}
           <ProjectPaletteContext.Provider value={projectPalette}>
+          {/* Paleta del proyecto leads the editor (top on mobile + desktop) so
+              the curated material library is set before lines are added. */}
+          <ProjectPaletteCard />
           <QuoteActionsContext.Provider value={{
             onToggleGroupOptional: toggleGroupOptional,
             onChangeLine: hx(updateLine),
@@ -952,7 +955,6 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               </HeldStockContext.Provider>
             </FamiliesContext.Provider>
           </QuoteActionsContext.Provider>
-          <ProjectPaletteCard />
           </ProjectPaletteContext.Provider>
           {/* The customer's WhatsApp conversation lives in the Chats sidebar
               (and the mobile ModeBar's WhatsApp tab) — it's intentionally NOT
