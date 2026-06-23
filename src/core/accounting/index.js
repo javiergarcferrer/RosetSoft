@@ -26,6 +26,11 @@ export {
 export { resolveExpensesList, resolve606 } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
 
+// ── compras y gastos (unified pane): the merged + filterable list VM + natures
+export {
+  resolvePurchasesExpenses, purchaseNature, NATURES, NATURE_LABEL,
+} from './compras.js';
+
 // ── sales (Facturación) ViewModels + the DGII 607 + IT-1 liquidation
 export { resolveSales607, resolveItbisLiquidation } from './sales607.js';
 

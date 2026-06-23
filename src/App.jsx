@@ -49,11 +49,10 @@ const AccountingDashboard = lazyPage(() => import('./pages/accounting/Dashboard.
 const AccountingLedger = lazyPage(() => import('./pages/accounting/Ledger.jsx'));
 const AccountingStatements = lazyPage(() => import('./pages/accounting/Statements.jsx'));
 const AccountingSettings = lazyPage(() => import('./pages/accounting/AccountingSettings.jsx'));
-const AccountingExpenses = lazyPage(() => import('./pages/accounting/Expenses.jsx'));
+const AccountingComprasGastos = lazyPage(() => import('./pages/accounting/ComprasGastos.jsx'));
 const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.jsx'));
 const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturacion.jsx'));
 const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
-const AccountingCompras = lazyPage(() => import('./pages/accounting/Compras.jsx'));
 const AccountingImportaciones = lazyPage(() => import('./pages/accounting/Importaciones.jsx'));
 const AccountingLandedCalculator = lazyPage(() => import('./pages/accounting/LandedCalculator.jsx'));
 const AccountingImportacionDetail = lazyPage(() => import('./pages/accounting/ImportacionDetail.jsx'));
@@ -304,11 +303,15 @@ function ProtectedApp() {
             <Route path="accounting/ledger" element={<AccountingLedger />} />
             <Route path="accounting/statements" element={<AccountingStatements />} />
             <Route path="accounting/settings" element={<AccountingSettings />} />
-            <Route path="accounting/expenses" element={<AccountingExpenses />} />
+            {/* Compras y gastos — one unified pane. The two legacy paths render
+                the same page so old bookmarks + deep-links (handoffs) keep
+                working. */}
+            <Route path="accounting/compras-gastos" element={<AccountingComprasGastos />} />
+            <Route path="accounting/expenses" element={<AccountingComprasGastos />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />
             <Route path="accounting/facturacion" element={<AccountingFacturacion />} />
             <Route path="accounting/ligne-roset" element={<AccountingLigneRoset />} />
-            <Route path="accounting/compras" element={<AccountingCompras />} />
+            <Route path="accounting/compras" element={<AccountingComprasGastos />} />
             {/* Inventario left Contabilidad — old accounting bookmarks redirect
                 to the standalone section. */}
             <Route path="accounting/inventario" element={<Navigate to="/inventario/existencias" replace />} />

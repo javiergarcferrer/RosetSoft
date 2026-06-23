@@ -526,7 +526,7 @@ export default function AccountingDashboard() {
             <div className="card overflow-hidden min-w-0">
               <div className="card-header">
                 <h2 className="eyebrow font-semibold text-ink-700">Gastos por categoría · {monthLabel}</h2>
-                <Link to="/accounting/expenses" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ver gastos →</Link>
+                <Link to="/accounting/compras-gastos" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ver gastos →</Link>
               </div>
               {expComp.length === 0 ? (
                 <p className="text-sm text-ink-400 px-4 py-6 text-center">Sin gastos en el período.</p>

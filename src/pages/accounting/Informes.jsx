@@ -22,7 +22,7 @@ const GROUPS = [
   ] },
   { title: 'Impuestos (DGII)', items: [
     { label: '607 — Ventas', desc: 'Comprobantes de ventas + TXT Oficina Virtual', to: '/accounting/facturacion?tab=607' },
-    { label: '606 — Compras y gastos', desc: 'Comprobantes de compras + TXT Oficina Virtual', to: '/accounting/expenses?tab=606' },
+    { label: '606 — Compras y gastos', desc: 'Comprobantes de compras + TXT Oficina Virtual', to: '/accounting/compras-gastos?tab=606' },
     { label: 'Liquidación de ITBIS (IT-1)', desc: 'Débito − crédito (local + importación)', to: '/accounting/facturacion?tab=it1' },
     { label: 'Secuencias e-NCF', desc: 'Rangos autorizados por tipo de e-CF', to: '/accounting/ecf' },
   ] },

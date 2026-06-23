@@ -653,6 +653,8 @@ export interface Expense {
   /** The class-6 account this gasto hits. */
   accountCode?: string | null;
   description?: string;
+  /** Optional link to the import expediente this gasto belongs to. */
+  expedienteId?: string | null;
   base: number;
   itbis: number;
   itbisCreditable?: boolean;
@@ -995,6 +997,8 @@ export interface Purchase {
   kind: PurchaseKind;
   /** For asset/service kind: the account debited. Goods use the inventory account. */
   accountCode?: string | null;
+  /** Free-text memo (shown on the asiento + the merged Compras y gastos list). */
+  description?: string;
   /** Legacy single-item goods receipt (itemId + qty). Superseded by `lines`. */
   itemId?: string | null;
   qty: number;

@@ -45,10 +45,13 @@ export const ACCOUNTING_SECTIONS = [
   ] },
   // Inventario left Contabilidad — it's a standalone section now (see
   // lib/access.js ADMIN_GROUP) while the accounting engine is in testing.
-  { key: 'gastos', label: 'Gastos', icon: Receipt, tabs: [
-    { to: '/accounting/expenses', label: 'Gastos' },
-    { to: '/accounting/compras', label: 'Compras' },
-  ] },
+  // Compras y gastos — ONE pane. Mercancía, activos y gastos son todos facturas
+  // de proveedor; se registran y listan juntas (filtro por tipo) y el 606 (tab
+  // in-page) las declara todas. `extraMatch` mantiene encendido el centro en los
+  // paths viejos que ahora renderizan la misma página.
+  { key: 'gastos', label: 'Compras y gastos', icon: Receipt, tabs: [
+    { to: '/accounting/compras-gastos', label: 'Compras y gastos' },
+  ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
   { key: 'banca', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
     { to: '/accounting/planes-de-pago', label: 'Planes de pago' },
@@ -89,8 +92,8 @@ export const QUICK_CREATE = [
     { label: 'Calculadora de costo en destino', to: '/accounting/importaciones/calculadora' },
   ] },
   { group: 'Proveedores', items: [
-    { label: 'Gasto', to: '/accounting/expenses?new=1' },
-    { label: 'Compra', to: '/accounting/compras?new=1' },
+    { label: 'Gasto', to: '/accounting/compras-gastos?new=gasto' },
+    { label: 'Compra de mercancía', to: '/accounting/compras-gastos?new=mercancia' },
     { label: 'Pago', to: '/accounting/cuentas?new=out' },
   ] },
   { group: 'Empleados', items: [
