@@ -102,6 +102,7 @@ const ACCOUNTING_SALES_GROUP = {
   items: [
     { to: '/quotes', label: 'Cotizaciones', icon: FileText },
     { to: '/customers', label: 'Clientes', icon: Users },
+    { to: '/drive', label: 'Drive', icon: HardDrive },
   ],
 };
 
