@@ -8,6 +8,7 @@ import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
 import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
+import { togoQuickStarts } from '../../lib/togo/quickStarts.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced, compactPlaced,
@@ -221,6 +222,23 @@ export default function TogoEmbed() {
     setSelectedUid(uid);
   }, [resolvedById, placed]);
 
+  // One-tap quick-start sets (resolved against the available models) — drop a whole
+  // arrangement and auto-pack it, so a customer goes from blank to a real layout in
+  // a single tap. compactPlaced lays the pieces out edge-to-edge.
+  const quickStarts = useMemo(() => togoQuickStarts(models), [models]);
+  const startFromTemplate = useCallback((pieceIds) => {
+    if (!pieceIds?.length) return;
+    setSelectedUid(null);
+    setPlaced((prev) => {
+      const next = [...prev];
+      for (const pid of pieceIds) {
+        if (!resolvedById[pid]) continue;
+        next.push({ uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, pieceId: pid, x: 0, y: 0, rot: 0 });
+      }
+      return compactPlaced(next, resolvedById);
+    });
+  }, [resolvedById]);
+
   // uid-parameterized so the on-plan hover controls can rotate/delete ANY piece
   // (not just the selected one) without a round-trip to the toolbar.
   const rotatePiece = useCallback((uid) => {
@@ -365,6 +383,7 @@ export default function TogoEmbed() {
       placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
       hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
       onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
+      quickStarts={quickStarts} onQuickStart={startFromTemplate}
     />
   );
   // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
@@ -658,9 +677,40 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
  *  plan is a FIXED cm-sized canvas at SCALE px/cm (the drag math divides pointer
  *  deltas by SCALE) — it is NEVER rescaled; on small screens it lives in an
  *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
+// Empty-plan starter overlay — the fast path from blank to a real layout: one tap
+// drops a whole arrangement (resolved from the catalogue), or the visitor adds
+// pieces from the palette. Floats over the plan grid and only while it's empty.
+function EmptyPlanStart({ quickStarts, onQuickStart }) {
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center p-4 pointer-events-none">
+      <div className="pointer-events-auto text-center max-w-sm rounded-2xl bg-surface/85 backdrop-blur-sm border border-ink-200 px-5 py-4 shadow-pop">
+        <div className="w-10 h-10 mx-auto rounded-full bg-brand-50 text-brand-600 grid place-items-center"><Sofa size={20} /></div>
+        <p className="mt-2 text-sm font-display font-semibold text-ink-800">Empieza tu diseño</p>
+        {quickStarts.length > 0 ? (
+          <>
+            <p className="text-[11px] text-ink-500 mt-0.5">Toca una combinación para armarla al instante:</p>
+            <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
+              {quickStarts.map((q) => (
+                <button key={q.id} type="button" onClick={() => onQuickStart?.(q.pieceIds)}
+                  className="text-xs rounded-full border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-100 px-3 py-1.5 font-medium transition-colors">
+                  {q.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-ink-400 mt-2.5">o agrega piezas una a una desde el panel.</p>
+          </>
+        ) : (
+          <p className="text-[11px] text-ink-400 mt-0.5">Toca una pieza del panel para agregarla.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CanvasArea({
   view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed,
   onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
+  quickStarts = [], onQuickStart,
 }) {
   const [hoveredUid, setHoveredUid] = useState(null);
   if (view === '3d') {
@@ -669,7 +719,8 @@ function CanvasArea({
   const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
   const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
   return (
-    <div className="overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]">
+    <div className="relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]">
+      {!vm.tiles.length && <EmptyPlanStart quickStarts={quickStarts} onQuickStart={onQuickStart} />}
       <div
         className="relative mx-auto"
         style={{
