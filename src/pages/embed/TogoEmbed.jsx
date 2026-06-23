@@ -7,6 +7,7 @@ import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
 import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
+import { loadMeshPlan } from '../../lib/togo/meshPlanCache.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced, compactPlaced,
@@ -19,15 +20,38 @@ import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
 
-// Force a stored plan SVG to FILL its footprint tile. The stored SVGs carry only a
-// (square) viewBox — no width/height — so the browser renders them square and
-// top-anchored, leaving a strip at the bottom of a non-square tile that swings to
-// the side when the piece is rotated. width/height 100% makes the element fill the
-// tile; preserveAspectRatio="none" stretches the drawing to fill it (no letterbox).
+// Make a plan SVG fill its footprint tile. Every plan SVG's viewBox IS its own cm
+// footprint (mesh-derived or DWG) and the tile is sized to that same footprint, so
+// the fill is a clean uniform scale — no distortion. width/height 100% pins the
+// element to the tile (the SVGs carry no width/height of their own), avoiding the
+// browser's intrinsic-size guess that would leave a strip on one side.
 const fillSvg = (svg) =>
   (typeof svg === 'string' && svg.startsWith('<svg') && !svg.includes('preserveAspectRatio'))
     ? svg.replace('<svg', '<svg preserveAspectRatio="none" width="100%" height="100%"')
     : svg;
+
+// Load each mesh-backed model's FBX once and derive its top-down plan + footprint
+// (meshToPlan) keyed by model id — the FBX is the single source for 2D and 3D. The
+// stored DWG plan is only the fallback shown while the mesh loads (or if it can't
+// be read).
+function useMeshPlans(models) {
+  const [plans, setPlans] = useState({});
+  useEffect(() => {
+    let alive = true;
+    for (const m of (models || [])) {
+      const url = m.mesh?.url;
+      if (!url) continue;
+      loadMeshPlan(url, { upAxis: m.mesh.upAxis || 'y' })
+        .then((plan) => {
+          if (!alive || !plan?.svg) return;
+          setPlans((prev) => (prev[m.id]?.svg === plan.svg ? prev : { ...prev, [m.id]: plan }));
+        })
+        .catch(() => { /* keep the stored fallback */ });
+    }
+    return () => { alive = false; };
+  }, [models]);
+  return plans;
+}
 
 // The material editor's finish presets — physically-based fabric looks that
 // re-skin the 3D visualizer live (roughness + the sheen lobe that makes fabric
@@ -108,9 +132,18 @@ export default function TogoEmbed() {
 
   const data = cat.data;
   const rates = data?.rates || { USD: 1, DOP: 60 };
-  const models = useMemo(() => (data?.models || []).filter((m) => m.svg), [data]);
+  const models = useMemo(() => (data?.models || []).filter((m) => m.svg || m.mesh?.url), [data]);
   const materials = useMemo(() => data?.materials || [], [data]);
-  const svgById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m.svg])), [models]);
+
+  // A mesh-backed piece derives BOTH its plan SVG and its footprint straight from
+  // the FBX (`useMeshPlans` → meshToPlan): the 2D tile is literally the model seen
+  // from above, so it can never disagree with the 3D. The mesh loads async, so
+  // until it resolves we fall back to the stored plan/dims.
+  const meshPlans = useMeshPlans(models);
+  const svgById = useMemo(
+    () => Object.fromEntries(models.map((m) => [m.id, meshPlans[m.id]?.svg || m.svg])),
+    [models, meshPlans],
+  );
 
   // Per-model family (grades + retail prices) so a fabric pick reprices exactly
   // like the internal configurator (productForGrade), keyed by family root.
@@ -123,37 +156,21 @@ export default function TogoEmbed() {
     return map;
   }, [models]);
 
-  // The TRUE footprint of each uploaded mesh (url → {widthCm, depthCm}), measured
-  // by the 3D once it loads. A dealer's FBX can disagree with the catalogue dims
-  // (e.g. a "102×102" corner whose mesh is actually deeper); using the real
-  // footprint keeps the plan, the placement and the 3D in agreement — and lets a
-  // non-square piece ROTATE correctly instead of leaving dead space in a wrong
-  // square tile.
-  const [meshDims, setMeshDims] = useState({});
-  const onMeshFootprint = useCallback((url, dims) => {
-    if (!url || !(dims?.widthCm > 0) || !(dims?.depthCm > 0)) return;
-    setMeshDims((prev) => {
-      const cur = prev[url];
-      if (cur && Math.abs(cur.widthCm - dims.widthCm) < 0.5 && Math.abs(cur.depthCm - dims.depthCm) < 0.5) return prev;
-      return { ...prev, [url]: dims };
-    });
-  }, []);
-
   const resolvedById = useMemo(() => {
     const o = {};
     for (const m of models) {
-      const real = m.mesh?.url ? meshDims[m.mesh.url] : null;   // measured mesh footprint wins
+      const mp = meshPlans[m.id];        // the FBX footprint wins over catalogue dims
       o[m.id] = {
         id: m.id, label: m.name,
-        widthCm: real?.widthCm ?? m.widthCm,
-        depthCm: real?.depthCm ?? m.depthCm,
+        widthCm: mp?.widthCm ?? m.widthCm,
+        depthCm: mp?.depthCm ?? m.depthCm,
         unitPrice: m.priceUsd, root: m.family?.root || m.root || null,
         offeredKeys: m.offeredFabricKeys || [],
         mesh: m.mesh || null,
       };
     }
     return o;
-  }, [models, meshDims]);
+  }, [models, meshPlans]);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
   const scene3d = useMemo(() => resolveTogoScene(scenePlacementsFromPlaced(placed, resolvedById)), [placed, resolvedById]);
@@ -331,7 +348,7 @@ export default function TogoEmbed() {
       selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
       placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
       hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
-      onRotatePiece={rotatePiece} onDeletePiece={deletePiece} onMeshFootprint={onMeshFootprint}
+      onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
     />
   );
   // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
@@ -627,11 +644,11 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
  *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
 function CanvasArea({
   view, vm, scene3d, material, svgById, selectedUid, setSelectedUid, codeByUid, placed,
-  onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece, onMeshFootprint,
+  onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
 }) {
   const [hoveredUid, setHoveredUid] = useState(null);
   if (view === '3d') {
-    return <TogoScene3D scene3d={scene3d} material={material} onMeshFootprint={onMeshFootprint} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
+    return <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
   }
   const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
   const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
