@@ -7,9 +7,9 @@
 // behave identically everywhere. Files open inside the app (Drive preview) with
 // a link out; everything rides the single Google connection set up under
 // Configuración → Integraciones.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { HardDrive, Folder, ExternalLink, X, Pin } from 'lucide-react';
+import { HardDrive, Folder, ExternalLink, X, Pin, Lock } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import Modal from '../components/Modal.jsx';
@@ -19,26 +19,43 @@ import { driveFolderUrl } from '../lib/google.js';
 import { userMessageFor } from '../lib/errorMessages.js';
 
 export default function Drive() {
-  const { settings, saveSettings } = useApp();
+  const { settings, saveSettings, isAdmin, isAccounting } = useApp();
+  const allowed = isAdmin || isAccounting; // Drive is an admin/accounting tool
   const connected = !!settings?.googleConnectedAt;
   const pins = useMemo(() => settings?.googleDrivePins || [], [settings?.googleDrivePins]);
 
   const [preview, setPreview] = useState(null); // a file to view in-app
   const [err, setErr] = useState('');
 
+  // Pins live on the shared settings row; saveSettings overwrites the whole
+  // array, so back-to-back pins must each build on the previous one — not on
+  // the `pins` captured at render (which lags until refreshSettings lands).
+  // pinsRef holds the freshest array; we only re-sync it from props when no
+  // save is in flight so an optimistic update is never stomped mid-write.
+  const pinsRef = useRef(pins);
+  const savesInFlight = useRef(0);
+  useEffect(() => {
+    if (savesInFlight.current === 0) pinsRef.current = pins;
+  }, [pins]);
+
   const togglePin = useCallback(async (folder) => {
     if (!folder?.id) return;
     setErr('');
-    const exists = pins.some((p) => p.id === folder.id);
-    const next = exists
-      ? pins.filter((p) => p.id !== folder.id)
-      : [...pins, { id: folder.id, name: folder.name || 'Carpeta', url: folder.url || driveFolderUrl(folder.id) }];
+    const cur = pinsRef.current;
+    const next = cur.some((p) => p.id === folder.id)
+      ? cur.filter((p) => p.id !== folder.id)
+      : [...cur, { id: folder.id, name: folder.name || 'Carpeta', url: folder.url || driveFolderUrl(folder.id) }];
+    pinsRef.current = next; // a rapid second toggle builds on this, not the stale prop
+    savesInFlight.current += 1;
     try {
       await saveSettings({ googleDrivePins: next });
     } catch (e) {
+      pinsRef.current = cur;
       setErr(userMessageFor(e));
+    } finally {
+      savesInFlight.current -= 1;
     }
-  }, [pins, saveSettings]);
+  }, [saveSettings]);
 
   const onFile = useCallback((f) => {
     // Folders are handled inside the explorer; here we only ever get files.
@@ -52,7 +69,13 @@ export default function Drive() {
         subtitle="Explora tu Drive, abre documentos y fija carpetas para acceso rápido."
       />
 
-      {!connected ? (
+      {!allowed ? (
+        <EmptyState
+          icon={Lock}
+          title="Acceso restringido"
+          description="Esta sección está disponible solo para administración y contabilidad."
+        />
+      ) : !connected ? (
         <EmptyState
           icon={HardDrive}
           title="Google Drive no está conectado"
