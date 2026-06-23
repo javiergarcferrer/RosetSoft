@@ -109,7 +109,14 @@ export default function TogoEmbed() {
 
   const data = cat.data;
   const rates = data?.rates || { USD: 1, DOP: 60 };
-  const models = useMemo(() => (data?.models || []).filter((m) => m.svg || m.mesh?.url), [data]);
+  // FBX-only: the configurator is built entirely from the 3D models. We show only
+  // pieces that have a mesh (their plan + footprint come from it). The `|| all`
+  // guard keeps the widget from going blank if a catalogue has no meshes yet.
+  const models = useMemo(() => {
+    const all = data?.models || [];
+    const withMesh = all.filter((m) => m.mesh?.url);
+    return withMesh.length ? withMesh : all.filter((m) => m.svg);
+  }, [data]);
   const materials = useMemo(() => data?.materials || [], [data]);
 
   // A mesh-backed piece derives BOTH its plan SVG and its footprint straight from

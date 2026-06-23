@@ -8,18 +8,18 @@ import { uploadTogoMesh, removeTogoMesh } from '../../db/togoMeshUpload.js';
 import { loadMeshPlan } from '../../lib/togo/meshPlanCache.js';
 import { groupFamilies } from '../../lib/catalog.js';
 import { resolveTogoModelCards, togoPickerFamilies } from '../../core/quote/index.js';
-import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import EmptyState from '../../components/EmptyState.jsx';
 import { TOGO_SEEDS } from '../../assets/togo/seeds.js';
 
 /**
  * The "Modelos" tab of the Togo workspace (TogoWorkspace) — the dealer-managed
  * picture catalog the configurator reads, plus the website embed snippet. Upload
- * a model's DWG → it's converted to a top-down plan IN THE BROWSER (the libredwg
- * WASM is lazy-loaded only here, on the first drop) → name it, bind it to a Ligne
- * Roset product for pricing, and save. Reliable because each model is an explicit,
- * dealer-authored entry — no name-matching guesswork. Renders no page chrome of
- * its own (the workspace owns the header + tabs); admin-only.
+ * a piece's 3D model (.fbx/.glb/…) → its top-down plan AND its footprint are
+ * derived from the mesh IN THE BROWSER (meshToPlan), so the 2D tile and the 3D
+ * view are always the same object → name it, bind it to a Ligne Roset product for
+ * pricing, and save. The mesh is the single source — there is no separate 2D
+ * import. Renders no page chrome of its own (the workspace owns the header + tabs);
+ * admin-only.
  *
  * Architecture: a model's BOUND state is a property of its own row (productRoot),
  * so the list renders instantly from the tiny togo_models query. The full LR
@@ -94,7 +94,7 @@ export default function TogoModels() {
           <EmptyState
             icon={Sofa}
             title="Aún no hay modelos Togo"
-            description="Sube el DWG de cada pieza arriba, o importa las cinco piezas de ejemplo para empezar."
+            description="Sube el modelo 3D (.fbx) de cada pieza arriba, o importa las piezas de ejemplo para empezar."
             action={<button type="button" onClick={importSeeds} className="btn-primary text-sm"><Sparkles size={15} /> Importar piezas de ejemplo</button>}
           />
         ) : (
@@ -125,34 +125,21 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
     if (!file) return;
     setError(null); setBusy(true); setPlan(null);
     setMeshUrl((prev) => { if (prev) removeTogoMesh(prev); return null; });   // drop an orphan from a re-pick
-    const is3d = /\.(fbx|glb|gltf|obj|dae|3ds)$/i.test(file.name);
-    const isDwg = /\.dwg$/i.test(file.name);
-    if (!is3d && !isDwg) { setError('Sube un modelo 3D (.fbx, .glb…) o un .dwg de AutoCAD.'); setBusy(false); return; }
+    if (!/\.(fbx|glb|gltf|obj|dae|3ds)$/i.test(file.name)) {
+      setError('Sube el modelo 3D de la pieza (.fbx, .glb, .obj…).'); setBusy(false); return;
+    }
     try {
-      if (is3d) {
-        // FBX-first: upload the mesh and derive BOTH the plan and the footprint
-        // straight from it — one source for the 2D tile and the 3D view.
-        const url = await uploadTogoMesh(file);
-        const p = await loadMeshPlan(url, { upAxis: 'y' });
-        setMeshUrl(url); setUpAxis('y'); setPlan(p);
-        onNeedCatalog();
-        if (!name) setName(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim());
-      } else {
-        const buf = await file.arrayBuffer();
-        // The 6 MB libredwg WASM loads lazily, only on a real DWG conversion.
-        const mod = await safeDynamicImport(() => import('../../lib/togo/dwgToPlan.js'));
-        const res = await mod.dwgToPlan(buf);
-        if (!res.svg || res.warning === 'no-geometry') {
-          setError('No se encontró geometría de planta en el DWG (capa “Mobilier 2D”).');
-        } else {
-          setPlan(res);
-          onNeedCatalog();
-          if (!name) setName(file.name.replace(/\.dwg$/i, '').replace(/[_-]+/g, ' ').trim());
-        }
-      }
+      // The 3D model is the SINGLE source: upload it, then derive the 2D plan and
+      // the footprint straight from the mesh (meshToPlan) — no separate 2D import.
+      const url = await uploadTogoMesh(file);
+      const p = await loadMeshPlan(url, { upAxis: 'y' });
+      if (!p?.svg) { setError('El modelo no produjo una planta legible. ¿Está en cm y de pie?'); removeTogoMesh(url); setBusy(false); return; }
+      setMeshUrl(url); setUpAxis('y'); setPlan(p);
+      onNeedCatalog();
+      if (!name) setName(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim());
     } catch (e) {
-      console.error('[togo] model conversion failed', e);
-      setError(is3d ? 'No se pudo leer el modelo 3D.' : 'No se pudo leer el DWG. ¿Es un AutoCAD 2013+ válido?');
+      console.error('[togo] mesh → plan failed', e);
+      setError('No se pudo leer el modelo 3D.');
     } finally {
       setBusy(false);
     }
@@ -196,11 +183,11 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
         onClick={() => fileRef.current?.click()}
         className="rounded-xl border-2 border-dashed border-ink-200 hover:border-brand-300 hover:bg-brand-50/40 transition-colors px-4 py-8 text-center cursor-pointer"
       >
-        <input ref={fileRef} type="file" accept=".fbx,.glb,.gltf,.obj,.dae,.3ds,.dwg" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+        <input ref={fileRef} type="file" accept=".fbx,.glb,.gltf,.obj,.dae,.3ds" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
         {busy ? (
-          <span className="inline-flex items-center gap-2 text-sm text-ink-500"><Loader2 size={16} className="animate-spin" /> Procesando…</span>
+          <span className="inline-flex items-center gap-2 text-sm text-ink-500"><Loader2 size={16} className="animate-spin" /> Procesando modelo…</span>
         ) : (
-          <span className="text-sm text-ink-500">Arrastra un <b>modelo 3D (.fbx)</b> aquí o haz clic para elegirlo<br /><span className="text-[11px] text-ink-400">El plano 2D y la huella se generan del modelo. (También acepta .dwg)</span></span>
+          <span className="text-sm text-ink-500">Arrastra el <b>modelo 3D (.fbx)</b> de la pieza aquí o haz clic para elegirlo<br /><span className="text-[11px] text-ink-400">El plano 2D y la huella se generan del propio modelo.</span></span>
         )}
       </div>
 
@@ -216,11 +203,10 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
           <div className="flex-1 space-y-2.5 min-w-0">
             <div className="text-[11px] text-ink-500 tabular-nums flex items-center gap-2 flex-wrap">
               <span>Huella detectada: <b className="text-ink-700">{plan.widthCm}×{plan.depthCm} cm</b></span>
-              {meshUrl && <span className="text-emerald-600">· desde modelo 3D</span>}
+              {meshUrl && <span className="text-emerald-600">· del modelo 3D</span>}
               {meshUrl && (
                 <button type="button" onClick={flipAxis} disabled={busy} className="btn-ghost text-[11px] py-0 h-6 disabled:opacity-50" title="Si el plano se ve girado, cambia el eje vertical">Eje {upAxis === 'z' ? 'Z' : 'Y'}</button>
               )}
-              {plan.warning === 'fallback-layer' && <span className="text-amber-600"> · sin capa “Mobilier 2D”, se usó otra capa 2D</span>}
             </div>
             <div>
               <label className="label">Nombre</label>
