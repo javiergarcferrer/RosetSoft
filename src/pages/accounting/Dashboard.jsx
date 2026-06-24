@@ -222,6 +222,25 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
   return to ? <Link to={to} className="block active:scale-[0.99] transition-transform min-w-0">{body}</Link> : body;
 }
 
+/** One stage of the trade-cycle pipeline (importación → venta → cobro). Each
+ *  links to its detail surface; the value comes straight from already-resolved
+ *  VM data, so this band adds NO logic — only synthesis of figures that
+ *  otherwise sit scattered across the widgets below. */
+function CycleStage({ icon: Icon, tint, label, value, sub, to }) {
+  return (
+    <Link to={to} className="flex-1 min-w-[7.5rem] surface-subtle p-3 hover:shadow-xs active:scale-[0.99] transition-all">
+      <span className={`icon-tile ${tint} mb-2`}><Icon size={14} /></span>
+      <div className="eyebrow-xs text-ink-500 truncate">{label}</div>
+      <div className="stat-value text-base whitespace-nowrap">{value}</div>
+      <div className="text-[11px] text-ink-400 truncate">{sub}</div>
+    </Link>
+  );
+}
+/** The → connecting two pipeline stages. */
+function CycleArrow() {
+  return <span aria-hidden className="self-center shrink-0 text-ink-300 text-lg select-none">→</span>;
+}
+
 /** The human label for one cockpit action (the VM returns structured data; the
  *  View owns the money/date formatting + the copy). */
 function actionText(a) {
@@ -426,6 +445,24 @@ export default function AccountingDashboard() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Trade-cycle pipeline — the business in one line: merchandise in the
+              water → landed cost → sold → still owed. Synthesizes figures that
+              otherwise sit scattered across the widgets below, so the
+              import→venta→cobro flow (our whole purpose) reads at a glance.
+              Pure synthesis of already-resolved VM data. */}
+          <div className="card p-4 min-w-0">
+            <CardHead title="Del contenedor a la venta" />
+            <div className="flex items-stretch gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <CycleStage icon={Ship} tint="tint-sky" label="En tránsito" value={formatDop(importPanel.inTransit)} sub="en el agua" to="/accounting/importaciones" />
+              <CycleArrow />
+              <CycleStage icon={Boxes} tint="tint-brand" label="Importado" value={formatDop(importPanel.landed)} sub={`destino · ${monthLabel}`} to="/accounting/importaciones" />
+              <CycleArrow />
+              <CycleStage icon={Receipt} tint="tint-emerald" label="Ventas" value={formatDop(ventasKpi?.current || 0)} sub={`facturado · ${monthLabel}`} to="/accounting/facturacion" />
+              <CycleArrow />
+              <CycleStage icon={ArrowDownCircle} tint="tint-ink" label="Por cobrar" value={formatDop(d.ar.unpaid)} sub="sin cobrar" to="/accounting/cuentas" />
             </div>
           </div>
 
