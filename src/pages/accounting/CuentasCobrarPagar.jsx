@@ -155,12 +155,16 @@ export default function CuentasCobrarPagar() {
     setPrintingSt(true);
     try {
       const party = selected.type === 'customer' ? customersById.get(selected.id) : suppliersById.get(selected.id);
+      // The same per-party aging buckets the cobrar/pagar table shows — printed
+      // as an "Antigüedad del saldo" strip on the statement.
+      const src = selected.type === 'customer' ? receivables : payables;
+      const aging = src.rows.find((r) => r.partyId === selected.id)?.buckets;
       const mod = await safeDynamicImport(() => import('../../pdf/accounting/index.js'));
       const blob = await mod.generateStatementPdf({
         emisor: { name: settings?.companyName || '', rnc: cleanRnc(settings?.companyRnc) },
         party: { name: statement.name, rnc: party?.rnc },
         title: selected.type === 'customer' ? 'Estado de cuenta — cliente' : 'Estado de cuenta — proveedor',
-        rows: statement.rows, balance: statement.balance, asOf: Date.now(),
+        rows: statement.rows, balance: statement.balance, asOf: Date.now(), aging,
       });
       setPrintDoc({ blob, title: 'Estado de cuenta' });
     } catch (e) {

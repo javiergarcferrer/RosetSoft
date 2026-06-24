@@ -3,6 +3,7 @@ import { C, FS, fs, PAGE, MARGIN } from '../react/theme.js';
 import { formatDop } from '../../lib/format.js';
 
 export interface StatementRow { date: number; label: string; ref?: string; charge: number; payment: number; balance: number; }
+export interface StatementAging { d0_30: number; d31_60: number; d61_90: number; d90: number; }
 export interface StatementDocumentProps {
   emisor: { name: string; rnc?: string };
   party: { name: string; rnc?: string };
@@ -10,6 +11,9 @@ export interface StatementDocumentProps {
   rows: StatementRow[];
   balance: number;
   asOf?: number;
+  /** Open balance split by age — the same buckets as the cobrar/pagar aging
+   *  table; prints an "Antigüedad del saldo" strip so the party sees what's due. */
+  aging?: StatementAging;
 }
 
 const st = StyleSheet.create({
@@ -28,6 +32,11 @@ const st = StyleSheet.create({
   band: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.bandInk, height: 36, paddingHorizontal: 12, marginTop: 10 },
   bandLabel: { fontFamily: 'Sohne', fontSize: fs(8), color: C.bandCream, letterSpacing: 1.5 },
   bandVal: { fontSize: fs(14), fontWeight: 'bold', color: C.white },
+  agingTitle: { fontFamily: 'Sohne', fontSize: fs(7.5), color: C.inkMid, letterSpacing: 1, textTransform: 'uppercase', marginTop: 14, marginBottom: 5 },
+  agingRow: { flexDirection: 'row', gap: 8 },
+  agingCell: { flex: 1, borderWidth: 0.5, borderColor: C.inkLine, paddingVertical: 6, paddingHorizontal: 8 },
+  agingLabel: { fontSize: fs(7.5), color: C.inkMid },
+  agingVal: { fontSize: fs(10), fontWeight: 'bold', marginTop: 2 },
 });
 
 const money = (v: number) => formatDop(v);
@@ -36,7 +45,8 @@ const d = (ms: number) => {
   return `${String(x.getDate()).padStart(2, '0')}/${String(x.getMonth() + 1).padStart(2, '0')}/${x.getFullYear()}`;
 };
 
-export function StatementDocument({ emisor, party, title = 'Estado de cuenta', rows, balance, asOf }: StatementDocumentProps) {
+export function StatementDocument({ emisor, party, title = 'Estado de cuenta', rows, balance, asOf, aging }: StatementDocumentProps) {
+  const agingTotal = aging ? aging.d0_30 + aging.d31_60 + aging.d61_90 + aging.d90 : 0;
   return (
     <Document title={`${title} ${party.name}`}>
       <Page size={[PAGE.width, PAGE.height]} style={st.page}>
@@ -69,6 +79,18 @@ export function StatementDocument({ emisor, party, title = 'Estado de cuenta', r
           <Text style={st.bandLabel}>BALANCE</Text>
           <Text style={st.bandVal}>{money(balance)}</Text>
         </View>
+
+        {aging && agingTotal > 0.01 ? (
+          <>
+            <Text style={st.agingTitle}>Antigüedad del saldo</Text>
+            <View style={st.agingRow}>
+              <View style={st.agingCell}><Text style={st.agingLabel}>0–30 días</Text><Text style={st.agingVal}>{money(aging.d0_30)}</Text></View>
+              <View style={st.agingCell}><Text style={st.agingLabel}>31–60 días</Text><Text style={st.agingVal}>{money(aging.d31_60)}</Text></View>
+              <View style={st.agingCell}><Text style={st.agingLabel}>61–90 días</Text><Text style={st.agingVal}>{money(aging.d61_90)}</Text></View>
+              <View style={st.agingCell}><Text style={st.agingLabel}>+90 días</Text><Text style={st.agingVal}>{money(aging.d90)}</Text></View>
+            </View>
+          </>
+        ) : null}
       </Page>
     </Document>
   );
