@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import { useConfirm, useToast } from '../../components/ConfirmProvider.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import {
@@ -26,6 +27,8 @@ const FREQS = [{ v: 'monthly', l: 'Mensual' }, { v: 'weekly', l: 'Semanal' }, { 
 export default function Recurrentes() {
   const { profileId, settings } = useApp();
   const scope = profileId || 'team';
+  const confirm = useConfirm();
+  const toast = useToast();
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   const templatesQ = useLiveQueryStatus(() => db.recurringTemplates.where('profileId').equals(scope).toArray(), [scope], []);
@@ -53,13 +56,17 @@ export default function Recurrentes() {
       const adv = advance(t);
       await db.recurringTemplates.update(t.id, { lastRunAt: adv.lastRunAt, nextRunAt: adv.nextRunAt, updatedAt: Date.now() });
     } catch (e) {
-      window.alert(userMessageFor(e));
+      toast(userMessageFor(e), { tone: 'error' });
     } finally {
       setBusy(null);
     }
   }
   async function toggle(t) { await db.recurringTemplates.update(t.id, { status: t.status === 'active' ? 'paused' : 'active', updatedAt: Date.now() }); }
-  async function remove(t) { if (window.confirm(`¿Eliminar la recurrente "${t.name}"?`)) await db.recurringTemplates.delete(t.id); }
+  async function remove(t) {
+    const ok = await confirm({ title: 'Eliminar recurrente', message: `La recurrente "${t.name}" se eliminará.`, confirmLabel: 'Eliminar', tone: 'danger' });
+    if (!ok) return;
+    await db.recurringTemplates.delete(t.id);
+  }
 
   const Row = ({ r, due }) => (
     <div className={`card p-3 flex flex-wrap items-center gap-x-4 gap-y-2 ${due ? 'border-amber-300' : ''}`}>

@@ -2,6 +2,7 @@ import { useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy, Paperclip, UploadCloud, RefreshCw, ExternalLink, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -214,6 +215,7 @@ export default function ComprasGastoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profileId } = useApp();
+  const confirm = useConfirm();
   const scope = profileId || 'team';
 
   const purchaseQ = useLiveQueryStatus(() => db.purchases.get(id), [id], null);
@@ -258,7 +260,13 @@ export default function ComprasGastoDetail() {
     const doc = purchaseQ.data || expenseQ.data;
     if (!doc || deleting) return;
     const what = detail.natureLabel.toLowerCase();
-    if (!confirm(`¿Eliminar ${what}${detail.number != null ? ` #${detail.number}` : ''}? Se revierte el asiento${detail.reversesInventory ? ', los movimientos de inventario y las existencias' : ''}. Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: 'Eliminar compra',
+      message: `¿Eliminar ${what}${detail.number != null ? ` #${detail.number}` : ''}? Se revierte el asiento${detail.reversesInventory ? ', los movimientos de inventario y las existencias' : ''}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setErr('');
     setDeleting(true);
     try {

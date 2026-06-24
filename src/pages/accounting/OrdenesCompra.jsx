@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { resolvePurchaseOrders, poTotals, PO_STATUS_LABEL } from '../../core/accounting/index.js';
@@ -24,6 +25,7 @@ const NEXT = { open: [['received', 'Marcar recibida'], ['cancelled', 'Cancelar']
 export default function OrdenesCompra() {
   const { profileId } = useApp();
   const scope = profileId || 'team';
+  const confirm = useConfirm();
 
   const ordersQ = useLiveQueryStatus(() => db.purchaseOrders.where('profileId').equals(scope).toArray(), [scope], []);
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
@@ -36,7 +38,11 @@ export default function OrdenesCompra() {
   const list = useMemo(() => resolvePurchaseOrders({ orders: ordersQ.data, suppliersById, statusFilter }), [ordersQ.data, suppliersById, statusFilter]);
 
   async function setStatus(po, status) { await db.purchaseOrders.update(po.id, { status, updatedAt: Date.now() }); }
-  async function remove(po) { if (window.confirm(`¿Eliminar la orden #${po.number ?? ''}?`)) await db.purchaseOrders.delete(po.id); }
+  async function remove(po) {
+    const ok = await confirm({ title: 'Eliminar orden', message: `La orden #${po.number ?? ''} se eliminará.`, confirmLabel: 'Eliminar', tone: 'danger' });
+    if (!ok) return;
+    await db.purchaseOrders.delete(po.id);
+  }
 
   return (
     <AccountingGate title="Órdenes de compra">

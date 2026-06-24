@@ -9,6 +9,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import { useToast } from '../../components/ConfirmProvider.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -106,6 +107,7 @@ const STATEMENT_DEFAULT = { concept: true, ref: true, charge: true, payment: tru
 export default function CuentasCobrarPagar() {
   const { profileId, settings } = useApp();
   const scope = profileId || 'team';
+  const toast = useToast();
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
@@ -165,8 +167,8 @@ export default function CuentasCobrarPagar() {
     let token = customersById.get(selected.id)?.statementToken;
     if (!token) { token = newShareToken(); await db.customers.update(selected.id, { statementToken: token }); }
     const url = statementLinkUrl(token);
-    try { await navigator.clipboard.writeText(url); window.alert(`Enlace del estado de cuenta copiado:\n${url}`); }
-    catch { window.prompt('Enlace del estado de cuenta:', url); }
+    try { await navigator.clipboard.writeText(url); toast('Enlace del estado de cuenta copiado'); }
+    catch { toast('No se pudo copiar el enlace', { tone: 'error' }); }
   }
 
   async function printStatement() {
