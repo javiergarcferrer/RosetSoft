@@ -17,6 +17,9 @@ export interface InvoiceDocumentProps {
   gravado: number;
   itbis: number;
   total: number;
+  /** Total spelled out in words ("ONCE MIL OCHOCIENTOS PESOS CON 00/100") —
+   *  the "Son:" line, a standard element of a compliant Dominican factura. */
+  totalEnLetras?: string;
   itbisRate?: number;
   /** Payment activity (deposit + cobros), dated; renders a "Pagos registrados" block. */
   payments?: InvoicePayment[];
@@ -71,6 +74,7 @@ const st = StyleSheet.create({
   payTotLabel: { fontSize: fs(9.5), color: C.inkMid },
   payTotVal: { fontSize: fs(9.5), fontWeight: 'bold' },
   balVal: { fontSize: fs(9.5), fontWeight: 'bold', color: C.brand700 },
+  enLetras: { fontSize: fs(8.5), color: C.inkMid, marginTop: 8, fontStyle: 'italic' },
   band: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.bandInk, height: 38, paddingHorizontal: 12, marginTop: 8 },
   bandLabel: { fontFamily: 'Sohne', fontSize: fs(8), color: C.bandCream, letterSpacing: 1.5 },
   bandVal: { fontSize: fs(15), fontWeight: 'bold', color: C.white },
@@ -86,7 +90,7 @@ const st = StyleSheet.create({
 const money = (v: number) => formatDop(v);
 
 export function InvoiceDocument(props: InvoiceDocumentProps) {
-  const { emisor, comprador, ecfType, eNcf, items, gravado, itbis, total, itbisRate = 18, securityCode, fechaFirma, qrDataUrl } = props;
+  const { emisor, comprador, ecfType, eNcf, items, gravado, itbis, total, totalEnLetras, itbisRate = 18, securityCode, fechaFirma, qrDataUrl } = props;
   const payments = props.payments || [];
   const amountPaid = props.amountPaid ?? 0;
   const balanceDue = props.balanceDue ?? 0;
@@ -141,6 +145,8 @@ export function InvoiceDocument(props: InvoiceDocumentProps) {
             <Text style={st.bandVal}>{money(total)}</Text>
           </View>
         </View>
+
+        {totalEnLetras ? <Text style={st.enLetras}>Son: {totalEnLetras}</Text> : null}
 
         {payments.length ? (
           <View style={st.payWrap}>

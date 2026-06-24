@@ -54,6 +54,7 @@ test('payment activity: deposit + allocated cobros are dated, summed, and net th
   assert.equal(doc.amountPaid, 8000);
   assert.equal(doc.balanceDue, 3800);
   assert.equal(doc.items[0].name, 'Venta · cotización #42');
+  assert.equal(doc.totalEnLetras, 'ONCE MIL OCHOCIENTOS PESOS CON 00/100'); // "Son:" line on the factura
 });
 
 test('balance never goes negative when overpaid', () => {

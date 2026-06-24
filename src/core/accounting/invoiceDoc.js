@@ -13,6 +13,7 @@
 import { round2 } from '../../lib/accounting/ledger.js';
 import { parseENcf, ecfQrUrl, ecfTypeLabel } from '../../lib/accounting/ecf.js';
 import { formatEcfDate } from '../../lib/accounting/ecfPayload.js';
+import { montoEnLetras } from '../../lib/numeroEnLetras.js';
 
 const PAYMENT_METHOD_LABELS = { cash: 'Efectivo', bank: 'Transferencia', card: 'Tarjeta', credit: 'Crédito' };
 const digits = (s) => String(s || '').replace(/\D/g, '');
@@ -81,6 +82,7 @@ export function resolveInvoiceDoc({ posting, customer, quote, payments = [], set
       qty: 1, unitPrice: base, amount: base,
     }],
     gravado: base, itbis, total, itbisRate: config?.itbisRate ?? 18,
+    totalEnLetras: montoEnLetras(total),
     securityCode: p.securityCode || '',
     fechaFirma: p.fechaFirma || '',
     payments: activity, amountPaid, balanceDue,
