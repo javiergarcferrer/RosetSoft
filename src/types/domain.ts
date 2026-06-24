@@ -982,6 +982,16 @@ export interface PurchaseOrder {
   updatedAt?: number;
 }
 
+/** A memorized report view — a named shortcut to a report path + query. */
+export interface SavedReport {
+  id: string;
+  profileId: string;
+  name: string;
+  path: string;
+  search?: string;
+  createdAt?: number;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**

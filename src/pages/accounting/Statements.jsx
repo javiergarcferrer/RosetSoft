@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Scale, TrendingUp, Download, Table2, BarChart3, Banknote } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -9,6 +9,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
+import SaveViewButton from '../../components/accounting/SaveViewButton.jsx';
 import { YoYColumns, Waterfall, Donut, Legend, CountUp } from '../../components/charts/MiniCharts.jsx';
 import { formatDop } from '../../lib/format.js';
 import { downloadCsv } from '../../lib/csv.js';
@@ -147,8 +148,10 @@ export default function Statements() {
   const { profileId } = useApp();
   const scope = profileId || 'team';
 
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState(['income', 'cashflow'].includes(params.get('tab')) ? params.get('tab') : 'balance'); // 'balance' | 'income' | 'cashflow'
+  // Keep the active statement in the URL so a saved view restores it.
+  useEffect(() => { setParams((prev) => { const p = new URLSearchParams(prev); p.set('tab', tab); return p; }, { replace: true }); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [periodSel, setPeriodSel] = useState({ kind: 'month', ref: Date.now() });
   const [compare, setCompare] = useState('none'); // 'none' | 'prev' | 'yoy'
   const [view, setView] = useState('table'); // 'table' | 'chart'
@@ -223,7 +226,7 @@ export default function Statements() {
   return (
     <AccountingGate title="Estados financieros">
       <PageHeader title="Estados financieros" subtitle="Proyecciones del libro mayor — valores en RD$"
-        actions={<PeriodNav kind={periodSel.kind} refMs={periodSel.ref} onChange={setPeriodSel} />} />
+        actions={<div className="flex items-center gap-2"><SaveViewButton defaultName={`Estados — ${period.label}`} /><PeriodNav kind={periodSel.kind} refMs={periodSel.ref} onChange={setPeriodSel} /></div>} />
 
       <div className="flex flex-wrap items-start gap-2">
         <TabPills

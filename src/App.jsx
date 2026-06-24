@@ -50,6 +50,7 @@ const AccountingLedger = lazyPage(() => import('./pages/accounting/Ledger.jsx'))
 const AccountingStatements = lazyPage(() => import('./pages/accounting/Statements.jsx'));
 const AccountingPresupuesto = lazyPage(() => import('./pages/accounting/Presupuesto.jsx'));
 const AccountingFlujoProyectado = lazyPage(() => import('./pages/accounting/FlujoProyectado.jsx'));
+const AccountingSavedReports = lazyPage(() => import('./pages/accounting/SavedReports.jsx'));
 const AccountingSettings = lazyPage(() => import('./pages/accounting/AccountingSettings.jsx'));
 const AccountingComprasGastos = lazyPage(() => import('./pages/accounting/ComprasGastos.jsx'));
 const AccountingComprasGastoDetail = lazyPage(() => import('./pages/accounting/ComprasGastoDetail.jsx'));
@@ -317,6 +318,7 @@ function ProtectedApp() {
             <Route path="accounting/statements" element={<AccountingStatements />} />
             <Route path="accounting/presupuesto" element={<AccountingPresupuesto />} />
             <Route path="accounting/flujo-proyectado" element={<AccountingFlujoProyectado />} />
+            <Route path="accounting/vistas" element={<AccountingSavedReports />} />
             <Route path="accounting/settings" element={<AccountingSettings />} />
             {/* Compras y gastos — one unified pane. The two legacy paths render
                 the same page so old bookmarks + deep-links (handoffs) keep

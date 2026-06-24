@@ -90,6 +90,7 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/statements', label: 'Estados financieros' },
     { to: '/accounting/presupuesto', label: 'Presupuesto' },
     { to: '/accounting/flujo-proyectado', label: 'Flujo proyectado' },
+    { to: '/accounting/vistas', label: 'Vistas guardadas' },
   ] },
 
   // ── Configuración ── label-less footer band.
