@@ -16,6 +16,8 @@ export interface InvoiceDocumentProps {
    *  header so the paper states the same TipoPago transmitted in the e-CF. */
   condicionPago?: string;
   fechaVencimiento?: string;
+  /** For a nota de crédito (e-CF 34): the e-NCF this document modifies. */
+  modifiesNcf?: string;
   fechaEmision: number;
   items: InvoiceItem[];
   gravado: number;
@@ -115,6 +117,7 @@ export function InvoiceDocument(props: InvoiceDocumentProps) {
           <View style={st.docBox}>
             <Text style={st.docType}>{docLabel}</Text>
             {eNcf ? <Text style={st.encf}>{eNcf}</Text> : null}
+            {props.modifiesNcf ? <Text style={st.date}>Modifica: {props.modifiesNcf}</Text> : null}
             <Text style={st.date}>Fecha: {dateStr}</Text>
             {props.condicionPago ? (
               <Text style={st.date}>

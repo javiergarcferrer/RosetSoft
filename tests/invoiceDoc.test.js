@@ -35,6 +35,19 @@ test('an e-NCF with a security code carries the timbre QR + e-CF label', () => {
   assert.equal(doc.fechaFirma, '01-06-2026 10:00:00'); // printed as text in the timbre block
 });
 
+test('a nota de crédito (e-CF 34) shows the modified e-NCF and no payment condition', () => {
+  const doc = resolveInvoiceDoc({
+    posting: { id: 'nc1', ncf: 'E340000000007', ecfType: '34', base: 4000, itbis: 720, total: 4720, depositApplied: 0, modifiesNcf: 'E310000000001', postedAt: 1 },
+    customer: { name: 'CLIENTE SRL' }, settings, config,
+  });
+  assert.match(doc.docLabel, /e-CF 34/);
+  assert.equal(doc.modifiesNcf, 'E310000000001');
+  assert.equal(doc.condicionPago, '');   // a nota has no payment condition of its own
+  assert.equal(doc.fechaVencimiento, '');
+  assert.equal(doc.items[0].name, 'Nota de crédito · ref E310000000001');
+  assert.equal(doc.totalEnLetras, 'CUATRO MIL SETECIENTOS VEINTE PESOS CON 00/100');
+});
+
 test('payment activity: deposit + allocated cobros are dated, summed, and net the balance', () => {
   const doc = resolveInvoiceDoc({
     posting: { id: 'sp3', quoteId: 'q3', ncf: 'E310000000001', ecfType: '31', rnc: '101010101', base: 10000, itbis: 1800, total: 11800, depositApplied: 5000, postedAt: 2000 },

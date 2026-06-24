@@ -41,7 +41,7 @@ export { dgii606Txt, dgii607Txt, dgiiPeriod, dgiiTxtFilename, collectionSplit } 
 export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from './lrSales.js';
-export { buildSaleEntry, buildCreditNoteEntry, depositApplied } from '../../lib/accounting/sale.js';
+export { buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
 export { resolveInvoiceDoc } from './invoiceDoc.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)
@@ -70,7 +70,7 @@ export {
 
 // ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload
 export {
-  ECF_TYPES, ecfTypeLabel, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
+  ECF_TYPES, ecfTypeLabel, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, isCreditNote,
   sequenceState, pickSequence, padSeq, ecfQrUrl,
 } from '../../lib/accounting/ecf.js';
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';

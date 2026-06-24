@@ -80,6 +80,72 @@ export function buildSaleEntry({
   });
 }
 
+export interface CreditNoteDraftInput {
+  /** The sale being credited (DOP figures booked at posting). */
+  sale: { base: number; itbis: number; depositApplied?: number };
+  /** 'full' = anulación total (código 1); 'partial' = corrección de monto (3). */
+  kind: 'full' | 'partial';
+  /** Credited base for a partial (DOP, net of ITBIS). Ignored for 'full'. */
+  creditedBase?: number;
+  itbisRate?: number;
+  /** Base already credited by prior notas against this sale (DOP). */
+  priorCreditedBase?: number;
+}
+
+export interface CreditNoteDraft {
+  base: number;
+  itbis: number;
+  total: number;
+  depositToRestore: number;
+  /** 1 = anulación total, 3 = corrección de montos (DGII CodigoModificacion). */
+  codigoModificacion: number;
+}
+
+/**
+ * Resolve a nota de crédito's credited amounts from the original sale — the
+ * pure core the issuance UI feeds into `buildCreditNoteEntry`.
+ *
+ * FULL (anulación total) credits the ENTIRE sale and restores the deposit that
+ * was applied, so the asiento is the exact inverse of `buildSaleEntry`; it is
+ * refused once any nota already exists against the sale (use partials for the
+ * remainder). PARTIAL (corrección de monto) credits `creditedBase` + its ITBIS
+ * against the receivable, restoring no deposit, and is clamped to the sale's
+ * un-credited balance. Throws on a non-positive or over-crediting amount — fail
+ * before the E34 e-NCF is burned. Pure.
+ */
+export function resolveCreditNoteDraft(input: CreditNoteDraftInput): CreditNoteDraft {
+  const rate = input.itbisRate ?? 18;
+  const saleBase = round2(input.sale?.base || 0);
+  const saleItbis = round2(input.sale?.itbis || 0);
+  const prior = round2(input.priorCreditedBase || 0);
+  const remainingBase = round2(saleBase - prior);
+
+  if (input.kind === 'full') {
+    if (prior > 0) {
+      throw new Error('La venta ya tiene notas de crédito; usa una corrección parcial por el saldo restante.');
+    }
+    if (saleBase <= 0) throw new Error('La venta no tiene monto a acreditar.');
+    return {
+      base: saleBase,
+      itbis: saleItbis,
+      total: round2(saleBase + saleItbis),
+      depositToRestore: round2(input.sale?.depositApplied || 0),
+      codigoModificacion: 1,
+    };
+  }
+
+  const base = round2(input.creditedBase || 0);
+  if (base <= 0) throw new Error('El monto a acreditar debe ser mayor que cero.');
+  if (base - remainingBase > 0.005) throw new Error('El monto a acreditar excede el saldo de la venta.');
+  return {
+    base,
+    itbis: round2(base * rate / 100),
+    total: round2(base + base * rate / 100),
+    depositToRestore: 0,
+    codigoModificacion: 3,
+  };
+}
+
 export interface CreditNotePostInput {
   /** The credit-note sales_posting id (refId of the asiento). */
   id: string;

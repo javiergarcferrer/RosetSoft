@@ -151,7 +151,7 @@ export function dgii607Txt({ rows, payments, rncEmisor, period } = {}) {
       digits(r.rnc),                          // 1  RNC/Cédula/Pasaporte
       tipoId(r.rnc, { allowPassport: true }), // 2  Tipo identificación
       r.ncf || '',                            // 3  NCF
-      '',                                     // 4  NCF modificado
+      r.modifiesNcf || '',                    // 4  NCF modificado (nota de crédito E34)
       '1',                                    // 5  Tipo de ingreso (operaciones)
       ymd8(r.date),                           // 6  Fecha comprobante
       ymd8(s.fechaRet),                       // 7  Fecha retención

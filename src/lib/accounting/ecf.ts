@@ -72,6 +72,12 @@ export function saleDueDate(postedAt: number): number {
   return (Number(postedAt) || 0) + 30 * 24 * 60 * 60 * 1000;
 }
 
+/** True for a nota de crédito e-NCF (E34…). The 607 + IT-1 NET these out of
+ *  sales/débito fiscal, so the projections key off this. */
+export function isCreditNote(ncf: string | null | undefined): boolean {
+  return /^E34/i.test(String(ncf || '').trim());
+}
+
 /** A well-formed DR fiscal id: RNC (9 digits) or cédula (11 digits). */
 export function isValidFiscalId(id: string | null | undefined): boolean {
   const digits = String(id || '').replace(/\D/g, '');

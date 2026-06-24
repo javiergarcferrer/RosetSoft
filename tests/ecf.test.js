@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
+  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, isCreditNote, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
 } from '../src/lib/accounting/ecf.js';
 import { buildEcfPayload, formatEcfDate } from '../src/lib/accounting/ecfPayload.js';
 
@@ -35,6 +35,14 @@ test('saleTipoPago: contado when the deposit covers the total, else crédito', (
 
 test('saleDueDate: net-30 from emission', () => {
   assert.equal(saleDueDate(Date.UTC(2026, 5, 1)), Date.UTC(2026, 5, 1) + 30 * 86400000);
+});
+
+test('isCreditNote: true only for an E34 e-NCF', () => {
+  assert.equal(isCreditNote('E340000000001'), true);
+  assert.equal(isCreditNote('E310000000001'), false);
+  assert.equal(isCreditNote('E320000000001'), false);
+  assert.equal(isCreditNote(''), false);
+  assert.equal(isCreditNote(null), false);
 });
 
 test('saleEcfType: 31 with a fiscal id, 32 without', () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes } from 'lucide-react';
+import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -18,9 +18,10 @@ import { displayRatesFor } from '../../lib/exchangeRate.js';
 import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
+import Modal from '../../components/Modal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
-  resolveSales607, resolveItbisLiquidation, buildSaleEntry,
+  resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
 } from '../../core/accounting/index.js';
@@ -135,6 +136,8 @@ export default function Facturacion() {
   // In-app print preview state — the modal rasterizes the PDF and prints via
   // window.print() on our own page, so printing can never become a download.
   const [printDoc, setPrintDoc] = useState(null);   // { blob, title } | null
+  const [creditNote, setCreditNote] = useState(null); // { posting, kind:'full'|'partial', amount } | null
+  const [issuingNc, setIssuingNc] = useState(false);
   async function printInvoice(rowId) {
     const p = postingById.get(rowId);
     if (!p) return;
@@ -161,6 +164,68 @@ export default function Facturacion() {
       setErr(userMessageFor(e));
     } finally {
       setPrinting(null);
+    }
+  }
+
+  // Issue a nota de crédito (e-CF 34) against a posted+transmitted sale: validate
+  // the credited amount, assign an E34 e-NCF, post the reversing asiento, and
+  // persist a posting the 607/IT-1 net out. It then transmits like any e-CF from
+  // the row's "Transmitir".
+  async function issueCreditNote() {
+    const sale = creditNote?.posting;
+    if (!sale) return;
+    setErr('');
+    if (!/^E3[12]/.test(sale.ncf || '')) {
+      setErr('Sólo una venta con e-CF (31/32) admite nota de crédito.');
+      return;
+    }
+    setIssuingNc(true);
+    try {
+      // Base already credited by prior notas against THIS sale → remaining balance.
+      const priorCreditedBase = postingsQ.data
+        .filter((x) => x.modifiesPostingId === sale.id && /^E34/.test(x.ncf || ''))
+        .reduce((s, x) => s + (Number(x.base) || 0), 0);
+      // Validate the amounts BEFORE assigning the e-NCF (a bad draft burns no number).
+      const draft = resolveCreditNoteDraft({
+        sale: { base: sale.base, itbis: sale.itbis, depositApplied: sale.depositApplied },
+        kind: creditNote.kind,
+        creditedBase: Number(creditNote.amount) || 0,
+        itbisRate: config.itbisRate,
+        priorCreditedBase,
+      });
+      const assigned = await assignNextENcf(scope, '34');
+      if (!assigned) {
+        setErr('No hay secuencia e-CF activa para el tipo 34 (nota de crédito). Autoriza una en Secuencias e-CF.');
+        return;
+      }
+      const id = newId();
+      const postedAt = Date.now();
+      const ncf = assigned.eNcf;
+      const built = buildCreditNoteEntry({
+        newId, config, postedAt,
+        note: {
+          id, quoteId: sale.quoteId, customerId: sale.customerId,
+          base: draft.base, itbis: draft.itbis, depositToRestore: draft.depositToRestore,
+          ncf, memo: `Nota de crédito ${ncf} · modifica ${sale.ncf}`,
+        },
+      });
+      await postSaleTx({
+        entry: built.entry,
+        lines: built.lines,
+        posting: {
+          id, profileId: scope, quoteId: sale.quoteId, customerId: sale.customerId,
+          postedAt, ncf, rnc: sale.rnc, ecfType: '34',
+          ecfStatus: 'pending', ecfExpiresAt: assigned.expiresAt ?? null,
+          base: draft.base, itbis: draft.itbis, total: draft.total, depositApplied: 0,
+          modifiesNcf: sale.ncf, modifiesPostingId: sale.id, codigoModificacion: draft.codigoModificacion,
+        },
+      });
+      invalidate();
+      setCreditNote(null);
+    } catch (e) {
+      setErr(userMessageFor(e));
+    } finally {
+      setIssuingNc(false);
     }
   }
 
@@ -196,9 +261,14 @@ export default function Facturacion() {
     setTransmitting(p.id);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
+      // A nota de crédito (E34) modifies a prior sale: it carries the
+      // InformacionReferencia pointing at the modified e-NCF and transmits as
+      // contado (no payment terms of its own).
+      const isNota = /^E34/.test(p.ncf || '');
+      const original = isNota && p.modifiesPostingId ? postingById.get(p.modifiesPostingId) : null;
       // Contado if the deposit covered the sale; crédito if a balance remains —
       // a crédito carries the DGII-required fecha límite de pago (net-30).
-      const tipoPago = saleTipoPago(p.depositApplied, p.total);
+      const tipoPago = isNota ? 1 : saleTipoPago(p.depositApplied, p.total);
       const payload = buildEcfPayload({
         ecfType: p.ecfType || saleEcfType(!!p.rnc),
         eNcf: p.ncf,
@@ -208,11 +278,16 @@ export default function Facturacion() {
           address: settings?.companyAddress || '',
         },
         comprador: p.rnc ? { rnc: p.rnc, name: customer?.name } : null,
-        items: [{ name: `Venta ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
+        items: [{ name: `${isNota ? 'Nota de crédito' : 'Venta'} ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
         gravado: p.base, itbis: p.itbis, total: p.total,
         itbisRate: config.itbisRate, fechaEmision: p.postedAt,
         tipoPago,
         fechaLimitePago: tipoPago === 2 ? saleDueDate(p.postedAt) : null,
+        referencia: isNota ? {
+          ncfModificado: p.modifiesNcf,
+          fechaNcfModificado: original?.postedAt ?? null,
+          codigoModificacion: p.codigoModificacion ?? 1,
+        } : null,
       });
       const data = await sendEcf({ payload, eNcf: p.ncf, profileId: scope });
       await db.salesPostings.update(p.id, {
@@ -502,6 +577,17 @@ export default function Facturacion() {
           title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">
           {printing === r.id ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Imprimir
         </button>
+        {(status === 'sent' || status === 'accepted') && !r.creditNote ? (
+          <button type="button" onClick={() => {
+            // Once a sale has any nota, a full anulación is refused — open straight
+            // into a partial correction for the remaining balance.
+            const prior = postingsQ.data.some((x) => x.modifiesPostingId === p.id && /^E34/.test(x.ncf || ''));
+            setCreditNote({ posting: p, kind: prior ? 'partial' : 'full', amount: '' });
+          }}
+            title="Emitir nota de crédito" className="btn-ghost text-xs whitespace-nowrap">
+            <FileMinus size={12} /> N. crédito
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -703,6 +789,50 @@ export default function Facturacion() {
       {printDoc && (
         <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
+      {creditNote && (() => {
+        const sale = creditNote.posting;
+        const prior = postingsQ.data
+          .filter((x) => x.modifiesPostingId === sale.id && /^E34/.test(x.ncf || ''))
+          .reduce((s, x) => s + (Number(x.base) || 0), 0);
+        const remainingBase = Math.max(0, (sale.base || 0) - prior);
+        return (
+          <Modal open onClose={() => { if (!issuingNc) { setErr(''); setCreditNote(null); } }} title="Nota de crédito" size="sm" footer={
+            <>
+              <button onClick={() => { setErr(''); setCreditNote(null); }} disabled={issuingNc} className="btn-ghost">Cancelar</button>
+              <button onClick={issueCreditNote} disabled={issuingNc} className="btn-primary disabled:opacity-40 inline-flex items-center gap-1.5">
+                {issuingNc ? <Loader2 size={14} className="animate-spin" /> : <FileMinus size={14} />} Emitir nota
+              </button>
+            </>
+          }>
+            <p className="text-sm text-ink-600">
+              Acredita la venta <span className="font-medium tabular-nums">{sale.ncf}</span> por <span className="tabular-nums">{formatDop(sale.total)}</span>.
+              {prior > 0 ? <> Ya acreditada <span className="tabular-nums">{formatDop(prior)}</span> de base; saldo <span className="tabular-nums">{formatDop(remainingBase)}</span>.</> : null}
+            </p>
+            <div className="mt-4 space-y-2.5">
+              <label className={`flex items-start gap-2.5 ${prior > 0 ? 'opacity-40' : 'cursor-pointer'}`}>
+                <input type="radio" name="nc-kind" className="mt-1" disabled={prior > 0} checked={creditNote.kind === 'full'}
+                  onChange={() => setCreditNote({ ...creditNote, kind: 'full' })} />
+                <span className="text-sm text-ink-700"><span className="font-medium">Anulación total</span> — acredita toda la venta y restaura el depósito aplicado.</span>
+              </label>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="radio" name="nc-kind" className="mt-1" checked={creditNote.kind === 'partial'}
+                  onChange={() => setCreditNote({ ...creditNote, kind: 'partial' })} />
+                <span className="text-sm text-ink-700"><span className="font-medium">Corrección de monto</span> — acredita un monto parcial (base, sin ITBIS).</span>
+              </label>
+            </div>
+            {creditNote.kind === 'partial' ? (
+              <div className="mt-3">
+                <div className="label">Monto a acreditar (base, sin ITBIS)</div>
+                <input type="number" min="0" step="0.01" className="input" value={creditNote.amount}
+                  onChange={(e) => setCreditNote({ ...creditNote, amount: e.target.value })}
+                  placeholder={remainingBase.toFixed(2)} autoFocus />
+                <p className="mt-1.5 text-xs text-ink-400">El ITBIS ({config.itbisRate}%) se calcula automáticamente.</p>
+              </div>
+            ) : null}
+            {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
+          </Modal>
+        );
+      })()}
     </AccountingGate>
   );
 }

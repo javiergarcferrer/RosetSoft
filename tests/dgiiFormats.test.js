@@ -90,6 +90,22 @@ test('dgii607Txt: consumo sin RNC keeps id fields empty', () => {
   assert.equal(f[19], '1180.00'); // all open → venta a crédito
 });
 
+test('dgii607Txt: nota de crédito (E34) carries the modified NCF in field 4, positive amounts', () => {
+  const txt = dgii607Txt({
+    rncEmisor: '131223344', period: '202605',
+    rows: [{
+      id: 'nc1', rnc: '101010101', ncf: 'E340000000001', modifiesNcf: 'E310000000001',
+      date: D, base: 4000, itbis: 720, total: 4720, depositApplied: 0,
+    }],
+  });
+  const f = txt.split('\r\n')[1].split('|');
+  assert.equal(f.length, 23);
+  assert.equal(f[2], 'E340000000001'); // field 3 NCF (the nota)
+  assert.equal(f[3], 'E310000000001'); // field 4 NCF modificado
+  assert.equal(f[7], '4000.00');       // monto facturado (positive on the row)
+  assert.equal(f[8], '720.00');        // ITBIS facturado
+});
+
 test('collectionSplit groups allocated cobros by method and prorates retentions', () => {
   const split = collectionSplit([
     {

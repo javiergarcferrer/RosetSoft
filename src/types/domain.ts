@@ -703,6 +703,13 @@ export interface SalePosting {
   securityCode?: string;
   /** Signature date (dd-mm-yyyy HH:mm:ss) — goes into the consulta-timbre QR. */
   fechaFirma?: string;
+  /* Nota de crédito (ecfType '34'): this posting MODIFIES a prior sale. Amounts
+   * are stored POSITIVE (the credited amount); the 607 + IT-1 net it out by its
+   * E34 e-NCF prefix. These carry the DGII InformacionReferencia. */
+  modifiesNcf?: string | null;
+  modifiesPostingId?: string | null;
+  /** RazónModificación: 1 = anulación total, 3 = corrección de montos. */
+  codigoModificacion?: number | null;
   journalEntryId?: string | null;
   createdAt?: number;
   updatedAt?: number;

@@ -2,6 +2,7 @@
 // liquidation (IT-1 = débito fiscal de ventas − crédito fiscal de compras).
 // Pure: no React, no db.
 import { round2 } from '../../lib/accounting/ledger.js';
+import { isCreditNote } from '../../lib/accounting/ecf.js';
 
 function inWindow(t, start, end) {
   if (start != null && t < start) return false;
@@ -33,6 +34,10 @@ export function resolveSales607({ salesPostings, customersById, start, end, quer
         name: c?.name || '',
         ncf: p.ncf || '',
         ncfType: p.ncfType || '',
+        // A nota de crédito (E34) reports its own row with the NCF it modifies,
+        // and NETS against sales — the totals below subtract it.
+        creditNote: isCreditNote(p.ncf),
+        modifiesNcf: p.modifiesNcf || '',
         date: p.postedAt,
         base: round2(p.base || 0),
         itbis: round2(p.itbis || 0),
@@ -42,11 +47,10 @@ export function resolveSales607({ salesPostings, customersById, start, end, quer
     })
     .sort((a, b) => (a.date || 0) - (b.date || 0));
 
-  const totals = rows.reduce((acc, r) => ({
-    base: acc.base + r.base,
-    itbis: acc.itbis + r.itbis,
-    total: acc.total + r.total,
-  }), { base: 0, itbis: 0, total: 0 });
+  const totals = rows.reduce((acc, r) => {
+    const s = r.creditNote ? -1 : 1; // notas de crédito reduce net sales
+    return { base: acc.base + s * r.base, itbis: acc.itbis + s * r.itbis, total: acc.total + s * r.total };
+  }, { base: 0, itbis: 0, total: 0 });
   for (const k of Object.keys(totals)) totals[k] = round2(totals[k]);
 
   return { rows, totals, count: rows.length };
@@ -65,7 +69,8 @@ export function resolveSales607({ salesPostings, customersById, start, end, quer
 export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, expedientes, start, end } = {}) {
   const debitoFiscal = round2((salesPostings || [])
     .filter((p) => inWindow(p.postedAt, start, end))
-    .reduce((s, p) => s + (Number(p.itbis) || 0), 0));
+    // A nota de crédito (E34) reverses débito fiscal — subtract its ITBIS.
+    .reduce((s, p) => s + (isCreditNote(p.ncf) ? -1 : 1) * (Number(p.itbis) || 0), 0));
   const expCredit = (expenses || [])
     .filter((e) => inWindow(e.expenseAt, start, end) && e.itbisCreditable !== false)
     .reduce((s, e) => s + (Number(e.itbis) || 0), 0);

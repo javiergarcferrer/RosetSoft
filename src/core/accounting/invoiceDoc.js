@@ -11,7 +11,7 @@
  * Pure: no React, no Supabase, no pdf-lib.
  */
 import { round2 } from '../../lib/accounting/ledger.js';
-import { parseENcf, ecfQrUrl, ecfTypeLabel, saleTipoPago, saleDueDate } from '../../lib/accounting/ecf.js';
+import { parseENcf, ecfQrUrl, ecfTypeLabel, saleTipoPago, saleDueDate, isCreditNote } from '../../lib/accounting/ecf.js';
 import { formatEcfDate } from '../../lib/accounting/ecfPayload.js';
 import { montoEnLetras } from '../../lib/numeroEnLetras.js';
 
@@ -61,11 +61,14 @@ export function resolveInvoiceDoc({ posting, customer, quote, payments = [], set
   const amountPaid = round2(activity.reduce((s, a) => s + a.amount, 0));
   const balanceDue = round2(Math.max(0, total - amountPaid));
 
+  // A nota de crédito (E34) modifies a prior sale — it has no payment condition
+  // of its own; it shows the e-NCF it modifies instead.
+  const isNota = isCreditNote(ncf);
   // Payment condition mirrors the e-CF TipoPago (same rule as Facturacion) so
   // the printed factura agrees with the transmitted fiscal document. A crédito
   // shows its fecha límite de pago (net-30 from emission).
-  const isCredit = saleTipoPago(depositApplied, total) === 2;
-  const condicionPago = isCredit ? 'Crédito' : 'Contado';
+  const isCredit = !isNota && saleTipoPago(depositApplied, total) === 2;
+  const condicionPago = isNota ? '' : (isCredit ? 'Crédito' : 'Contado');
   const fechaVencimiento = isCredit ? formatEcfDate(saleDueDate(p.postedAt)) : '';
 
   const docLabel = isEcf
@@ -85,12 +88,15 @@ export function resolveInvoiceDoc({ posting, customer, quote, payments = [], set
     docLabel,
     fechaEmision: p.postedAt,
     items: [{
-      name: `Venta${quote?.number ? ` · cotización #${quote.number}` : ''}`,
+      name: isNota
+        ? `Nota de crédito${p.modifiesNcf ? ` · ref ${p.modifiesNcf}` : ''}`
+        : `Venta${quote?.number ? ` · cotización #${quote.number}` : ''}`,
       qty: 1, unitPrice: base, amount: base,
     }],
     gravado: base, itbis, total, itbisRate: config?.itbisRate ?? 18,
     totalEnLetras: montoEnLetras(total),
     condicionPago, fechaVencimiento,
+    modifiesNcf: p.modifiesNcf || '',
     securityCode: p.securityCode || '',
     fechaFirma: p.fechaFirma || '',
     payments: activity, amountPaid, balanceDue,

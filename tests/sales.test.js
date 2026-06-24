@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { resolveAccountingConfig } from '../src/lib/accounting/config.js';
-import { buildSaleEntry, buildCreditNoteEntry, depositApplied } from '../src/lib/accounting/sale.js';
+import { buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../src/lib/accounting/sale.js';
 import { debitTotal, creditTotal } from '../src/lib/accounting/ledger.js';
 import { resolveSales607, resolveItbisLiquidation } from '../src/core/accounting/sales607.js';
 
@@ -104,6 +104,34 @@ test('buildCreditNoteEntry refuses a zero-amount note', () => {
   }), /acreditar/);
 });
 
+/* ---------------------------- credit-note draft -------------------------- */
+
+test('resolveCreditNoteDraft (full) credits the whole sale + restores the deposit', () => {
+  const d = resolveCreditNoteDraft({ sale: { base: 10000, itbis: 1800, depositApplied: 3000 }, kind: 'full' });
+  assert.deepEqual(d, { base: 10000, itbis: 1800, total: 11800, depositToRestore: 3000, codigoModificacion: 1 });
+});
+
+test('resolveCreditNoteDraft (full) is refused once a nota already exists', () => {
+  assert.throws(() => resolveCreditNoteDraft({
+    sale: { base: 10000, itbis: 1800 }, kind: 'full', priorCreditedBase: 2000,
+  }), /notas de crédito/i);
+});
+
+test('resolveCreditNoteDraft (partial) credits the amount + its ITBIS, restores no deposit', () => {
+  const d = resolveCreditNoteDraft({ sale: { base: 10000, itbis: 1800 }, kind: 'partial', creditedBase: 2500, itbisRate: 18 });
+  assert.deepEqual(d, { base: 2500, itbis: 450, total: 2950, depositToRestore: 0, codigoModificacion: 3 });
+});
+
+test('resolveCreditNoteDraft (partial) refuses over-crediting the sale balance', () => {
+  assert.throws(() => resolveCreditNoteDraft({
+    sale: { base: 10000, itbis: 1800 }, kind: 'partial', creditedBase: 9000, priorCreditedBase: 2000,
+  }), /excede/);
+});
+
+test('resolveCreditNoteDraft (partial) refuses a non-positive amount', () => {
+  assert.throws(() => resolveCreditNoteDraft({ sale: { base: 10000, itbis: 1800 }, kind: 'partial', creditedBase: 0 }), /mayor que cero/);
+});
+
 /* -------------------------------- 607 ----------------------------------- */
 
 const CUSTOMERS = new Map([
@@ -135,6 +163,32 @@ test('resolveItbisLiquidation: débito − crédito, a pagar / a favor', () => {
   assert.equal(r.saldo, 1700);
   assert.equal(r.aPagar, 1700);
   assert.equal(r.aFavor, 0);
+});
+
+test('resolveSales607: a nota de crédito (E34) nets sales + carries the modified NCF', () => {
+  const postings = [
+    { id: 'sp1', customerId: 'c1', postedAt: 1000, ncf: 'E310000000001', rnc: '00112345678', base: 10000, itbis: 1800, total: 11800 },
+    { id: 'nc1', customerId: 'c1', postedAt: 1500, ncf: 'E340000000001', rnc: '00112345678', base: 4000, itbis: 720, total: 4720, modifiesNcf: 'E310000000001' },
+  ];
+  const r = resolveSales607({ salesPostings: postings, customersById: CUSTOMERS });
+  assert.equal(r.count, 2);
+  const nota = r.rows.find((x) => x.ncf === 'E340000000001');
+  assert.equal(nota.creditNote, true);
+  assert.equal(nota.modifiesNcf, 'E310000000001');
+  assert.equal(r.totals.base, 6000);  // 10000 − 4000
+  assert.equal(r.totals.itbis, 1080); // 1800 − 720
+  assert.equal(r.totals.total, 7080); // 11800 − 4720
+});
+
+test('resolveItbisLiquidation: a nota de crédito reverses débito fiscal', () => {
+  const r = resolveItbisLiquidation({
+    salesPostings: [
+      { postedAt: 1000, ncf: 'E310000000001', itbis: 1800 },
+      { postedAt: 1500, ncf: 'E340000000001', itbis: 720 }, // nota → subtracts
+    ],
+    expenses: [],
+  });
+  assert.equal(r.debitoFiscal, 1080); // 1800 − 720
 });
 
 test('resolveItbisLiquidation: crédito > débito ⇒ saldo a favor', () => {
