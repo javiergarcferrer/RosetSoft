@@ -660,6 +660,9 @@ export interface Expense {
   /** The class-6 account this gasto hits. */
   accountCode?: string | null;
   description?: string;
+  /** DGII 606 casilla 3 (Tipo de Bienes y Servicios Comprados) — accountant's
+   *  explicit choice; falls back to the derived code (tipo606For) when unset. */
+  tipo606?: string | null;
   /** Optional link to the import expediente this gasto belongs to. */
   expedienteId?: string | null;
   base: number;
@@ -1267,6 +1270,9 @@ export interface Purchase {
   kind: PurchaseKind;
   /** For asset/service kind: the account debited. Goods use the inventory account. */
   accountCode?: string | null;
+  /** DGII 606 casilla 3 (Tipo de Bienes y Servicios Comprados) — accountant's
+   *  explicit choice; falls back to the derived code (tipo606For) when unset. */
+  tipo606?: string | null;
   /** Free-text memo (shown on the asiento + the merged Compras y gastos list). */
   description?: string;
   /** Legacy single-item goods receipt (itemId + qty). Superseded by `lines`. */

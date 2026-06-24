@@ -147,6 +147,15 @@ test('resolve606 stamps the DGII tipo de bienes/servicios per doc', () => {
   assert.equal(r.rows.find((x) => x.ncf === 'B03').tipo606, '10'); // adquisición de activos
 });
 
+test('resolve606: an explicit tipo606 on the doc overrides the derivation', () => {
+  const r = resolve606({
+    // A goods purchase would derive '09', but the accountant tagged it '06'.
+    purchases: [{ id: 'p1', supplierId: 's1', purchaseAt: 1000, ncf: 'B04', base: 100, itbis: 18, kind: 'goods', tipo606: '06', paymentMethod: 'credit' }],
+    suppliers: SUPPLIERS,
+  });
+  assert.equal(r.rows.find((x) => x.ncf === 'B04').tipo606, '06'); // explicit choice wins
+});
+
 test('resolveExpensesList joins supplier + account names, newest first', () => {
   const accounts = [{ code: '6-02-007-01-03-00', name: 'TELEFONO E INTERNET' }];
   const withAcct = EXPENSES.map((e) => ({ ...e, accountCode: '6-02-007-01-03-00', paymentMethod: 'bank' }));

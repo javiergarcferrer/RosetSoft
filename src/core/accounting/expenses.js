@@ -53,6 +53,8 @@ export function resolveExpensesList({ expenses, suppliers, accounts, start, end,
  * (inventory vs. services vs. assets) are derived from real data.
  */
 export function tipo606For(doc, source) {
+  // The accountant's explicit pick at registration wins over the derivation.
+  if (doc.tipo606) return String(doc.tipo606);
   if (source === 'purchase') {
     if (doc.kind === 'goods') return '09';
     if (doc.kind === 'asset') return '10';

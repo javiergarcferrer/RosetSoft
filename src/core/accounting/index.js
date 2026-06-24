@@ -35,7 +35,7 @@ export { resolveCashForecast } from './cashForecast.js';
 export { resolveVendorProfile } from './vendorProfile.js';
 
 // ── expenses (Gastos) ViewModels + the DGII 606 projection
-export { resolveExpensesList, resolve606 } from './expenses.js';
+export { resolveExpensesList, resolve606, tipo606For, DGII_606_TIPO_LABEL } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
 
 // ── compras y gastos (unified pane): the merged + filterable list VM + natures

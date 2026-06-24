@@ -16,7 +16,7 @@ import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import {
   NATURES, NATURE_LABEL, purchaseNature, buildExpenseEntry, buildPurchaseEntry, computeExpenseTaxes,
   resolvePurchaseLines, resolveAccountingConfig, classOf, postableAccounts, weightedAverageIn,
-  resolveBillLines, buildBillEntry, taxPresetById,
+  resolveBillLines, buildBillEntry, taxPresetById, tipo606For, DGII_606_TIPO_LABEL,
 } from '../../core/accounting/index.js';
 import { reverseComprasGastoPosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
@@ -127,13 +127,13 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     date: editDoc ? isoDate(editDoc.source === 'purchase' ? editDoc.purchaseAt : editDoc.expenseAt) : isoDate(Date.now()),
     ncf: editDoc?.ncf || '', ncfType: editDoc?.ncfType || '',
     accountCode: pf.accountCode || '', expedienteId: pf.expedienteId || '',
-    description: pf.description || '',
+    description: pf.description || '', tipo606: pf.tipo606 || '',
     base: pf.nature === 'mercancia' ? '' : String(pf.base ?? ''),
     itbis: String(pf.itbis ?? ''), retIsr: String(pf.retentionIsr ?? ''),
     retItbis: String(pf.retentionItbis ?? ''), paymentMethod: pf.paymentMethod || 'bank',
   } : {
     nature: initialNature || 'gasto', supplierId: '', date: isoDate(Date.now()), ncf: '', ncfType: '',
-    accountCode: '', expedienteId: '', description: initial?.description || '',
+    accountCode: '', expedienteId: '', description: initial?.description || '', tipo606: '',
     base: initial?.base || '', itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
   }));
   const [lines, setLines] = useState(() => (pf?.nature === 'mercancia' && pf.lines?.length
@@ -148,6 +148,14 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
   const nature = form.nature;
   const goods = nature === 'mercancia';
   const isBill = nature === 'lineas';
+  // DGII 606 casilla 3 — defaults to the code derived from the nature/account; the
+  // accountant overrides it via the selector. `tipo606 || derived` is what saves.
+  const derivedTipo606 = useMemo(() => {
+    if (nature === 'gasto') return tipo606For({ accountCode: form.accountCode }, 'expense');
+    const kind = nature === 'mercancia' ? 'goods' : nature === 'activo' ? 'asset' : 'service';
+    return tipo606For({ kind }, 'purchase');
+  }, [nature, form.accountCode]);
+  const tipo606 = form.tipo606 || derivedTipo606;
 
   const accountOpts = useMemo(() => {
     const cls = nature === 'activo' ? 1 : 6;
@@ -266,7 +274,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         }));
         const prow = {
           id, profileId: scope, supplierId: form.supplierId || null, purchaseAt: postedAt,
-          ncf: form.ncf, ncfType: form.ncfType, kind: 'service', lineMode: true, accountCode: null, description: form.description,
+          ncf: form.ncf, ncfType: form.ncfType, kind: 'service', lineMode: true, accountCode: null, description: form.description, tipo606,
           itemId: null, qty: 0, lines: storedLines, expedienteId,
           base: t.base, itbis: t.itbis, itbisCreditable: true, retentionIsr: t.retIsr, retentionItbis: t.retItbis,
           paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
@@ -287,7 +295,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         await db.journalLines.bulkPut(built.lines);
         const row = {
           id, profileId: scope, supplierId: form.supplierId || null, expenseAt: postedAt,
-          ncf: form.ncf, ncfType: form.ncfType, accountCode: form.accountCode, description: form.description,
+          ncf: form.ncf, ncfType: form.ncfType, accountCode: form.accountCode, description: form.description, tipo606,
           expedienteId, base, itbis, itbisCreditable: true, retentionIsr: retIsr, retentionItbis: retItbis,
           paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
           journalEntryId: built.entry.id,
@@ -332,7 +340,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       await db.journalLines.bulkPut(built.lines);
       const prow = {
         id, profileId: scope, supplierId: form.supplierId || null, purchaseAt: postedAt,
-        ncf: form.ncf, ncfType: '', kind, accountCode: goods ? null : form.accountCode, description: form.description,
+        ncf: form.ncf, ncfType: '', kind, accountCode: goods ? null : form.accountCode, description: form.description, tipo606,
         itemId: null, qty: goods ? lineRes.qty : 0, lines: storedLines, expedienteId,
         base, itbis, itbisCreditable: true, retentionIsr: retIsr, retentionItbis: retItbis,
         paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
@@ -418,6 +426,11 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
               </select>
             </Field>
           )}
+          <Field label="Tipo de costos y gastos (606)">
+            <select value={tipo606} onChange={(e) => setForm((f) => ({ ...f, tipo606: e.target.value }))} className={field}>
+              {Object.entries(DGII_606_TIPO_LABEL).map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}
+            </select>
+          </Field>
           <Field label="No. de comprobante (NCF)">
             <input value={form.ncf} onChange={(e) => setForm((f) => ({ ...f, ncf: e.target.value }))} placeholder="NCF" className={`${field} tabular-nums`} />
           </Field>
