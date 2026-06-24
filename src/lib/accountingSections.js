@@ -120,6 +120,8 @@ export const QUICK_CREATE = [
     { label: 'Gasto', to: '/accounting/compras-gastos/nuevo?tipo=gasto' },
     { label: 'Compra de mercancía', to: '/accounting/compras-gastos/nuevo?tipo=mercancia' },
     { label: 'Pago', to: '/accounting/cuentas?new=out' },
+    { label: 'Orden de compra', to: '/accounting/ordenes-compra?new=1' },
+    { label: 'Gasto recurrente', to: '/accounting/recurrentes?new=1' },
   ] },
   { group: 'Empleados', items: [
     { label: 'Nómina', to: '/accounting/nomina' },

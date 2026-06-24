@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ClipboardList, Plus, X, Loader2, Trash2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -30,7 +31,8 @@ export default function OrdenesCompra() {
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
 
   const [statusFilter, setStatusFilter] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [params] = useSearchParams();
+  const [showForm, setShowForm] = useState(params.get('new') === '1');
   const list = useMemo(() => resolvePurchaseOrders({ orders: ordersQ.data, suppliersById, statusFilter }), [ordersQ.data, suppliersById, statusFilter]);
 
   async function setStatus(po, status) { await db.purchaseOrders.update(po.id, { status, updatedAt: Date.now() }); }

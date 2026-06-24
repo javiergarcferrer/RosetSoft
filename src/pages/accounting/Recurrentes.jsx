@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Repeat, Plus, X, Loader2, Zap, Play, Pause, Trash2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -33,7 +34,8 @@ export default function Recurrentes() {
   const loaded = templatesQ.loaded && suppliersQ.loaded && accountsQ.loaded;
 
   const agenda = useMemo(() => resolveRecurring({ templates: templatesQ.data, now: Date.now() }), [templatesQ.data]);
-  const [showForm, setShowForm] = useState(false);
+  const [params] = useSearchParams();
+  const [showForm, setShowForm] = useState(params.get('new') === '1');
   const [busy, setBusy] = useState(null);
 
   async function generate(t) {
