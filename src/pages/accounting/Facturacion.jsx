@@ -660,7 +660,14 @@ export default function Facturacion() {
             )}
           </span>
         ) : status === 'rejected' ? (
-          <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-rose-600 whitespace-nowrap">Rechazado</span>
+            <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+              title="Reintentar la transmisión a la DGII (mismo e-NCF)"
+              className="btn-ghost text-xs whitespace-nowrap">
+              {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Reintentar
+            </button>
+          </span>
         ) : !isEcf ? (
           <span className="text-xs text-ink-400">—</span>
         ) : (
