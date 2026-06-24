@@ -114,6 +114,12 @@ export default function Recurrentes() {
                   <div className="space-y-2">{agenda.paused.map((r) => <Row key={r.template.id} r={r} />)}</div>
                 </section>
               )}
+              {agenda.ended.length > 0 && (
+                <section>
+                  <h3 className="eyebrow font-semibold text-ink-400 mb-2">Finalizadas</h3>
+                  <div className="space-y-2">{agenda.ended.map((r) => <Row key={r.template.id} r={r} />)}</div>
+                </section>
+              )}
             </div>
           )}
         </>

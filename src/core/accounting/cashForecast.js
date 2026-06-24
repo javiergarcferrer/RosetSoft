@@ -62,6 +62,9 @@ export function resolveCashForecast({
     totalOut: round2(rows.reduce((s, r) => s + r.outflow, 0)),
     endingBalance: bal,
     lowPoint: low,
-    negativeWeek: rows.find((r) => r.balance < 0) || null,
+    // Consistent with lowPoint: if cash is already negative today (opening < 0),
+    // surface that as the negative point rather than only a later week — else the
+    // negative lowPoint and a null "se vuelve negativo" banner would contradict.
+    negativeWeek: (openingCash < 0 ? { week: -1, weekStart: at, balance: round2(openingCash) } : rows.find((r) => r.balance < 0)) || null,
   };
 }

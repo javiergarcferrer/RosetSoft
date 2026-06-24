@@ -26,13 +26,17 @@ export function resolveRecurring({ templates, now } = {}) {
     amount: round2((t.payload?.base || 0) + (t.payload?.itbis || 0)),
     scheduleLabel: scheduleLabel(t),
     due: isDue(t, at),
+    ended: t.endAt != null && at > t.endAt,
   }));
   const byNext = (a, b) => (a.nextRunAt || 0) - (b.nextRunAt || 0);
-  const due = rows.filter((r) => r.due).sort(byNext);
-  const upcoming = rows.filter((r) => r.status === 'active' && !r.due).sort(byNext);
+  const due = rows.filter((r) => r.due && !r.ended).sort(byNext);
+  const upcoming = rows.filter((r) => r.status === 'active' && !r.due && !r.ended).sort(byNext);
   const paused = rows.filter((r) => r.status === 'paused').sort(byNext);
+  // Active templates past their end date — surfaced separately so they stop
+  // showing a perpetual past "próxima" date under Upcoming (and never generate).
+  const ended = rows.filter((r) => r.status !== 'paused' && r.ended).sort(byNext);
   return {
-    rows, due, upcoming, paused,
+    rows, due, upcoming, paused, ended,
     count: rows.length,
     dueCount: due.length,
     dueTotal: round2(due.reduce((s, r) => s + r.amount, 0)),
