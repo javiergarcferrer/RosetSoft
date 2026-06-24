@@ -704,7 +704,9 @@ export default function Facturacion() {
 
   return (
     <AccountingGate title="Facturación">
-      <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)" />
+      <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)"
+        actions={<Link to="/accounting/facturacion/nueva" className="btn-primary"><FileText size={15} /> Nueva factura</Link>} />
+
 
       <TabPills tabs={[
         { key: 'pending', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
