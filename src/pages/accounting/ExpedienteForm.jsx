@@ -12,7 +12,7 @@ import SearchPicker from '../../components/SearchPicker.jsx';
 import DriveDocumentsCard from '../../components/drive/DriveDocumentsCard.jsx';
 import { groupFamilies, catalogSellingPrice } from '../../lib/catalog.js';
 import {
-  resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
+  resolveExpediente, buildExpedienteEntry, weightedAverageIn,
   resolvePurchasesExpenses, NATURE_LABEL,
 } from '../../core/accounting/index.js';
 import { reverseExpedientePosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
@@ -255,7 +255,6 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
   const resolved = useMemo(() => resolveExpediente(expediente, config), [expediente, config]);
   const byLine = useMemo(() => Object.fromEntries(resolved.lines.map((l) => [l.id, l])), [resolved]);
   const t = resolved.totals;
-  const costT = expedienteCostTotals(expediente.costs);
   const dua = Number(head.duaTotal) || 0;
   const duaDiff = r2(dua - t.impuestos);
   const newItemCount = useMemo(
@@ -279,9 +278,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     return allLines.filter((l) => `${l.name || ''} ${l.reference || ''}`.toLowerCase().includes(q));
   }, [allLines, lineQuery]);
 
-  function setCost(id, patch) { setCosts((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
-  function addCost() { setCosts((cs) => [...cs, { id: newId(), concept: 'agenciamiento', supplierId: '', ncf: '', amount: '', itbis: '', paymentMethod: 'bank' }]); }
-  function removeCost(id) { setCosts((cs) => cs.filter((c) => c.id !== id)); }
+  // Landing costs are no longer entered here (they're linked gastos/compras
+  // below). `costs` is still carried so legacy expedientes keep their books.
 
   // ── linked gastos & compras (the "pull in costs already registered" flow) ──
   // Costs live ONCE in the compras/gastos registry; the expediente just points
@@ -729,99 +727,70 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         <button type="button" onClick={() => setEmbs((es) => [...es, blankEmbarque()])} className="btn-ghost text-sm inline-flex items-center gap-1.5"><Plus size={14} /> Embarque</button>
       </div>
 
-      {/* Costos del expediente — ONE section, two ways to add a landing cost:
-          (1) capitalizable cost sheet (suma al costo en destino, lo asienta el
-          expediente) and (2) gastos y compras enlazados (cada uno con su propio
-          asiento en el registro; el expediente sólo los referencia). */}
+      {/* Costos del expediente — landing costs (agenciamiento, transporte,
+          puerto…) are registered ONCE in the compras/gastos registry; the
+          expediente only links to them. Each keeps its own asiento, so linking
+          never re-posts (no double count). */}
       <div className="mt-4 surface-subtle p-3">
-        <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Costos del expediente</h4>
-
-        {/* Capitalizables — prorratean al costo en destino */}
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="eyebrow text-ink-400">Capitalizables (suman al costo en destino)</span>
-          <button type="button" onClick={addCost} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Costo</button>
-        </div>
-        {costs.length === 0 ? (
-          <p className="text-xs text-ink-400">El neto suma al costo del producto (prorrateado por CIF); el ITBIS va al crédito fiscal.</p>
-        ) : (
-          <div className="space-y-2">
-            {costs.map((c) => (
-              <div key={c.id} className="flex flex-wrap items-center gap-2">
-                <select value={c.concept} onChange={(e) => setCost(c.id, { concept: e.target.value })} className={`${field} w-full sm:w-44`}>
-                  {COST_CONCEPTS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-                </select>
-                <select value={c.supplierId} onChange={(e) => setCost(c.id, { supplierId: e.target.value })} className={`${field} flex-1 min-w-[130px]`}>
-                  <option value="">— Proveedor (606) —</option>
-                  {supplierOpts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <input value={c.ncf} onChange={(e) => setCost(c.id, { ncf: e.target.value })} placeholder="NCF" className={`${field} w-28 min-w-0`} />
-                <input type="number" step="0.01" min="0" inputMode="decimal" value={c.amount} onChange={(e) => setCost(c.id, { amount: e.target.value })} placeholder="Monto RD$" className={num} />
-                <input type="number" step="0.01" min="0" inputMode="decimal" value={c.itbis} onChange={(e) => setCost(c.id, { itbis: e.target.value })} placeholder="ITBIS" className="input w-24 text-right tabular-nums" />
-                <select value={c.paymentMethod} onChange={(e) => setCost(c.id, { paymentMethod: e.target.value })} className={`${field} w-full sm:w-auto`}>
-                  <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
-                </select>
-                <button type="button" onClick={() => removeCost(c.id)} className="btn-icon-danger" title="Eliminar costo" aria-label="Eliminar costo"><Trash2 size={15} /></button>
-              </div>
-            ))}
-            <div className="text-xs text-ink-500">Costos: bruto <b className="tabular-nums">{formatDop(costT.gross)}</b> · ITBIS crédito <b className="tabular-nums">{formatDop(costT.itbis)}</b> · neto al costo <b className="tabular-nums">{formatDop(costT.net)}</b></div>
-          </div>
-        )}
-
-        {/* Gastos y compras enlazados — registrados una sola vez, el expediente
-            sólo los referencia (cada uno con su propio asiento). */}
-        <div className="mt-4 pt-3 border-t border-ink-100">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-            <span className="eyebrow text-ink-400 inline-flex items-center gap-1"><ShoppingCart size={12} /> Gastos y compras enlazados (asiento propio)</span>
-            {expedienteId && (
-              <div className="flex items-center gap-1.5">
-                <button type="button" onClick={() => goRegisterCost('gasto')} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Gasto</button>
-                <button type="button" onClick={() => goRegisterCost('mercancia')} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Compra</button>
-              </div>
-            )}
-          </div>
-          {!expedienteId ? (
-            <p className="text-xs text-ink-400">Guarda el borrador para registrar o enlazar gastos y compras ya registrados a este expediente.</p>
-          ) : (
-            <div className="space-y-2">
-              {/* Pull in an already-registered gasto/compra (set its expedienteId). */}
-              {linkCandidates.length > 0 && (
-                <label className="flex items-center gap-2 text-xs text-ink-500">
-                  <Link2 size={13} className="text-ink-400 shrink-0" />
-                  <select
-                    value=""
-                    onChange={(e) => { const [src, did] = e.target.value.split('::'); if (did) linkDoc(src, did); }}
-                    className={`${field} flex-1 min-w-0`}
-                  >
-                    <option value="">Enlazar un gasto o compra ya registrado…</option>
-                    {linkCandidates.map((r) => (
-                      <option key={`${r.source}::${r.id}`} value={`${r.source}::${r.id}`}>
-                        {formatDate(r.date)} · {r.supplierName || 's/proveedor'} · {NATURE_LABEL[r.nature] || r.nature} · {r.destination} · {formatDop(r.total)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {linkedCosts.length === 0 ? (
-                <p className="text-xs text-ink-400">Aún no hay gastos ni compras enlazados.</p>
-              ) : (
-                <>
-                  <ul className="divide-y divide-ink-100 rounded-lg border border-ink-100 bg-surface">
-                    {linkedCosts.map((r) => (
-                      <li key={r.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs">
-                        <span className="text-ink-400 w-20 shrink-0 whitespace-nowrap">{formatDate(r.date)}</span>
-                        <span className="text-ink-600 w-24 shrink-0 truncate">{NATURE_LABEL[r.nature] || r.nature}</span>
-                        <span className="min-w-0 flex-1 truncate text-ink-700">{r.supplierName || '—'} · {r.destination}</span>
-                        <span className="shrink-0 tabular-nums text-ink-600 w-24 text-right">{formatDop(r.total)}</span>
-                        <button type="button" onClick={() => unlinkDoc(r.source, r.id)} className="btn-icon text-ink-400 hover:text-rose-600 shrink-0" title="Quitar enlace" aria-label="Quitar enlace"><Unlink size={13} /></button>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="text-xs text-ink-500">{linkedCosts.length} enlazado{linkedCosts.length === 1 ? '' : 's'} · total <b className="tabular-nums">{formatDop(linkedCostsTotal)}</b></div>
-                </>
-              )}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+          <h4 className="font-display text-sm font-medium text-ink-700 inline-flex items-center gap-1.5"><ShoppingCart size={14} className="text-ink-400" /> Costos del expediente (gastos y compras)</h4>
+          {expedienteId && (
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => goRegisterCost('gasto')} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Gasto</button>
+              <button type="button" onClick={() => goRegisterCost('mercancia')} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Compra</button>
             </div>
           )}
         </div>
+
+        {/* Legacy: expedientes posted under the old model carry capitalized
+            costs inline. They stay on the books (we don't rewrite history) and
+            show on the detail; they're just not editable here anymore. */}
+        {costs.length > 0 && (
+          <p className="text-xs text-amber-700 mb-2">Este expediente tiene {costs.length} costo{costs.length === 1 ? '' : 's'} capitalizado{costs.length === 1 ? '' : 's'} (modelo anterior). Se conservan en el asiento y aparecen en el detalle.</p>
+        )}
+
+        {!expedienteId ? (
+          <p className="text-xs text-ink-400">Guarda el borrador para registrar o enlazar gastos y compras a este expediente. Los costos se registran como gastos/compras y el expediente sólo los referencia.</p>
+        ) : (
+          <div className="space-y-2">
+            {/* Pull in an already-registered gasto/compra (set its expedienteId). */}
+            {linkCandidates.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-ink-500">
+                <Link2 size={13} className="text-ink-400 shrink-0" />
+                <select
+                  value=""
+                  onChange={(e) => { const [src, did] = e.target.value.split('::'); if (did) linkDoc(src, did); }}
+                  className={`${field} flex-1 min-w-0`}
+                >
+                  <option value="">Enlazar un gasto o compra ya registrado…</option>
+                  {linkCandidates.map((r) => (
+                    <option key={`${r.source}::${r.id}`} value={`${r.source}::${r.id}`}>
+                      {formatDate(r.date)} · {r.supplierName || 's/proveedor'} · {NATURE_LABEL[r.nature] || r.nature} · {r.destination} · {formatDop(r.total)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {linkedCosts.length === 0 ? (
+              <p className="text-xs text-ink-400">Aún no hay gastos ni compras enlazados. Registra uno o enlaza uno existente.</p>
+            ) : (
+              <>
+                <ul className="divide-y divide-ink-100 rounded-lg border border-ink-100 bg-surface">
+                  {linkedCosts.map((r) => (
+                    <li key={r.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs">
+                      <span className="text-ink-400 w-20 shrink-0 whitespace-nowrap">{formatDate(r.date)}</span>
+                      <span className="text-ink-600 w-24 shrink-0 truncate">{NATURE_LABEL[r.nature] || r.nature}</span>
+                      <span className="min-w-0 flex-1 truncate text-ink-700">{r.supplierName || '—'} · {r.destination}</span>
+                      <span className="shrink-0 tabular-nums text-ink-600 w-24 text-right">{formatDop(r.total)}</span>
+                      <button type="button" onClick={() => unlinkDoc(r.source, r.id)} className="btn-icon text-ink-400 hover:text-rose-600 shrink-0" title="Quitar enlace" aria-label="Quitar enlace"><Unlink size={13} /></button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-xs text-ink-500">{linkedCosts.length} enlazado{linkedCosts.length === 1 ? '' : 's'} · total <b className="tabular-nums">{formatDop(linkedCostsTotal)}</b></div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Documentos en Google Drive — folder created on the first attachment,
