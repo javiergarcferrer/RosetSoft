@@ -308,12 +308,12 @@ function ProtectedApp() {
             <Route path="inventario" element={<Navigate to="/inventario/existencias" replace />} />
             <Route path="inventario/existencias" element={<InventoryExistencias />} />
             <Route path="inventario/lifestylegarden" element={<InventoryLifestyleGarden />} />
-            {/* Accounting surface. /accounting lands on the Panel (the
-                business overview) — the sales/commissions workspace lives at
-                /accounting/ventas with the other Ventas tabs. Every legacy
-                sub-path redirects so old bookmarks still work. Pages
-                self-gate on the accounting/admin role. */}
-            <Route path="accounting" element={<Navigate to="/accounting/ventas" replace />} />
+            {/* Accounting surface. /accounting lands on Facturación (the single
+                invoice register — the sales hub). The sales/commissions
+                workspace still lives at /accounting/ventas (reachable from
+                Informes). Every legacy sub-path redirects so old bookmarks still
+                work. Pages self-gate on the accounting/admin role. */}
+            <Route path="accounting" element={<Navigate to="/accounting/facturacion" replace />} />
             <Route path="accounting/ventas" element={<AccountingWorkspace />} />
             <Route path="accounting/dashboard" element={<AccountingDashboard />} />
             <Route path="accounting/ledger" element={<AccountingLedger />} />
