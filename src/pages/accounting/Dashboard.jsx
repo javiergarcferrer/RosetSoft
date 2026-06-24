@@ -429,6 +429,8 @@ export default function AccountingDashboard() {
             </div>
           </div>
 
+          <div className="section-rule"><span>Posición del negocio</span></div>
+
           {/* Comparative KPI scorecards — the monitor layer: the period's
               headline figures, each against the previous period AND the same
               period last year. */}
