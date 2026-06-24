@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { formatDate } from '../../lib/format.js';
 
 const ROUTE_LABEL = {
@@ -20,9 +21,14 @@ const ROUTE_LABEL = {
 export default function SavedReports() {
   const { profileId } = useApp();
   const scope = profileId || 'team';
+  const confirm = useConfirm();
   const q = useLiveQueryStatus(() => db.savedReports.where('profileId').equals(scope).toArray(), [scope], []);
   const rows = useMemo(() => q.data.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [q.data]);
-  async function remove(r) { if (window.confirm(`¿Eliminar "${r.name}"?`)) await db.savedReports.delete(r.id); }
+  async function remove(r) {
+    const ok = await confirm({ title: 'Eliminar vista', message: `¿Eliminar "${r.name}"?`, confirmLabel: 'Eliminar', tone: 'danger' });
+    if (!ok) return;
+    await db.savedReports.delete(r.id);
+  }
 
   return (
     <AccountingGate title="Vistas guardadas">

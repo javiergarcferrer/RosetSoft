@@ -2,19 +2,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, invalidate } from '../../db/database.js';
+import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import KpiBand from '../../components/accounting/KpiBand.jsx';
+import { ActionChips } from '../../components/accounting/ActionCenter.jsx';
+import InvoiceDrawer from '../../components/accounting/InvoiceDrawer.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
-import { displayRatesFor } from '../../lib/exchangeRate.js';
+import { displayRatesFor, effectiveDopRate, readExchangeRate } from '../../lib/exchangeRate.js';
 import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
@@ -22,9 +25,9 @@ import Modal from '../../components/Modal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
-  resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
+  resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
-  resolveReceivables, resolveInvoicePipeline,
+  resolveAccountingCockpit, resolveReceivables, resolveInvoiceRegister, invoiceRowTotals, buildPaymentEntry,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -47,6 +50,17 @@ function ymd(ts) {
  * pure render off its `ctx` bag; `foot` marks a numeric total column so the
  * footer can place it (columns without `foot` merge into the "N ventas" span).
  */
+// e-CF status → the leading dot color in the NCF cell (pending pulses).
+const ECF_DOT = { accepted: 'bg-emerald-500', sent: 'bg-emerald-500', pending: 'bg-amber-500', rejected: 'bg-rose-500' };
+// Payment status → the estado pill [label, skin].
+const STATUS_PILL = {
+  paid: ['Pagada', 'bg-emerald-100 text-emerald-700'],
+  open: ['Por cobrar', 'bg-blue-100 text-blue-700'],
+  partial: ['Parcial', 'bg-brand-100 text-brand-700'],
+  overdue: ['Vencida', 'bg-rose-100 text-rose-700'],
+  note: ['Nota', 'bg-ink-100 text-ink-600'],
+};
+
 const SALES607_COLUMNS = [
   {
     key: 'rnc', label: 'RNC/Cédula', canHide: false,
@@ -59,11 +73,21 @@ const SALES607_COLUMNS = [
     cell: ({ r }) => r.name || '—',
   },
   {
-    key: 'ncf', label: 'NCF',
+    key: 'ncf', label: 'e-CF · NCF',
     thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
-    cell: ({ r }) => r.creditNote
-      ? <span title={`Nota de crédito · modifica ${r.modifiesNcf}`}>{r.ncf} <span className="text-rose-500">↩ {r.modifiesNcf || ''}</span></span>
-      : (r.ncf || '—'),
+    cell: ({ r }) => (
+      <span className="inline-flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ECF_DOT[r.ecfStatus] || 'bg-ink-300'} ${r.ecfStatus === 'pending' ? 'animate-pulse' : ''}`} aria-hidden />
+        {r.creditNote
+          ? <span title={`Nota de crédito · modifica ${r.modifiesNcf}`}>{r.ncf} <span className="text-rose-500">↩ {r.modifiesNcf || ''}</span></span>
+          : (r.ncf || '—')}
+      </span>
+    ),
+  },
+  {
+    key: 'tipo', label: 'Tipo',
+    thClass: 'whitespace-nowrap', tdClass: 'whitespace-nowrap',
+    cell: ({ r }) => r.ecfType ? <span className="badge text-[10px] tabular-nums">e-CF {r.ecfType}</span> : <span className="text-ink-300">—</span>,
   },
   {
     key: 'date', label: 'Fecha',
@@ -88,12 +112,30 @@ const SALES607_COLUMNS = [
     cell: ({ r }) => r.creditNote ? <span className="text-rose-600">{formatDop(-r.total)}</span> : formatDop(r.total),
     foot: ({ totals }) => formatDop(totals.total),
   },
+  {
+    key: 'balance', label: 'Balance',
+    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
+    cell: ({ r }) => r.open > 0.01 ? <span className={r.overdue ? 'text-rose-600 font-medium' : 'text-ink-700'}>{formatDop(r.open)}</span> : <span className="text-ink-300">—</span>,
+    foot: ({ totals }) => formatDop(totals.open),
+  },
+  {
+    key: 'vence', label: 'Vence',
+    thClass: 'whitespace-nowrap', tdClass: 'whitespace-nowrap text-ink-500',
+    cell: ({ r }) => (r.status === 'paid' || r.creditNote)
+      ? <span className="text-ink-300">—</span>
+      : <span className={r.overdue ? 'text-rose-600' : ''}>{formatDate(r.dueAt)}</span>,
+  },
+  {
+    key: 'estado', label: 'Estado',
+    thClass: 'whitespace-nowrap', tdClass: 'whitespace-nowrap',
+    cell: ({ r }) => { const [label, cls] = STATUS_PILL[r.status] || STATUS_PILL.open; return <span className={`chip ${cls}`}>{label}</span>; },
+  },
 ];
 
 const SALES607_DEFAULT = {
-  name: true, ncf: true, date: true, base: true, itbis: true, total: true,
+  name: true, ncf: true, tipo: true, date: true, base: true, itbis: true, total: true, balance: true, vence: true, estado: true,
 };
-const SALES607_COLS_KEY = 'rs.facturacion.cols.v1';
+const SALES607_COLS_KEY = 'rs.facturacion.cols.v2';
 
 // The "ready to invoice" gate + effective invoice date are SHARED with the
 // CRM dashboard's "Por facturar" tile — one rule, lib/quoteMilestones.
@@ -118,17 +160,18 @@ export default function Facturacion() {
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
+  const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
+  const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
+  const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && postingsQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
-  // Invoice pipeline (AR funnel) — por cobrar / vencida / cobrada + e-CF backlog.
+  const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
+  // Open receivables (allocations + FIFO already applied) — feeds each factura's
+  // balance + estado in the register, and the "Por cobrar" vital.
   const pipelineReceivables = useMemo(
     () => resolveReceivables({ salesPostings: postingsQ.data, payments: paymentsQ.data, customersById }),
     [postingsQ.data, paymentsQ.data, customersById],
-  );
-  const pipeline = useMemo(
-    () => resolveInvoicePipeline({ salesPostings: postingsQ.data, receivables: pipelineReceivables, customersById, now: Date.now() }),
-    [postingsQ.data, pipelineReceivables, customersById],
   );
   const linesByQuote = useMemo(() => {
     const m = new Map();
@@ -480,7 +523,7 @@ export default function Facturacion() {
 
   const today = useMemo(() => new Date(), []);
   const [params] = useSearchParams();
-  const [tab, setTab] = useState(['607', 'it1'].includes(params.get('tab')) ? params.get('tab') : 'pending'); // 'pending' | '607' | 'it1'
+  const [tab, setTab] = useState(['cobrar', 'pagadas', 'ecf', 'porfacturar'].includes(params.get('tab')) ? params.get('tab') : 'todas'); // 'todas'|'cobrar'|'pagadas'|'ecf'|'porfacturar'
   const win = useMemo(() => ({
     start: new Date(today.getFullYear(), today.getMonth(), 1).getTime(),
     end: today.getTime(),
@@ -489,15 +532,45 @@ export default function Facturacion() {
   const [q607, setQ607] = useState('');
   const sales607 = useMemo(() => resolveSales607({ salesPostings: postingsQ.data, customersById, ...win }),
     [postingsQ.data, customersById, win]);
-  // The on-screen 607 honors the search box; the CSV/TXT exports must stay the
-  // FULL period (a filtered fiscal file would underreport), so they read
-  // `sales607` above.
-  const sales607View = useMemo(() => resolveSales607({ salesPostings: postingsQ.data, customersById, query: q607, ...win }),
-    [postingsQ.data, customersById, q607, win]);
+  // The CSV/TXT 607 exports stay the FULL month (a filtered fiscal file would
+  // underreport), so they read `sales607` above — not the on-screen register.
   const itbis = useMemo(() => resolveItbisLiquidation({
     salesPostings: postingsQ.data, expenses: expensesQ.data,
     purchases: purchasesQ.data, imports: importsQ.data, expedientes: expedientesQ.data, ...win,
   }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
+
+  // Cockpit — the prioritized "needs attention" actions, surfaced where the
+  // dealer actually invoices. SAME resolver the Resumen dashboard uses, so the
+  // two can never disagree; "as of today", independent of the 607 search box.
+  const cockpit = useMemo(() => resolveAccountingCockpit({
+    settings, fiscalPeriods: periodsQ.data, quotes: quotesQ.data, salesPostings: postingsQ.data,
+    payments: paymentsQ.data, purchases: purchasesQ.data, expenses: expensesQ.data,
+    customersById, suppliersById, ecfSequences: ecfSeqQ.data, now: today.getTime(),
+  }), [settings, periodsQ.data, quotesQ.data, postingsQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById, ecfSeqQ.data, today]);
+  // Payables belong to the compras side, not the invoicing screen — the strip
+  // carries the selling + fiscal pendientes only.
+  const facturaActions = useMemo(() => cockpit.actions.filter((a) => a.kind !== 'payable'), [cockpit]);
+  const monthLabel = useMemo(() => today.toLocaleDateString('es-DO', { month: 'short' }).replace('.', ''), [today]);
+  // Cobros de clientes recibidos en el período — el KPI "Cobrado · mes".
+  const cobradoMes = useMemo(() => paymentsQ.data
+    .filter((p) => p.direction === 'in' && p.partyType === 'customer' && p.paidAt >= win.start && p.paidAt <= win.end)
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0), [paymentsQ.data, win]);
+
+  // The SINGLE invoice register — every factura (not month-scoped: overdue
+  // prior-month docs belong here too) with its payment status, balance and e-CF
+  // state. This one list backs the pane, filtered by the status pill + search.
+  const register = useMemo(() => resolveInvoiceRegister({
+    salesPostings: postingsQ.data, receivables: pipelineReceivables, customersById, now: today.getTime(),
+  }), [postingsQ.data, pipelineReceivables, customersById, today]);
+  const registerView = useMemo(() => {
+    let rows = register.rows;
+    if (tab === 'cobrar') rows = rows.filter((r) => ['open', 'partial', 'overdue'].includes(r.status));
+    else if (tab === 'pagadas') rows = rows.filter((r) => r.status === 'paid');
+    else if (tab === 'ecf') rows = rows.filter((r) => r.needsEcf);
+    const query = q607.trim().toLowerCase();
+    if (query) rows = rows.filter((r) => [r.name, r.rnc, r.ncf].some((v) => (v || '').toLowerCase().includes(query)));
+    return { rows, totals: invoiceRowTotals(rows), count: rows.length };
+  }, [register, tab, q607]);
 
   // e-NCFs assigned but never transmitted — the count the 607 tab badges so
   // signed-but-unsent invoices can't sit invisible.
@@ -514,6 +587,7 @@ export default function Facturacion() {
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
+  const [drawerRow, setDrawerRow] = useState(null); // 607 row whose detail briefing is open
 
   // Column visibility (Shopify "edit columns") for the 607 table — persisted
   // per browser. The e-CF actions column stays a fixed trailing cell.
@@ -525,7 +599,7 @@ export default function Facturacion() {
   const {
     tableRef: tableRef607, tableStyle: tableStyle607, thProps: thProps607,
     ResizeHandle: ResizeHandle607, reset: resetWidths607,
-  } = useColumnWidths(cols607, 'rs.facturacion.widths.v1');
+  } = useColumnWidths(cols607, 'rs.facturacion.widths.v2');
 
   const setDraft = (id, patch) => setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
 
@@ -556,6 +630,13 @@ export default function Facturacion() {
     const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
     if (rnc && !isValidFiscalId(rnc)) {
       setErr('RNC/cédula inválido: debe tener 9 dígitos (RNC) u 11 (cédula).');
+      return;
+    }
+    // A consumo (32) of RD$250,000+ MUST identify the buyer — block here, BEFORE
+    // assignNextENcf, or we burn an E32 that buildEcfPayload will refuse to
+    // transmit (a permanent, un-fillable fiscal-number gap).
+    if (!rnc && consumoRequiresBuyerId(book.total)) {
+      setErr('Una factura de RD$250,000 o más requiere el RNC/cédula del comprador (se emite como crédito fiscal 31). Agrégalo y vuelve a facturar.');
       return;
     }
     setPosting(quote.id);
@@ -624,6 +705,43 @@ export default function Facturacion() {
       setErr(userMessageFor(e));
     } finally {
       setPosting(null);
+    }
+  }
+
+  // Registrar cobro straight from the invoice briefing — posts the cobro asiento
+  // (Debit Banco/Caja / Credit CxC via buildPaymentEntry) + the numbered payment
+  // row allocated to THIS factura, the SAME path Banca uses, so the receivable
+  // clears without ever leaving Facturación.
+  async function collectInvoice(p, { amount, method, date }) {
+    const amt = Number(amount) || 0;
+    if (!p || amt <= 0) return { ok: false, error: 'El monto debe ser mayor que cero.' };
+    try {
+      const id = newId();
+      const postedAt = date ? new Date(date).getTime() : Date.now();
+      const reference = `Cobro ${p.ncf || ''}`.trim();
+      const built = buildPaymentEntry({
+        newId, config, postedAt,
+        payment: {
+          id, direction: 'in', partyType: 'customer', partyId: p.customerId,
+          amount: amt, method, reference,
+          commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+        },
+      });
+      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+      await db.journalLines.bulkPut(built.lines);
+      await assignSequenceNumber({
+        table: 'payments', profileId: scope, start: 1,
+        build: (n) => ({
+          id, profileId: scope, number: n, direction: 'in', partyType: 'customer', partyId: p.customerId,
+          paidAt: postedAt, amount: amt, method, reference,
+          commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+          allocations: [{ docId: p.id, amount: amt }], journalEntryId: built.entry.id,
+        }),
+      });
+      invalidate();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: userMessageFor(e) };
     }
   }
 
@@ -715,34 +833,49 @@ export default function Facturacion() {
   return (
     <AccountingGate title="Facturación">
       <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)"
-        actions={<Link to="/accounting/facturacion/nueva" className="btn-primary"><FileText size={15} /> Nueva factura</Link>} />
+        actions={
+          <>
+            {loaded && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-3 py-1.5 text-xs shadow-xs"
+                title={readExchangeRate(settings).updatedAt ? `Banco Popular · venta · actualizada ${formatDate(readExchangeRate(settings).updatedAt)}` : 'Banco Popular · venta'}>
+                <span className="text-ink-400">USD→DOP</span>
+                <span className="font-medium tabular-nums text-ink-800">{effectiveDopRate(settings).toFixed(2)}</span>
+              </span>
+            )}
+            <Link to="/accounting/facturacion/nueva" className="btn-primary"><FileText size={15} /> Nueva factura</Link>
+          </>
+        } />
 
-
-      {loaded && pipeline.count > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-          {pipeline.buckets.map((b) => (
-            <div key={b.key} className="card p-3 min-w-0">
-              <div className="eyebrow-xs text-ink-500 mb-1">{b.label}</div>
-              <div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(b.amount)}</div>
-              <div className="text-[11px] text-ink-400">{b.count} {b.count === 1 ? 'factura' : 'facturas'}</div>
-            </div>
-          ))}
-          <div className={`card p-3 min-w-0 ${pipeline.pendingEcf.count > 0 ? 'border-amber-300' : ''}`}>
-            <div className={`eyebrow-xs mb-1 ${pipeline.pendingEcf.count > 0 ? 'text-amber-600' : 'text-ink-500'}`}>e-CF pendiente</div>
-            <div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(pipeline.pendingEcf.amount)}</div>
-            <div className="text-[11px] text-ink-400">{pipeline.pendingEcf.count} por transmitir</div>
-          </div>
-        </div>
+      {loaded && (
+        <ActionChips actions={facturaActions} onSelect={(a) => {
+          // Two cockpit actions resolve on THIS page — handle them in place
+          // (switch tab) instead of a no-op navigation back to /facturacion.
+          if (a.kind === 'ecf') { setTab('ecf'); return true; }
+          if (a.kind === 'invoice') { setTab('porfacturar'); return true; }
+          return false;
+        }} />
+      )}
+      {loaded && (
+        <KpiBand items={[
+          { label: `Facturado · ${monthLabel}`, value: formatDop(sales607.totals.total) },
+          { label: `Cobrado · ${monthLabel}`, value: formatDop(cobradoMes), tone: 'pos' },
+          { label: 'Por cobrar', value: formatDop(pipelineReceivables.totals.balance),
+            tone: pipelineReceivables.totals.d90 > 0 ? 'neg' : undefined,
+            hint: pipelineReceivables.totals.d90 > 0 ? `${formatDop(pipelineReceivables.totals.d90)} vencido +90 d` : undefined },
+          { label: itbis.aPagar > 0 ? 'ITBIS a pagar' : 'ITBIS a favor', value: formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor) },
+        ]} />
       )}
 
       <TabPills tabs={[
-        { key: 'pending', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
-        { key: '607', label: `607${pendingEcfCount ? ` · ${pendingEcfCount} por transmitir` : ''}` },
-        { key: 'it1', label: 'IT-1 (ITBIS)' },
+        { key: 'todas', label: `Todas${register.counts.todas ? ` (${register.counts.todas})` : ''}` },
+        { key: 'cobrar', label: `Por cobrar${register.counts.cobrar ? ` (${register.counts.cobrar})` : ''}` },
+        { key: 'pagadas', label: `Pagadas${register.counts.pagadas ? ` (${register.counts.pagadas})` : ''}` },
+        { key: 'ecf', label: `e-CF pendientes${register.counts.ecf ? ` (${register.counts.ecf})` : ''}` },
+        { key: 'porfacturar', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
       ]} active={tab} onChange={setTab} />
       {err && <p className={`text-sm mb-3 ${err.startsWith('✓') ? 'text-emerald-700' : 'text-rose-600'}`}>{err}</p>}
 
-      {!loaded ? <ListLoading /> : tab === 'pending' ? (
+      {!loaded ? <ListLoading /> : tab === 'porfacturar' ? (
         deliverables.length === 0 ? (
           <EmptyState icon={FileText} title="Nada por facturar"
             description="Las ventas listas para facturar —entregadas, o de piso con depósito recibido— aparecen aquí." />
@@ -809,7 +942,7 @@ export default function Facturacion() {
             })}
           </div>
         )
-      ) : tab === '607' ? (
+      ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <div className="relative w-full sm:w-auto">
@@ -836,31 +969,34 @@ export default function Facturacion() {
                 className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
               <button type="button" onClick={export607Txt} disabled={sales607.count === 0}
                 className="btn-ghost"><Download size={14} /> TXT DGII (607)</button>
+              <Link to="/accounting/impuestos" className="btn-ghost" title="Liquidación de ITBIS (IT-1) en el resumen DGII">IT-1 →</Link>
             </div>
           </div>
-          {sales607View.count === 0 ? (
-            <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin ventas en el mes'}
-              description={q607 ? 'Ninguna venta del período coincide con la búsqueda.' : 'Las ventas facturadas del mes aparecen aquí.'} />
+          {registerView.count === 0 ? (
+            <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin facturas'}
+              description={q607 ? 'Ninguna factura coincide con la búsqueda.' : 'Las facturas emitidas aparecen aquí. Crea una con “Nueva factura”, o factura una entrega desde “Por facturar”.'} />
           ) : (
             <>
             <RowCards
-              rows={sales607View.rows.map((r) => ({
+              rows={registerView.rows.map((r) => ({
                 key: r.id,
                 title: r.name || '—',
                 right: r.creditNote ? formatDop(-r.total) : formatDop(r.total),
                 sub: <span className="tabular-nums">{r.rnc ? `${r.rnc} · ` : ''}{r.ncf || '—'}{r.creditNote && r.modifiesNcf ? ` ↩ ${r.modifiesNcf}` : ''}</span>,
                 kv: [
                   ['Fecha', formatDate(r.date)],
+                  ['Estado', (STATUS_PILL[r.status] || STATUS_PILL.open)[0]],
                   ['Base', formatDop(r.creditNote ? -r.base : r.base)],
-                  ['ITBIS', formatDop(r.creditNote ? -r.itbis : r.itbis)],
+                  ['Balance', r.open > 0.01 ? formatDop(r.open) : '—'],
                 ],
-                actions: ecfActions(r),
+                onClick: () => setDrawerRow(r),
               }))}
               footer={[
-                ['Ventas', sales607View.count],
-                ['Base', formatDop(sales607View.totals.base)],
-                ['ITBIS', formatDop(sales607View.totals.itbis)],
-                ['Total', formatDop(sales607View.totals.total)],
+                ['Facturas', registerView.count],
+                ['Base', formatDop(registerView.totals.base)],
+                ['ITBIS', formatDop(registerView.totals.itbis)],
+                ['Total', formatDop(registerView.totals.total)],
+                ['Balance', formatDop(registerView.totals.open)],
               ]}
             />
             <div className="hidden md:block">
@@ -882,14 +1018,14 @@ export default function Facturacion() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sales607View.rows.map((r) => {
+                      {registerView.rows.map((r) => {
                         const ctx = { r };
                         return (
-                          <tr key={r.id}>
+                          <tr key={r.id} className="cursor-pointer" onClick={() => setDrawerRow(r)}>
                             {cols607.map((col) => (
                               <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
                             ))}
-                            <td>{ecfActions(r)}</td>
+                            <td onClick={(e) => e.stopPropagation()}>{ecfActions(r)}</td>
                           </tr>
                         );
                       })}
@@ -900,13 +1036,13 @@ export default function Facturacion() {
                         // up to the first visible total column; each total column
                         // then renders its own `foot`, and the fixed e-CF column
                         // closes with an empty cell.
-                        const footCtx = { totals: sales607View.totals };
+                        const footCtx = { totals: registerView.totals };
                         const labelSpan = cols607.findIndex((c) => c.foot);
                         const leadSpan = labelSpan === -1 ? cols607.length : labelSpan;
                         const totalCols = labelSpan === -1 ? [] : cols607.slice(labelSpan);
                         return (
                           <tr className="border-t border-ink-200 font-semibold">
-                            <td className="whitespace-nowrap" colSpan={leadSpan}>{sales607View.count} ventas</td>
+                            <td className="whitespace-nowrap" colSpan={leadSpan}>{registerView.count} facturas</td>
                             {totalCols.map((col) => (
                               <td key={col.key} className={col.foot ? (col.tdClass || '') : ''}>
                                 {col.foot ? col.foot(footCtx) : null}
@@ -924,21 +1060,21 @@ export default function Facturacion() {
             </>
           )}
         </>
-      ) : (
-        <div className="card p-5 max-w-md">
-          <h2 className="eyebrow font-semibold text-ink-600 mb-3">Liquidación de ITBIS — mes actual</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>Débito fiscal (ITBIS ventas)</span><span className="tabular-nums">{formatDop(itbis.debitoFiscal)}</span></div>
-            <div className="flex justify-between"><span>Crédito fiscal (ITBIS compras)</span><span className="tabular-nums">−{formatDop(itbis.creditoFiscal)}</span></div>
-            <div className="flex justify-between text-xs text-ink-500 pl-3"><span>Local (606)</span><span className="tabular-nums">{formatDop(itbis.creditoLocal)}</span></div>
-            <div className="flex justify-between text-xs text-ink-500 pl-3"><span>Importación (DUA)</span><span className="tabular-nums">{formatDop(itbis.creditoImportacion)}</span></div>
-            <div className="flex justify-between pt-2 mt-1 border-t border-ink-200 font-bold">
-              <span>{itbis.aPagar > 0 ? 'ITBIS a pagar' : 'Saldo a favor'}</span>
-              <span className="tabular-nums">{formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor)}</span>
-            </div>
-          </div>
-        </div>
       )}
+      {drawerRow && (() => {
+        const p = postingById.get(drawerRow.id);
+        const customer = p?.customerId ? customersById.get(p.customerId) : null;
+        const pmts = paymentsQ.data.filter((pay) => (pay.allocations || []).some((a) => a.docId === drawerRow.id));
+        return (
+          <InvoiceDrawer
+            row={drawerRow} posting={p} customer={customer} payments={pmts}
+            itbisRate={config.itbisRate}
+            fiscalActions={ecfActions(drawerRow)}
+            onCollect={(args) => collectInvoice(p, args)}
+            onClose={() => setDrawerRow(null)}
+          />
+        );
+      })()}
       {printDoc && (
         <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}

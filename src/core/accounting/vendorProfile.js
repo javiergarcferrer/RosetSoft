@@ -5,7 +5,9 @@ import { round2 } from '../../lib/accounting/ledger.js';
 export function resolveVendorProfile({ supplier, expenses, purchases, payments, year } = {}) {
   if (!supplier) return null;
   const sid = supplier.id;
-  const inYear = (t) => year == null || new Date(t || 0).getUTCFullYear() === year;
+  // Local-time year (matches the `year` the page derives from new Date().getFullYear()
+  // and every other analytics window) — getUTCFullYear mis-bucketed New-Year docs.
+  const inYear = (t) => year == null || new Date(t || 0).getFullYear() === year;
 
   const docs = [
     ...(purchases || []).filter((p) => p.supplierId === sid).map((p) => ({

@@ -66,7 +66,7 @@ export function resolveSales607({ salesPostings, customersById, start, end, quer
  *   • `creditoImportacion` — ITBIS paid at customs (DUA-backed, no NCF): the
  *     legacy single liquidations + every expediente's import ITBIS.
  */
-export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, expedientes, start, end } = {}) {
+export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, expedientes, pettyCashVouchers, start, end } = {}) {
   const debitoFiscal = round2((salesPostings || [])
     .filter((p) => inWindow(p.postedAt, start, end))
     // A nota de crédito (E34) reverses débito fiscal — subtract its ITBIS.
@@ -90,7 +90,13 @@ export function resolveItbisLiquidation({ salesPostings, expenses, purchases, im
       const a = Math.max(0, Number(c?.amount) || 0);
       return cs + Math.min(Math.max(0, Number(c?.itbis) || 0), a);
     }, 0), 0);
-  const creditoLocal = round2(expCredit + purCredit + expedienteCostItbis);
+  // Petty-cash vales with an NCF are creditable local compras too — they also
+  // appear in the 606, so the IT-1 crédito fiscal must include them or the two
+  // filings disagree (the DGII cross-checks 606 vs IT-1).
+  const pettyCredit = (pettyCashVouchers || [])
+    .filter((v) => v.type === 'expense' && v.ncf && v.itbisCreditable !== false && inWindow(v.voucherAt, start, end))
+    .reduce((s, v) => s + (Number(v.itbis) || 0), 0);
+  const creditoLocal = round2(expCredit + purCredit + expedienteCostItbis + pettyCredit);
   const creditoImportacion = round2(impCredit + expedienteImportItbis);
   const creditoFiscal = round2(creditoLocal + creditoImportacion);
   const saldo = round2(debitoFiscal - creditoFiscal);

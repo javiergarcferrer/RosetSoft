@@ -46,8 +46,8 @@ export {
 // ── sales (Facturación) ViewModels + the DGII 607 + IT-1 liquidation
 export { resolveSales607, resolveItbisLiquidation } from './sales607.js';
 
-// ── invoice pipeline (AR funnel: por cobrar / vencida / cobrada + e-CF backlog)
-export { resolveInvoicePipeline } from './invoices.js';
+// ── invoice pipeline (AR funnel) + the single-pane invoice register
+export { resolveInvoicePipeline, resolveInvoiceRegister, invoiceRowTotals } from './invoices.js';
 
 // ── DGII Formato de Envío TXT builders (606/607 Oficina Virtual files)
 export { dgii606Txt, dgii607Txt, dgiiPeriod, dgiiTxtFilename, collectionSplit } from './dgiiFormats.js';

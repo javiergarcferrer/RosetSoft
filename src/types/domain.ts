@@ -650,8 +650,11 @@ export interface Expense {
   number?: number | null;
   supplierId?: string | null;
   expenseAt: number;
-  /** Receipt link (e.g. Google Drive) + review/approval flag. */
+  /** Receipt comprobante — an uploaded file (photo/PDF) in the `documents`
+   *  bucket or an external link — plus a review/approval flag. */
   attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentType?: string | null;
   approvalStatus?: string;
   approvedBy?: string | null;
   approvedAt?: number | null;
@@ -1260,8 +1263,11 @@ export interface Purchase {
   number?: number | null;
   supplierId?: string | null;
   purchaseAt: number;
-  /** Receipt link (e.g. Google Drive) + review/approval flag. */
+  /** Receipt comprobante — an uploaded file (photo/PDF) in the `documents`
+   *  bucket or an external link — plus a review/approval flag. */
   attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentType?: string | null;
   approvalStatus?: string;
   approvedBy?: string | null;
   approvedAt?: number | null;

@@ -12,6 +12,7 @@ import RowCards from '../../components/RowCards.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import AccountTree from '../../components/accounting/AccountTree.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { downloadCsv } from '../../lib/csv.js';
@@ -224,6 +225,7 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
 export default function Ledger() {
   const { profileId, currentProfile } = useApp();
   const scope = profileId || 'team';
+  const confirm = useConfirm();
 
   const [tab, setTab] = useState('diario'); // 'diario' | 'mayor' | 'balanza'
   const [showForm, setShowForm] = useState(false);
@@ -291,8 +293,13 @@ export default function Ledger() {
   } = useColumnWidths(balanzaCols.cols, 'rs.ledger.balanza.widths.v1');
 
   async function reverse(entry, lines) {
-    if (typeof window !== 'undefined'
-      && !window.confirm(`¿Reversar el asiento #${entry.number ?? ''}? Se creará un asiento espejo.`)) return;
+    const ok = await confirm({
+      title: 'Reversar asiento',
+      message: `Se creará un asiento espejo que anula el asiento #${entry.number ?? ''}. Queda registrado en el libro.`,
+      confirmLabel: 'Reversar',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setReversing(entry.id);
     try {
       const built = buildReversalEntry({ newId, original: entry, originalLines: lines });

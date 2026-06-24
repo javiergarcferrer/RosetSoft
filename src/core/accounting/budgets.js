@@ -9,8 +9,11 @@ const BUDGETABLE = [4, 5, 6];
 
 export function resolveBudgetVariance({ accounts, lines, entries, budgets, year } = {}) {
   const y = Number(year);
-  const start = Date.UTC(y, 0, 1);
-  const end = Date.UTC(y, 11, 31, 23, 59, 59);
+  // Local-time year boundaries — the dealer's AST calendar, matching analytics'
+  // yearWindow and the entries' postedAt. (Date.UTC here shifted the window 4h
+  // early in DR, mis-bucketing entries in the first/last hours of the year.)
+  const start = new Date(y, 0, 1).getTime();
+  const end = new Date(y, 11, 31, 23, 59, 59, 999).getTime();
   const raw = accountRawBalances(lines, { entries, start, end });
   const byCode = new Map((accounts || []).map((a) => [a.code, a]));
   const budgetByCode = new Map((budgets || []).filter((b) => Number(b.year) === y).map((b) => [b.accountCode, round2(b.amount || 0)]));

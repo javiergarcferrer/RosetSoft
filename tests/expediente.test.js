@@ -68,6 +68,30 @@ test('creditable ITBIS = import ITBIS + every service ITBIS', () => {
   assert.equal(expedienteCreditableItbis(expediente()), 2430); // 2160 + 270
 });
 
+test('zero-CIF cost sheet allocates by quantity, not dumped on the last line', () => {
+  const e = {
+    id: 'x', profileId: 'team', bl: '', liquidatedAt: 0, paymentMethod: 'bank',
+    cif: 0, duty: 0, importItbis: 0, lines: [],
+    embarques: [
+      { id: 'e1', bl: '', flete: 0, seguro: 0, facturas: [
+        { id: 'f1', supplierId: 's', lines: [
+          { id: 'a', itemId: 'iA', name: 'A', qty: 3, fob: 0 },
+          { id: 'b', itemId: 'iB', name: 'B', qty: 1, fob: 0 },
+        ] },
+      ] },
+    ],
+    costs: [{ id: 'c', concept: 'flete', amount: 400, itbis: 0, paymentMethod: 'bank' }],
+  };
+  const r = resolveExpediente(e, config);
+  const a = r.lines.find((l) => l.itemId === 'iA');
+  const b = r.lines.find((l) => l.itemId === 'iB');
+  assert.equal(a.costShare, 300); // 400 × 3/4, by quantity — NOT 0
+  assert.equal(b.costShare, 100); // 400 × 1/4 (drift line) — NOT the whole 400
+  assert.equal(a.landedUnitCost, 100); // 300 / 3
+  assert.equal(b.landedUnitCost, 100); // 100 / 1
+  assert.equal(r.totals.landed, 400);
+});
+
 test('asiento balances and books the right debits', () => {
   let i = 0;
   const { lines } = buildExpedienteEntry({ newId: () => `id${i++}`, config, expediente: emb(), postedAt: 0 });

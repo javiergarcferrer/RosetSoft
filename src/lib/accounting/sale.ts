@@ -198,7 +198,6 @@ export interface CreditNoteDraft {
  * before the E34 e-NCF is burned. Pure.
  */
 export function resolveCreditNoteDraft(input: CreditNoteDraftInput): CreditNoteDraft {
-  const rate = input.itbisRate ?? 18;
   const saleBase = round2(input.sale?.base || 0);
   const saleItbis = round2(input.sale?.itbis || 0);
   const prior = round2(input.priorCreditedBase || 0);
@@ -221,10 +220,14 @@ export function resolveCreditNoteDraft(input: CreditNoteDraftInput): CreditNoteD
   const base = round2(input.creditedBase || 0);
   if (base <= 0) throw new Error('El monto a acreditar debe ser mayor que cero.');
   if (base - remainingBase > 0.005) throw new Error('El monto a acreditar excede el saldo de la venta.');
+  // Prorate the ORIGINAL sale's actual ITBIS by the credited share — never
+  // recompute at the standard rate, or a tax-exempt sale (itbis 0) would have
+  // ITBIS fabricated against it and the E34 / 607 / IT-1 would under-report tax.
+  const itbis = saleBase > 0 ? round2(saleItbis * base / saleBase) : 0;
   return {
     base,
-    itbis: round2(base * rate / 100),
-    total: round2(base + base * rate / 100),
+    itbis,
+    total: round2(base + itbis),
     depositToRestore: 0,
     codigoModificacion: 3,
   };

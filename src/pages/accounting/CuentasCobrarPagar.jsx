@@ -3,12 +3,14 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer, Send, ListChecks, Share2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, assignSequenceNumber } from '../../db/database.js';
+import { db, newId } from '../../db/database.js';
+import { postPaymentTx } from '../../lib/paymentPosting.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import { useToast } from '../../components/ConfirmProvider.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -106,6 +108,7 @@ const STATEMENT_DEFAULT = { concept: true, ref: true, charge: true, payment: tru
 export default function CuentasCobrarPagar() {
   const { profileId, settings } = useApp();
   const scope = profileId || 'team';
+  const toast = useToast();
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
@@ -165,8 +168,8 @@ export default function CuentasCobrarPagar() {
     let token = customersById.get(selected.id)?.statementToken;
     if (!token) { token = newShareToken(); await db.customers.update(selected.id, { statementToken: token }); }
     const url = statementLinkUrl(token);
-    try { await navigator.clipboard.writeText(url); window.alert(`Enlace del estado de cuenta copiado:\n${url}`); }
-    catch { window.prompt('Enlace del estado de cuenta:', url); }
+    try { await navigator.clipboard.writeText(url); toast('Enlace del estado de cuenta copiado'); }
+    catch { toast('No se pudo copiar el enlace', { tone: 'error' }); }
   }
 
   async function printStatement() {
@@ -471,15 +474,14 @@ function PayBillsPanel({ bills, scope, config, onClose }) {
       const postedAt = new Date(date).getTime();
       for (const b of chosen) {
         const id = newId();
-        const built = buildPaymentEntry({
-          newId, config, postedAt,
-          payment: { id, direction: 'out', partyType: 'supplier', partyId: b.supplierId, amount: b.open, method, commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0 },
-        });
-        await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
-        await db.journalLines.bulkPut(built.lines);
-        await assignSequenceNumber({
-          table: 'payments', profileId: scope, start: 1,
-          build: (n) => ({ id, profileId: scope, number: n, direction: 'out', partyType: 'supplier', partyId: b.supplierId, paidAt: postedAt, amount: b.open, method, commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0, allocations: [{ docId: b.docId, amount: b.open }], journalEntryId: built.entry.id }),
+        const payment = { id, direction: 'out', partyType: 'supplier', partyId: b.supplierId, amount: b.open, method, commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0 };
+        const built = buildPaymentEntry({ newId, config, postedAt, payment });
+        // Asiento + lines + payments row in ONE transaction (numbers assigned
+        // server-side) — never an orphan asiento that lets the bill be paid twice.
+        await postPaymentTx({
+          entry: built.entry,
+          lines: built.lines,
+          payment: { ...payment, profileId: scope, paidAt: postedAt, allocations: [{ docId: b.docId, amount: b.open }], journalEntryId: built.entry.id },
         });
       }
       onClose();
@@ -562,33 +564,34 @@ function PaymentForm({ direction, scope, config, parties, docsByParty, initial, 
     const amount = Number(form.amount) || 0;
     if (!form.partyId) { setErr('Elige el ' + (direction === 'in' ? 'cliente' : 'proveedor') + '.'); return; }
     if (amount <= 0) { setErr('El monto debe ser mayor que cero.'); return; }
+    const allocations = openDocs
+      .map((d) => ({ docId: d.docId, amount: Number(alloc[d.docId]) || 0 }))
+      .filter((a) => a.amount > 0);
+    // A payment can never allocate more than it received — otherwise the aging
+    // would over-clear invoices (each doc dropped past what was actually paid).
+    const allocSum = Math.round(allocations.reduce((s, a) => s + a.amount, 0) * 100) / 100;
+    if (allocSum - amount > 0.005) {
+      setErr(`Las asignaciones (${formatDop(allocSum)}) superan el monto del pago (${formatDop(amount)}).`);
+      return;
+    }
     setSaving(true);
     try {
       const id = newId();
       const postedAt = new Date(form.date).getTime();
-      const built = buildPaymentEntry({
-        newId, config, postedAt,
-        payment: {
-          id, direction, partyType: direction === 'in' ? 'customer' : 'supplier', partyId: form.partyId,
-          amount, method: form.method, reference: form.reference,
-          commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
-          itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
-        },
-      });
-      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
-      await db.journalLines.bulkPut(built.lines);
-      const allocations = openDocs
-        .map((d) => ({ docId: d.docId, amount: Number(alloc[d.docId]) || 0 }))
-        .filter((a) => a.amount > 0);
-      await assignSequenceNumber({
-        table: 'payments', profileId: scope, start: 1,
-        build: (n) => ({
-          id, profileId: scope, number: n, direction, partyType: direction === 'in' ? 'customer' : 'supplier',
-          partyId: form.partyId, paidAt: postedAt, amount, method: form.method, reference: form.reference,
-          commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
-          itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
-          allocations, journalEntryId: built.entry.id,
-        }),
+      const payment = {
+        id, direction, partyType: direction === 'in' ? 'customer' : 'supplier', partyId: form.partyId,
+        amount, method: form.method, reference: form.reference,
+        commission: Number(form.commission) || 0, commissionItbis: Number(form.commissionItbis) || 0,
+        itbisRetained: Number(form.itbisRetained) || 0, isrRetained: Number(form.isrRetained) || 0,
+      };
+      const built = buildPaymentEntry({ newId, config, postedAt, payment });
+      // Asiento + lines + payments row in ONE transaction (numbers assigned
+      // server-side), so a mid-way failure can't leave a paid-looking asiento
+      // with no payment row (which would let the same cobro be entered twice).
+      await postPaymentTx({
+        entry: built.entry,
+        lines: built.lines,
+        payment: { ...payment, profileId: scope, paidAt: postedAt, allocations, journalEntryId: built.entry.id },
       });
       onClose();
     } catch (e) {

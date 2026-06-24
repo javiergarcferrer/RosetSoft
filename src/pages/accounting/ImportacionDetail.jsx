@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2, Pencil, ShoppingCart } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -113,6 +114,7 @@ export default function ImportacionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profileId, currentProfile, settings } = useApp();
+  const confirm = useConfirm();
   const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
   const scope = profileId || 'team';
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
@@ -231,7 +233,13 @@ export default function ImportacionDetail() {
   async function deleteExpediente() {
     const e = expQ.data;
     if (!e || deleting) return;
-    if (!confirm(`¿Eliminar el expediente${e.number != null ? ` #${e.number}` : ''}? Se revierten el asiento, los movimientos de inventario y las existencias${e.driveFolderId ? ', y se borra su carpeta de documentos en Drive' : ''}. Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: 'Eliminar expediente',
+      message: `¿Eliminar el expediente${e.number != null ? ` #${e.number}` : ''}? Se revierten el asiento, los movimientos de inventario y las existencias${e.driveFolderId ? ', y se borra su carpeta de documentos en Drive' : ''}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setErr('');
     setDeleting(true);
     try {

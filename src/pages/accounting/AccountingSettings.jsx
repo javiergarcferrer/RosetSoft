@@ -4,6 +4,7 @@ import { updateSettings } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import FileDropZone from '../../components/FileDropZone.jsx';
 import { formatDate } from '../../lib/format.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { saveEcfCredentials } from '../../lib/ecfCert.js';
@@ -195,14 +196,18 @@ export default function AccountingSettings() {
                 Sube tu certificado .p12 y su clave. Se guarda de forma segura y sólo el servidor de firma lo lee — el navegador nunca lo recupera.
               </p>
             )}
-            <div className="flex flex-wrap items-center gap-2">
-              <input type="file" accept=".p12,.pfx" onChange={(e) => setCertFile(e.target.files?.[0] || null)} className="text-sm w-full sm:w-auto" />
-              <input type="password" value={certPassword} onChange={(e) => setCertPassword(e.target.value)}
-                placeholder="Clave del .p12" className="input flex-1 min-w-[140px]" />
-              <button type="button" onClick={saveCert} disabled={certSaving || !certFile || !certPassword}
-                className="btn-primary">
-                {certSaving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar certificado
-              </button>
+            <div className="space-y-2">
+              <FileDropZone mode="file" accept=".p12,.pfx" height="py-4"
+                hint="Arrastra tu certificado .p12 / .pfx o haz clic"
+                fileName={certFile?.name || ''} onFile={(f) => setCertFile(f)} onClear={() => setCertFile(null)} />
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="password" value={certPassword} onChange={(e) => setCertPassword(e.target.value)}
+                  placeholder="Clave del .p12" className="input flex-1 min-w-[140px]" />
+                <button type="button" onClick={saveCert} disabled={certSaving || !certFile || !certPassword}
+                  className="btn-primary">
+                  {certSaving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar certificado
+                </button>
+              </div>
             </div>
             {certMsg && <p className="text-sm mt-2 text-ink-600">{certMsg}</p>}
           </div>
@@ -215,8 +220,10 @@ export default function AccountingSettings() {
               Firma el XML del formulario de postulación con el certificado cargado — sin la app de Windows de la DGII.
               El certificado debe ser el del <b>representante legal registrado</b>. Descarga el archivo firmado y súbelo a la Oficina Virtual.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <input type="file" accept=".xml" onChange={(e) => setPostFile(e.target.files?.[0] || null)} className="text-sm w-full sm:w-auto" />
+            <div className="space-y-2">
+              <FileDropZone mode="file" accept=".xml" height="py-4"
+                hint="Arrastra el XML de postulación o haz clic"
+                fileName={postFile?.name || ''} onFile={(f) => setPostFile(f)} onClear={() => setPostFile(null)} />
               <button type="button" onClick={signPostulacion} disabled={signingPost || !postFile || !settings?.ecfCertUploadedAt}
                 className="btn-primary disabled:opacity-40">
                 {signingPost ? <Loader2 size={15} className="animate-spin" /> : <FileCheck size={15} />} Firmar y descargar

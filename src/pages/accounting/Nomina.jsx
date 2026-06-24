@@ -11,7 +11,7 @@ import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig,
-  ratesForPeriod, overtimePay, regaliaPascual, vacationDays, dailyWage, vacationPay,
+  ratesForPeriod, overtimePay, regaliaPascual, vacationDays, vacationProportionalDays, dailyWage, vacationPay,
   liquidacion, monthsOfService, bonificacionRun, bonificacionCapDays,
   buildRegaliaEntry, buildLiquidacionEntry, buildBonificacionEntry, round2,
 } from '../../core/accounting/index.js';
@@ -467,8 +467,12 @@ function Regalia({ scope, config, employees, runs }) {
 function Vacaciones({ employees }) {
   const [days, setDays] = useState({}); // override días
   const rows = employees.map((e) => {
-    const years = e.hireAt ? monthsOfService(e.hireAt, Date.now()) / 12 : 0;
-    const defDays = vacationDays(Math.floor(years));
+    const months = e.hireAt ? monthsOfService(e.hireAt, Date.now()) : 0;
+    const years = months / 12;
+    // Under a year accrues proportionally from month 5 (Art. 180); 14/18 días
+    // from year 1 (Art. 177). Was always vacationDays(floor(years)) → 0 días for
+    // first-year staff, silently under-paying the proportional entitlement.
+    const defDays = years >= 1 ? vacationDays(Math.floor(years)) : vacationProportionalDays(months);
     const d = days[e.id] != null && days[e.id] !== '' ? num(days[e.id]) : defDays;
     return { e, years, defDays, d, daily: dailyWage(e.monthlySalary), pay: vacationPay(e.monthlySalary, d) };
   });
@@ -477,7 +481,7 @@ function Vacaciones({ employees }) {
   return (
     <div className="card p-4 space-y-3">
       <p className="text-xs text-ink-400">
-        Vacaciones (Art. 177): 14 días laborables de 1 a 5 años de servicio, 18 días a partir de 5 años. Salario diario = salario ÷ 23.83. La antigüedad se calcula desde la fecha de ingreso del empleado.
+        Vacaciones (Art. 177): 14 días laborables de 1 a 5 años de servicio, 18 días a partir de 5 años; en el primer año se acumulan proporcionalmente desde los 5 meses (Art. 180). Salario diario = salario ÷ 23.83. La antigüedad se calcula desde la fecha de ingreso del empleado.
       </p>
       {/* Mobile cards */}
       <div className="sm:hidden space-y-3">

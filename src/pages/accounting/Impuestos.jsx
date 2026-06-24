@@ -34,7 +34,8 @@ export default function Impuestos() {
   const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
-  const loaded = salesQ.loaded && expensesQ.loaded && purchasesQ.loaded && importsQ.loaded && expedientesQ.loaded;
+  const vouchersQ = useLiveQueryStatus(() => db.pettyCashVouchers.where('profileId').equals(scope).toArray(), [scope], []);
+  const loaded = salesQ.loaded && expensesQ.loaded && purchasesQ.loaded && importsQ.loaded && expedientesQ.loaded && vouchersQ.loaded;
 
   const today = useMemo(() => new Date(), []);
   const win = useMemo(() => ({
@@ -43,8 +44,8 @@ export default function Impuestos() {
   }), [today]);
   const itbis = useMemo(() => resolveItbisLiquidation({
     salesPostings: salesQ.data, expenses: expensesQ.data, purchases: purchasesQ.data,
-    imports: importsQ.data, expedientes: expedientesQ.data, ...win,
-  }), [salesQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
+    imports: importsQ.data, expedientes: expedientesQ.data, pettyCashVouchers: vouchersQ.data, ...win,
+  }), [salesQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, vouchersQ.data, win]);
 
   const monthLabel = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
   // The filings to file — straight from the plugin (DR: 606 · 607 · IT-1 · e-CF).

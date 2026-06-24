@@ -95,10 +95,22 @@ export default function Empleados() {
             <button type="button" onClick={() => setEditing(null)} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
           </div>
           <div className="grid sm:grid-cols-2 gap-3 max-w-2xl">
-            <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre" className={field} />
-            <input value={form.cedula} onChange={(e) => setForm((f) => ({ ...f, cedula: e.target.value }))} placeholder="Cédula" inputMode="numeric" className={field} />
-            <input value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} placeholder="Cargo" className={field} />
-            <input type="number" step="0.01" min="0" inputMode="decimal" enterKeyHint="done" value={form.monthlySalary} onChange={(e) => setForm((f) => ({ ...f, monthlySalary: e.target.value }))} placeholder="Salario mensual" className={`${field} text-right tabular-nums`} />
+            <label className="block">
+              <span className="label">Nombre</span>
+              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nombre" className={field} />
+            </label>
+            <label className="block">
+              <span className="label">Cédula</span>
+              <input value={form.cedula} onChange={(e) => setForm((f) => ({ ...f, cedula: e.target.value }))} placeholder="Cédula" inputMode="numeric" className={field} />
+            </label>
+            <label className="block">
+              <span className="label">Cargo</span>
+              <input value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} placeholder="Cargo" className={field} />
+            </label>
+            <label className="block">
+              <span className="label">Salario mensual</span>
+              <input type="number" step="0.01" min="0" inputMode="decimal" enterKeyHint="done" value={form.monthlySalary} onChange={(e) => setForm((f) => ({ ...f, monthlySalary: e.target.value }))} placeholder="Salario mensual" className={`${field} text-right tabular-nums`} />
+            </label>
             <label className="block">
               <span className="label">Fecha de ingreso</span>
               <input type="date" value={form.hireAt} onChange={(e) => setForm((f) => ({ ...f, hireAt: e.target.value }))} className={field} />

@@ -55,9 +55,12 @@ export const ACCOUNTING_SECTIONS = [
 
   // ── Ventas y tesorería ── the outbound / revenue side: the sale, the bank
   //    (cobros y pagos), and payroll — the money in and out.
-  { key: 'ventas', band: 'ventas', label: 'Ventas', icon: FileText, tabs: [
-    { to: '/accounting/ventas', label: 'Ventas' },
-  ], extraMatch: ['/accounting/ligne-roset'] },
+  // Facturación — the SINGLE invoice register (e-CF · 607 · cobros), the sales
+  // hub. Replaces the old "Ventas" workspace here; the comisiones/Odoo workspace
+  // at /accounting/ventas stays reachable from Informes.
+  { key: 'facturacion', band: 'ventas', label: 'Facturación', icon: FileText, tabs: [
+    { to: '/accounting/facturacion', label: 'Facturación' },
+  ], extraMatch: ['/accounting/facturacion/nueva', '/accounting/ventas', '/accounting/ligne-roset'] },
   { key: 'banca', band: 'ventas', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
     { to: '/accounting/caja-chica', label: 'Caja chica' },
@@ -76,7 +79,6 @@ export const ACCOUNTING_SECTIONS = [
   // ranges.
   { key: 'dgii', band: 'libros', label: 'DGII', icon: Percent, tabs: [
     { to: '/accounting/impuestos', label: 'Resumen' },
-    { to: '/accounting/facturacion', label: '607 · IT-1 · e-CF' },
     { to: '/accounting/ecf', label: 'Secuencias e-NCF' },
     { to: '/accounting/recibidos', label: 'Comprobantes recibidos' },
   ] },

@@ -16,7 +16,7 @@ import { postSaleTx } from '../../lib/salePosting.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import {
   resolveAccountingConfig, resolveBillLines, buildSalesBillEntry,
-  postableAccounts, classOf, saleEcfType, isValidFiscalId, parseENcf,
+  postableAccounts, classOf, saleEcfType, isValidFiscalId, consumoRequiresBuyerId, parseENcf,
 } from '../../core/accounting/index.js';
 
 const blankLine = () => ({ id: newId(), description: '', accountCode: '', qty: '1', unitPrice: '', taxIds: ['itbis18'] });
@@ -78,6 +78,11 @@ export default function FacturaVentaEditor() {
     if (bl.some((l) => !l.accountCode)) { setErr('Cada línea necesita una cuenta de ingreso.'); return; }
     if (bl.some((l) => !(l.base > 0))) { setErr('Cada línea necesita cantidad y precio mayores que cero.'); return; }
     if (rnc && !isValidFiscalId(rnc)) { setErr('El RNC/cédula del cliente es inválido (9 u 11 dígitos).'); return; }
+    // ≥RD$250k consumo needs the buyer's RNC — block before the e-NCF is burned.
+    if (!rnc && consumoRequiresBuyerId(totals.total)) {
+      setErr('Una factura de RD$250,000 o más requiere el RNC/cédula del cliente (se emite como crédito fiscal 31).');
+      return;
+    }
 
     setSaving(true);
     try {

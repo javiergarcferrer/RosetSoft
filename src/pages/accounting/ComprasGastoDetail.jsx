@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy, Paperclip } from 'lucide-react';
+import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy, Paperclip, UploadCloud, RefreshCw, ExternalLink, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
+import { uploadDocAttachment, removeDocAttachment } from '../../db/docAttachmentUpload.js';
 import { useApp } from '../../context/AppContext.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
@@ -41,39 +43,170 @@ function Field({ label, children }) {
  * recomputes from what's LEFT; an item minted only by this invoice is removed).
  * Self-gates on accounting/admin.
  */
-/** Receipt attachment + review/approval flag for a supplier document. */
+const APPROVAL = {
+  approved: ['Aprobada', 'bg-emerald-100 text-emerald-700'],
+  rejected: ['Rechazada', 'bg-rose-100 text-rose-700'],
+  pending: ['Pendiente', 'bg-amber-100 text-amber-800'],
+};
+
+/** Classify an attachment for preview: prefer the stored MIME type, fall back
+ *  to the URL extension (legacy/external links carry no type). */
+function attachmentKind(url, type) {
+  if (/^image\//i.test(type) || (!type && /\.(png|jpe?g|webp|gif|heic|heif|avif)(\?|$)/i.test(url))) return 'image';
+  if (type === 'application/pdf' || (!type && /\.pdf(\?|$)/i.test(url))) return 'pdf';
+  return url ? 'link' : 'none';
+}
+
+/**
+ * Receipt comprobante + review/approval flag for a supplier document. A
+ * two-column block: the upload controls + approval on the left, a live preview
+ * (image inline · PDF embed · external-link card) on the right. Drag, paste or
+ * click to upload a photo/PDF straight into the `documents` bucket; an external
+ * link is still accepted as a secondary path.
+ */
 function DocExtras({ doc, table }) {
-  const [url, setUrl] = useState(doc.attachmentUrl || '');
-  const [editing, setEditing] = useState(!doc.attachmentUrl);
-  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+
+  const url = doc.attachmentUrl || '';
+  const kind = attachmentKind(url, doc.attachmentType || '');
   const status = doc.approvalStatus || 'approved';
-  const STATUS = { approved: ['Aprobada', 'bg-emerald-100 text-emerald-700'], rejected: ['Rechazada', 'bg-rose-100 text-rose-700'], pending: ['Pendiente', 'bg-amber-100 text-amber-800'] };
-  async function saveUrl() { setSaving(true); try { await db[table].update(doc.id, { attachmentUrl: url.trim() || null, updatedAt: Date.now() }); setEditing(false); } finally { setSaving(false); } }
-  async function setApproval(s) { await db[table].update(doc.id, { approvalStatus: s, approvedAt: Date.now(), updatedAt: Date.now() }); }
-  const [label, cls] = STATUS[status] || STATUS.approved;
+  const [statusLabel, statusCls] = APPROVAL[status] || APPROVAL.approved;
+
+  const patch = (fields) => db[table].update(doc.id, { ...fields, updatedAt: Date.now() });
+
+  async function upload(file) {
+    if (!file || busy) return;
+    setErr('');
+    setBusy(true);
+    try {
+      const prev = doc.attachmentUrl;
+      const att = await uploadDocAttachment(file);
+      await patch({ attachmentUrl: att.url, attachmentName: att.name, attachmentType: att.type });
+      if (prev) removeDocAttachment(prev).catch(() => {});
+    } catch (e) {
+      setErr(userMessageFor(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onPaste(e) {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/') || i.type === 'application/pdf');
+    if (!item) return;
+    e.preventDefault();
+    upload(item.getAsFile());
+  }
+
+  async function clearAttachment() {
+    const prev = doc.attachmentUrl;
+    await patch({ attachmentUrl: null, attachmentName: null, attachmentType: null });
+    if (prev) removeDocAttachment(prev).catch(() => {});
+  }
+
+  async function saveLink() {
+    const u = linkUrl.trim();
+    if (!u) return;
+    const prev = doc.attachmentUrl;
+    await patch({ attachmentUrl: u, attachmentName: null, attachmentType: null });
+    if (prev) removeDocAttachment(prev).catch(() => {});
+    setLinking(false);
+    setLinkUrl('');
+  }
+
+  const setApproval = (s) => patch({ approvalStatus: s, approvedAt: Date.now() });
+
   return (
-    <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-      <div className="flex items-center gap-2 text-sm min-w-0">
-        <Paperclip size={14} className="text-ink-400 shrink-0" />
-        {doc.attachmentUrl && !editing ? (
-          <>
-            <a href={doc.attachmentUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:text-brand-700 truncate">Ver adjunto</a>
-            <button type="button" onClick={() => setEditing(true)} className="text-xs text-ink-400 hover:text-ink-700">cambiar</button>
-          </>
+    <div className="grid gap-5 sm:grid-cols-2">
+      {/* Controls */}
+      <div className="space-y-4 min-w-0">
+        <div>
+          <div className="eyebrow text-ink-400 mb-1.5">Comprobante</div>
+          {url ? (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2 min-w-0 flex-1">
+                {kind === 'pdf' ? <FileText size={16} className="text-rose-500 shrink-0" />
+                  : kind === 'image' ? <ImageIcon size={16} className="text-brand-500 shrink-0" />
+                  : <LinkIcon size={16} className="text-ink-400 shrink-0" />}
+                <span className="text-sm text-ink-700 truncate">{doc.attachmentName || (kind === 'pdf' ? 'Comprobante.pdf' : kind === 'image' ? 'Comprobante' : 'Enlace adjunto')}</span>
+              </div>
+              <a href={url} target="_blank" rel="noreferrer" className="btn-icon text-ink-400" title="Abrir" aria-label="Abrir"><ExternalLink size={15} /></a>
+              <button type="button" onClick={() => inputRef.current?.click()} disabled={busy} className="btn-icon text-ink-400" title="Reemplazar" aria-label="Reemplazar">{busy ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}</button>
+              <button type="button" onClick={clearAttachment} className="btn-icon text-ink-400" title="Quitar" aria-label="Quitar"><Trash2 size={15} /></button>
+            </div>
+          ) : (
+            <>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); upload(e.dataTransfer.files?.[0]); }}
+                onPaste={onPaste}
+                onClick={() => inputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
+                className={`cursor-pointer rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${dragging ? 'border-brand-500 bg-brand-50' : 'border-ink-200 bg-ink-50 hover:border-ink-300'}`}
+              >
+                {busy ? <Loader2 size={20} className="animate-spin mx-auto text-ink-400" /> : <UploadCloud size={20} className="mx-auto text-ink-400" />}
+                <div className="mt-1.5 text-sm text-ink-600">{busy ? 'Subiendo…' : 'Arrastra, pega o haz clic'}</div>
+                <div className="text-xs text-ink-400">Imagen o PDF · máx. 25 MB</div>
+              </div>
+              {linking ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveLink()} placeholder="https://… (Drive, etc.)" className="input py-1 flex-1" autoFocus />
+                  <button type="button" onClick={saveLink} className="btn-ghost text-xs">Guardar</button>
+                  <button type="button" onClick={() => { setLinking(false); setLinkUrl(''); }} className="btn-ghost text-xs">Cancelar</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setLinking(true)} className="mt-2 text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1"><LinkIcon size={11} /> o pegar un enlace</button>
+              )}
+            </>
+          )}
+          {err && <p className="text-xs text-rose-600 mt-1.5">{err}</p>}
+        </div>
+
+        <div>
+          <div className="eyebrow text-ink-400 mb-1.5">Aprobación</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`status-pill ${statusCls}`}>{statusLabel}</span>
+            {status !== 'approved' && <button type="button" onClick={() => setApproval('approved')} className="btn-ghost text-xs">Aprobar</button>}
+            {status !== 'pending' && <button type="button" onClick={() => setApproval('pending')} className="btn-ghost text-xs">Marcar pendiente</button>}
+            {status !== 'rejected' && <button type="button" onClick={() => setApproval('rejected')} className="btn-ghost text-xs text-rose-600">Rechazar</button>}
+          </div>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="rounded-lg border border-ink-200 bg-ink-50 overflow-hidden h-56 flex items-center justify-center">
+        {kind === 'image' ? (
+          <a href={url} target="_blank" rel="noreferrer" className="block w-full h-full" title="Abrir en grande">
+            <img src={url} alt={doc.attachmentName || 'Comprobante'} className="w-full h-full object-contain" />
+          </a>
+        ) : kind === 'pdf' ? (
+          <object data={`${url}#toolbar=0&navpanes=0&view=FitH`} type="application/pdf" className="w-full h-full">
+            <div className="text-center p-4">
+              <FileText size={22} className="mx-auto mb-1.5 text-rose-500" />
+              <a href={url} target="_blank" rel="noreferrer" className="text-sm text-brand-600 hover:text-brand-700">Abrir PDF</a>
+            </div>
+          </object>
+        ) : kind === 'link' ? (
+          <a href={url} target="_blank" rel="noreferrer" className="text-center text-brand-600 hover:text-brand-700 p-4">
+            <ExternalLink size={22} className="mx-auto mb-1.5" />
+            <div className="text-sm">Abrir enlace</div>
+          </a>
         ) : (
-          <>
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL del comprobante (Drive…)" className="input py-1 w-56" />
-            <button type="button" onClick={saveUrl} disabled={saving} className="btn-ghost text-xs">{saving ? '…' : 'Guardar'}</button>
-          </>
+          <div className="text-center text-ink-400">
+            <Paperclip size={22} className="mx-auto mb-1.5 opacity-70" />
+            <div className="text-xs">Sin comprobante adjunto</div>
+          </div>
         )}
       </div>
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-ink-500">Aprobación:</span>
-        <span className={`status-pill ${cls}`}>{label}</span>
-        {status !== 'approved' && <button type="button" onClick={() => setApproval('approved')} className="btn-ghost text-xs">Aprobar</button>}
-        {status !== 'pending' && <button type="button" onClick={() => setApproval('pending')} className="btn-ghost text-xs">Marcar pendiente</button>}
-        {status !== 'rejected' && <button type="button" onClick={() => setApproval('rejected')} className="btn-ghost text-xs text-rose-600">Rechazar</button>}
-      </div>
+
+      <input ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
     </div>
   );
 }
@@ -82,6 +215,7 @@ export default function ComprasGastoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profileId } = useApp();
+  const confirm = useConfirm();
   const scope = profileId || 'team';
 
   const purchaseQ = useLiveQueryStatus(() => db.purchases.get(id), [id], null);
@@ -126,7 +260,13 @@ export default function ComprasGastoDetail() {
     const doc = purchaseQ.data || expenseQ.data;
     if (!doc || deleting) return;
     const what = detail.natureLabel.toLowerCase();
-    if (!confirm(`¿Eliminar ${what}${detail.number != null ? ` #${detail.number}` : ''}? Se revierte el asiento${detail.reversesInventory ? ', los movimientos de inventario y las existencias' : ''}. Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: 'Eliminar compra',
+      message: `¿Eliminar ${what}${detail.number != null ? ` #${detail.number}` : ''}? Se revierte el asiento${detail.reversesInventory ? ', los movimientos de inventario y las existencias' : ''}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setErr('');
     setDeleting(true);
     try {
