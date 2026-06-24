@@ -15,7 +15,7 @@
 // trade cycle, never an expense.
 import {
   Gauge, FileText, Receipt, Landmark, Wallet, BookOpen, BarChart3,
-  Percent, SlidersHorizontal, Ship,
+  Percent, SlidersHorizontal, Ship, ClipboardList,
 } from 'lucide-react';
 
 // Order = on-screen order, grouped by band, following the trade cycle of an
@@ -49,6 +49,9 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/suppliers', label: 'Proveedores' },
     { to: '/accounting/proveedor-360', label: 'Proveedor 360' },
   ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
+  { key: 'ordenes', band: 'compras', label: 'Órdenes de compra', icon: ClipboardList, tabs: [
+    { to: '/accounting/ordenes-compra', label: 'Órdenes de compra' },
+  ] },
 
   // ── Ventas y tesorería ── the outbound / revenue side: the sale, the bank
   //    (cobros y pagos), and payroll — the money in and out.

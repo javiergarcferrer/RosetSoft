@@ -57,6 +57,7 @@ const AccountingComprasGastoEditor = lazyPage(() => import('./pages/accounting/C
 const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.jsx'));
 const AccountingRecurrentes = lazyPage(() => import('./pages/accounting/Recurrentes.jsx'));
 const AccountingVendorProfile = lazyPage(() => import('./pages/accounting/VendorProfile.jsx'));
+const AccountingOrdenesCompra = lazyPage(() => import('./pages/accounting/OrdenesCompra.jsx'));
 const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturacion.jsx'));
 const AccountingFacturaVentaEditor = lazyPage(() => import('./pages/accounting/FacturaVentaEditor.jsx'));
 const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
@@ -328,6 +329,7 @@ function ProtectedApp() {
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />
             <Route path="accounting/recurrentes" element={<AccountingRecurrentes />} />
             <Route path="accounting/proveedor-360" element={<AccountingVendorProfile />} />
+            <Route path="accounting/ordenes-compra" element={<AccountingOrdenesCompra />} />
             <Route path="accounting/facturacion" element={<AccountingFacturacion />} />
             <Route path="accounting/facturacion/nueva" element={<AccountingFacturaVentaEditor />} />
             <Route path="accounting/ligne-roset" element={<AccountingLigneRoset />} />

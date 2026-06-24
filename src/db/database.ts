@@ -42,6 +42,7 @@ import type {
   Budget,
   RecurringTemplate,
   AuditLogEntry,
+  PurchaseOrder,
   Employee,
   PayrollRun,
   WaMessage,
@@ -130,6 +131,7 @@ const TABLES = {
   budgets:            { db: 'budgets',             pk: 'id' },
   recurringTemplates: { db: 'recurring_templates', pk: 'id' },
   auditLog:           { db: 'audit_log',           pk: 'id' },
+  purchaseOrders:     { db: 'purchase_orders',     pk: 'id' },
   employees:          { db: 'employees',           pk: 'id' },
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
   waMessages:         { db: 'wa_messages',         pk: 'id' },
@@ -194,6 +196,7 @@ export interface TableRowMap {
   budgets: Budget;
   recurringTemplates: RecurringTemplate;
   auditLog: AuditLogEntry;
+  purchaseOrders: PurchaseOrder;
   employees: Employee;
   payrollRuns: PayrollRun;
   waMessages: WaMessage;

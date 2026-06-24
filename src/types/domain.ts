@@ -961,6 +961,22 @@ export interface AuditLogEntry {
   after?: unknown;
 }
 
+/** A purchase order (orden de compra) — the PO → bill workflow. Not fiscal;
+ *  only the resulting bill carries the NCF for the 606. */
+export interface PurchaseOrder {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  supplierId?: string | null;
+  orderedAt: number;
+  status: 'open' | 'received' | 'billed' | 'cancelled';
+  lines: { id?: string; name: string; reference?: string; qty: number; unitCost: number }[];
+  notes?: string;
+  expedienteId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**
