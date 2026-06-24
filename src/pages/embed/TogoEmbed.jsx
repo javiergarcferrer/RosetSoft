@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal, Receipt, Magnet } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal, Receipt } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -85,8 +85,16 @@ export default function TogoEmbed() {
   const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
   const [sheet, setSheet] = useState(null);      // mobile bottom sheet: 'pieces' | 'material' | null
   const [moreOpen, setMoreOpen] = useState(false); // mobile toolbar "⋯ Opciones" popover
+  const [actionsOpen, setActionsOpen] = useState(false); // desktop toolbar "⋯ Más" popover
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ palette
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
+
+  // Dieter Rams skin: while the configurator is mounted, flag <body> so the
+  // monochrome variable remap (index.css) reaches the portalled modals too.
+  useEffect(() => {
+    document.body.classList.add('togo-rams');
+    return () => document.body.classList.remove('togo-rams');
+  }, []);
   const material = useMemo(() => {
     const f = FINISHES.find((x) => x.key === finishKey) || FINISHES[1];
     return {
@@ -303,12 +311,6 @@ export default function TogoEmbed() {
     setPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
   }, [selectedUid]);
 
-  // Pull every piece flush — closes any empty gap between pieces (e.g. left behind
-  // when a middle piece is deleted) so the sectional reads as one connected sofa.
-  const connectPieces = useCallback(() => {
-    setPlaced((prev) => compactPlaced(prev, resolvedById));
-  }, [resolvedById]);
-
   // Download the plan as CAD (DXF) — opens in AutoCAD and every plan tool. A
   // genuine differentiator: consumer sofa configurators stop at PDF/image, so a
   // designer-grade, real-cm layout handed straight to the customer's architect.
@@ -408,12 +410,9 @@ export default function TogoEmbed() {
   return (
     <div className="min-h-full bg-surface text-ink-900">
       <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-28 lg:pb-6">
-        <header className="flex items-center gap-2.5 mb-3 sm:mb-4">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 text-brand-600"><Sofa size={16} /></span>
-          <div className="min-w-0">
-            <h1 className="font-display font-semibold text-base sm:text-lg leading-tight truncate">Configura tu Togo</h1>
-            <p className="text-[11px] sm:text-xs text-ink-500 truncate">Arrastra las piezas, elige tus telas y arma tu sofá · {data.storeName}</p>
-          </div>
+        <header className="mb-5 sm:mb-7">
+          <h1 className="font-display font-semibold text-xl sm:text-2xl tracking-tight leading-none">Togo</h1>
+          <p className="mt-1.5 text-xs text-ink-500 truncate">Configura tu sofá · {data.storeName}</p>
         </header>
 
         {/* ─── DESKTOP (lg+): centered, balanced 3-zone layout ─── pieces rail ·
@@ -434,12 +433,21 @@ export default function TogoEmbed() {
                   <span className="text-xs text-ink-500 truncate">{view === '3d' ? 'Arrastra para girar · rueda para acercar' : (vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla')}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={connectPieces} disabled={vm.count < 2} className="btn-ghost text-xs disabled:opacity-40" title="Juntar todas las piezas — cierra los espacios vacíos entre módulos"><Magnet size={14} /> Conectar</button>
                   <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
-                  <button type="button" onClick={() => setArOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver tu sofá a tamaño real en tu sala (Realidad Aumentada)"><View size={14} /> En tu espacio</button>
-                  <button type="button" onClick={downloadDxf} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Descargar el plano en CAD (DXF) — se abre en AutoCAD y cualquier programa de planos"><FileDown size={14} /> Plano</button>
                   <button type="button" onClick={() => setQuoteOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver el resumen de tu cotización"><Receipt size={14} /> Resumen</button>
-                  <button type="button" onClick={() => { setPlaced([]); setSelectedUid(null); }} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Vaciar"><Eraser size={14} /></button>
+                  <div className="relative">
+                    <button type="button" onClick={() => setActionsOpen((v) => !v)} disabled={!vm.count} aria-expanded={actionsOpen} className="btn-ghost text-xs disabled:opacity-40" title="Más opciones"><MoreHorizontal size={16} /></button>
+                    {actionsOpen && vm.count > 0 && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setActionsOpen(false)} aria-hidden />
+                        <div className="absolute right-0 top-full mt-1 z-40 w-56 rounded-xl border border-ink-200 bg-surface shadow-pop p-1.5 flex flex-col gap-0.5">
+                          <button type="button" onClick={() => { setActionsOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
+                          <button type="button" onClick={() => { setActionsOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Descargar plano (DXF)</button>
+                          <button type="button" onClick={() => { setActionsOpen(false); setPlaced([]); setSelectedUid(null); }} className="btn-ghost justify-start text-sm text-red-600"><Eraser size={15} /> Vaciar plano</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -476,7 +484,6 @@ export default function TogoEmbed() {
                   <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} aria-hidden />
                   <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-ink-200 bg-surface shadow-pop p-1.5 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
                     <button type="button" onClick={() => { setMoreOpen(false); openMaterial('all'); }} className="btn-ghost justify-start text-sm"><Layers size={15} /> Tela a todas</button>
-                    <button type="button" onClick={() => { setMoreOpen(false); connectPieces(); }} className="btn-ghost justify-start text-sm"><Magnet size={15} /> Conectar piezas</button>
                     <button type="button" onClick={() => { setMoreOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
                     <button type="button" onClick={() => { setMoreOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Plano (DXF)</button>
                     <button type="button" onClick={() => { setMoreOpen(false); setQuoteOpen(true); }} className="btn-ghost justify-start text-sm"><Receipt size={15} /> Resumen</button>
@@ -524,12 +531,12 @@ export default function TogoEmbed() {
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/95 backdrop-blur px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto max-w-[1400px] flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
+              <div className="text-[11px] text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
               {pricedUsd > 0
-                ? <div className="text-lg font-display font-semibold tabular-nums leading-tight">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-[11px] font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
+                ? <div className="text-xl font-display font-semibold tabular-nums tracking-tight leading-none mt-0.5">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-[11px] font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
                 : <div className="text-sm text-ink-500 leading-tight py-0.5">{vm.count ? 'Elige una tela' : '—'}</div>}
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
-                <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
+                <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
             </div>
             <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50 shrink-0">
@@ -544,14 +551,14 @@ export default function TogoEmbed() {
           grows. ─── */}
       <div className="hidden lg:block">
         <div className="mx-auto w-full max-w-[1400px] px-6 pb-6">
-          <div className="card p-4 flex flex-wrap items-center justify-between gap-3 sticky bottom-4">
+          <div className="card p-5 flex flex-wrap items-end justify-between gap-3 sticky bottom-4">
             <div>
-              <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado ({vm.count} pieza{vm.count === 1 ? '' : 's'})</div>
+              <div className="text-xs text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
               {pricedUsd > 0
-                ? <div className="text-xl font-display font-semibold tabular-nums">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-xs font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
-                : <div className="text-base text-ink-500">{vm.count ? 'Elige una tela para ver el estimado' : '—'}</div>}
+                ? <div className="text-3xl font-display font-semibold tabular-nums tracking-tight leading-none mt-1">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-sm font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
+                : <div className="text-base text-ink-500 mt-1">{vm.count ? 'Elige una tela para ver el estimado' : '—'}</div>}
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
-                <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
+                <div className="text-[11px] text-ink-500 tabular-nums mt-1.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
             </div>
             <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50">

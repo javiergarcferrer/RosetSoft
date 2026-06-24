@@ -1226,3 +1226,18 @@
   .vtrack-grid > .vtrack-points  { grid-column: 1; grid-row: 2; }
   .vtrack-grid > .vtrack-map     { grid-column: 2; grid-row: 1 / span 2; }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Togo configurator — "Dieter Rams" skin. Applied on <body> while the embed is
+   mounted (TogoEmbed adds/removes `.togo-rams`), so CSS variables cascade into
+   the portalled fabric/summary modals too. The chrome goes monochrome graphite —
+   the upholstery swatches and the 3D render carry the ONLY colour ("as little
+   design as possible") — and the panels flatten to hairline rules. The embed is
+   always light, so only light values are remapped. */
+body.togo-rams {
+  --brand-50: 245 245 243;  --brand-100: 232 231 227; --brand-200: 210 207 199;
+  --brand-300: 171 167 154; --brand-400: 122 118 105; --brand-500: 38 36 31;
+  --brand-600: 28 26 22;    --brand-700: 64 60 52;    --brand-800: 41 38 32;
+  --brand-900: 23 22 18;
+}
+body.togo-rams .card { box-shadow: none; background-image: none; border-color: rgb(var(--ink-200) / 0.65); }
