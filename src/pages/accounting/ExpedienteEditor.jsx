@@ -33,6 +33,11 @@ export default function ExpedienteEditor() {
   const containersQ = useLiveQueryStatus(() => db.containers.where('profileId').equals(scope).toArray(), [scope], []);
   const productsQ = useLiveQueryStatus(() => db.products.where('profileId').equals(scope).toArray(), [scope], []);
   const materialsQ = useLiveQueryStatus(() => db.materials.where('profileId').equals(scope).toArray(), [scope], []);
+  // Compras y gastos for the "pull in registered costs" picker (link existing
+  // gastos/compras to this expediente). Cheap lists; the form filters them.
+  const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
+  const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
+  const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
   const expQ = useLiveQueryStatus(() => (id ? db.importExpedientes.get(id) : Promise.resolve(null)), [id], null);
 
   const loaded = suppliersQ.loaded && itemsQ.loaded && (!id || expQ.loaded);
@@ -74,6 +79,7 @@ export default function ExpedienteEditor() {
         suppliers={suppliersQ.data} items={itemsQ.data}
         orders={ordersQ.data || []} containers={containersQ.data || []}
         products={productsQ.data || []} materials={materialsQ.data || []}
+        expenses={expensesQ.data || []} purchases={purchasesQ.data || []} accounts={accountsQ.data || []}
         existing={existing}
       />
     </>

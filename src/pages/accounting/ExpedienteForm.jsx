@@ -1,9 +1,9 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Check, Plus, Trash2, Upload, Ship, Receipt, History, Sparkles, Save, Search, Package } from 'lucide-react';
+import { Loader2, Check, Plus, Trash2, Upload, Ship, Receipt, History, Sparkles, Save, Search, Package, Link2, Unlink, ShoppingCart } from 'lucide-react';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
-import { formatDop } from '../../lib/format.js';
+import { formatDop, formatDate } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { parseInvoicePdf } from '../../lib/loadRosetInvoice.js';
@@ -13,6 +13,7 @@ import DriveDocumentsCard from '../../components/drive/DriveDocumentsCard.jsx';
 import { groupFamilies, catalogSellingPrice } from '../../lib/catalog.js';
 import {
   resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
+  resolvePurchasesExpenses, NATURE_LABEL,
 } from '../../core/accounting/index.js';
 import { reverseExpedientePosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
@@ -89,7 +90,7 @@ function Stat({ label, value, accent }) {
  * and focuses it; the half-entered form autosaves as a draft and a saved
  * expediente can seed a new one as a template.
  */
-export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, existing = null }) {
+export default function ExpedienteForm({ scope, config, settings, suppliers, items, orders, containers, products, materials, expenses = [], purchases = [], accounts = [], existing = null }) {
   const navigate = useNavigate();
   // Invoice PDFs the user imported, kept to upload into the expediente's Drive
   // folder on save (keyed by factura id so a re-import replaces). Drive archival
@@ -281,6 +282,38 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
   function setCost(id, patch) { setCosts((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
   function addCost() { setCosts((cs) => [...cs, { id: newId(), concept: 'agenciamiento', supplierId: '', ncf: '', amount: '', itbis: '', paymentMethod: 'bank' }]); }
   function removeCost(id) { setCosts((cs) => cs.filter((c) => c.id !== id)); }
+
+  // ── linked gastos & compras (the "pull in costs already registered" flow) ──
+  // Costs live ONCE in the compras/gastos registry; the expediente just points
+  // at them via expedienteId. Each keeps its own asiento — linking never
+  // re-posts, so there's no double count. Only available once the expediente is
+  // saved (it needs an id to link against).
+  const expedienteId = existing?.id || null;
+  const linkedCosts = useMemo(() => {
+    if (!expedienteId) return [];
+    return resolvePurchasesExpenses({ expenses, purchases, suppliers, accounts, expedientes: existing ? [existing] : [] })
+      .rows.filter((r) => r.expedienteId === expedienteId && r.source !== 'expediente-cost');
+  }, [expedienteId, expenses, purchases, suppliers, accounts, existing]);
+  const linkCandidates = useMemo(() => {
+    if (!expedienteId) return [];
+    return resolvePurchasesExpenses({ expenses, purchases, suppliers, accounts })
+      .rows.filter((r) => !r.expedienteId && (r.source === 'expense' || r.source === 'purchase'));
+  }, [expedienteId, expenses, purchases, suppliers, accounts]);
+  const linkedCostsTotal = useMemo(() => linkedCosts.reduce((s, r) => s + (r.total || 0), 0), [linkedCosts]);
+  const tableFor = (source) => (source === 'purchase' ? 'purchases' : 'expenses');
+  async function linkDoc(source, docId) {
+    if (!expedienteId || !docId) return;
+    try { await db[tableFor(source)].update(docId, { expedienteId, updatedAt: Date.now() }); }
+    catch (e) { setErr(userMessageFor(e)); }
+  }
+  async function unlinkDoc(source, docId) {
+    try { await db[tableFor(source)].update(docId, { expedienteId: null, updatedAt: Date.now() }); }
+    catch (e) { setErr(userMessageFor(e)); }
+  }
+  const goRegisterCost = (tipo) => {
+    if (!expedienteId) return;
+    navigate(`/accounting/compras-gastos/nuevo?expediente=${expedienteId}&tipo=${tipo}`);
+  };
 
   /** Build the row fields shared by a draft save and a posting. `lines` is the
    *  resolved cascade (flat); `totals` the rolled-up figures. */
@@ -696,10 +729,16 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         <button type="button" onClick={() => setEmbs((es) => [...es, blankEmbarque()])} className="btn-ghost text-sm inline-flex items-center gap-1.5"><Plus size={14} /> Embarque</button>
       </div>
 
-      {/* Cost sheet */}
-      <div className="mt-4">
+      {/* Costos del expediente — ONE section, two ways to add a landing cost:
+          (1) capitalizable cost sheet (suma al costo en destino, lo asienta el
+          expediente) and (2) gastos y compras enlazados (cada uno con su propio
+          asiento en el registro; el expediente sólo los referencia). */}
+      <div className="mt-4 surface-subtle p-3">
+        <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Costos del expediente</h4>
+
+        {/* Capitalizables — prorratean al costo en destino */}
         <div className="flex items-center justify-between mb-1.5">
-          <h4 className="font-display text-sm font-medium text-ink-700">Costos del expediente (agenciamiento, transporte, puerto…)</h4>
+          <span className="eyebrow text-ink-400">Capitalizables (suman al costo en destino)</span>
           <button type="button" onClick={addCost} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Costo</button>
         </div>
         {costs.length === 0 ? (
@@ -727,6 +766,62 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             <div className="text-xs text-ink-500">Costos: bruto <b className="tabular-nums">{formatDop(costT.gross)}</b> · ITBIS crédito <b className="tabular-nums">{formatDop(costT.itbis)}</b> · neto al costo <b className="tabular-nums">{formatDop(costT.net)}</b></div>
           </div>
         )}
+
+        {/* Gastos y compras enlazados — registrados una sola vez, el expediente
+            sólo los referencia (cada uno con su propio asiento). */}
+        <div className="mt-4 pt-3 border-t border-ink-100">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+            <span className="eyebrow text-ink-400 inline-flex items-center gap-1"><ShoppingCart size={12} /> Gastos y compras enlazados (asiento propio)</span>
+            {expedienteId && (
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={() => goRegisterCost('gasto')} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Gasto</button>
+                <button type="button" onClick={() => goRegisterCost('mercancia')} className="btn-ghost text-xs inline-flex items-center gap-1"><Plus size={13} /> Compra</button>
+              </div>
+            )}
+          </div>
+          {!expedienteId ? (
+            <p className="text-xs text-ink-400">Guarda el borrador para registrar o enlazar gastos y compras ya registrados a este expediente.</p>
+          ) : (
+            <div className="space-y-2">
+              {/* Pull in an already-registered gasto/compra (set its expedienteId). */}
+              {linkCandidates.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-ink-500">
+                  <Link2 size={13} className="text-ink-400 shrink-0" />
+                  <select
+                    value=""
+                    onChange={(e) => { const [src, did] = e.target.value.split('::'); if (did) linkDoc(src, did); }}
+                    className={`${field} flex-1 min-w-0`}
+                  >
+                    <option value="">Enlazar un gasto o compra ya registrado…</option>
+                    {linkCandidates.map((r) => (
+                      <option key={`${r.source}::${r.id}`} value={`${r.source}::${r.id}`}>
+                        {formatDate(r.date)} · {r.supplierName || 's/proveedor'} · {NATURE_LABEL[r.nature] || r.nature} · {r.destination} · {formatDop(r.total)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {linkedCosts.length === 0 ? (
+                <p className="text-xs text-ink-400">Aún no hay gastos ni compras enlazados.</p>
+              ) : (
+                <>
+                  <ul className="divide-y divide-ink-100 rounded-lg border border-ink-100 bg-surface">
+                    {linkedCosts.map((r) => (
+                      <li key={r.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs">
+                        <span className="text-ink-400 w-20 shrink-0 whitespace-nowrap">{formatDate(r.date)}</span>
+                        <span className="text-ink-600 w-24 shrink-0 truncate">{NATURE_LABEL[r.nature] || r.nature}</span>
+                        <span className="min-w-0 flex-1 truncate text-ink-700">{r.supplierName || '—'} · {r.destination}</span>
+                        <span className="shrink-0 tabular-nums text-ink-600 w-24 text-right">{formatDop(r.total)}</span>
+                        <button type="button" onClick={() => unlinkDoc(r.source, r.id)} className="btn-icon text-ink-400 hover:text-rose-600 shrink-0" title="Quitar enlace" aria-label="Quitar enlace"><Unlink size={13} /></button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="text-xs text-ink-500">{linkedCosts.length} enlazado{linkedCosts.length === 1 ? '' : 's'} · total <b className="tabular-nums">{formatDop(linkedCostsTotal)}</b></div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Documentos en Google Drive — folder created on the first attachment,
