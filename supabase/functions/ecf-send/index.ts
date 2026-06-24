@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
   const { data: auth } = await authClient.auth.getUser();
   if (!auth?.user) return json({ ok: false, error: 'No autorizado.' }, 401);
 
-  let body: { op?: string; payload?: any; eNcf?: string; trackId?: string; profileId?: string } = {};
+  let body: { op?: string; payload?: any; eNcf?: string; trackId?: string; profileId?: string; xml?: string } = {};
   try { body = await req.json(); } catch { return json({ ok: false, error: 'invalid body' }, 400); }
 
   const op = body.op || 'send';
@@ -85,6 +85,7 @@ Deno.serve(async (req: Request) => {
   const trackIdIn = String(body.trackId || '');
   if ((op === 'send' || op === 'approve' || op === 'sign') && (!payload || !eNcf)) return json({ ok: false, error: 'payload + eNcf required' }, 400);
   if (op === 'status' && !trackIdIn) return json({ ok: false, error: 'trackId required' }, 400);
+  if (op === 'sign-xml' && !body.xml) return json({ ok: false, error: 'xml required' }, 400);
 
   const profileId = body.profileId || 'team';
   const ecfType = String(payload?.ECF?.Encabezado?.IdDoc?.TipoeCF || '');
@@ -126,6 +127,15 @@ Deno.serve(async (req: Request) => {
         outXml = rfce?.xml || signedXml;
       }
       return json({ ok: true, signedXml: outXml, securityCode, fechaFirma });
+    }
+
+    // op:'sign-xml' — sign an ARBITRARY XML (the DGII postulación form) with the
+    // team's certificate: the same XAdES enveloped signature as an e-CF, but over
+    // a caller-supplied document and with NO DGII round-trip — lets the dealer
+    // sign the postulación in-app instead of DGII's Windows-only firma tool.
+    if (op === 'sign-xml') {
+      const signature = new (dgii as any).Signature(certs.key, certs.cert);
+      return json({ ok: true, signedXml: signature.signXml(String(body.xml || '')) });
     }
 
     await ecf.authenticate();

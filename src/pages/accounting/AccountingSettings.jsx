@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import { formatDate } from '../../lib/format.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { saveEcfCredentials } from '../../lib/ecfCert.js';
+import { signPostulacionXml } from '../../lib/ecfSend.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
 const ECF_ENVS = [
@@ -49,6 +50,29 @@ export default function AccountingSettings() {
   const [certPassword, setCertPassword] = useState('');
   const [certSaving, setCertSaving] = useState(false);
   const [certMsg, setCertMsg] = useState('');
+  // Sign the DGII postulación XML in-app with the uploaded certificate.
+  const [postFile, setPostFile] = useState(null);
+  const [signingPost, setSigningPost] = useState(false);
+  const [postMsg, setPostMsg] = useState('');
+
+  async function signPostulacion() {
+    if (!postFile) return;
+    setPostMsg(''); setSigningPost(true);
+    try {
+      const signed = await signPostulacionXml({ xml: await postFile.text(), profileId: scope });
+      const url = URL.createObjectURL(new Blob([signed], { type: 'application/xml' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = postFile.name.replace(/\.xml$/i, '') + '-firmado.xml';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      setPostMsg('✓ Archivo firmado y descargado. Súbelo a la Oficina Virtual.');
+    } catch (e) {
+      setPostMsg(userMessageFor(e));
+    } finally {
+      setSigningPost(false);
+    }
+  }
 
   if (!allowed) {
     return (
@@ -181,6 +205,25 @@ export default function AccountingSettings() {
               </button>
             </div>
             {certMsg && <p className="text-sm mt-2 text-ink-600">{certMsg}</p>}
+          </div>
+
+          <div className="surface-subtle p-3 max-w-2xl mt-3">
+            <div className="flex items-center gap-2 mb-2 text-sm font-medium text-ink-700">
+              <FileCheck size={15} /> Firmar postulación (DGII)
+            </div>
+            <p className="text-xs text-ink-500 mb-2">
+              Firma el XML del formulario de postulación con el certificado cargado — sin la app de Windows de la DGII.
+              El certificado debe ser el del <b>representante legal registrado</b>. Descarga el archivo firmado y súbelo a la Oficina Virtual.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="file" accept=".xml" onChange={(e) => setPostFile(e.target.files?.[0] || null)} className="text-sm w-full sm:w-auto" />
+              <button type="button" onClick={signPostulacion} disabled={signingPost || !postFile || !settings?.ecfCertUploadedAt}
+                className="btn-primary disabled:opacity-40">
+                {signingPost ? <Loader2 size={15} className="animate-spin" /> : <FileCheck size={15} />} Firmar y descargar
+              </button>
+            </div>
+            {!settings?.ecfCertUploadedAt ? <p className="text-xs text-amber-600 mt-2">Sube primero tu certificado .p12 arriba.</p> : null}
+            {postMsg && <p className="text-sm mt-2 text-ink-600">{postMsg}</p>}
           </div>
         </div>
       </div>
