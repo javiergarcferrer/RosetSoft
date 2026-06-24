@@ -1,9 +1,11 @@
 // Accounting navigation model — cloned from QuickBooks Online's structure:
-//   • a set of top-level CENTERS in the sidebar, grouped into a few scannable
-//     BANDS (`band` per center) so the cluster reads as ~4 groups, not 10 flat
-//     rows: Resumen (the overview, leads) → Operación (the daily trade + money
-//     cycle) → Fiscal y libros (DGII + books + reports) → Configuración. The
-//     unified sidebar renders each band with its own header + bracket.
+//   • a set of top-level CENTERS in the sidebar, grouped into scannable BANDS
+//     (`band` per center) that follow the importer's trade cycle, so the
+//     cluster reads as ~5 groups, not 10 flat rows: Resumen (the overview,
+//     leads) → Compras e importación (the DGA inbound supply side) → Ventas y
+//     tesorería (the sale + the money in/out) → Fiscal y libros (DGII + books +
+//     reports) → Configuración. The sidebar renders each band with its own
+//     header + bracket.
 //   • each center's pages render as a horizontal secondary tab strip in-page
 //     (AccountingSubnav),
 //   • a "+ Nuevo" quick-create menu (Clientes / Proveedores / … / Otros)
@@ -16,9 +18,11 @@ import {
   Percent, SlidersHorizontal, Ship,
 } from 'lucide-react';
 
-// Order = on-screen order, grouped by band. The DGII center isolates ALL
-// Dominican fiscal logic (607 · IT-1 · e-CF/comprobantes · 606) behind ONE
-// label, so moving DR→PR swaps this one center, not the books.
+// Order = on-screen order, grouped by band, following the trade cycle of an
+// importer-dealer: bring merchandise in (DGA customs), sell it (DGII e-CF),
+// settle the money, then the books. The DGII center isolates ALL Dominican
+// fiscal logic (607 · IT-1 · e-CF/comprobantes · 606) behind ONE label, so
+// moving DR→PR swaps this one center, not the books.
 export const ACCOUNTING_SECTIONS = [
   // ── Resumen ── the accounting home (QBO "Business overview"); leads the nav
   //    and is where every primary entry point lands.
@@ -26,12 +30,10 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/dashboard', label: 'Resumen' },
   ] },
 
-  // ── Operación ── the day-to-day trade + money cycle, in flow order: the sale,
-  //    the goods coming in, what we owe suppliers, the bank, and payroll.
-  { key: 'ventas', band: 'operacion', label: 'Ventas', icon: FileText, tabs: [
-    { to: '/accounting/ventas', label: 'Ventas' },
-  ], extraMatch: ['/accounting/ligne-roset'] },
-  { key: 'importaciones', band: 'operacion', label: 'Importaciones', icon: Ship, tabs: [
+  // ── Compras e importación ── the inbound / DGA supply side: the import
+  //    expediente (customs landed cost) and every supplier invoice. This is
+  //    where merchandise becomes inventory before it can be sold.
+  { key: 'importaciones', band: 'compras', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
     { to: '/accounting/importaciones/calculadora', label: 'Calculadora de costos' },
   ] },
@@ -40,16 +42,22 @@ export const ACCOUNTING_SECTIONS = [
   // from the DGII center) reads them; los Proveedores viven junto a las facturas
   // que se les registran. `extraMatch` mantiene encendido el centro en los paths
   // viejos que ahora renderizan la misma página.
-  { key: 'gastos', band: 'operacion', label: 'Compras y gastos', icon: Receipt, tabs: [
+  { key: 'gastos', band: 'compras', label: 'Compras y gastos', icon: Receipt, tabs: [
     { to: '/accounting/compras-gastos', label: 'Compras y gastos' },
     { to: '/accounting/suppliers', label: 'Proveedores' },
   ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
-  { key: 'banca', band: 'operacion', label: 'Banca', icon: Landmark, tabs: [
+
+  // ── Ventas y tesorería ── the outbound / revenue side: the sale, the bank
+  //    (cobros y pagos), and payroll — the money in and out.
+  { key: 'ventas', band: 'ventas', label: 'Ventas', icon: FileText, tabs: [
+    { to: '/accounting/ventas', label: 'Ventas' },
+  ], extraMatch: ['/accounting/ligne-roset'] },
+  { key: 'banca', band: 'ventas', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
     { to: '/accounting/planes-de-pago', label: 'Planes de pago' },
     { to: '/accounting/conciliacion', label: 'Conciliación' },
   ] },
-  { key: 'nomina', band: 'operacion', label: 'Nómina', icon: Wallet, tabs: [
+  { key: 'nomina', band: 'ventas', label: 'Nómina', icon: Wallet, tabs: [
     { to: '/accounting/nomina', label: 'Nómina' },
     { to: '/accounting/empleados', label: 'Empleados' },
   ] },
@@ -116,7 +124,8 @@ export const QUICK_CREATE = [
 // unified sidebar renders with its own eyebrow + bracket.
 const ACCOUNTING_BANDS = [
   { key: 'resumen', label: 'Contabilidad' },
-  { key: 'operacion', label: 'Operación' },
+  { key: 'compras', label: 'Compras e importación' },
+  { key: 'ventas', label: 'Ventas y tesorería' },
   { key: 'libros', label: 'Fiscal y libros' },
   { key: 'config', label: null },
 ];

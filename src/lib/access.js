@@ -88,10 +88,11 @@ const ADMIN_GROUP = {
   ],
 };
 
-// The Contabilidad centers render as several labeled bands (Resumen / Operación
-// / Fiscal y libros / Configuración) — `accountingSectionGroups`, spread into
-// the sidebar below. The first band's "Contabilidad" label is the umbrella that
-// marks where the accounting cluster begins.
+// The Contabilidad centers render as several labeled bands that follow the
+// trade cycle (Resumen / Compras e importación / Ventas y tesorería / Fiscal y
+// libros / Configuración) — `accountingSectionGroups`, spread into the sidebar
+// below. The first band's "Contabilidad" label is the umbrella that marks where
+// the accounting cluster begins.
 
 // The slice of the CRM an accounting user gets, sitting ABOVE the Contabilidad
 // centers in their sidebar: quoting + the clients they quote for. They're not
