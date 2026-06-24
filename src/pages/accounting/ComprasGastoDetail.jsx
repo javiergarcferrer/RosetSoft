@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil } from 'lucide-react';
+import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -123,6 +123,10 @@ export default function ComprasGastoDetail() {
             <button type="button" onClick={() => navigate(`/accounting/compras-gastos/${id}/editar`)}
               className="btn-secondary">
               <Pencil size={14} /> <span className="hidden sm:inline">Editar</span>
+            </button>
+            <button type="button" onClick={() => navigate(`/accounting/compras-gastos/nuevo?duplicate=${id}`)}
+              className="btn-secondary" title="Duplicar — registrar una factura similar">
+              <Copy size={14} /> <span className="hidden sm:inline">Duplicar</span>
             </button>
             <button type="button" onClick={reverseDoc} disabled={deleting}
               className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 disabled:opacity-50">

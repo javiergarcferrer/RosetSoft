@@ -48,15 +48,17 @@ export default function ComprasGastoEditor() {
   const scope = profileId || 'team';
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const dupId = params.get('duplicate');         // /nuevo?duplicate=<id> ⇒ Duplicar
+  const srcId = id || dupId;                      // the doc we edit OR duplicate from
   const config = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
 
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
   const itemsQ = useLiveQueryStatus(() => db.inventoryItems.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
-  const purchaseQ = useLiveQueryStatus(() => (id ? db.purchases.get(id) : Promise.resolve(null)), [id], null);
-  const expenseQ = useLiveQueryStatus(() => (id ? db.expenses.get(id) : Promise.resolve(null)), [id], null);
-  const loaded = suppliersQ.loaded && accountsQ.loaded && itemsQ.loaded && expedientesQ.loaded && (!id || (purchaseQ.loaded && expenseQ.loaded));
+  const purchaseQ = useLiveQueryStatus(() => (srcId ? db.purchases.get(srcId) : Promise.resolve(null)), [srcId], null);
+  const expenseQ = useLiveQueryStatus(() => (srcId ? db.expenses.get(srcId) : Promise.resolve(null)), [srcId], null);
+  const loaded = suppliersQ.loaded && accountsQ.loaded && itemsQ.loaded && expedientesQ.loaded && (!srcId || (purchaseQ.loaded && expenseQ.loaded));
 
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
   const editDoc = useMemo(() => {
@@ -65,13 +67,20 @@ export default function ComprasGastoEditor() {
     if (expenseQ.data) return { source: 'expense', ...expenseQ.data, nature: 'gasto' };
     return null;
   }, [id, purchaseQ.data, expenseQ.data]);
+  // Duplicar: seed a NEW doc from an existing one (fresh NCF + today's date).
+  const seedDoc = useMemo(() => {
+    if (id || !dupId) return null;
+    if (purchaseQ.data) return { source: 'purchase', ...purchaseQ.data, nature: purchaseNature(purchaseQ.data.kind) };
+    if (expenseQ.data) return { source: 'expense', ...expenseQ.data, nature: 'gasto' };
+    return null;
+  }, [id, dupId, purchaseQ.data, expenseQ.data]);
 
   const initialNature = NATURES.some((n) => n.key === params.get('tipo')) ? params.get('tipo') : 'gasto';
   const initial = { description: params.get('desc') || '', base: params.get('amount') || '', itbis: params.get('itbis') ?? '' };
   const backTo = id ? `/accounting/compras-gastos/${id}` : '/accounting/compras-gastos';
   const title = id
     ? (editDoc ? `Editar ${NATURE_LABEL[editDoc.nature]?.toLowerCase() || 'documento'}${editDoc.number != null ? ` #${editDoc.number}` : ''}` : 'Editar')
-    : 'Nueva compra o gasto';
+    : (seedDoc ? 'Duplicar compra o gasto' : 'Nueva compra o gasto');
 
   return (
     <AccountingGate title="Compras y gastos">
@@ -81,10 +90,10 @@ export default function ComprasGastoEditor() {
         <EmptyState icon={Receipt} title="Documento no encontrado" description="Puede haber sido eliminado o registrado en otro perfil." />
       ) : (
         <DocForm
-          key={editDoc?.id || 'new'}
+          key={editDoc?.id || (seedDoc ? `dup-${seedDoc.id}` : 'new')}
           scope={scope} config={config} suppliers={suppliersQ.data} suppliersById={suppliersById}
           accounts={accountsQ.data} items={itemsQ.data} expedientes={expedientesQ.data}
-          initialNature={initialNature} initial={initial} editDoc={editDoc}
+          initialNature={initialNature} initial={initial} editDoc={editDoc} seedDoc={seedDoc}
           onSaved={(savedId) => navigate(`/accounting/compras-gastos/${savedId}`)}
           onCancel={() => navigate(backTo)}
         />
@@ -93,23 +102,26 @@ export default function ComprasGastoEditor() {
   );
 }
 
-function DocForm({ scope, config, suppliers, suppliersById, accounts, items, expedientes, initialNature, initial, editDoc, onSaved, onCancel }) {
-  const [form, setForm] = useState(() => (editDoc ? {
-    nature: editDoc.nature, supplierId: editDoc.supplierId || '',
-    date: isoDate(editDoc.source === 'purchase' ? editDoc.purchaseAt : editDoc.expenseAt),
-    ncf: editDoc.ncf || '', ncfType: editDoc.ncfType || '',
-    accountCode: editDoc.accountCode || '', expedienteId: editDoc.expedienteId || '',
-    description: editDoc.description || '',
-    base: editDoc.nature === 'mercancia' ? '' : String(editDoc.base ?? ''),
-    itbis: String(editDoc.itbis ?? ''), retIsr: String(editDoc.retentionIsr ?? ''),
-    retItbis: String(editDoc.retentionItbis ?? ''), paymentMethod: editDoc.paymentMethod || 'bank',
+function DocForm({ scope, config, suppliers, suppliersById, accounts, items, expedientes, initialNature, initial, editDoc, seedDoc, onSaved, onCancel }) {
+  // Prefill source: editDoc (edit in place) OR seedDoc (Duplicar — a NEW doc
+  // pre-filled from an existing one, with a fresh NCF + today's date).
+  const pf = editDoc || seedDoc;
+  const [form, setForm] = useState(() => (pf ? {
+    nature: pf.nature, supplierId: pf.supplierId || '',
+    date: editDoc ? isoDate(editDoc.source === 'purchase' ? editDoc.purchaseAt : editDoc.expenseAt) : isoDate(Date.now()),
+    ncf: editDoc?.ncf || '', ncfType: editDoc?.ncfType || '',
+    accountCode: pf.accountCode || '', expedienteId: pf.expedienteId || '',
+    description: pf.description || '',
+    base: pf.nature === 'mercancia' ? '' : String(pf.base ?? ''),
+    itbis: String(pf.itbis ?? ''), retIsr: String(pf.retentionIsr ?? ''),
+    retItbis: String(pf.retentionItbis ?? ''), paymentMethod: pf.paymentMethod || 'bank',
   } : {
     nature: initialNature || 'gasto', supplierId: '', date: isoDate(Date.now()), ncf: '', ncfType: '',
     accountCode: '', expedienteId: '', description: initial?.description || '',
     base: initial?.base || '', itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
   }));
-  const [lines, setLines] = useState(() => (editDoc?.nature === 'mercancia' && editDoc.lines?.length
-    ? editDoc.lines.map((l) => ({ id: l.id || newId(), itemId: l.itemId || '', name: l.name || '', reference: l.reference || '', qty: String(l.qty ?? ''), cost: String(l.cost ?? '') }))
+  const [lines, setLines] = useState(() => (pf?.nature === 'mercancia' && pf.lines?.length
+    ? pf.lines.map((l) => ({ id: newId(), itemId: l.itemId || '', name: l.name || '', reference: l.reference || '', qty: String(l.qty ?? ''), cost: String(l.cost ?? '') }))
     : [blankLine()]));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -137,7 +149,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
   // Mercancía has no base input (it's Σ líneas) → recompute the suggested taxes
   // whenever the líneas/supplier move. On an EDIT keep the stored taxes on first
   // render — only recompute once the user actually changes the líneas/supplier.
-  const skipFirstTaxCalc = useRef(!!editDoc);
+  const skipFirstTaxCalc = useRef(!!(editDoc || seedDoc));
   useEffect(() => {
     if (!goods) return;
     if (skipFirstTaxCalc.current) { skipFirstTaxCalc.current = false; return; }
