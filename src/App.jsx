@@ -72,6 +72,7 @@ const AccountingCajaChica = lazyPage(() => import('./pages/accounting/CajaChica.
 const AccountingImpuestos = lazyPage(() => import('./pages/accounting/Impuestos.jsx'));
 const AccountingInformes = lazyPage(() => import('./pages/accounting/Informes.jsx'));
 const AccountingPeriodos = lazyPage(() => import('./pages/accounting/Periodos.jsx'));
+const AccountingBitacora = lazyPage(() => import('./pages/accounting/Bitacora.jsx'));
 const AccountingNomina = lazyPage(() => import('./pages/accounting/Nomina.jsx'));
 const AccountingEmpleados = lazyPage(() => import('./pages/accounting/Empleados.jsx'));
 
@@ -345,6 +346,7 @@ function ProtectedApp() {
             <Route path="accounting/impuestos" element={<AccountingImpuestos />} />
             <Route path="accounting/informes" element={<AccountingInformes />} />
             <Route path="accounting/periodos" element={<AccountingPeriodos />} />
+            <Route path="accounting/bitacora" element={<AccountingBitacora />} />
             <Route path="accounting/nomina" element={<AccountingNomina />} />
             <Route path="accounting/empleados" element={<AccountingEmpleados />} />
             <Route path="accounting/quotes" element={<Navigate to="/accounting/ventas" replace />} />

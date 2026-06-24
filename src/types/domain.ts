@@ -947,6 +947,20 @@ export interface RecurringTemplate {
   updatedAt?: number;
 }
 
+/** One append-only audit-trail entry (DGII inalterability). Written by a
+ *  Postgres trigger; the app only reads it. */
+export interface AuditLogEntry {
+  id: string;
+  profileId: string;
+  loggedAt?: number;
+  userId?: string | null;
+  action: string;
+  tableName: string;
+  rowId?: string;
+  before?: unknown;
+  after?: unknown;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**

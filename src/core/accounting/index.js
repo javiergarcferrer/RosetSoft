@@ -134,6 +134,9 @@ export {
 export { resolveRecurring } from './recurring.js';
 export { nextOccurrence, isDue, advance, materializeExpense } from '../../lib/accounting/recurring.js';
 
+// ── bitácora / audit trail (DGII inalterability)
+export { resolveAuditTrail } from './auditLog.js';
+
 // ── nómina (payroll): monthly TSS+ISR engine, date-keyed topes, overtime + the
 // regalía / liquidación / bonificación asiento builders
 export {

@@ -79,6 +79,7 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'contabilidad', band: 'libros', label: 'Libros', icon: BookOpen, tabs: [
     { to: '/accounting/ledger', label: 'Libro diario / mayor' },
     { to: '/accounting/periodos', label: 'Cierre de período' },
+    { to: '/accounting/bitacora', label: 'Bitácora' },
   ] },
   { key: 'informes', band: 'libros', label: 'Informes', icon: BarChart3, tabs: [
     { to: '/accounting/informes', label: 'Informes' },
