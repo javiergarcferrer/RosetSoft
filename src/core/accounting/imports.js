@@ -252,3 +252,56 @@ export function resolveExpedienteDetail({ expediente, config, suppliers, items, 
     journalEntryId: expediente.journalEntryId || null,
   };
 }
+
+/**
+ * DGA customs-tax report — the aduana side of every POSTED expediente whose
+ * `liquidatedAt` falls in [start, end]. The tax stack is read straight off the
+ * stored fields (the same ones expedienteLanded / expedienteCreditableItbis
+ * read): valor en aduana (CIF), gravamen arancelario (duty), ISC/selectivo,
+ * the recoverable ITBIS aduanal, and the resulting costo en destino. Drafts are
+ * excluded — they haven't liquidated, so their customs figures aren't final.
+ * Lets the accountant reconcile duties + the ITBIS credit against the DGA for a
+ * period. `impuestos` = the capitalizing customs taxes (gravamen + selectivo);
+ * the ITBIS is a separate recoverable credit, never part of cost. Pure.
+ */
+export function resolveCustomsTaxes({ expedientes, suppliers, start, end } = {}) {
+  const supById = new Map((suppliers || []).map((s) => [s.id, s]));
+  const rows = (expedientes || [])
+    .filter((e) => e.status !== 'draft')
+    .filter((e) => {
+      const t = e.liquidatedAt || 0;
+      if (start != null && t < start) return false;
+      if (end != null && t > end) return false;
+      return true;
+    })
+    .map((e) => {
+      const cif = round2(e.cif || 0);
+      const gravamen = round2(e.duty || 0);
+      const selectivo = round2(e.selectivo || 0);
+      return {
+        id: e.id,
+        number: e.number ?? null,
+        date: e.liquidatedAt || 0,
+        bl: e.bl || '',
+        supplierName: e.supplierId ? (supById.get(e.supplierId)?.name || '') : '',
+        cif,
+        gravamen,
+        selectivo,
+        itbis: expedienteCreditableItbis(e),
+        landed: expedienteLanded(e),
+        impuestos: round2(gravamen + selectivo),
+      };
+    })
+    .sort((a, b) => (b.date - a.date) || ((b.number || 0) - (a.number || 0)));
+
+  const totals = rows.reduce((acc, r) => ({
+    cif: round2(acc.cif + r.cif),
+    gravamen: round2(acc.gravamen + r.gravamen),
+    selectivo: round2(acc.selectivo + r.selectivo),
+    itbis: round2(acc.itbis + r.itbis),
+    landed: round2(acc.landed + r.landed),
+    impuestos: round2(acc.impuestos + r.impuestos),
+  }), { cif: 0, gravamen: 0, selectivo: 0, itbis: 0, landed: 0, impuestos: 0 });
+
+  return { rows, totals, count: rows.length };
+}
