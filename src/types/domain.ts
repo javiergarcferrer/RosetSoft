@@ -733,6 +733,10 @@ export interface EcfReceived {
   xml?: string;
   receivedAt?: number;
   createdAt?: number;
+  /* OUR commercial approval of this received e-CF (the ACECF we sent back). */
+  commercialEstado?: string;   // '1' aprobado, '2' rechazado
+  commercialAt?: number;
+  commercialMotivo?: string;
 }
 
 /**

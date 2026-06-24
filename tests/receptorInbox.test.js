@@ -24,6 +24,22 @@ test('received e-CFs: labelled, flagged, newest first', () => {
   assert.equal(r.received[1].notReceived, false);
 });
 
+test('received e-CF surfaces OUR commercial approval + the canApprove gate', () => {
+  const r = resolveReceptorInbox({
+    received: [
+      { id: 'a', eNcf: 'E310000000001', estado: '0', receivedAt: 1 },                       // recibido, not yet actioned
+      { id: 'b', eNcf: 'E310000000002', estado: '0', commercialEstado: '1', receivedAt: 2 }, // already approved
+      { id: 'c', eNcf: 'E310000000003', estado: '1', receivedAt: 3 },                        // no recibido
+    ],
+  });
+  const byId = Object.fromEntries(r.received.map((x) => [x.id, x]));
+  assert.equal(byId.a.canApprove, true);
+  assert.equal(byId.a.commercialLabel, '');
+  assert.equal(byId.b.canApprove, false);          // already actioned
+  assert.equal(byId.b.commercialLabel, 'Aprobado');
+  assert.equal(byId.c.canApprove, false);          // a "no recibido" e-CF can't be commercially approved
+});
+
 test('commercial approvals: aprobado/rechazado labelled + rejected count', () => {
   const r = resolveReceptorInbox({
     approvals: [

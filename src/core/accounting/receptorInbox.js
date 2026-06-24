@@ -21,6 +21,7 @@ export function resolveReceptorInbox({ received = [], approvals = [], query = ''
     .filter((r) => hit([r.eNcf, r.rncEmisor, r.tipoEcf]))
     .map((r) => {
       const estado = String(r.estado ?? '');
+      const commercialEstado = String(r.commercialEstado ?? '');
       return {
         id: r.id,
         eNcf: r.eNcf || '',
@@ -33,6 +34,13 @@ export function resolveReceptorInbox({ received = [], approvals = [], query = ''
         estadoLabel: RECEIVED_ESTADO[estado] || '—',
         notReceived: estado === '1',
         codigoNoRecibido: r.codigoNoRecibido || '',
+        // OUR commercial approval (ACECF) of this doc, if we've sent one.
+        commercialEstado,
+        commercialLabel: ACECF_ESTADO[commercialEstado] || '',
+        commercialMotivo: r.commercialMotivo || '',
+        // A received (not "no recibido") e-CF we haven't yet answered commercially.
+        canApprove: estado === '0' && !commercialEstado,
+        xml: r.xml || '',
         receivedAt: r.receivedAt || r.createdAt || null,
       };
     })

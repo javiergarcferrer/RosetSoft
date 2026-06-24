@@ -1,15 +1,18 @@
 import { useMemo, useState } from 'react';
-import { Inbox, Search, CheckCircle2, XCircle } from 'lucide-react';
+import { Inbox, Search, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db } from '../../db/database.js';
+import { db, invalidate } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import RowCards from '../../components/RowCards.jsx';
+import Modal from '../../components/Modal.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
-import { resolveReceptorInbox } from '../../core/accounting/index.js';
+import { resolveReceptorInbox, buildCommercialApproval, parseEcfFechaEmision } from '../../core/accounting/index.js';
+import { sendCommercialApproval } from '../../lib/ecfSend.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 
 /**
  * Comprobantes recibidos — the DGII RECEPTOR inbox. Two read-only streams the
@@ -35,6 +38,43 @@ export default function ReceptorInbox() {
   );
 
   const loaded = receivedQ.loaded && approvalsQ.loaded;
+
+  const [approving, setApproving] = useState(null); // { row, estado:1|2, motivo } | null
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  // Send an Aprobación / Rechazo Comercial (ACECF) on a received supplier e-CF,
+  // then record OUR decision on the row so the inbox shows it and won't re-send.
+  async function submitApproval() {
+    const row = approving?.row;
+    if (!row) return;
+    setErr('');
+    const estado = approving.estado;
+    if (estado === 2 && !approving.motivo.trim()) { setErr('Indica el motivo del rechazo.'); return; }
+    if (!row.rncComprador) { setErr('No se conoce nuestro RNC en este comprobante.'); return; }
+    setBusy(true);
+    try {
+      // The supplier e-CF's own emission date rides into the ACECF (parsed from
+      // the archived XML; the reception date is the fallback).
+      const fechaEmision = parseEcfFechaEmision(row.xml) ?? row.receivedAt ?? Date.now();
+      const payload = buildCommercialApproval({
+        rncEmisor: row.rncEmisor, eNcf: row.eNcf, fechaEmision,
+        montoTotal: row.montoTotal, rncComprador: row.rncComprador, estado,
+        motivoRechazo: estado === 2 ? approving.motivo.trim() : undefined,
+      });
+      await sendCommercialApproval({ payload, eNcf: row.eNcf, profileId: scope });
+      await db.ecfReceived.update(row.id, {
+        commercialEstado: String(estado), commercialAt: Date.now(),
+        commercialMotivo: estado === 2 ? approving.motivo.trim() : '',
+      });
+      invalidate();
+      setApproving(null);
+    } catch (e) {
+      setErr(userMessageFor(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <AccountingGate title="Comprobantes recibidos">
@@ -63,12 +103,15 @@ export default function ReceptorInbox() {
                   rows={inbox.received.map((r) => ({
                     key: r.id,
                     title: r.eNcf,
-                    right: r.estadoLabel,
+                    right: r.commercialLabel || r.estadoLabel,
                     sub: `${r.tipoLabel || r.tipoEcf} · RNC ${r.rncEmisor || '—'}`,
+                    onClick: r.canApprove ? () => { setErr(''); setApproving({ row: r, estado: 1, motivo: '' }); } : undefined,
                     kv: [
                       ['Monto', formatDop(r.montoTotal)],
                       ['Recibido', r.receivedAt ? formatDate(r.receivedAt) : '—'],
                       ...(r.notReceived ? [['No recibido (cód.)', r.codigoNoRecibido || '—']] : []),
+                      ...(r.commercialLabel ? [['Aprobación comercial', r.commercialLabel]] : []),
+                      ...(r.canApprove ? [['Acción', 'Tocar para aprobar / rechazar']] : []),
                     ],
                   }))}
                 />
@@ -79,6 +122,7 @@ export default function ReceptorInbox() {
                         <tr>
                           <th>e-NCF</th><th>Tipo</th><th>RNC emisor</th>
                           <th className="text-right">Monto</th><th>Estado</th><th>Recibido</th>
+                          <th className="text-right">Aprobación comercial</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -93,6 +137,18 @@ export default function ReceptorInbox() {
                               {r.notReceived && r.codigoNoRecibido ? <span className="ml-1.5 text-xs text-ink-400">cód. {r.codigoNoRecibido}</span> : null}
                             </td>
                             <td className="text-ink-600 whitespace-nowrap">{r.receivedAt ? formatDate(r.receivedAt) : '—'}</td>
+                            <td className="text-right whitespace-nowrap">
+                              {r.commercialLabel ? (
+                                <span className={`status-pill ${r.commercialEstado === '2' ? 'status-pill-declined' : 'status-pill-active'}`}>{r.commercialLabel}</span>
+                              ) : r.canApprove ? (
+                                <span className="inline-flex gap-1.5">
+                                  <button type="button" onClick={() => { setErr(''); setApproving({ row: r, estado: 1, motivo: '' }); }}
+                                    className="btn-ghost text-xs whitespace-nowrap" title="Aprobar comercialmente"><CheckCircle2 size={12} /> Aprobar</button>
+                                  <button type="button" onClick={() => { setErr(''); setApproving({ row: r, estado: 2, motivo: '' }); }}
+                                    className="btn-ghost text-xs whitespace-nowrap text-rose-600" title="Rechazar comercialmente"><XCircle size={12} /> Rechazar</button>
+                                </span>
+                              ) : <span className="text-ink-300">—</span>}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -157,6 +213,44 @@ export default function ReceptorInbox() {
             )}
           </section>
         </div>
+      )}
+
+      {approving && (
+        <Modal open onClose={() => { if (!busy) { setErr(''); setApproving(null); } }}
+          title="Aprobación comercial" size="sm" footer={
+            <>
+              <button onClick={() => { setErr(''); setApproving(null); }} disabled={busy} className="btn-ghost">Cancelar</button>
+              <button onClick={submitApproval} disabled={busy} className="btn-primary disabled:opacity-40 inline-flex items-center gap-1.5">
+                {busy ? <Loader2 size={14} className="animate-spin" /> : (approving.estado === 2 ? <XCircle size={14} /> : <CheckCircle2 size={14} />)}
+                {approving.estado === 2 ? 'Enviar rechazo' : 'Enviar aprobación'}
+              </button>
+            </>
+          }>
+          <p className="text-sm text-ink-600">
+            Comprobante <span className="font-medium tabular-nums">{approving.row.eNcf}</span> de RNC {approving.row.rncEmisor || '—'} · <span className="tabular-nums">{formatDop(approving.row.montoTotal)}</span>.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <button type="button" onClick={() => setApproving({ ...approving, estado: 1 })}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${approving.estado === 1 ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
+              <CheckCircle2 size={14} className="inline -mt-0.5 mr-1" /> Aprobar
+            </button>
+            <button type="button" onClick={() => setApproving({ ...approving, estado: 2 })}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${approving.estado === 2 ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
+              <XCircle size={14} className="inline -mt-0.5 mr-1" /> Rechazar
+            </button>
+          </div>
+          {approving.estado === 2 ? (
+            <div className="mt-3">
+              <div className="label">Motivo del rechazo</div>
+              <textarea className="input min-h-[72px]" value={approving.motivo}
+                onChange={(e) => setApproving({ ...approving, motivo: e.target.value })}
+                placeholder="Ej. montos o conceptos incorrectos" autoFocus />
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-ink-400">Se enviará un acuse de Aprobación Comercial (ACECF) firmado al emisor.</p>
+          )}
+          {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
+        </Modal>
       )}
     </AccountingGate>
   );

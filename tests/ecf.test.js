@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, isCreditNote, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
+  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, isCreditNote, parseEcfFechaEmision, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
 } from '../src/lib/accounting/ecf.js';
 import { buildEcfPayload, formatEcfDate } from '../src/lib/accounting/ecfPayload.js';
 
@@ -35,6 +35,13 @@ test('saleTipoPago: contado when the deposit covers the total, else crédito', (
 
 test('saleDueDate: net-30 from emission', () => {
   assert.equal(saleDueDate(Date.UTC(2026, 5, 1)), Date.UTC(2026, 5, 1) + 30 * 86400000);
+});
+
+test('parseEcfFechaEmision pulls FechaEmision (dd-mm-yyyy) out of e-CF XML', () => {
+  assert.equal(parseEcfFechaEmision('<Emisor><FechaEmision>15-03-2026</FechaEmision></Emisor>'), new Date(2026, 2, 15).getTime());
+  assert.equal(parseEcfFechaEmision('<ns:FechaEmision> 01-06-2026 </ns:FechaEmision>'), new Date(2026, 5, 1).getTime());
+  assert.equal(parseEcfFechaEmision('no date here'), null);
+  assert.equal(parseEcfFechaEmision(null), null);
 });
 
 test('isCreditNote: true only for an E34 e-NCF', () => {

@@ -78,6 +78,14 @@ export function isCreditNote(ncf: string | null | undefined): boolean {
   return /^E34/i.test(String(ncf || '').trim());
 }
 
+/** Parse FechaEmision (dd-mm-yyyy) out of a raw e-CF XML → ms (local midnight),
+ *  or null. Used to date a commercial approval (ACECF) of a received e-CF. */
+export function parseEcfFechaEmision(xml: string | null | undefined): number | null {
+  const m = /<(?:\w+:)?FechaEmision>\s*(\d{2})-(\d{2})-(\d{4})/.exec(String(xml || ''));
+  if (!m) return null;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+}
+
 /** A well-formed DR fiscal id: RNC (9 digits) or cédula (11 digits). */
 export function isValidFiscalId(id: string | null | undefined): boolean {
   const digits = String(id || '').replace(/\D/g, '');
