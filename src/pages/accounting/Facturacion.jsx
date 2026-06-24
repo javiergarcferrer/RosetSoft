@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
@@ -609,6 +609,32 @@ export default function Facturacion() {
   const [err, setErr] = useState('');
   const [drawerRow, setDrawerRow] = useState(null); // posted factura whose detail briefing is open
   const [facturarQuote, setFacturarQuote] = useState(null); // por-facturar quote whose facturar modal is open
+  const navigate = useNavigate();
+  const searchRef = useRef(null);
+  const focusedRowRef = useRef(null);
+  const [focusIdx, setFocusIdx] = useState(0);
+  // Reset the keyboard cursor when the visible row set changes.
+  useEffect(() => { setFocusIdx(0); }, [tab, q607]);
+  useEffect(() => { focusedRowRef.current?.scrollIntoView({ block: 'nearest' }); }, [focusIdx]);
+  // Palantir-style keyboard nav over the register (desktop). Overlays own the
+  // keyboard when open; typing in a field is never intercepted (except '/').
+  useEffect(() => {
+    if (!loaded) return undefined;
+    const onKey = (e) => {
+      if (drawerRow || facturarQuote || creditNote || printDoc) return;
+      const tag = (e.target.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+      if (e.key === '/' && !typing) { e.preventDefault(); searchRef.current?.focus(); return; }
+      if (typing) return;
+      const rows = registerView.rows;
+      if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); setFocusIdx((i) => Math.min(i + 1, rows.length - 1)); }
+      else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); setFocusIdx((i) => Math.max(0, i - 1)); }
+      else if (e.key === 'Enter') { const r = rows[focusIdx]; if (r) { if (r.kind === 'porfacturar') setFacturarQuote(r.quote); else setDrawerRow(r); } }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); navigate('/accounting/facturacion/nueva'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [loaded, drawerRow, facturarQuote, creditNote, printDoc, registerView, focusIdx, navigate]);
 
   // Column visibility (Shopify "edit columns") for the 607 table — persisted
   // per browser. The e-CF actions column stays a fixed trailing cell.
@@ -945,8 +971,8 @@ export default function Facturacion() {
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <div className="relative w-full sm:w-auto">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
-              <input value={q607} onChange={(e) => setQ607(e.target.value)}
-                placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-full sm:w-56" />
+              <input ref={searchRef} value={q607} onChange={(e) => setQ607(e.target.value)}
+                placeholder="Buscar cliente, RNC, NCF…   /" className="input py-1.5 pl-8 text-sm w-full sm:w-56" />
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-auto">
               {pendingEcfCount > 0 ? (
@@ -1015,11 +1041,15 @@ export default function Facturacion() {
                       </tr>
                     </thead>
                     <tbody>
-                      {registerView.rows.map((r) => {
+                      {registerView.rows.map((r, i) => {
                         const ctx = { r };
                         const pf = r.kind === 'porfacturar';
+                        const focused = i === focusIdx;
                         return (
-                          <tr key={r.id} className="cursor-pointer" onClick={() => pf ? setFacturarQuote(r.quote) : setDrawerRow(r)}>
+                          <tr key={r.id} ref={focused ? focusedRowRef : null}
+                            className={`cursor-pointer ${focused ? 'bg-brand-50' : ''}`}
+                            onMouseEnter={() => setFocusIdx(i)}
+                            onClick={() => pf ? setFacturarQuote(r.quote) : setDrawerRow(r)}>
                             {cols607.map((col) => (
                               <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
                             ))}
@@ -1058,6 +1088,13 @@ export default function Facturacion() {
                   </table>
                 </div>
               </div>
+            </div>
+            <div className="hidden md:flex items-center gap-x-4 gap-y-1 flex-wrap mt-2 px-1 text-[11px] text-ink-400">
+              <span><kbd className="kbd">J</kbd> <kbd className="kbd">K</kbd> navegar</span>
+              <span><kbd className="kbd">↵</kbd> abrir</span>
+              <span><kbd className="kbd">/</kbd> buscar</span>
+              <span><kbd className="kbd">N</kbd> nueva factura</span>
+              <span><kbd className="kbd">Esc</kbd> cerrar</span>
             </div>
             </>
           )}
