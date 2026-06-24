@@ -45,6 +45,7 @@ export const ACCOUNTING_SECTIONS = [
   // viejos que ahora renderizan la misma página.
   { key: 'gastos', band: 'compras', label: 'Compras y gastos', icon: Receipt, tabs: [
     { to: '/accounting/compras-gastos', label: 'Compras y gastos' },
+    { to: '/accounting/recurrentes', label: 'Recurrentes' },
     { to: '/accounting/suppliers', label: 'Proveedores' },
   ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
 

@@ -130,6 +130,10 @@ export {
   resolveDunningPolicy, DEFAULT_DUNNING_POLICY, planReminders, dueStepFor, fillTemplate,
 } from '../../lib/accounting/dunning.js';
 
+// ── recurrentes (memorized recurring transactions): agenda VM + schedule Model
+export { resolveRecurring } from './recurring.js';
+export { nextOccurrence, isDue, advance, materializeExpense } from '../../lib/accounting/recurring.js';
+
 // ── nómina (payroll): monthly TSS+ISR engine, date-keyed topes, overtime + the
 // regalía / liquidación / bonificación asiento builders
 export {

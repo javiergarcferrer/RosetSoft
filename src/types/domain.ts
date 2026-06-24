@@ -918,6 +918,35 @@ export interface Budget {
   updatedAt?: number;
 }
 
+/** A memorized recurring-transaction template (v1: recurring expenses/bills).
+ *  Fires on a cadence; the dealer generates the transaction with one click. */
+export interface RecurringTemplate {
+  id: string;
+  profileId: string;
+  name: string;
+  kind: 'expense';
+  freq: 'weekly' | 'monthly' | 'yearly';
+  interval: number;
+  startAt: number;
+  nextRunAt: number;
+  endAt?: number | null;
+  status: 'active' | 'paused';
+  lastRunAt?: number | null;
+  payload: {
+    supplierId?: string | null;
+    accountCode?: string | null;
+    description?: string;
+    base: number;
+    itbis: number;
+    itbisCreditable?: boolean;
+    retentionIsr?: number;
+    retentionItbis?: number;
+    paymentMethod?: PaymentMethod;
+  };
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**
