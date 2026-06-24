@@ -1054,10 +1054,17 @@
     transform: translateY(calc(-1 * var(--rs-keyboard, 0px)));
   }
   /* Give scroll containers room to bring the focused field above the keyboard
-     when it auto-scrolls into view. */
+     when it auto-scrolls into view. scroll-padding-bottom only fixes the scroll
+     ALIGNMENT — it reserves no real space — so the very LAST field in the
+     container (e.g. the permanently-open "Nuevo profesional…" / "Nuevo cliente…"
+     row at the bottom of the mobile sheet) has nothing below it to scroll
+     against and stays pinned behind the keyboard. The matching padding-bottom
+     adds that real scroll room so even the final input can rise clear of the
+     keyboard. Both are keyboard-gated, so they cost nothing when it's down. */
   html.kb-open .kb-scroll-pad,
   html.kb-keep-open .kb-scroll-pad {
     scroll-padding-bottom: calc(var(--rs-keyboard, 0px) + 1rem);
+    padding-bottom: calc(var(--rs-keyboard, 0px) + 1rem);
   }
   /* The quote workspace's WhatsApp pane sizes itself to end exactly on the
      ModeBar's top edge (it subtracts the bar's 3.5rem). While typing, the bar
