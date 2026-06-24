@@ -9,12 +9,13 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import { ActionChips } from '../../components/accounting/ActionCenter.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
-import { displayRatesFor } from '../../lib/exchangeRate.js';
+import { displayRatesFor, effectiveDopRate, readExchangeRate } from '../../lib/exchangeRate.js';
 import { readyToInvoice, invoiceReadyAt } from '../../lib/quoteMilestones.js';
 import { downloadCsv, downloadText } from '../../lib/csv.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
@@ -24,7 +25,7 @@ import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
-  resolveReceivables, resolveInvoicePipeline,
+  resolveAccountingCockpit, resolveReceivables, resolveInvoicePipeline,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -118,9 +119,13 @@ export default function Facturacion() {
   const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
   const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
   const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
+  const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
+  const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
+  const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && postingsQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
+  const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
   // Invoice pipeline (AR funnel) — por cobrar / vencida / cobrada + e-CF backlog.
   const pipelineReceivables = useMemo(
     () => resolveReceivables({ salesPostings: postingsQ.data, payments: paymentsQ.data, customersById }),
@@ -499,6 +504,18 @@ export default function Facturacion() {
     purchases: purchasesQ.data, imports: importsQ.data, expedientes: expedientesQ.data, ...win,
   }), [postingsQ.data, expensesQ.data, purchasesQ.data, importsQ.data, expedientesQ.data, win]);
 
+  // Cockpit — the prioritized "needs attention" actions, surfaced where the
+  // dealer actually invoices. SAME resolver the Resumen dashboard uses, so the
+  // two can never disagree; "as of today", independent of the 607 search box.
+  const cockpit = useMemo(() => resolveAccountingCockpit({
+    settings, fiscalPeriods: periodsQ.data, quotes: quotesQ.data, salesPostings: postingsQ.data,
+    payments: paymentsQ.data, purchases: purchasesQ.data, expenses: expensesQ.data,
+    customersById, suppliersById, ecfSequences: ecfSeqQ.data, now: today.getTime(),
+  }), [settings, periodsQ.data, quotesQ.data, postingsQ.data, paymentsQ.data, purchasesQ.data, expensesQ.data, customersById, suppliersById, ecfSeqQ.data, today]);
+  // Payables belong to the compras side, not the invoicing screen — the strip
+  // carries the selling + fiscal pendientes only.
+  const facturaActions = useMemo(() => cockpit.actions.filter((a) => a.kind !== 'payable'), [cockpit]);
+
   // e-NCFs assigned but never transmitted — the count the 607 tab badges so
   // signed-but-unsent invoices can't sit invisible.
   const pendingEcfCount = useMemo(
@@ -715,9 +732,28 @@ export default function Facturacion() {
   return (
     <AccountingGate title="Facturación">
       <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)"
-        actions={<Link to="/accounting/facturacion/nueva" className="btn-primary"><FileText size={15} /> Nueva factura</Link>} />
+        actions={
+          <>
+            {loaded && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-3 py-1.5 text-xs shadow-xs"
+                title={readExchangeRate(settings).updatedAt ? `Banco Popular · venta · actualizada ${formatDate(readExchangeRate(settings).updatedAt)}` : 'Banco Popular · venta'}>
+                <span className="text-ink-400">USD→DOP</span>
+                <span className="font-medium tabular-nums text-ink-800">{effectiveDopRate(settings).toFixed(2)}</span>
+              </span>
+            )}
+            <Link to="/accounting/facturacion/nueva" className="btn-primary"><FileText size={15} /> Nueva factura</Link>
+          </>
+        } />
 
-
+      {loaded && (
+        <ActionChips actions={facturaActions} onSelect={(a) => {
+          // Two cockpit actions resolve on THIS page — handle them in place
+          // (switch tab) instead of a no-op navigation back to /facturacion.
+          if (a.kind === 'ecf') { setTab('607'); return true; }
+          if (a.kind === 'invoice') { setTab('pending'); return true; }
+          return false;
+        }} />
+      )}
       {loaded && pipeline.count > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           {pipeline.buckets.map((b) => (

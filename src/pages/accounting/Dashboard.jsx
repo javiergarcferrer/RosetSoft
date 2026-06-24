@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Wallet, ArrowDownCircle, ArrowUpCircle, Receipt, FileWarning,
-  AlertTriangle, BookOpen, Landmark, Ship, Boxes, Percent, Gauge,
-  FileText, ShoppingCart, CalendarClock, Lock, CheckCircle2, ListChecks,
+  Wallet, ArrowDownCircle, ArrowUpCircle, Receipt,
+  BookOpen, Landmark, Ship, Boxes, Percent, Gauge,
+  FileText, ShoppingCart, Lock, CheckCircle2, ListChecks,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -12,6 +12,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
+import { ActionList } from '../../components/accounting/ActionCenter.jsx';
 import SegmentBar from '../../components/accounting/SegmentBar.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -35,17 +36,6 @@ const QUICK_ACTIONS = [
   { label: 'Expediente', to: '/accounting/importaciones/nuevo', icon: Ship },
   { label: 'Asiento', to: '/accounting/ledger?new=1', icon: BookOpen },
 ];
-// Action-center severity skins + the icon per action kind.
-const SEV_SKIN = {
-  danger: 'bg-rose-50 text-rose-800 border-rose-200',
-  warn: 'bg-amber-50 text-amber-800 border-amber-200',
-  info: 'bg-ink-50 text-ink-700 border-ink-200',
-};
-const ACTION_ICON = {
-  ecfSeq: FileWarning, ecf: FileWarning, deadline: CalendarClock,
-  payable: ArrowUpCircle, receivable: ArrowDownCircle, invoice: FileText, periodClose: Lock,
-};
-
 // Chart palette — drawn from the app's warm tokens (ink/brand) + a few accents.
 // Centralized here so the incoming design system can retune the dashboard hues
 // in one spot.
@@ -243,22 +233,6 @@ function CycleArrow() {
 
 /** The human label for one cockpit action (the VM returns structured data; the
  *  View owns the money/date formatting + the copy). */
-function actionText(a) {
-  switch (a.kind) {
-    case 'ecfSeq':
-      if (a.seqKind === 'none') return `Sin secuencia e-NCF utilizable para ${a.name} — autoriza un rango`;
-      if (a.seqKind === 'low') return `Quedan ${a.remaining} e-NCF de ${a.name}`;
-      return `La secuencia e-NCF de ${a.name} vence el ${formatDate(a.expiresAt)}`;
-    case 'ecf': return `${a.count} e-CF por transmitir a la DGII`;
-    case 'deadline': return `${a.name} vence ${a.daysLeft === 0 ? 'hoy' : a.daysLeft === 1 ? 'mañana' : `en ${a.daysLeft} días`} · ${a.periodLabel}`;
-    case 'payable': return `${formatDop(a.amount)} en cuentas por pagar vencidas`;
-    case 'receivable': return `${formatDop(a.amount)} en cuentas por cobrar vencidas`;
-    case 'invoice': return `${a.count} cotización${a.count === 1 ? '' : 'es'} aceptada${a.count === 1 ? '' : 's'} por facturar`;
-    case 'periodClose': return `Cierra ${a.label} — el mes anterior sigue abierto`;
-    default: return '';
-  }
-}
-
 /**
  * Resumen del negocio — the accounting home, in the QuickBooks "Business
  * overview" shape: a grid of live financial widgets (flujo de caja, gastos,
@@ -403,20 +377,7 @@ export default function AccountingDashboard() {
                 {cockpit.actions.length === 0 ? (
                   <div className="flex items-center justify-center gap-2 text-sm text-emerald-700 py-8"><CheckCircle2 size={16} /> Todo al día — sin pendientes.</div>
                 ) : (
-                  <ul className="space-y-1.5">
-                    {cockpit.actions.map((a) => {
-                      const Icon = ACTION_ICON[a.kind] || AlertTriangle;
-                      return (
-                        <li key={a.id}>
-                          <Link to={a.to} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm shadow-xs hover:shadow-sm transition-shadow ${SEV_SKIN[a.severity]}`}>
-                            <Icon size={15} className="shrink-0" />
-                            <span className="min-w-0 flex-1 break-words">{actionText(a)}</span>
-                            <span className="shrink-0 opacity-50">→</span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <ActionList actions={cockpit.actions} />
                 )}
               </div>
 
