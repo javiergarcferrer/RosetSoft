@@ -59,6 +59,7 @@ const STATUS_PILL = {
   partial: ['Parcial', 'bg-brand-100 text-brand-700'],
   overdue: ['Vencida', 'bg-rose-100 text-rose-700'],
   note: ['Nota', 'bg-ink-100 text-ink-600'],
+  porfacturar: ['Por facturar', 'bg-amber-100 text-amber-800'],
 };
 
 const SALES607_COLUMNS = [
@@ -121,7 +122,7 @@ const SALES607_COLUMNS = [
   {
     key: 'vence', label: 'Vence',
     thClass: 'whitespace-nowrap', tdClass: 'whitespace-nowrap text-ink-500',
-    cell: ({ r }) => (r.status === 'paid' || r.creditNote)
+    cell: ({ r }) => (r.status === 'paid' || r.creditNote || !r.dueAt)
       ? <span className="text-ink-300">—</span>
       : <span className={r.overdue ? 'text-rose-600' : ''}>{formatDate(r.dueAt)}</span>,
   },
@@ -562,15 +563,32 @@ export default function Facturacion() {
   const register = useMemo(() => resolveInvoiceRegister({
     salesPostings: postingsQ.data, receivables: pipelineReceivables, customersById, now: today.getTime(),
   }), [postingsQ.data, pipelineReceivables, customersById, today]);
+  // Delivered-but-not-yet-invoiced quotes fold into the SAME table as
+  // 'porfacturar' rows — clicking one opens the facturar modal (vs the detail
+  // drawer for a posted factura), so the entrega → factura step never leaves
+  // this screen.
+  const porfacturarRows = useMemo(() => deliverables.map((q) => {
+    const c = q.customerId ? customersById.get(q.customerId) : null;
+    const book = bookFor(q);
+    return {
+      id: q.id, kind: 'porfacturar', quote: q,
+      name: c?.name || 'Cliente', rnc: c?.rnc || '', ncf: '',
+      date: invoiceReadyAt(q), base: book.base, itbis: book.itbis, total: book.total,
+      open: 0, status: 'porfacturar', ecfStatus: '', ecfType: '', creditNote: false, needsEcf: false,
+    };
+  }), [deliverables, customersById, linesByQuote, settings]);
   const registerView = useMemo(() => {
-    let rows = register.rows;
-    if (tab === 'cobrar') rows = rows.filter((r) => ['open', 'partial', 'overdue'].includes(r.status));
-    else if (tab === 'pagadas') rows = rows.filter((r) => r.status === 'paid');
-    else if (tab === 'ecf') rows = rows.filter((r) => r.needsEcf);
+    let rows;
+    if (tab === 'porfacturar') rows = porfacturarRows;
+    else if (tab === 'cobrar') rows = register.rows.filter((r) => ['open', 'partial', 'overdue'].includes(r.status));
+    else if (tab === 'pagadas') rows = register.rows.filter((r) => r.status === 'paid');
+    else if (tab === 'ecf') rows = register.rows.filter((r) => r.needsEcf);
+    else rows = [...porfacturarRows, ...register.rows]; // Todas: the por-facturar queue sits on top
     const query = q607.trim().toLowerCase();
     if (query) rows = rows.filter((r) => [r.name, r.rnc, r.ncf].some((v) => (v || '').toLowerCase().includes(query)));
-    return { rows, totals: invoiceRowTotals(rows), count: rows.length };
-  }, [register, tab, q607]);
+    // Totals over posted facturas only — a por-facturar isn't a factura yet.
+    return { rows, totals: invoiceRowTotals(rows.filter((r) => r.kind !== 'porfacturar')), count: rows.length };
+  }, [register, porfacturarRows, tab, q607]);
 
   // e-NCFs assigned but never transmitted — the count the 607 tab badges so
   // signed-but-unsent invoices can't sit invisible.
@@ -587,7 +605,8 @@ export default function Facturacion() {
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
-  const [drawerRow, setDrawerRow] = useState(null); // 607 row whose detail briefing is open
+  const [drawerRow, setDrawerRow] = useState(null); // posted factura whose detail briefing is open
+  const [facturarQuote, setFacturarQuote] = useState(null); // por-facturar quote whose facturar modal is open
 
   // Column visibility (Shopify "edit columns") for the 607 table — persisted
   // per browser. The e-CF actions column stays a fixed trailing cell.
@@ -832,7 +851,7 @@ export default function Facturacion() {
 
   return (
     <AccountingGate title="Facturación">
-      <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)"
+      <PageHeader title="Facturación" subtitle="Comprobantes fiscales electrónicos · 607 · cobros"
         actions={
           <>
             {loaded && (
@@ -841,6 +860,14 @@ export default function Facturacion() {
                 <span className="text-ink-400">USD→DOP</span>
                 <span className="font-medium tabular-nums text-ink-800">{effectiveDopRate(settings).toFixed(2)}</span>
               </span>
+            )}
+            {loaded && (
+              <Link to="/accounting/impuestos"
+                className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-3 py-1.5 text-xs shadow-xs hover:border-ink-300"
+                title="Liquidación de ITBIS — IT-1 (resumen DGII)">
+                <span className="text-ink-400">IT-1</span>
+                <span className="font-medium tabular-nums text-ink-800">{formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor)}</span>
+              </Link>
             )}
             <Link to="/accounting/facturacion/nueva" className="btn-primary"><FileText size={15} /> Nueva factura</Link>
           </>
@@ -867,7 +894,7 @@ export default function Facturacion() {
       )}
 
       <TabPills tabs={[
-        { key: 'todas', label: `Todas${register.counts.todas ? ` (${register.counts.todas})` : ''}` },
+        { key: 'todas', label: `Todas${(register.counts.todas + deliverables.length) ? ` (${register.counts.todas + deliverables.length})` : ''}` },
         { key: 'cobrar', label: `Por cobrar${register.counts.cobrar ? ` (${register.counts.cobrar})` : ''}` },
         { key: 'pagadas', label: `Pagadas${register.counts.pagadas ? ` (${register.counts.pagadas})` : ''}` },
         { key: 'ecf', label: `e-CF pendientes${register.counts.ecf ? ` (${register.counts.ecf})` : ''}` },
@@ -875,74 +902,7 @@ export default function Facturacion() {
       ]} active={tab} onChange={setTab} />
       {err && <p className={`text-sm mb-3 ${err.startsWith('✓') ? 'text-emerald-700' : 'text-rose-600'}`}>{err}</p>}
 
-      {!loaded ? <ListLoading /> : tab === 'porfacturar' ? (
-        deliverables.length === 0 ? (
-          <EmptyState icon={FileText} title="Nada por facturar"
-            description="Las ventas listas para facturar —entregadas, o de piso con depósito recibido— aparecen aquí." />
-        ) : (
-          <div className="space-y-3">
-            {deliverables.map((q) => {
-              const book = bookFor(q);
-              const customer = q.customerId ? customersById.get(q.customerId) : null;
-              const draft = drafts[q.id] || {};
-              return (
-                <div key={q.id} className="card p-4 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="text-xs text-ink-400 tabular-nums">#{q.number ?? '—'}</span>
-                    <span className="font-medium truncate">{customer?.name || 'Cliente'}</span>
-                    <span className="text-sm text-ink-500 whitespace-nowrap">
-                      {q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`}
-                    </span>
-                    <span className="text-sm tabular-nums whitespace-nowrap sm:ml-auto font-semibold text-ink-900">{formatDop(book.total)} <span className="text-ink-400 font-normal">({formatMoney(book.usdTotal, 'USD')})</span></span>
-                  </div>
-                  <div className="text-xs text-ink-500 mb-3 tabular-nums break-words">
-                    Base {formatDop(book.base)} · ITBIS {formatDop(book.itbis)}
-                    {book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex gap-1 w-full sm:w-auto">
-                      <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
-                        onChange={(e) => setDraft(q.id, { rnc: e.target.value })}
-                        className="input flex-1 min-w-0 sm:flex-none sm:w-36" />
-                      <button type="button" onClick={() => lookupFor(q)}
-                        disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
-                        className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
-                        {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                      </button>
-                    </div>
-                    <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
-                      onChange={(e) => setDraft(q.id, { ncf: e.target.value })}
-                      className="input w-full sm:w-52" />
-                    <button type="button" onClick={() => postSale(q)} disabled={posting === q.id}
-                      className="btn-primary w-full sm:w-auto justify-center">
-                      {posting === q.id ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Facturar
-                    </button>
-                    {draft.msg && <span className="text-xs text-ink-500 break-words">{draft.msg}</span>}
-                  </div>
-                  {/* Stock-sourced lines (inventoryItemId stamped at quoting
-                      time) → offer the kardex salida prefilled; the sale's
-                      stock move stays a human act in Inventario. */}
-                  {(() => {
-                    const stocked = (linesByQuote.get(q.id) || []).filter((l) => l.inventoryItemId);
-                    if (!stocked.length) return null;
-                    const first = stocked[0];
-                    return (
-                      <Link
-                        to={`/inventario/existencias?item=${first.inventoryItemId}&qty=${Number(first.qty) || 1}`}
-                        className="btn-ghost text-xs mt-2"
-                        title="Registrar la salida de almacén de los artículos vendidos de stock"
-                      >
-                        <Boxes size={12} aria-hidden /> Salida de inventario
-                        {stocked.length > 1 ? ` (${stocked.length} artículos)` : ''}
-                      </Link>
-                    );
-                  })()}
-                </div>
-              );
-            })}
-          </div>
-        )
-      ) : (
+      {!loaded ? <ListLoading /> : (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <div className="relative w-full sm:w-auto">
@@ -969,7 +929,6 @@ export default function Facturacion() {
                 className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
               <button type="button" onClick={export607Txt} disabled={sales607.count === 0}
                 className="btn-ghost"><Download size={14} /> TXT DGII (607)</button>
-              <Link to="/accounting/impuestos" className="btn-ghost" title="Liquidación de ITBIS (IT-1) en el resumen DGII">IT-1 →</Link>
             </div>
           </div>
           {registerView.count === 0 ? (
@@ -989,7 +948,7 @@ export default function Facturacion() {
                   ['Base', formatDop(r.creditNote ? -r.base : r.base)],
                   ['Balance', r.open > 0.01 ? formatDop(r.open) : '—'],
                 ],
-                onClick: () => setDrawerRow(r),
+                onClick: () => r.kind === 'porfacturar' ? setFacturarQuote(r.quote) : setDrawerRow(r),
               }))}
               footer={[
                 ['Facturas', registerView.count],
@@ -1020,12 +979,17 @@ export default function Facturacion() {
                     <tbody>
                       {registerView.rows.map((r) => {
                         const ctx = { r };
+                        const pf = r.kind === 'porfacturar';
                         return (
-                          <tr key={r.id} className="cursor-pointer" onClick={() => setDrawerRow(r)}>
+                          <tr key={r.id} className="cursor-pointer" onClick={() => pf ? setFacturarQuote(r.quote) : setDrawerRow(r)}>
                             {cols607.map((col) => (
                               <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
                             ))}
-                            <td onClick={(e) => e.stopPropagation()}>{ecfActions(r)}</td>
+                            <td onClick={(e) => e.stopPropagation()}>
+                              {pf
+                                ? <button type="button" onClick={() => setFacturarQuote(r.quote)} className="btn-primary text-xs whitespace-nowrap"><Check size={13} /> Facturar</button>
+                                : ecfActions(r)}
+                            </td>
                           </tr>
                         );
                       })}
@@ -1061,6 +1025,49 @@ export default function Facturacion() {
           )}
         </>
       )}
+      {facturarQuote && (() => {
+        const q = facturarQuote;
+        const book = bookFor(q);
+        const customer = q.customerId ? customersById.get(q.customerId) : null;
+        const draft = drafts[q.id] || {};
+        const stocked = (linesByQuote.get(q.id) || []).filter((l) => l.inventoryItemId);
+        return (
+          <Modal open onClose={() => { if (posting !== q.id) { setErr(''); setFacturarQuote(null); } }}
+            title={`Facturar — ${customer?.name || 'Cliente'}`} size="md" footer={
+            <>
+              <button onClick={() => { setErr(''); setFacturarQuote(null); }} disabled={posting === q.id} className="btn-ghost">Cancelar</button>
+              <button onClick={() => postSale(q)} disabled={posting === q.id} className="btn-primary disabled:opacity-40 inline-flex items-center gap-1.5">
+                {posting === q.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Facturar
+              </button>
+            </>
+          }>
+            <div className="mb-3">
+              <div className="font-display text-xl font-semibold tabular-nums text-ink-900">{formatDop(book.total)} <span className="text-sm text-ink-400 font-normal">({formatMoney(book.usdTotal, 'USD')})</span></div>
+              <div className="text-xs text-ink-500 mt-1 tabular-nums">Base {formatDop(book.base)} · ITBIS {formatDop(book.itbis)}{book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}</div>
+              <div className="text-xs text-ink-400 mt-0.5">{q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`} · cotización #{q.number ?? '—'}</div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex gap-1">
+                <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
+                  onChange={(e) => setDraft(q.id, { rnc: e.target.value })} className="input flex-1" />
+                <button type="button" onClick={() => lookupFor(q)} disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
+                  className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
+                  {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                </button>
+              </div>
+              <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
+                onChange={(e) => setDraft(q.id, { ncf: e.target.value })} className="input w-full" />
+              {draft.msg && <p className="text-xs text-ink-500 break-words">{draft.msg}</p>}
+              {stocked.length > 0 && (
+                <Link to={`/inventario/existencias?item=${stocked[0].inventoryItemId}&qty=${Number(stocked[0].qty) || 1}`} className="btn-ghost text-xs">
+                  <Boxes size={12} aria-hidden /> Salida de inventario{stocked.length > 1 ? ` (${stocked.length} artículos)` : ''}
+                </Link>
+              )}
+              {err && <p className="text-sm text-rose-600">{err}</p>}
+            </div>
+          </Modal>
+        );
+      })()}
       {drawerRow && (() => {
         const p = postingById.get(drawerRow.id);
         const customer = p?.customerId ? customersById.get(p.customerId) : null;
