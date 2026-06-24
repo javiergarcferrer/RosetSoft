@@ -78,11 +78,11 @@ export function resolveAccountingCockpit({
 
   // ── 4) e-CF transmission backlog + sequence health ───────────────────────
   const ecfPending = (salesPostings || [])
-    .filter((s) => /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
+    .filter((s) => !s.voidedAt && /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
   const ecfSeqAlerts = resolveEcfSequenceAlerts(ecfSequences, { now });
 
   // ── 5) Accepted quotes not yet invoiced (a sales posting links by quoteId) ─
-  const invoiced = new Set((salesPostings || []).map((s) => s.quoteId).filter(Boolean));
+  const invoiced = new Set((salesPostings || []).filter((s) => !s.voidedAt).map((s) => s.quoteId).filter(Boolean));
   const toInvoice = (quotes || []).filter((q) => q.status === QUOTE_STATUS_ACCEPTED && !invoiced.has(q.id)).length;
 
   // ── Build the prioritized action center ──────────────────────────────────

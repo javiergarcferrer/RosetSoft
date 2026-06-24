@@ -116,7 +116,7 @@ export function resolveAccountingDashboard({
     else if (node.class === 5 || node.class === 6) series[i].egresos += naturalBalance(debit - credit, node.nature);
     if (cashLeaves.has(l.accountCode)) { series[i].cashIn += debit; series[i].cashOut += credit; }
   }
-  for (const sp of salesPostings || []) {
+  for (const sp of (salesPostings || []).filter((s) => !s.voidedAt)) {
     const i = idxByKey.get(monthKey(sp.postedAt || 0));
     if (i != null) series[i].sales = round2(series[i].sales + (Number(sp.total) || 0));
   }

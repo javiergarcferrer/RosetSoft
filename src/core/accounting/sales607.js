@@ -20,6 +20,7 @@ export function resolveSales607({ salesPostings, customersById, start, end, quer
   const custById = customersById || new Map();
   const q = (query || '').trim().toLowerCase();
   const rows = (salesPostings || [])
+    .filter((p) => !p.voidedAt)
     .filter((p) => inWindow(p.postedAt, start, end))
     .filter((p) => {
       if (!q) return true;
@@ -68,6 +69,7 @@ export function resolveSales607({ salesPostings, customersById, start, end, quer
  */
 export function resolveItbisLiquidation({ salesPostings, expenses, purchases, imports, expedientes, pettyCashVouchers, start, end } = {}) {
   const debitoFiscal = round2((salesPostings || [])
+    .filter((p) => !p.voidedAt)
     .filter((p) => inWindow(p.postedAt, start, end))
     // A nota de crédito (E34) reverses débito fiscal — subtract its ITBIS.
     .reduce((s, p) => s + (isCreditNote(p.ncf) ? -1 : 1) * (Number(p.itbis) || 0), 0));

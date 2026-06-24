@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Loader2, ArrowDownCircle } from 'lucide-react';
+import { Loader2, ArrowDownCircle, Ban } from 'lucide-react';
 import { formatDop, formatDate } from '../../lib/format.js';
 
 /**
@@ -42,12 +42,15 @@ function Row({ label, value, strong, big, rule, tone }) {
   );
 }
 
-export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, fiscalActions, onCollect, onClose }) {
+export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, fiscalActions, onCollect, onVoid, onClose }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('transfer');
   const [date, setDate] = useState(todayInput());
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [voiding, setVoiding] = useState(false);
 
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose(); };
@@ -57,6 +60,7 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
 
   if (!posting) return null;
   const isNote = !!row.creditNote || /^E34/.test(posting.ncf || '');
+  const voided = !!posting.voidedAt;
   const base = Number(posting.base) || 0;
   const itbis = Number(posting.itbis) || 0;
   const total = Number(posting.total) || 0;
@@ -64,8 +68,14 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
   const allocFor = (p) => (p.allocations || []).filter((a) => a.docId === posting.id).reduce((x, a) => x + (Number(a.amount) || 0), 0);
   const cobrado = (payments || []).reduce((s, p) => s + allocFor(p), 0);
   const balance = Math.max(0, total - depositApplied - cobrado);
-  const ecf = ECF_SKIN[posting.ecfStatus] || { dot: 'bg-ink-300', label: 'Sin transmitir', cls: 'text-ink-400' };
+  const ecf = voided
+    ? { dot: 'bg-ink-300', label: 'Anulada', cls: 'text-ink-400' }
+    : (ECF_SKIN[posting.ecfStatus] || { dot: 'bg-ink-300', label: 'Sin transmitir', cls: 'text-ink-400' });
   const tipoLabel = TIPO_LABEL[posting.ecfType] || (posting.ncf || '');
+  // A not-yet-transmitted e-CF can be voided in place (sequence gap); an issued
+  // one (sent/accepted) is cancelled/corrected only via a nota de crédito.
+  const canVoid = !isNote && !voided && posting.ecfStatus !== 'sent' && posting.ecfStatus !== 'accepted';
+  const issued = posting.ecfStatus === 'sent' || posting.ecfStatus === 'accepted';
 
   // The sale's asiento, derived from the posting exactly as lib/accounting/sale
   // books it (deposit clears the liability, the rest bills the receivable, base
@@ -112,12 +122,17 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
           <div className="text-xs text-ink-500 mt-0.5">{tipoLabel}{posting.rnc ? ` · RNC ${posting.rnc}` : ''}</div>
           <div className="flex items-baseline gap-3 mt-3">
             <span className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(isNote ? -total : total)}</span>
-            {!isNote && balance <= 0 && <span className="chip bg-emerald-100 text-emerald-700">Liquidada</span>}
-            {!isNote && balance > 0 && <span className="chip bg-amber-100 text-amber-800">Balance {formatDop(balance)}</span>}
+            {!voided && !isNote && balance <= 0 && <span className="chip bg-emerald-100 text-emerald-700">Liquidada</span>}
+            {!voided && !isNote && balance > 0 && <span className="chip bg-amber-100 text-amber-800">Balance {formatDop(balance)}</span>}
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {voided && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              Factura anulada el {formatDate(posting.voidedAt)}{posting.voidedReason ? ` · ${posting.voidedReason}` : ''}. El asiento fue revertido y el e-NCF quedó anulado.
+            </div>
+          )}
           <div>
             <div className="eyebrow-xs text-ink-400 mb-1.5">Desglose</div>
             <Row label="Base imponible" value={formatDop(base)} rule />
@@ -128,7 +143,7 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
             {!isNote && <Row label="Balance pendiente" value={formatDop(balance)} strong big tone={balance > 0 ? 'brand' : 'emerald'} />}
           </div>
 
-          {!isNote && balance > 0 && (
+          {!isNote && !voided && balance > 0 && (
             <div className="surface-subtle p-3.5">
               <div className="eyebrow-xs text-ink-500 mb-2 inline-flex items-center gap-1.5"><ArrowDownCircle size={13} aria-hidden /> Registrar cobro</div>
               <div className="grid grid-cols-2 gap-2">
@@ -204,6 +219,35 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
                   </tfoot>
                 </table>
               </div>
+            </div>
+          )}
+
+          {(canVoid || issued) && (
+            <div>
+              <div className="eyebrow-xs text-ink-400 mb-1.5">Cancelar / corregir</div>
+              {issued && (
+                <p className="text-xs text-ink-500">Este e-CF ya está en la DGII. Para cancelarlo o corregirlo, emite una <span className="font-medium text-ink-700">nota de crédito</span> (Anulación total o Corrección) desde las acciones de abajo.</p>
+              )}
+              {canVoid && !voidOpen && (
+                <button type="button" onClick={() => setVoidOpen(true)} className="btn-ghost text-xs text-rose-600">
+                  <Ban size={13} aria-hidden /> Anular factura
+                </button>
+              )}
+              {canVoid && voidOpen && (
+                <div className="surface-subtle p-3">
+                  <p className="text-xs text-ink-500 mb-2">Revierte el asiento y marca el e-NCF como anulado (queda un hueco en la secuencia — no se transmite nada a la DGII). Si viene de una cotización, vuelve a “Por facturar”.</p>
+                  <textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} rows={2} placeholder="Motivo (opcional)…" className="input w-full mb-2" />
+                  <div className="flex gap-2">
+                    <button type="button" disabled={voiding}
+                      onClick={async () => { setErr(''); setVoiding(true); const r = await onVoid?.(voidReason); setVoiding(false); if (r?.ok) onClose(); else setErr(r?.error || 'No se pudo anular.'); }}
+                      className="btn-danger text-xs">
+                      {voiding ? <Loader2 size={13} className="animate-spin" /> : <Ban size={13} aria-hidden />} Confirmar anulación
+                    </button>
+                    <button type="button" onClick={() => { setVoidOpen(false); setErr(''); }} disabled={voiding} className="btn-ghost text-xs">Cancelar</button>
+                  </div>
+                  {err && <p className="text-xs text-rose-600 mt-2">{err}</p>}
+                </div>
+              )}
             </div>
           )}
         </div>

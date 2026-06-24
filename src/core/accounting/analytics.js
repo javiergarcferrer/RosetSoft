@@ -100,9 +100,10 @@ export function resolveComparativeKpis({
   accounts, entries, lines, period,
 } = {}) {
   const cobros = (payments || []).filter((p) => p.direction === 'in' && p.partyType === 'customer');
+  const sales = (salesPostings || []).filter((s) => !s.voidedAt);
   const windows = { current: period, previous: period.prev, yoy: period.yoy };
   const measure = (w) => ({
-    ventas: sumIn(salesPostings, 'postedAt', w, (r) => r.total),
+    ventas: sumIn(sales, 'postedAt', w, (r) => r.total),
     cobrado: sumIn(cobros, 'paidAt', w, (r) => r.amount),
     gastos: sumIn(expenses, 'expenseAt', w, (r) => r.base),
     compras: sumIn(purchases, 'purchaseAt', w, (r) => r.base),
@@ -142,7 +143,7 @@ export function resolveSalesSegmented({
   const segs = new Map();
   let totalAll = 0;
 
-  for (const p of salesPostings || []) {
+  for (const p of (salesPostings || []).filter((s) => !s.voidedAt)) {
     if (!inWin(p.postedAt, { start, end })) continue;
     const quote = p.quoteId ? quoteById.get(p.quoteId) : null;
     let key = '—';
@@ -198,6 +199,7 @@ export function resolveMonthlyComparative({
   salesPostings, payments, expenses, purchases, expedientes, imports, months = 12, end = Date.now(),
 } = {}) {
   const cobros = (payments || []).filter((p) => p.direction === 'in' && p.partyType === 'customer');
+  const sales = (salesPostings || []).filter((s) => !s.voidedAt);
   const endD = new Date(end);
   const rows = [];
   for (let i = months - 1; i >= 0; i--) {
@@ -206,8 +208,8 @@ export function resolveMonthlyComparative({
     const d = new Date(y, m, 1);
     const w = monthWindow(d.getFullYear(), d.getMonth());
     const wYoy = monthWindow(d.getFullYear() - 1, d.getMonth());
-    const ventas = sumIn(salesPostings, 'postedAt', w, (r) => r.total);
-    const ventasYoy = sumIn(salesPostings, 'postedAt', wYoy, (r) => r.total);
+    const ventas = sumIn(sales, 'postedAt', w, (r) => r.total);
+    const ventasYoy = sumIn(sales, 'postedAt', wYoy, (r) => r.total);
     rows.push({
       key: `${d.getFullYear()}-${d.getMonth() + 1}`,
       label: `${MONTHS_ES_SHORT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,

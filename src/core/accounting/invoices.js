@@ -19,7 +19,7 @@ export function resolveInvoicePipeline({ salesPostings, receivables, customersBy
     for (const d of row.docs || []) openByDoc.set(d.docId, d.open);
   }
 
-  const invoices = (salesPostings || []).map((s) => {
+  const invoices = (salesPostings || []).filter((s) => !s.voidedAt).map((s) => {
     const open = round2(openByDoc.get(s.id) ?? 0);
     const ecf = s.ecfStatus || '';
     const age = Math.floor((at - (s.postedAt || 0)) / DAY);
@@ -82,15 +82,17 @@ export function resolveInvoiceRegister({ salesPostings, receivables, customersBy
     const base = round2(p.base || 0);
     const itbis = round2(p.itbis || 0);
     const isNote = isCreditNote(p.ncf);
+    const voided = !!p.voidedAt;
     const deposit = round2(p.depositApplied || 0);
-    const open = isNote ? 0 : round2(openByDoc.get(p.id) ?? 0);
+    const open = (isNote || voided) ? 0 : round2(openByDoc.get(p.id) ?? 0);
     const cobrado = round2(Math.max(0, total - deposit - open));
     const dueAt = (p.postedAt || 0) + TERM_DAYS * DAY;
     const overdue = open > 0.01 && at > dueAt;
     const ecf = p.ecfStatus || '';
-    const needsEcf = ecf === 'pending' || ecf === 'rejected';
+    const needsEcf = !voided && (ecf === 'pending' || ecf === 'rejected');
     let status;
-    if (isNote) status = 'note';
+    if (voided) status = 'voided';
+    else if (isNote) status = 'note';
     else if (open <= 0.01) status = 'paid';
     else if (overdue) status = 'overdue';
     else if (cobrado > 0 || deposit > 0) status = 'partial';
@@ -106,10 +108,11 @@ export function resolveInvoiceRegister({ salesPostings, receivables, customersBy
 
   const isUnpaid = (r) => r.status === 'open' || r.status === 'partial' || r.status === 'overdue';
   const counts = {
-    todas: rows.length,
+    todas: rows.filter((r) => r.status !== 'voided').length,
     cobrar: rows.filter(isUnpaid).length,
     pagadas: rows.filter((r) => r.status === 'paid').length,
     ecf: rows.filter((r) => r.needsEcf).length,
+    anuladas: rows.filter((r) => r.status === 'voided').length,
   };
   return { rows, counts };
 }
@@ -117,6 +120,7 @@ export function resolveInvoiceRegister({ salesPostings, receivables, customersBy
 /** Net totals over a register-row subset (notas de crédito subtract). */
 export function invoiceRowTotals(rows) {
   const t = (rows || []).reduce((acc, r) => {
+    if (r.status === 'voided') return acc;
     const s = r.creditNote ? -1 : 1;
     return {
       base: acc.base + s * r.base, itbis: acc.itbis + s * r.itbis,

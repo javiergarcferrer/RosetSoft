@@ -96,6 +96,7 @@ function rollup(rows) {
 /** Cuentas por cobrar — open balance + aging per customer. */
 export function resolveReceivables({ salesPostings, payments, customersById, asOf } = {}) {
   const charges = (salesPostings || [])
+    .filter((s) => !s.voidedAt)
     .map((s) => {
       // A nota de crédito (E34) reduces the receivable — carry it as a NEGATIVE
       // charge so it nets the balance instead of inflating it.
@@ -162,7 +163,7 @@ export function resolveStatementFor({
 } = {}) {
   if (!selected) return null;
   if (selected.type === 'customer') {
-    const sales = (salesPostings || []).filter((s) => s.customerId === selected.id);
+    const sales = (salesPostings || []).filter((s) => s.customerId === selected.id && !s.voidedAt);
     const charges = sales.filter((s) => !isCreditNote(s.ncf))
       .map((s) => ({ date: s.postedAt, amount: round2((s.total || 0) - (s.depositApplied || 0)), label: 'Factura', ref: s.ncf || '' }))
       .filter((c) => c.amount > 0.001);

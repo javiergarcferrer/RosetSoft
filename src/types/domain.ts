@@ -723,6 +723,13 @@ export interface SalePosting {
   modifiesPostingId?: string | null;
   /** RazónModificación: 1 = anulación total, 3 = corrección de montos. */
   codigoModificacion?: number | null;
+  /** Anulación: set when this e-CF was voided — a not-yet-transmitted e-NCF
+   *  (a compliant sequence gap) or a cancelled draft. A voided posting drops out
+   *  of the 607, IT-1, receivables and the register totals but stays visible as
+   *  Anulada; its reversing asiento is a separate journal entry. An ISSUED e-CF
+   *  (sent/accepted) is never voided here — it's cancelled with a nota de crédito. */
+  voidedAt?: number | null;
+  voidedReason?: string | null;
   journalEntryId?: string | null;
   createdAt?: number;
   updatedAt?: number;

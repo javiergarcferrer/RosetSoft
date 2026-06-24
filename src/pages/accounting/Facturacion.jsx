@@ -60,6 +60,7 @@ const STATUS_PILL = {
   overdue: ['Vencida', 'bg-rose-100 text-rose-700'],
   note: ['Nota', 'bg-ink-100 text-ink-600'],
   porfacturar: ['Por facturar', 'bg-amber-100 text-amber-800'],
+  voided: ['Anulada', 'bg-ink-100 text-ink-400 line-through'],
 };
 
 const SALES607_COLUMNS = [
@@ -182,7 +183,7 @@ export default function Facturacion() {
     }
     return m;
   }, [linesQ.data]);
-  const postedQuoteIds = useMemo(() => new Set(postingsQ.data.map((p) => p.quoteId).filter(Boolean)), [postingsQ.data]);
+  const postedQuoteIds = useMemo(() => new Set(postingsQ.data.filter((p) => !p.voidedAt).map((p) => p.quoteId).filter(Boolean)), [postingsQ.data]);
   const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
   const quotesById = useMemo(() => new Map(quotesQ.data.map((q) => [q.id, q])), [quotesQ.data]);
   const [transmitting, setTransmitting] = useState(null);
@@ -524,7 +525,7 @@ export default function Facturacion() {
 
   const today = useMemo(() => new Date(), []);
   const [params] = useSearchParams();
-  const [tab, setTab] = useState(['cobrar', 'pagadas', 'ecf', 'porfacturar'].includes(params.get('tab')) ? params.get('tab') : 'todas'); // 'todas'|'cobrar'|'pagadas'|'ecf'|'porfacturar'
+  const [tab, setTab] = useState(['cobrar', 'pagadas', 'ecf', 'porfacturar', 'anuladas'].includes(params.get('tab')) ? params.get('tab') : 'todas'); // 'todas'|'cobrar'|'pagadas'|'ecf'|'porfacturar'|'anuladas'
   const win = useMemo(() => ({
     start: new Date(today.getFullYear(), today.getMonth(), 1).getTime(),
     end: today.getTime(),
@@ -583,7 +584,8 @@ export default function Facturacion() {
     else if (tab === 'cobrar') rows = register.rows.filter((r) => ['open', 'partial', 'overdue'].includes(r.status));
     else if (tab === 'pagadas') rows = register.rows.filter((r) => r.status === 'paid');
     else if (tab === 'ecf') rows = register.rows.filter((r) => r.needsEcf);
-    else rows = [...porfacturarRows, ...register.rows]; // Todas: the por-facturar queue sits on top
+    else if (tab === 'anuladas') rows = register.rows.filter((r) => r.status === 'voided');
+    else rows = [...porfacturarRows, ...register.rows.filter((r) => r.status !== 'voided')]; // Todas: active only (anuladas have their own filter)
     const query = q607.trim().toLowerCase();
     if (query) rows = rows.filter((r) => [r.name, r.rnc, r.ncf].some((v) => (v || '').toLowerCase().includes(query)));
     // Totals over posted facturas only — a por-facturar isn't a factura yet.
@@ -764,6 +766,40 @@ export default function Facturacion() {
     }
   }
 
+  // Anular una factura NO transmitida — reversa el asiento (el inverso exacto de
+  // buildSaleEntry, vía buildCreditNoteEntry) y marca el posting como anulado. El
+  // e-NCF queda como un hueco en la secuencia (la DGII lo acepta). Un e-CF YA
+  // transmitido (sent/accepted) sólo se cancela con nota de crédito. Si estaba
+  // ligada a una cotización, ésta vuelve a "Por facturar".
+  async function voidInvoice(p, reason) {
+    if (!p) return { ok: false, error: 'Factura no encontrada.' };
+    if (p.voidedAt) return { ok: false, error: 'La factura ya está anulada.' };
+    if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') {
+      return { ok: false, error: 'Un e-CF ya transmitido a la DGII sólo se cancela con una nota de crédito.' };
+    }
+    if (/^E34/.test(p.ncf || '')) {
+      return { ok: false, error: 'Una nota de crédito no se anula por aquí.' };
+    }
+    try {
+      const postedAt = Date.now();
+      const built = buildCreditNoteEntry({
+        newId, config, postedAt,
+        note: {
+          id: p.id, quoteId: p.quoteId, customerId: p.customerId,
+          base: p.base, itbis: p.itbis, depositToRestore: p.depositApplied || 0,
+          ncf: null, memo: `Anulación ${p.ncf || `venta #${p.number ?? ''}`}`.trim(),
+        },
+      });
+      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+      await db.journalLines.bulkPut(built.lines);
+      await db.salesPostings.update(p.id, { voidedAt: postedAt, voidedReason: reason || '' });
+      invalidate();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: userMessageFor(e) };
+    }
+  }
+
   function export607() {
     const rows = [
       ['RNC/Cédula', 'Nombre', 'NCF', 'Fecha', 'Base', 'ITBIS', 'Total'],
@@ -789,6 +825,7 @@ export default function Facturacion() {
   // the mobile card so the two variants can't drift.
   function ecfActions(r) {
     const p = postingById.get(r.id);
+    if (p?.voidedAt) return <span className="text-xs text-ink-400 whitespace-nowrap">Anulada</span>;
     const status = p?.ecfStatus || '';
     const isEcf = /^E\d{2}/.test(p?.ncf || r.ncf || '');
     return (
@@ -899,6 +936,7 @@ export default function Facturacion() {
         { key: 'pagadas', label: `Pagadas${register.counts.pagadas ? ` (${register.counts.pagadas})` : ''}` },
         { key: 'ecf', label: `e-CF pendientes${register.counts.ecf ? ` (${register.counts.ecf})` : ''}` },
         { key: 'porfacturar', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
+        { key: 'anuladas', label: `Anuladas${register.counts.anuladas ? ` (${register.counts.anuladas})` : ''}` },
       ]} active={tab} onChange={setTab} />
       {err && <p className={`text-sm mb-3 ${err.startsWith('✓') ? 'text-emerald-700' : 'text-rose-600'}`}>{err}</p>}
 
@@ -1078,6 +1116,7 @@ export default function Facturacion() {
             itbisRate={config.itbisRate}
             fiscalActions={ecfActions(drawerRow)}
             onCollect={(args) => collectInvoice(p, args)}
+            onVoid={(reason) => voidInvoice(p, reason)}
             onClose={() => setDrawerRow(null)}
           />
         );
