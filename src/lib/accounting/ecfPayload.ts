@@ -8,6 +8,7 @@
  * is the structurally-complete starting point. Pure: no React, no Supabase.
  */
 import { round2 } from './ledger.js';
+import { consumoRequiresBuyerId } from './ecf.js';
 
 /** DGII date format: dd-mm-yyyy. */
 export function formatEcfDate(ms: number | null | undefined): string {
@@ -82,6 +83,11 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
   const buyerRnc = input.comprador?.rnc?.replace(/\D/g, '') || '';
   if (input.ecfType === '31' && !buyerRnc) {
     throw new Error('La factura de crédito fiscal (tipo 31) requiere el RNC/cédula del comprador.');
+  }
+  // A consumo (32) of RD$250,000+ must identify the buyer — DGII rejects an
+  // anonymous one. Fail at build, not as a DGII 400 after the e-NCF is burned.
+  if (input.ecfType === '32' && !buyerRnc && consumoRequiresBuyerId(input.total)) {
+    throw new Error('Una factura de consumo (32) de RD$250,000 o más requiere el RNC/cédula del comprador; emítela como crédito fiscal (31).');
   }
   const referencing = REFERENCING_TYPES.has(input.ecfType);
   if (referencing && !input.referencia?.ncfModificado) {

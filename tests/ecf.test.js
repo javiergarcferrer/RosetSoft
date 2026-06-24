@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, isCreditNote, parseEcfFechaEmision, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
+  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, isCreditNote, parseEcfFechaEmision, consumoRequiresBuyerId, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
 } from '../src/lib/accounting/ecf.js';
 import { buildEcfPayload, formatEcfDate } from '../src/lib/accounting/ecfPayload.js';
 
@@ -42,6 +42,33 @@ test('parseEcfFechaEmision pulls FechaEmision (dd-mm-yyyy) out of e-CF XML', () 
   assert.equal(parseEcfFechaEmision('<ns:FechaEmision> 01-06-2026 </ns:FechaEmision>'), new Date(2026, 5, 1).getTime());
   assert.equal(parseEcfFechaEmision('no date here'), null);
   assert.equal(parseEcfFechaEmision(null), null);
+});
+
+test('consumoRequiresBuyerId: RD$250,000 is the buyer-ID threshold for a consumo', () => {
+  assert.equal(consumoRequiresBuyerId(249999.99), false);
+  assert.equal(consumoRequiresBuyerId(250000), true);
+  assert.equal(consumoRequiresBuyerId(2349087.95), true);
+  assert.equal(consumoRequiresBuyerId(0), false);
+});
+
+test('buildEcfPayload (32) THROWS for a RD$250k+ consumo with no buyer — fail at build, not a DGII 400', () => {
+  assert.throws(() => buildEcfPayload({
+    ecfType: '32', eNcf: 'E320000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    items: [{ name: 'Sofá', qty: 1, unitPrice: 1990752.5, amount: 1990752.5 }],
+    gravado: 1990752.5, itbis: 358335.45, total: 2349087.95,
+  }), /250,?000|comprador/i);
+});
+
+test('buildEcfPayload (32) UNDER the threshold needs no buyer', () => {
+  const p = buildEcfPayload({
+    ecfType: '32', eNcf: 'E320000000002',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    items: [{ name: 'Mesa', qty: 1, unitPrice: 5000, amount: 5000 }],
+    gravado: 5000, itbis: 900, total: 5900,
+  }).ECF;
+  assert.equal(p.Encabezado.Comprador, undefined);
+  assert.equal(p.Encabezado.Totales.MontoTotal, 5900);
 });
 
 test('isCreditNote: true only for an E34 e-NCF', () => {
