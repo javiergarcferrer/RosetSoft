@@ -57,6 +57,8 @@ export interface EcfPayloadInput {
   fechaEmision?: number;    // ms; default now
   /** 1 = contado, 2 = crédito. */
   tipoPago?: number;
+  /** FechaLimitePago (ms) — DGII-required whenever tipoPago = 2 (crédito). */
+  fechaLimitePago?: number | null;
   /**
    * The modified-document reference — REQUIRED for a nota de crédito (34) /
    * débito (33), which exist only to modify a prior e-CF. Omitted for 31/32.
@@ -85,6 +87,12 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
   if (referencing && !input.referencia?.ncfModificado) {
     throw new Error('La nota de crédito/débito requiere el e-NCF que modifica (NCFModificado).');
   }
+  // A credit sale (TipoPago 2) MUST carry a payment-due date — DGII rejects it
+  // otherwise. Fail at build, not as a rejection after the e-NCF is burned.
+  const tipoPago = input.tipoPago ?? 1;
+  if (tipoPago === 2 && !input.fechaLimitePago) {
+    throw new Error('Una venta a crédito (TipoPago 2) requiere la fecha límite de pago (FechaLimitePago).');
+  }
   const encab: Record<string, unknown> = {
     Version: '1.0',
     IdDoc: {
@@ -93,7 +101,8 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
       ...(input.sequenceExpiresAt ? { FechaVencimientoSecuencia: formatEcfDate(input.sequenceExpiresAt) } : {}),
       IndicadorMontoGravado: 0, // prices are net of ITBIS
       TipoIngresos: '01',
-      TipoPago: input.tipoPago ?? 1,
+      TipoPago: tipoPago,
+      ...(tipoPago === 2 ? { FechaLimitePago: formatEcfDate(input.fechaLimitePago) } : {}),
     },
     Emisor: {
       RNCEmisor: input.emisor.rnc,

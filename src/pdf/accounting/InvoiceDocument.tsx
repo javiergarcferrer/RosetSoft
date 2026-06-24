@@ -12,6 +12,10 @@ export interface InvoiceDocumentProps {
   eNcf: string;
   /** Header label override: an e-CF type label, or a plain "Factura de venta". */
   docLabel?: string;
+  /** Payment condition (Contado / Crédito) + due date for crédito — shown in the
+   *  header so the paper states the same TipoPago transmitted in the e-CF. */
+  condicionPago?: string;
+  fechaVencimiento?: string;
   fechaEmision: number;
   items: InvoiceItem[];
   gravado: number;
@@ -112,6 +116,11 @@ export function InvoiceDocument(props: InvoiceDocumentProps) {
             <Text style={st.docType}>{docLabel}</Text>
             {eNcf ? <Text style={st.encf}>{eNcf}</Text> : null}
             <Text style={st.date}>Fecha: {dateStr}</Text>
+            {props.condicionPago ? (
+              <Text style={st.date}>
+                Pago: {props.condicionPago}{props.fechaVencimiento ? ` · vence ${props.fechaVencimiento}` : ''}
+              </Text>
+            ) : null}
           </View>
         </View>
         <View style={st.rule} />

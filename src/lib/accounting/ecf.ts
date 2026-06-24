@@ -54,6 +54,24 @@ export function saleEcfType(hasFiscalId: boolean): string {
   return hasFiscalId ? '31' : '32';
 }
 
+/**
+ * TipoPago for a sale's e-CF: 1 (contado) when the deposit already covered the
+ * total, else 2 (crédito) — a balance remains at posting. The single rule shared
+ * by the transmitted payload and the printed factura, so they never disagree.
+ */
+export function saleTipoPago(depositApplied: number, total: number): number {
+  return (Number(depositApplied) || 0) >= (Number(total) || 0) ? 1 : 2;
+}
+
+/**
+ * Default FechaLimitePago (ms) for a credit sale: net-30 from emission. DGII
+ * requires a payment-due date whenever TipoPago = 2, so a sale with a balance
+ * pending always carries one.
+ */
+export function saleDueDate(postedAt: number): number {
+  return (Number(postedAt) || 0) + 30 * 24 * 60 * 60 * 1000;
+}
+
 /** A well-formed DR fiscal id: RNC (9 digits) or cédula (11 digits). */
 export function isValidFiscalId(id: string | null | undefined): boolean {
   const digits = String(id || '').replace(/\D/g, '');

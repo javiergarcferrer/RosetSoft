@@ -21,7 +21,7 @@ import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry,
-  resolveAccountingConfig, buildEcfPayload, saleEcfType, isValidFiscalId,
+  resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
@@ -196,6 +196,9 @@ export default function Facturacion() {
     setTransmitting(p.id);
     try {
       const customer = p.customerId ? customersById.get(p.customerId) : null;
+      // Contado if the deposit covered the sale; crédito if a balance remains —
+      // a crédito carries the DGII-required fecha límite de pago (net-30).
+      const tipoPago = saleTipoPago(p.depositApplied, p.total);
       const payload = buildEcfPayload({
         ecfType: p.ecfType || saleEcfType(!!p.rnc),
         eNcf: p.ncf,
@@ -208,8 +211,8 @@ export default function Facturacion() {
         items: [{ name: `Venta ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
         gravado: p.base, itbis: p.itbis, total: p.total,
         itbisRate: config.itbisRate, fechaEmision: p.postedAt,
-        // Contado if the deposit covered the sale; crédito if a balance remains.
-        tipoPago: (p.depositApplied || 0) >= p.total ? 1 : 2,
+        tipoPago,
+        fechaLimitePago: tipoPago === 2 ? saleDueDate(p.postedAt) : null,
       });
       const data = await sendEcf({ payload, eNcf: p.ncf, profileId: scope });
       await db.salesPostings.update(p.id, {

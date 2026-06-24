@@ -11,7 +11,7 @@
  * Pure: no React, no Supabase, no pdf-lib.
  */
 import { round2 } from '../../lib/accounting/ledger.js';
-import { parseENcf, ecfQrUrl, ecfTypeLabel } from '../../lib/accounting/ecf.js';
+import { parseENcf, ecfQrUrl, ecfTypeLabel, saleTipoPago, saleDueDate } from '../../lib/accounting/ecf.js';
 import { formatEcfDate } from '../../lib/accounting/ecfPayload.js';
 import { montoEnLetras } from '../../lib/numeroEnLetras.js';
 
@@ -61,6 +61,13 @@ export function resolveInvoiceDoc({ posting, customer, quote, payments = [], set
   const amountPaid = round2(activity.reduce((s, a) => s + a.amount, 0));
   const balanceDue = round2(Math.max(0, total - amountPaid));
 
+  // Payment condition mirrors the e-CF TipoPago (same rule as Facturacion) so
+  // the printed factura agrees with the transmitted fiscal document. A crédito
+  // shows its fecha límite de pago (net-30 from emission).
+  const isCredit = saleTipoPago(depositApplied, total) === 2;
+  const condicionPago = isCredit ? 'Crédito' : 'Contado';
+  const fechaVencimiento = isCredit ? formatEcfDate(saleDueDate(p.postedAt)) : '';
+
   const docLabel = isEcf
     ? `${ecfTypeLabel(ecfType)} (e-CF ${ecfType})`
     : (ncf ? `Factura · NCF ${ncf}` : 'Factura de venta');
@@ -83,6 +90,7 @@ export function resolveInvoiceDoc({ posting, customer, quote, payments = [], set
     }],
     gravado: base, itbis, total, itbisRate: config?.itbisRate ?? 18,
     totalEnLetras: montoEnLetras(total),
+    condicionPago, fechaVencimiento,
     securityCode: p.securityCode || '',
     fechaFirma: p.fechaFirma || '',
     payments: activity, amountPaid, balanceDue,

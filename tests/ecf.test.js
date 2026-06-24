@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  padSeq, formatENcf, parseENcf, saleEcfType, isValidFiscalId, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
+  padSeq, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, sequenceState, pickSequence, ecfTypeLabel, ecfQrUrl,
 } from '../src/lib/accounting/ecf.js';
 import { buildEcfPayload, formatEcfDate } from '../src/lib/accounting/ecfPayload.js';
 
@@ -24,6 +24,17 @@ test('parseENcf round-trips', () => {
   assert.deepEqual(parseENcf('E310000000001'), { type: '31', seq: 1 });
   assert.equal(parseENcf('B0100000001'), null); // legacy NCF, not e-NCF
   assert.equal(parseENcf('garbage'), null);
+});
+
+test('saleTipoPago: contado when the deposit covers the total, else crédito', () => {
+  assert.equal(saleTipoPago(11800, 11800), 1); // exactly covered
+  assert.equal(saleTipoPago(12000, 11800), 1); // overpaid
+  assert.equal(saleTipoPago(5000, 11800), 2);  // balance remains
+  assert.equal(saleTipoPago(0, 11800), 2);
+});
+
+test('saleDueDate: net-30 from emission', () => {
+  assert.equal(saleDueDate(Date.UTC(2026, 5, 1)), Date.UTC(2026, 5, 1) + 30 * 86400000);
 });
 
 test('saleEcfType: 31 with a fiscal id, 32 without', () => {
@@ -179,15 +190,29 @@ test('buildEcfPayload (31/32) never emit InformacionReferencia', () => {
   assert.equal(p31.Encabezado.InformacionReferencia, undefined);
 });
 
-test('buildEcfPayload carries TipoPago: 1 contado (default), 2 crédito', () => {
+test('buildEcfPayload carries TipoPago: 1 contado (default), 2 crédito with FechaLimitePago', () => {
   const base = {
     ecfType: '32', eNcf: 'E320000000001',
     emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
     items: [{ name: 'Mesa', qty: 1, unitPrice: 5000, amount: 5000 }],
     gravado: 5000, itbis: 900, total: 5900,
   };
-  assert.equal(buildEcfPayload(base).ECF.Encabezado.IdDoc.TipoPago, 1);
-  assert.equal(buildEcfPayload({ ...base, tipoPago: 2 }).ECF.Encabezado.IdDoc.TipoPago, 2);
+  const contado = buildEcfPayload(base).ECF.Encabezado.IdDoc;
+  assert.equal(contado.TipoPago, 1);
+  assert.equal(contado.FechaLimitePago, undefined); // contado never carries one
+  const credito = buildEcfPayload({ ...base, tipoPago: 2, fechaLimitePago: Date.UTC(2026, 6, 1) }).ECF.Encabezado.IdDoc;
+  assert.equal(credito.TipoPago, 2);
+  assert.equal(credito.FechaLimitePago, '01-07-2026'); // DGII-required for crédito
+});
+
+test('buildEcfPayload (crédito) THROWS without FechaLimitePago — fail at build, not at the DGII', () => {
+  assert.throws(() => buildEcfPayload({
+    ecfType: '32', eNcf: 'E320000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    items: [{ name: 'Mesa', qty: 1, unitPrice: 5000, amount: 5000 }],
+    gravado: 5000, itbis: 900, total: 5900,
+    tipoPago: 2,
+  }), /FechaLimitePago|crédito/i);
 });
 
 test('buildEcfPayload items carry IndicadorBienoServicio (1=bien default, 2=servicio) in XSD order', () => {

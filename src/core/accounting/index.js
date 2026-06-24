@@ -70,7 +70,7 @@ export {
 
 // ── e-CF (comprobante fiscal electrónico): types, e-NCF format, payload
 export {
-  ECF_TYPES, ecfTypeLabel, formatENcf, parseENcf, saleEcfType, isValidFiscalId,
+  ECF_TYPES, ecfTypeLabel, formatENcf, parseENcf, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
   sequenceState, pickSequence, padSeq, ecfQrUrl,
 } from '../../lib/accounting/ecf.js';
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';

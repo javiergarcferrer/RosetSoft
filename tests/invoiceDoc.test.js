@@ -55,6 +55,8 @@ test('payment activity: deposit + allocated cobros are dated, summed, and net th
   assert.equal(doc.balanceDue, 3800);
   assert.equal(doc.items[0].name, 'Venta · cotización #42');
   assert.equal(doc.totalEnLetras, 'ONCE MIL OCHOCIENTOS PESOS CON 00/100'); // "Son:" line on the factura
+  assert.equal(doc.condicionPago, 'Crédito'); // deposit 5000 < total 11800 → balance remains
+  assert.match(doc.fechaVencimiento, /^\d{2}-\d{2}-\d{4}$/); // net-30 fecha límite de pago
 });
 
 test('balance never goes negative when overpaid', () => {
@@ -63,4 +65,6 @@ test('balance never goes negative when overpaid', () => {
     settings, config,
   });
   assert.equal(doc.balanceDue, 0);
+  assert.equal(doc.condicionPago, 'Contado'); // deposit 200 ≥ total 118 → paid in full
+  assert.equal(doc.fechaVencimiento, '');      // no due date for a contado sale
 });
