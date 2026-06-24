@@ -35,6 +35,7 @@ export const ACCOUNTING_SECTIONS = [
   //    where merchandise becomes inventory before it can be sold.
   { key: 'importaciones', band: 'compras', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
+    { to: '/accounting/importaciones/impuestos', label: 'Impuestos de aduana' },
     { to: '/accounting/importaciones/calculadora', label: 'Calculadora de costos' },
   ] },
   // Compras y gastos — the supplier hub. Every supplier invoice (mercancía,

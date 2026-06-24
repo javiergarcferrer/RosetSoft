@@ -59,6 +59,7 @@ const AccountingImportaciones = lazyPage(() => import('./pages/accounting/Import
 const AccountingLandedCalculator = lazyPage(() => import('./pages/accounting/LandedCalculator.jsx'));
 const AccountingExpedienteEditor = lazyPage(() => import('./pages/accounting/ExpedienteEditor.jsx'));
 const AccountingImportacionDetail = lazyPage(() => import('./pages/accounting/ImportacionDetail.jsx'));
+const AccountingCustomsTaxes = lazyPage(() => import('./pages/accounting/CustomsTaxes.jsx'));
 const AccountingECFSequences = lazyPage(() => import('./pages/accounting/ECFSequences.jsx'));
 const AccountingReceptorInbox = lazyPage(() => import('./pages/accounting/ReceptorInbox.jsx'));
 const AccountingCuentas = lazyPage(() => import('./pages/accounting/CuentasCobrarPagar.jsx'));
@@ -324,6 +325,7 @@ function ProtectedApp() {
             <Route path="accounting/inventario" element={<Navigate to="/inventario/existencias" replace />} />
             <Route path="accounting/importaciones" element={<AccountingImportaciones />} />
             <Route path="accounting/importaciones/calculadora" element={<AccountingLandedCalculator />} />
+            <Route path="accounting/importaciones/impuestos" element={<AccountingCustomsTaxes />} />
             <Route path="accounting/importaciones/nuevo" element={<AccountingExpedienteEditor />} />
             <Route path="accounting/importaciones/:id" element={<AccountingImportacionDetail />} />
             <Route path="accounting/importaciones/:id/editar" element={<AccountingExpedienteEditor />} />

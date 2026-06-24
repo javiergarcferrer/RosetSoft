@@ -53,6 +53,7 @@ export { resolveKardex, weightedAverageIn, round4 } from '../../lib/accounting/i
 // ── importación / liquidación DGA (landed cost)
 export {
   resolveImportsList, resolveImportacionesList, resolveExpedienteDetail, expedienteEmbarques, PAYMENT_LABELS,
+  resolveCustomsTaxes,
 } from './imports.js';
 export {
   buildImportEntry, computeImportTaxes, landedCost, landedUnitCost, allocateShipment,
