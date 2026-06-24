@@ -54,6 +54,7 @@ const AccountingComprasGastoDetail = lazyPage(() => import('./pages/accounting/C
 const AccountingComprasGastoEditor = lazyPage(() => import('./pages/accounting/ComprasGastoEditor.jsx'));
 const AccountingSuppliers = lazyPage(() => import('./pages/accounting/Suppliers.jsx'));
 const AccountingFacturacion = lazyPage(() => import('./pages/accounting/Facturacion.jsx'));
+const AccountingFacturaVentaEditor = lazyPage(() => import('./pages/accounting/FacturaVentaEditor.jsx'));
 const AccountingLigneRoset = lazyPage(() => import('./pages/accounting/LigneRosetSales.jsx'));
 const AccountingImportaciones = lazyPage(() => import('./pages/accounting/Importaciones.jsx'));
 const AccountingLandedCalculator = lazyPage(() => import('./pages/accounting/LandedCalculator.jsx'));
@@ -318,6 +319,7 @@ function ProtectedApp() {
             <Route path="accounting/expenses" element={<AccountingComprasGastos />} />
             <Route path="accounting/suppliers" element={<AccountingSuppliers />} />
             <Route path="accounting/facturacion" element={<AccountingFacturacion />} />
+            <Route path="accounting/facturacion/nueva" element={<AccountingFacturaVentaEditor />} />
             <Route path="accounting/ligne-roset" element={<AccountingLigneRoset />} />
             <Route path="accounting/compras" element={<AccountingComprasGastos />} />
             {/* Inventario left Contabilidad — old accounting bookmarks redirect
