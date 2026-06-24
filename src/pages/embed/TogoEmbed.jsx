@@ -760,6 +760,11 @@ function CanvasArea({
           // its instances) rings every placed instance, and vice-versa.
           const linked = !sel && hoveredPieceId != null && t.pieceId === hoveredPieceId;
           const code = codeByUid[t.uid];
+          const td = topDownById[t.pieceId];
+          // The render is framed to the mesh's true footprint; size the image to that
+          // (fw×fd at SCALE), so it fills the tile with no letterbox and no stretch.
+          const tdW = td?.wCm ? td.wCm * SCALE * td.margin : t.innerWPx * (td?.margin || 1);
+          const tdH = td?.hCm ? td.hCm * SCALE * td.margin : t.innerHPx * (td?.margin || 1);
           const showControls = t.uid === hoveredUid || sel;
           return (
             <div
@@ -773,12 +778,12 @@ function CanvasArea({
               style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
             >
               <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : linked ? 'ring-2 ring-brand-300 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
-              {topDownById[t.pieceId]?.dataUrl ? (
-                // Realistic top-down render of the mesh; sized a touch larger than the
-                // footprint so its soft contact shadow isn't clipped, centred + rotated.
-                <img src={topDownById[t.pieceId].dataUrl} alt="" draggable={false}
+              {td?.dataUrl ? (
+                // Realistic top-down render of the mesh, sized to its true footprint
+                // (with a small shadow margin), centred + rotated to the placement.
+                <img src={td.dataUrl} alt="" draggable={false}
                   className="absolute top-1/2 left-1/2 max-w-none pointer-events-none select-none"
-                  style={{ width: t.innerWPx * topDownById[t.pieceId].margin, height: t.innerHPx * topDownById[t.pieceId].margin, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} />
+                  style={{ width: tdW, height: tdH, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} />
               ) : (
                 <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
               )}

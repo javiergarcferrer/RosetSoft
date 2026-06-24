@@ -88,19 +88,29 @@ async function render(piece) {
   });
   scene.add(group);
 
-  const halfW = (W / 2) * MARGIN, halfD = (D / 2) * MARGIN;
-  const cam = new THREE.OrthographicCamera(-halfW, halfW, halfD, -halfD, 1, radius * 12);
-  cam.position.set(0, radius * 6, 0);
+  // Frame the camera to the mesh's ACTUAL rendered footprint, not the catalogue
+  // widthCm×depthCm: buildTogoGroup/placeRealModel re-scales the model to a common
+  // height, so its real top-down extent differs from the passed dims — framing the
+  // latter left an empty border around the piece (the "letterbox"). Measuring the
+  // world bounding box makes the piece fill the frame, and the tile sizes its image
+  // to fw×fd so there's no stretch either. The frustum + canvas share fw:fd aspect.
+  const box = new THREE.Box3().setFromObject(group);
+  const size = box.getSize(new THREE.Vector3());
+  const mid = box.getCenter(new THREE.Vector3());
+  const fw = Math.max(1, size.x), fd = Math.max(1, size.z);
+  const halfW = (fw / 2) * MARGIN, halfD = (fd / 2) * MARGIN;
+  const cam = new THREE.OrthographicCamera(-halfW, halfW, halfD, -halfD, 1, radius * 14);
+  cam.position.set(mid.x, mid.y + radius * 6, mid.z);
   cam.up.set(0, 0, -1);                  // world +X→right, +Z→down — matches the plan
-  cam.lookAt(0, 0, 0);
+  cam.lookAt(mid.x, mid.y, mid.z);
 
-  renderer.setSize(Math.round(W * MARGIN * PX_PER_CM), Math.round(D * MARGIN * PX_PER_CM), false);
+  renderer.setSize(Math.round(fw * MARGIN * PX_PER_CM), Math.round(fd * MARGIN * PX_PER_CM), false);
   renderer.render(scene, cam);
   let dataUrl = null;
   try { dataUrl = renderer.domElement.toDataURL('image/png'); } catch { dataUrl = null; }
 
   scene.remove(group); disposeGroup(group); disposeStage();
-  return dataUrl ? { dataUrl, margin: MARGIN } : null;
+  return dataUrl ? { dataUrl, margin: MARGIN, wCm: fw, hCm: fd } : null;
 }
 
 const cache = new Map();        // key → Promise<{ dataUrl, margin } | null>
