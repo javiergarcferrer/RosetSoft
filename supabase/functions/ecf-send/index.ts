@@ -197,8 +197,16 @@ Deno.serve(async (req: Request) => {
     }
 
     return json({ ok: true, trackId, securityCode, fechaFirma, status: 'sent', response });
-  } catch (e) {
-    return json({ ok: false, error: `firma/transmisión: ${e}` }, 502);
+  } catch (e: any) {
+    // dgii-ecf talks to the DGII via axios; an HTTP rejection (e.g. 400 schema
+    // validation, or an auth failure) carries the REAL reason in e.response.data
+    // — surface it (+ the status) so the user sees WHAT the DGII rejected, not
+    // just "Request failed with status code 400".
+    const status = e?.response?.status;
+    const data = e?.response?.data;
+    const detail = data == null ? '' : (typeof data === 'string' ? data : JSON.stringify(data));
+    const msg = e?.message || String(e);
+    return json({ ok: false, error: `firma/transmisión: ${msg}${status ? ` [HTTP ${status}]` : ''}${detail ? ` — ${detail}` : ''}` }, 502);
   } finally {
     if (p12Path) await Deno.remove(p12Path).catch(() => {});
   }
