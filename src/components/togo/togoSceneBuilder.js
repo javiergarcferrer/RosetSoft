@@ -167,56 +167,46 @@ export function sampleSwatchColor(image) {
  * Drop a loaded REAL model (a pCon export — GLB/OBJ/FBX/DAE/3DS, already
  * tessellated) into a piece group: clone it, upholster every mesh in the piece's
  * fabric material (so "drag a fabric" works exactly like in pCon), apply the
- * descriptor's axis/facing fixups, FIT it to the plan tile, then recentre on its
- * footprint and sit it on the floor — so the export's own origin/scale/up-axis
- * don't matter and the piece lands EXACTLY where the 2D plan shows it.
+ * descriptor's axis/facing fixups, scale it UNIFORMLY (true to the FBX — never a
+ * per-axis squash), then recentre on its footprint and sit it on the floor — so the
+ * export's own origin/scale/up-axis don't matter and the piece lands EXACTLY where
+ * the 2D plan shows it.
  */
-function placeRealModel(THREE, object, material, desc, piece, pieceGroup) {
+function placeRealModel(THREE, object, material, desc, pieceGroup) {
   const clone = object.clone(true);
   clone.traverse((o) => {
     if (o.isMesh) {
       o.material = material;
-      // clone(true) shares the source geometry by reference; clone it so the
-      // group OWNS its buffers and disposeGroup never frees the cached model's.
+      // clone(true) shares the source geometry by reference; clone it so the group
+      // OWNS its buffers and disposeGroup never frees the cached model's.
       if (o.geometry) o.geometry = o.geometry.clone();
       o.castShadow = true;
       o.receiveShadow = true;
     }
   });
-  // Orientation fixups. The FBX/glTF loader ALREADY applies the file's up-axis,
-  // so these are MANUAL overrides: stand up a mis-tagged Z-up export, then spin
-  // the open front toward the viewer.
+  // Orientation fixups. The loader ALREADY applies the file's up-axis, so these are
+  // MANUAL overrides: stand up a mis-tagged Z-up export, then spin the open front
+  // toward the viewer.
   if (desc?.upAxis === 'z') clone.rotation.x = -Math.PI / 2;
   if (desc?.rotateY) clone.rotation.y += (desc.rotateY * Math.PI) / 180;
-
-  const wrap = new THREE.Group();
-  wrap.add(clone);
   clone.updateMatrixWorld(true);
 
-  // A dealer-set unit scale opts out of tile-fit: scale uniformly, recentre, floor.
-  if (Number(desc?.scale) > 0) {
-    clone.scale.multiplyScalar(desc.scale);
-    clone.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(wrap);
-    const c = box.getCenter(new THREE.Vector3());
-    wrap.position.set(-c.x, -box.min.y, -c.z);
-    pieceGroup.add(wrap);
-    return;
-  }
+  // ONE uniform scale — the FBX keeps its TRUE proportions (a square corner stays
+  // square; a per-axis "fit to tile" is what once turned it rectangular). A
+  // dealer-set desc.scale wins (a manual unit override); otherwise normalise the
+  // height to the Togo's real ~72 cm — every piece IS that height, and the ratio
+  // also absorbs whatever unit (mm/cm/m) the FBX was exported in.
+  const wrap = new THREE.Group();
+  wrap.add(clone);
+  const size0 = new THREE.Box3().setFromObject(clone).getSize(new THREE.Vector3());
+  wrap.scale.setScalar(Number(desc?.scale) > 0 ? Number(desc.scale) : togoMeshFit(size0, TOGO_HEIGHT_CM).s);
+  wrap.updateMatrixWorld(true);
 
-  // Normalise to the Togo height with a UNIFORM scale: show the dealer's model at
-  // its TRUE proportions (a square-footprint corner stays square), just sized to
-  // the common ~72 cm height and dropped on its footprint centre at the plan
-  // position. A per-axis "fit to tile" squashed any mesh whose footprint didn't
-  // exactly match the catalogue width×depth — that's what turned the square corner
-  // rectangular. `piece` kept for the call site / future footprint sanity checks.
-  const box0 = new THREE.Box3().setFromObject(clone);
-  const size0 = box0.getSize(new THREE.Vector3());
-  const c = box0.getCenter(new THREE.Vector3());
-  const { s } = togoMeshFit(size0, TOGO_HEIGHT_CM);
-  clone.position.sub(c);                          // centre the mesh on the wrapper origin
-  wrap.scale.setScalar(s);                        // uniform — never distorts the footprint
-  wrap.position.set(0, (size0.y * s) / 2, 0);     // content is centred → lift half-height to the floor
+  // Recentre on the footprint and sit it on the floor — the export's own origin and
+  // up-axis stop mattering, and the piece lands where the 2D plan shows it.
+  const box = new THREE.Box3().setFromObject(wrap);
+  const c = box.getCenter(new THREE.Vector3());
+  wrap.position.set(-c.x, -box.min.y, -c.z);
   pieceGroup.add(wrap);
 }
 
@@ -242,7 +232,7 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
     const material = makeFabricMaterial(THREE, null, { ...opts, color: colorFor(piece.fabricCode) ?? opts.color });
     const real = modelFor(piece);
     if (real && real.object) {
-      placeRealModel(THREE, real.object, material, real.desc, piece, pieceGroup);
+      placeRealModel(THREE, real.object, material, real.desc, pieceGroup);
     } else {
       for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
         let mesh;
