@@ -350,18 +350,35 @@ export default function Facturacion() {
     if (pf) { setErr(pf); return; }
     setErr('');
     let done = 0, failed = 0, firstErr = '';
-    setBulk({ done, total: pending.length, failed });
+    setBulk({ done, total: pending.length, failed, kind: 'tx' });
     for (const p of pending) {
       const r = await transmitOne(p);
       done += 1;
       if (!r.ok) { failed += 1; if (!firstErr) firstErr = `${p.ncf}: ${r.error}`; }
-      setBulk({ done, total: pending.length, failed });
+      setBulk({ done, total: pending.length, failed, kind: 'tx' });
     }
     invalidate();
     setBulk(null);
     setErr(failed
       ? `Transmitidos ${done - failed}/${pending.length}. ${failed} con error — ${firstErr}`
       : `✓ ${pending.length} e-CF transmitidos a la DGII.`);
+  }
+
+  // Core status check — resolve one transmitted e-CF's DGII estado and persist
+  // accepted/rejected. Returns {status:'accepted'|'rejected'|'pending', estado}
+  // with no global UI state, so the single button AND the bulk run reuse it.
+  async function checkOne(p) {
+    if (!p?.trackId) return { status: 'pending' };
+    try {
+      const data = await checkEcfStatus({ trackId: p.trackId, profileId: scope });
+      const estado = String(data.estado || '');
+      const norm = estado.toLowerCase();
+      if (norm.includes('acept')) { await db.salesPostings.update(p.id, { ecfStatus: 'accepted' }); return { status: 'accepted', estado }; }
+      if (norm.includes('rechaz')) { await db.salesPostings.update(p.id, { ecfStatus: 'rejected' }); return { status: 'rejected', estado }; }
+      return { status: 'pending', estado };
+    } catch (e) {
+      return { status: 'pending', error: userMessageFor(e) };
+    }
   }
 
   // Ask the DGII what became of a transmitted e-CF (trackId → estado). The
@@ -371,23 +388,35 @@ export default function Facturacion() {
     if (!p?.trackId) return;
     setErr('');
     setChecking(rowId);
-    try {
-      const data = await checkEcfStatus({ trackId: p.trackId, profileId: scope });
-      const estado = String(data.estado || '');
-      const norm = estado.toLowerCase();
-      if (norm.includes('acept')) {
-        await db.salesPostings.update(p.id, { ecfStatus: 'accepted' });
-      } else if (norm.includes('rechaz')) {
-        await db.salesPostings.update(p.id, { ecfStatus: 'rejected' });
-        setErr(`DGII rechazó ${p.ncf}: ${estado}`);
-      } else {
-        setErr(`DGII — ${p.ncf}: ${estado || 'en proceso'}`);
-      }
-    } catch (e) {
-      setErr(userMessageFor(e));
-    } finally {
-      setChecking(null);
+    const r = await checkOne(p);
+    if (r.error) setErr(r.error);
+    else if (r.status === 'rejected') setErr(`DGII rechazó ${p.ncf}: ${r.estado}`);
+    else if (r.status === 'pending') setErr(`DGII — ${p.ncf}: ${r.estado || 'en proceso'}`);
+    setChecking(null);
+  }
+
+  // Consultar EVERY transmitted ('sent') e-CF at once — the batch complement to
+  // "Transmitir todos": after the set de pruebas lands, resolve all the acuses in
+  // one pass instead of one click per document. Sequential, with a final tally.
+  async function checkAllSent() {
+    const sent = postingsQ.data.filter((p) => p.ecfStatus === 'sent' && p.trackId)
+      .sort((a, b) => (a.postedAt || 0) - (b.postedAt || 0));
+    if (!sent.length) return;
+    setErr('');
+    let done = 0, accepted = 0, rejected = 0, pend = 0;
+    setBulk({ done, total: sent.length, failed: 0, kind: 'check' });
+    for (const p of sent) {
+      const r = await checkOne(p);
+      done += 1;
+      if (r.status === 'accepted') accepted += 1;
+      else if (r.status === 'rejected') rejected += 1;
+      else pend += 1;
+      setBulk({ done, total: sent.length, failed: rejected, kind: 'check' });
     }
+    invalidate();
+    setBulk(null);
+    const tail = `${accepted} aceptados, ${rejected} rechazados, ${pend} en proceso`;
+    setErr(rejected === 0 ? `✓ Consultados ${sent.length}: ${tail}.` : `Consultados ${sent.length}: ${tail}.`);
   }
 
   // Auto-refresh DGII status: a transmitted e-CF sits in 'sent' until the DGII
@@ -464,6 +493,10 @@ export default function Facturacion() {
   // signed-but-unsent invoices can't sit invisible.
   const pendingEcfCount = useMemo(
     () => postingsQ.data.filter((p) => p.ecfStatus === 'pending').length,
+    [postingsQ.data],
+  );
+  const sentEcfCount = useMemo(
+    () => postingsQ.data.filter((p) => p.ecfStatus === 'sent' && p.trackId).length,
     [postingsQ.data],
   );
 
@@ -752,8 +785,15 @@ export default function Facturacion() {
               {pendingEcfCount > 0 ? (
                 <button type="button" onClick={transmitAllPending} disabled={!!bulk}
                   className="btn-primary disabled:opacity-60" title="Firmar y transmitir todos los e-CF pendientes a la DGII">
-                  {bulk ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  {bulk ? `Transmitiendo ${bulk.done}/${bulk.total}…` : `Transmitir todos (${pendingEcfCount})`}
+                  {bulk?.kind === 'tx' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {bulk?.kind === 'tx' ? `Transmitiendo ${bulk.done}/${bulk.total}…` : `Transmitir todos (${pendingEcfCount})`}
+                </button>
+              ) : null}
+              {sentEcfCount > 0 ? (
+                <button type="button" onClick={checkAllSent} disabled={!!bulk}
+                  className="btn-ghost disabled:opacity-60" title="Consultar en la DGII el estado de todos los e-CF transmitidos">
+                  {bulk?.kind === 'check' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  {bulk?.kind === 'check' ? `Consultando ${bulk.done}/${bulk.total}…` : `Consultar todos (${sentEcfCount})`}
                 </button>
               ) : null}
               <button type="button" onClick={export607} disabled={sales607.count === 0}
