@@ -39,6 +39,7 @@ import type {
   PettyCashVoucher,
   BankRule,
   CollectionReminder,
+  Budget,
   Employee,
   PayrollRun,
   WaMessage,
@@ -124,6 +125,7 @@ const TABLES = {
   pettyCashVouchers:  { db: 'petty_cash_vouchers', pk: 'id' },
   bankRules:          { db: 'bank_rules',          pk: 'id' },
   collectionReminders:{ db: 'collection_reminders', pk: 'id' },
+  budgets:            { db: 'budgets',             pk: 'id' },
   employees:          { db: 'employees',           pk: 'id' },
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
   waMessages:         { db: 'wa_messages',         pk: 'id' },
@@ -185,6 +187,7 @@ export interface TableRowMap {
   pettyCashVouchers: PettyCashVoucher;
   bankRules: BankRule;
   collectionReminders: CollectionReminder;
+  budgets: Budget;
   employees: Employee;
   payrollRuns: PayrollRun;
   waMessages: WaMessage;

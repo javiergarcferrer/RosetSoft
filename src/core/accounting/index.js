@@ -25,6 +25,9 @@ export {
 // ── estado de flujo de efectivo (cash-flow statement, direct method)
 export { resolveCashFlow, CASHFLOW_SOURCE_LABEL } from './cashflow.js';
 
+// ── presupuesto vs. real (budgets vs actuals)
+export { resolveBudgetVariance } from './budgets.js';
+
 // ── expenses (Gastos) ViewModels + the DGII 606 projection
 export { resolveExpensesList, resolve606 } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';

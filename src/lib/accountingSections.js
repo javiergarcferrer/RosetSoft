@@ -82,6 +82,7 @@ export const ACCOUNTING_SECTIONS = [
   { key: 'informes', band: 'libros', label: 'Informes', icon: BarChart3, tabs: [
     { to: '/accounting/informes', label: 'Informes' },
     { to: '/accounting/statements', label: 'Estados financieros' },
+    { to: '/accounting/presupuesto', label: 'Presupuesto' },
   ] },
 
   // ── Configuración ── label-less footer band.

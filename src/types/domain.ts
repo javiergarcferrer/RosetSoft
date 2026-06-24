@@ -907,6 +907,17 @@ export interface CollectionReminder {
   createdAt?: number;
 }
 
+/** An annual budget amount for one chart account (presupuesto vs. real). */
+export interface Budget {
+  id: string;
+  profileId: string;
+  year: number;
+  accountCode: string;
+  amount: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**
