@@ -28,6 +28,9 @@ export { resolveCashFlow, CASHFLOW_SOURCE_LABEL } from './cashflow.js';
 // ── presupuesto vs. real (budgets vs actuals)
 export { resolveBudgetVariance } from './budgets.js';
 
+// ── flujo de caja proyectado (13-week cash-flow forecast)
+export { resolveCashForecast } from './cashForecast.js';
+
 // ── expenses (Gastos) ViewModels + the DGII 606 projection
 export { resolveExpensesList, resolve606 } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
