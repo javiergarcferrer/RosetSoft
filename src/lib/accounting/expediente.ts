@@ -131,9 +131,18 @@ export function resolveExpediente(
   const totalCif = round2(taxed.reduce((s, l) => s + l.cif, 0));
   const { gross: costGross, net: costNet, itbis: costItbis } = expedienteCostTotals(expediente.costs);
 
+  const totalQty = round2(taxed.reduce((s, l) => s + l.qty, 0));
   let assigned = 0;
   const lines = taxed.map((l, i) => {
-    let share = totalCif > 0 ? round2((costNet * l.cif) / totalCif) : 0;
+    // Allocate the cost sheet by CIF value (the normal basis). If every line's
+    // CIF is 0 (costs entered before FOB, or a zero-valued sample shipment),
+    // fall back to quantity, then to an even split — never dump the whole sheet
+    // on the last line, which would wildly distort its per-unit landed cost and
+    // zero out every other line's.
+    let share;
+    if (totalCif > 0) share = round2((costNet * l.cif) / totalCif);
+    else if (totalQty > 0) share = round2((costNet * l.qty) / totalQty);
+    else share = round2(costNet / taxed.length);
     if (i === taxed.length - 1) share = round2(costNet - assigned); // drift → last
     assigned = round2(assigned + share);
     const landedTotal = round2(l.cif + l.gravamen + l.selectivo + share);

@@ -401,6 +401,14 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
       }
       // Land each line into inventory at its landed unit cost.
       const touched = [];
+      // Fold every line for the SAME item into one running (qty, avg) and write
+      // it ONCE after the loop. Reading it.qtyOnHand per line let two lines that
+      // resolve to a single itemId (same SKU+name across facturas, or the
+      // artículo picked twice) each start from the stale pre-save base and
+      // overwrite each other — stored qtyOnHand then disagreed with the kardex.
+      // (Re-liquidar recomputes from all movements below, so it only needs the
+      // per-item price backfill.)
+      const acc = new Map(); // itemId → { qtyOnHand, avgCost, sellingPrice? }
       for (const l of resolvedSave.lines) {
         if (!l.itemId || l.qty <= 0 || l.landedUnitCost <= 0) continue;
         await db.inventoryMovements.put({
@@ -408,23 +416,27 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           movedAt: postedAt, refTable: 'import_expedientes', refId: id, journalEntryId: built.entry.id,
         });
         const it = itemById.get(l.itemId);
-        if (it) {
-          // Backfill the catalog price onto an existing item that never carried
-          // one (newly-minted items already have it). A dealer-set price wins.
-          const price = priceByItem.get(l.itemId);
-          if (isRepost) {
-            // Re-liquidar: qty/avg come from the full recompute below (the
-            // expediente may not be chronologically last); only the price here.
-            if (price != null && it.sellingPrice == null) await db.inventoryItems.update(l.itemId, { sellingPrice: price });
-          } else {
-            const avg = weightedAverageIn(it.qtyOnHand || 0, it.avgCost || 0, l.qty, l.landedUnitCost);
-            const patch = { qtyOnHand: (it.qtyOnHand || 0) + l.qty, avgCost: avg };
-            if (price != null && it.sellingPrice == null) patch.sellingPrice = price;
-            await db.inventoryItems.update(l.itemId, patch);
+        const price = priceByItem.get(l.itemId);
+        if (it && isRepost) {
+          // Re-liquidar: qty/avg come from the full recompute below (this
+          // expediente may not be chronologically last); only the price here.
+          if (price != null && it.sellingPrice == null) await db.inventoryItems.update(l.itemId, { sellingPrice: price });
+        } else if (it) {
+          let cur = acc.get(l.itemId);
+          if (!cur) {
+            cur = { qtyOnHand: it.qtyOnHand || 0, avgCost: it.avgCost || 0 };
+            // Backfill the catalog price onto an existing item that never carried
+            // one (minted items already have it). A dealer-set price wins.
+            if (price != null && it.sellingPrice == null) cur.sellingPrice = price;
           }
+          cur.avgCost = weightedAverageIn(cur.qtyOnHand, cur.avgCost, l.qty, l.landedUnitCost);
+          cur.qtyOnHand += l.qty;
+          acc.set(l.itemId, cur);
         }
         touched.push(l.itemId);
       }
+      // Apply each item's folded total once (fresh-post path).
+      for (const [itemId, patch] of acc) await db.inventoryItems.update(itemId, patch);
       // Re-liquidar: recompute every touched item (prior ∪ new) from ALL its
       // movements, since the re-posted lines may not be chronologically last.
       if (isRepost) await recomputeItems([...priorTouched, ...touched]);
