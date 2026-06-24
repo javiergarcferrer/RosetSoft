@@ -113,6 +113,12 @@ export {
   pettyCashBalance, voucherCashDelta, buildPettyCashEntry, VOUCHER_TYPE_LABEL,
 } from '../../lib/accounting/pettyCash.js';
 
+// ── cobranza / dunning: the collections-queue VM + the cadence Model
+export { resolveCollectionsQueue } from './collections.js';
+export {
+  resolveDunningPolicy, DEFAULT_DUNNING_POLICY, planReminders, dueStepFor, fillTemplate,
+} from '../../lib/accounting/dunning.js';
+
 // ── nómina (payroll): monthly TSS+ISR engine, date-keyed topes, overtime + the
 // regalía / liquidación / bonificación asiento builders
 export {

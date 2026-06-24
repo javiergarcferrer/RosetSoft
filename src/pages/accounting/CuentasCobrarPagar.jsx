@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer } from 'lucide-react';
+import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer, Send } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -20,7 +20,7 @@ import { cleanRnc } from '../../lib/rncLookup.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import {
   resolveReceivables, resolvePayables, resolveStatementFor,
-  buildPaymentEntry, paymentNet, resolveAccountingConfig,
+  buildPaymentEntry, paymentNet, resolveAccountingConfig, resolveCollectionsQueue,
 } from '../../core/accounting/index.js';
 
 // Aging table columns (Shopify "edit columns"). The party column is the fixed
@@ -113,7 +113,8 @@ export default function CuentasCobrarPagar() {
   const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
-  const loaded = salesQ.loaded && customersQ.loaded && purchasesQ.loaded && expensesQ.loaded && suppliersQ.loaded && paymentsQ.loaded;
+  const remindersQ = useLiveQueryStatus(() => db.collectionReminders.where('profileId').equals(scope).toArray(), [scope], []);
+  const loaded = salesQ.loaded && customersQ.loaded && purchasesQ.loaded && expensesQ.loaded && suppliersQ.loaded && paymentsQ.loaded && remindersQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
@@ -122,6 +123,11 @@ export default function CuentasCobrarPagar() {
     [salesQ.data, paymentsQ.data, customersById]);
   const payables = useMemo(() => resolvePayables({ purchases: purchasesQ.data, expenses: expensesQ.data, payments: paymentsQ.data, suppliersById }),
     [purchasesQ.data, expensesQ.data, paymentsQ.data, suppliersById]);
+  // Cobranza queue — who to chase today (escalating cadence, status-gated).
+  const collections = useMemo(
+    () => resolveCollectionsQueue({ receivables, reminders: remindersQ.data, policy: settings?.dunningPolicy, now: Date.now() }),
+    [receivables, remindersQ.data, settings],
+  );
 
   const [params] = useSearchParams();
   const urlTab = params.get('tab');
@@ -133,6 +139,7 @@ export default function CuentasCobrarPagar() {
     ? { type: tab === 'cxp' ? 'supplier' : 'customer', id: params.get('statement') }
     : null)); // { type, id }
   const [printingSt, setPrintingSt] = useState(false);
+  const [reminding, setReminding] = useState(null);
 
   // The estado de cuenta is a Model projection (core/accounting/receivables:
   // resolveStatementFor) — the same money rules as the aging views, so the
@@ -174,6 +181,24 @@ export default function CuentasCobrarPagar() {
     }
   }
 
+  // Draft the reminder in WhatsApp for the dealer to review + send (never
+  // auto-sent), then log it so the cadence doesn't nudge the same step twice.
+  async function remind(r) {
+    const due = r.dueReminders && r.dueReminders[0];
+    if (!due) return;
+    setReminding(r.partyId);
+    try {
+      const phone = String(r.party?.phone || '').replace(/\D/g, '');
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(due.message)}`, '_blank', 'noopener');
+      await db.collectionReminders.put({
+        id: newId(), profileId: scope, customerId: r.partyId, docId: due.docId, docType: 'sale',
+        channel: due.channel, stepOffset: due.stepOffset, message: due.message, status: 'sent', sentAt: Date.now(),
+      });
+    } finally {
+      setReminding(null);
+    }
+  }
+
   const view = tab === 'cxc' ? receivables : payables;
   const partyLabel = tab === 'cxc' ? 'Cliente' : 'Proveedor';
   const docsByParty = new Map(view.rows.map((r) => [r.partyId, r.docs || []]));
@@ -191,12 +216,14 @@ export default function CuentasCobrarPagar() {
   return (
     <AccountingGate title="Cuentas por cobrar y pagar">
       <PageHeader title="Cuentas por cobrar y pagar" subtitle="Saldos, antigüedad y estados de cuenta — valores en RD$"
-        actions={<button type="button" onClick={() => { setShowForm((v) => !v); setSelected(null); }}
-          className="btn-primary"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>} />
+        actions={tab === 'cobranza' ? null : (
+          <button type="button" onClick={() => { setShowForm((v) => !v); setSelected(null); }}
+            className="btn-primary"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>
+        )} />
 
-      <TabPills tabs={[{ key: 'cxc', label: 'Por cobrar' }, { key: 'cxp', label: 'Por pagar' }]}
-        active={tab} onChange={(k) => { setTab(k); setSelected(null); }} />
-      {loaded && (
+      <TabPills tabs={[{ key: 'cxc', label: 'Por cobrar' }, { key: 'cxp', label: 'Por pagar' }, { key: 'cobranza', label: 'Cobranza' }]}
+        active={tab} onChange={(k) => { setTab(k); setSelected(null); setShowForm(false); }} />
+      {loaded && tab !== 'cobranza' && (
         <p className="text-sm text-ink-500 -mt-2 mb-4">
           Balance total <b className="tabular-nums text-ink-800">{formatDop(view.totals.balance)}</b>
         </p>
@@ -215,7 +242,9 @@ export default function CuentasCobrarPagar() {
           onClose={() => setShowForm(false)} />
       )}
 
-      {!loaded ? <ListLoading /> : view.count === 0 ? (
+      {!loaded ? <ListLoading /> : tab === 'cobranza' ? (
+        <CobranzaView queue={collections} onRemind={remind} busyId={reminding} />
+      ) : view.count === 0 ? (
         <EmptyState icon={ArrowLeftRight} title={tab === 'cxc' ? 'Nada por cobrar' : 'Nada por pagar'}
           description={tab === 'cxc' ? 'Las facturas con saldo pendiente aparecen aquí.' : 'Las compras y gastos a crédito con saldo aparecen aquí.'} />
       ) : (
@@ -350,6 +379,46 @@ export default function CuentasCobrarPagar() {
         <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
     </AccountingGate>
+  );
+}
+
+/**
+ * Cobranza — the collections queue: open customers ranked by balance × age,
+ * with a one-click "Recordar" that drafts the escalating reminder in WhatsApp
+ * for the dealer to review and send (human-in-the-loop). Paid invoices and
+ * already-sent steps drop out via the cadence in the VM.
+ */
+function CobranzaView({ queue, onRemind, busyId }) {
+  if (queue.count === 0) {
+    return <EmptyState icon={Send} title="Nada que cobrar" description="Las facturas con saldo pendiente aparecen aquí para gestionar el cobro." />;
+  }
+  return (
+    <>
+      <p className="text-sm text-ink-500 -mt-2 mb-3">
+        <b className="text-ink-800">{queue.dueCount}</b> cliente(s) para contactar hoy · <b className="tabular-nums text-ink-800">{formatDop(queue.totalDue)}</b> por cobrar
+      </p>
+      <div className="space-y-2">
+        {queue.rows.map((r) => (
+          <div key={r.partyId} className="card p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium truncate">{r.party?.name || '—'}</div>
+              <div className="text-xs text-ink-500">
+                {r.oldestDays > 0 ? `${r.oldestDays} días de atraso` : 'Al día'}
+                {r.lastSentAt ? ` · última gestión ${formatDate(r.lastSentAt)}` : ''}
+              </div>
+            </div>
+            {r.buckets.d90 > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 whitespace-nowrap">+90: {formatDop(r.buckets.d90)}</span>}
+            <div className="text-right tabular-nums font-semibold whitespace-nowrap">{formatDop(r.balance)}</div>
+            <button type="button" disabled={!r.dueCount || busyId === r.partyId} onClick={() => onRemind(r)}
+              className="btn-primary disabled:opacity-40 whitespace-nowrap"
+              title={r.dueCount ? 'Abrir WhatsApp con el recordatorio' : 'Sin recordatorio pendiente hoy'}>
+              {busyId === r.partyId ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Recordar
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-ink-400 mt-3">Los recordatorios se abren en WhatsApp para revisarlos y enviarlos — no se envían solos.</p>
+    </>
   );
 }
 

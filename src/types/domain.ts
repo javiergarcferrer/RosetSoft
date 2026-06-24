@@ -192,6 +192,8 @@ export interface Settings {
    * accountant changed. See `resolveAccountingConfig`.
    */
   accountingConfig?: AccountingConfig;
+  /** The collections/dunning cadence (lib/accounting/dunning). */
+  dunningPolicy?: DunningPolicy;
   /**
    * The "house account" customer whose quotes stock the public storefront
    * (`/#/tienda`). Alcover quotes itself for store inventory; those quotes'
@@ -869,6 +871,40 @@ export interface BankRule {
   autoConfirm?: boolean;
   createdAt?: number;
   updatedAt?: number;
+}
+
+/* --------------------------- Collections / dunning ----------------------- */
+
+/** One step of the dunning cadence: a reminder on `offsetDays` relative to the
+ *  invoice due date (negative = before, positive = after), with its template. */
+export interface DunningStep {
+  offsetDays: number;
+  template?: string;
+}
+
+/** The dunning cadence/policy (stored as JSON on settings). */
+export interface DunningPolicy {
+  enabled?: boolean;
+  channel?: 'whatsapp' | 'email';
+  /** Net term in days: due date = invoice date + netDays. */
+  netDays?: number;
+  steps?: DunningStep[];
+}
+
+/** A reminder sent for one invoice + cadence step — the dedup log so a customer
+ *  is never double-nudged for the same step. */
+export interface CollectionReminder {
+  id: string;
+  profileId: string;
+  customerId?: string | null;
+  docId: string;
+  docType?: string;
+  channel?: string;
+  stepOffset: number;
+  message?: string;
+  status?: string;
+  sentAt?: number | null;
+  createdAt?: number;
 }
 
 export type PaymentDirection = 'in' | 'out';
