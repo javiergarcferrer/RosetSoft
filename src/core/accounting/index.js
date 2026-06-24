@@ -41,7 +41,7 @@ export { dgii606Txt, dgii607Txt, dgiiPeriod, dgiiTxtFilename, collectionSplit } 
 export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from './lrSales.js';
-export { buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
+export { buildSaleEntry, buildSalesBillEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
 export { resolveInvoiceDoc } from './invoiceDoc.js';
 export { resolveReceptorInbox } from './receptorInbox.js';
 
