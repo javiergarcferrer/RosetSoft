@@ -776,6 +776,76 @@ export interface ECFSequence {
   updatedAt?: number;
 }
 
+/* ------------------------------ Caja chica ------------------------------ */
+
+/** A petty-cash voucher's kind. `opening`/`replenishment` add cash to the fund
+ *  (from bank or general cash); `expense` is a vale (gasto paid from the fund);
+ *  `adjustment` records an arqueo over/short. */
+export type PettyCashVoucherType = 'opening' | 'expense' | 'replenishment' | 'adjustment';
+
+/**
+ * A petty-cash fund (caja chica) run on the imprest system: a fixed amount of
+ * cash (`fixedAmount`) held by a custodian against a dedicated class-1 account
+ * (`accountCode`). Vales draw it down; a reposición tops it back to the ceiling.
+ * Amounts are DOP.
+ */
+export interface PettyCashFund {
+  id: string;
+  profileId: string;
+  number?: number | null;
+  name: string;
+  /** The class-1 asset (caja chica) account this fund's cash lives in. */
+  accountCode: string;
+  /** Fondo fijo — the replenishment ceiling. */
+  fixedAmount: number;
+  /** Responsable de la caja (free text). */
+  custodian?: string;
+  status: 'open' | 'closed';
+  openedAt: number;
+  closedAt?: number | null;
+  notes?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
+ * One petty-cash movement (vale). An `expense` posts the gasto (+ creditable
+ * ITBIS when the vale carries an NCF) against the fund account; `opening` /
+ * `replenishment` move cash in from bank/caja; `adjustment` books an arqueo
+ * difference. Saving one posts a balanced asiento linked by `journalEntryId`;
+ * expense vales with an NCF also feed the DGII 606. Amounts are DOP.
+ */
+export interface PettyCashVoucher {
+  id: string;
+  profileId: string;
+  fundId: string;
+  number?: number | null;
+  type: PettyCashVoucherType;
+  voucherAt: number;
+  description?: string;
+  /** expense → the class-6 gasto account; adjustment → the sobrante/faltante account. */
+  accountCode?: string | null;
+  supplierId?: string | null;
+  /** Beneficiario for a vale without a registered supplier (free text). */
+  beneficiary?: string;
+  ncf?: string;
+  ncfType?: string;
+  /** expense: base ex-ITBIS. opening/replenishment: the cash added. */
+  base: number;
+  itbis: number;
+  /** Whether the vale's ITBIS is a creditable advance (defaults true when an NCF is present). */
+  itbisCreditable?: boolean;
+  /** Magnitude of the cash movement (DOP): expense = base+itbis; opening/replenishment = cash in; adjustment = |difference|. */
+  total: number;
+  /** adjustment only — 'short' (faltante) or 'over' (sobrante). */
+  direction?: 'short' | 'over' | null;
+  /** opening/replenishment funding source. */
+  paymentMethod?: PaymentMethod;
+  journalEntryId?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**

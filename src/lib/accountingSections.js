@@ -55,6 +55,7 @@ export const ACCOUNTING_SECTIONS = [
   ], extraMatch: ['/accounting/ligne-roset'] },
   { key: 'banca', band: 'ventas', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
+    { to: '/accounting/caja-chica', label: 'Caja chica' },
     { to: '/accounting/planes-de-pago', label: 'Planes de pago' },
     { to: '/accounting/conciliacion', label: 'Conciliación' },
   ] },
@@ -116,6 +117,7 @@ export const QUICK_CREATE = [
     { label: 'Empleado', to: '/accounting/empleados?new=1' },
   ] },
   { group: 'Otros', items: [
+    { label: 'Vale de caja chica', to: '/accounting/caja-chica?new=1' },
     { label: 'Asiento contable', to: '/accounting/ledger?new=1' },
   ] },
 ];

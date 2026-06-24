@@ -103,6 +103,12 @@ export {
 // ── conciliación bancaria
 export { resolveReconciliation } from './reconciliation.js';
 
+// ── caja chica (petty cash): funds + vales VM + the posting Model
+export { resolveCajaChica, resolveFundLedger } from './cajaChica.js';
+export {
+  pettyCashBalance, voucherCashDelta, buildPettyCashEntry, VOUCHER_TYPE_LABEL,
+} from '../../lib/accounting/pettyCash.js';
+
 // ── nómina (payroll): monthly TSS+ISR engine, date-keyed topes, overtime + the
 // regalía / liquidación / bonificación asiento builders
 export {

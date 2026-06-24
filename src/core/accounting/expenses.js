@@ -135,12 +135,17 @@ function expedienteCostDocs(expedientes) {
  * transporte, puerto… — local invoices whose ITBIS the IT-1 credits, so the 606
  * must report them). The RNC + NCF + tax columns match the DGII layout.
  */
-export function resolve606({ expenses, purchases, expedientes, suppliers, start, end } = {}) {
+export function resolve606({ expenses, purchases, expedientes, pettyCashVouchers, suppliers, start, end } = {}) {
   const supById = new Map((suppliers || []).map((s) => [s.id, s]));
   const rows = [
     ...(expenses || []).filter((e) => inWindow(e.expenseAt, start, end)).map((e) => row606(e, 'expenseAt', supById, 'expense')),
     ...(purchases || []).filter((p) => inWindow(p.purchaseAt, start, end)).map((p) => row606(p, 'purchaseAt', supById, 'purchase')),
     ...expedienteCostDocs(expedientes).filter((c) => inWindow(c.costAt, start, end)).map((c) => row606(c, 'costAt', supById, 'importCost')),
+    // Petty-cash vales that carry an NCF are creditable compras too — report
+    // them (always cash-paid). Vales without an NCF never reach the 606.
+    ...(pettyCashVouchers || [])
+      .filter((v) => v.type === 'expense' && v.ncf && inWindow(v.voucherAt, start, end))
+      .map((v) => row606({ ...v, paymentMethod: 'cash' }, 'voucherAt', supById, 'expense')),
   ].sort((a, b) => (a.date || 0) - (b.date || 0));
 
   const totals = rows.reduce((acc, r) => ({
