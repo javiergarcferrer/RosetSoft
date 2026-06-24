@@ -187,7 +187,32 @@ export default function ComprasGastoDetail() {
         <div className="px-4 sm:px-6 pb-2 min-w-0">
           {tab === 'lines' && (
             <div className="overflow-x-auto">
-              {d.lines.length > 0 ? (
+              {d.isLineBill ? (
+                <table className="table min-w-[640px]">
+                  <thead>
+                    <tr>
+                      <th>Concepto</th>
+                      <th>Cuenta</th>
+                      <th className="text-right whitespace-nowrap">Cant.</th>
+                      <th className="text-right whitespace-nowrap">P. unit.</th>
+                      <th>Impuestos</th>
+                      <th className="text-right whitespace-nowrap">Importe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.lines.map((l) => (
+                      <tr key={l.id}>
+                        <td className="min-w-0">{l.description || '—'}</td>
+                        <td className="text-ink-600 min-w-0"><span className="font-mono text-xs text-ink-400 mr-1">{l.accountCode}</span>{l.accountName}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{l.qty || '—'}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{l.unitPrice > 0 ? formatDop(l.unitPrice) : '—'}</td>
+                        <td className="text-ink-500 text-xs">{l.taxLabels.length ? l.taxLabels.join(' · ') : '—'}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.base)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : d.lines.length > 0 ? (
                 <table className="table min-w-[520px]">
                   <thead>
                     <tr>

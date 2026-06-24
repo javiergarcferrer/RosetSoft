@@ -16,11 +16,27 @@ import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import {
   NATURES, NATURE_LABEL, purchaseNature, buildExpenseEntry, buildPurchaseEntry, computeExpenseTaxes,
   resolvePurchaseLines, resolveAccountingConfig, classOf, postableAccounts, weightedAverageIn,
+  resolveBillLines, buildBillEntry, taxPresetById,
 } from '../../core/accounting/index.js';
 import { reverseComprasGastoPosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
 const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty: '', cost: '' });
 const expOptLabel = (e) => `#${e.number ?? ''}${e.bl ? ` · ${e.bl}` : ''}`.trim();
+
+// "Por líneas" = the Odoo-style bill where each row hits its own account with its
+// own taxes (vs the single-account natures). A new row defaults to qty 1 + ITBIS 18%.
+const blankBillLine = () => ({ id: newId(), description: '', accountCode: '', qty: '1', unitPrice: '', taxIds: ['itbis18'] });
+const ITBIS_OPTS = [{ id: 'itbis18', label: 'ITBIS 18%' }, { id: 'itbis16', label: 'ITBIS 16%' }, { id: 'exento', label: 'Exento' }];
+const RET_OPTS = [
+  { id: '', label: 'Sin retención' },
+  { id: 'retItbis30', label: 'Ret. ITBIS 30%' }, { id: 'retItbis100', label: 'Ret. ITBIS 100%' },
+  { id: 'retIsr10', label: 'Ret. ISR 10%' }, { id: 'retIsr2', label: 'Ret. ISR 2%' }, { id: 'retIsr27', label: 'Ret. ISR 27%' },
+];
+const isRetKind = (k) => k === 'retIsr' || k === 'retItbis';
+// The two per-line selects (ITBIS · Retención) project onto the canonical taxIds array.
+const itbisOf = (taxIds) => (taxIds || []).find((id) => taxPresetById(id)?.kind === 'itbis') || '';
+const retOf = (taxIds) => (taxIds || []).find((id) => isRetKind(taxPresetById(id)?.kind)) || '';
+const joinTax = (itbisId, retId) => [itbisId, retId].filter(Boolean);
 
 /** A labeled control in the document grid. */
 function Field({ label, hint, children, className = '' }) {
@@ -63,14 +79,14 @@ export default function ComprasGastoEditor() {
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
   const editDoc = useMemo(() => {
     if (!id) return null;
-    if (purchaseQ.data) return { source: 'purchase', ...purchaseQ.data, nature: purchaseNature(purchaseQ.data.kind) };
+    if (purchaseQ.data) return { source: 'purchase', ...purchaseQ.data, nature: purchaseQ.data.lineMode ? 'lineas' : purchaseNature(purchaseQ.data.kind) };
     if (expenseQ.data) return { source: 'expense', ...expenseQ.data, nature: 'gasto' };
     return null;
   }, [id, purchaseQ.data, expenseQ.data]);
   // Duplicar: seed a NEW doc from an existing one (fresh NCF + today's date).
   const seedDoc = useMemo(() => {
     if (id || !dupId) return null;
-    if (purchaseQ.data) return { source: 'purchase', ...purchaseQ.data, nature: purchaseNature(purchaseQ.data.kind) };
+    if (purchaseQ.data) return { source: 'purchase', ...purchaseQ.data, nature: purchaseQ.data.lineMode ? 'lineas' : purchaseNature(purchaseQ.data.kind) };
     if (expenseQ.data) return { source: 'expense', ...expenseQ.data, nature: 'gasto' };
     return null;
   }, [id, dupId, purchaseQ.data, expenseQ.data]);
@@ -123,11 +139,15 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
   const [lines, setLines] = useState(() => (pf?.nature === 'mercancia' && pf.lines?.length
     ? pf.lines.map((l) => ({ id: newId(), itemId: l.itemId || '', name: l.name || '', reference: l.reference || '', qty: String(l.qty ?? ''), cost: String(l.cost ?? '') }))
     : [blankLine()]));
+  const [billLines, setBillLines] = useState(() => (pf?.lineMode && pf.lines?.length
+    ? pf.lines.map((l) => ({ id: newId(), description: l.description || '', accountCode: l.accountCode || '', qty: String(l.qty ?? ''), unitPrice: String(l.unitPrice ?? ''), taxIds: Array.isArray(l.taxIds) ? l.taxIds : [] }))
+    : [blankBillLine()]));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
   const nature = form.nature;
   const goods = nature === 'mercancia';
+  const isBill = nature === 'lineas';
 
   const accountOpts = useMemo(() => {
     const cls = nature === 'activo' ? 1 : 6;
@@ -137,10 +157,16 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     () => items.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((i) => ({ id: i.id, label: i.name, sublabel: i.sku || '' })),
     [items],
   );
+  // A bill line may hit any debitable destination: activo (1), costo (5) or gasto (6).
+  const billAccountOpts = useMemo(
+    () => postableAccounts(accounts).filter((a) => [1, 5, 6].includes(classOf(a.code))).sort((a, b) => a.code.localeCompare(b.code)),
+    [accounts],
+  );
   const expedienteOpts = useMemo(() => expedientes.slice().sort((a, b) => (b.liquidatedAt || 0) - (a.liquidatedAt || 0)), [expedientes]);
 
   const lineRes = useMemo(() => resolvePurchaseLines(lines), [lines]);
-  const base = goods ? lineRes.base : (Number(form.base) || 0);
+  const billRes = useMemo(() => resolveBillLines(billLines), [billLines]);
+  const base = goods ? lineRes.base : isBill ? billRes.totals.base : (Number(form.base) || 0);
 
   function recompute(amount, supplier) {
     const t = computeExpenseTaxes({ base: Number(amount) || 0, retainIsr: !!supplier?.retainIsr, retainItbis: !!supplier?.retainItbis, config });
@@ -173,6 +199,12 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
   const patchLine = (id, patch) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const delLine = (id) => setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls.map((l) => (l.id === id ? blankLine() : l))));
 
+  const addBillLine = () => setBillLines((ls) => [...ls, blankBillLine()]);
+  const patchBillLine = (id, patch) => setBillLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const delBillLine = (id) => setBillLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls.map((l) => (l.id === id ? blankBillLine() : l))));
+  const setLineItbis = (l, itbisId) => patchBillLine(l.id, { taxIds: joinTax(itbisId, retOf(l.taxIds)) });
+  const setLineRet = (l, retId) => patchBillLine(l.id, { taxIds: joinTax(itbisOf(l.taxIds), retId) });
+
   const newItemCount = useMemo(() => lineRes.lines.filter((l) => !l.itemId && l.name && l.qty > 0).length, [lineRes]);
 
   async function save() {
@@ -180,7 +212,12 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     const itbis = Number(form.itbis) || 0;
     const retIsr = Number(form.retIsr) || 0;
     const retItbis = Number(form.retItbis) || 0;
-    if (goods) {
+    if (isBill) {
+      const bl = billRes.lines;
+      if (bl.length === 0) { setErr('Agrega al menos una línea con cuenta y monto.'); return; }
+      if (bl.some((l) => !l.accountCode)) { setErr('Cada línea necesita una cuenta.'); return; }
+      if (bl.some((l) => !(l.base > 0))) { setErr('Cada línea necesita cantidad y precio mayores que cero.'); return; }
+    } else if (goods) {
       const ls = lineRes.lines;
       if (ls.length === 0) { setErr('Agrega al menos una línea con artículo, cantidad y costo.'); return; }
       if (ls.some((l) => !(l.itemId || l.name))) { setErr('Cada línea necesita un artículo.'); return; }
@@ -205,6 +242,40 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       if (editDoc) {
         const r = await reverseComprasGastoPosting({ id, source: editDoc.source, journalEntryId: editDoc.journalEntryId, keepOrphanItems: true });
         priorTouched = r.touched;
+      }
+
+      // Por líneas → a multi-account purchase: each line debits its own account
+      // with its own taxes (buildBillEntry), stored with lineMode + rich lines so
+      // an edit rehydrates the grid and the 606 reads the rolled-up totals.
+      if (isBill) {
+        const t = billRes.totals;
+        const built = buildBillEntry({
+          newId, config, postedAt,
+          bill: {
+            id, supplierId: form.supplierId || null,
+            lines: billRes.lines.map((l) => ({ accountCode: l.accountCode, base: l.base, itbis: l.itbis, retIsr: l.retIsr, retItbis: l.retItbis })),
+            paymentMethod: form.paymentMethod, ncf: form.ncf, memo: form.description, source: 'purchase', refTable: 'purchases',
+          },
+        });
+        await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+        await db.journalLines.bulkPut(built.lines);
+        const storedLines = billRes.lines.map((l) => ({
+          id: l.id || newId(), description: l.description, accountCode: l.accountCode,
+          qty: l.qty, unitPrice: l.unitPrice, taxIds: l.taxIds,
+          base: l.base, itbis: l.itbis, retIsr: l.retIsr, retItbis: l.retItbis,
+        }));
+        const prow = {
+          id, profileId: scope, supplierId: form.supplierId || null, purchaseAt: postedAt,
+          ncf: form.ncf, ncfType: form.ncfType, kind: 'service', lineMode: true, accountCode: null, description: form.description,
+          itemId: null, qty: 0, lines: storedLines, expedienteId,
+          base: t.base, itbis: t.itbis, itbisCreditable: true, retentionIsr: t.retIsr, retentionItbis: t.retItbis,
+          paymentMethod: form.paymentMethod, paidAt: form.paymentMethod === 'credit' ? null : postedAt,
+          journalEntryId: built.entry.id,
+        };
+        if (editDoc) await db.purchases.put({ ...prow, number: editDoc.number });
+        else await assignSequenceNumber({ table: 'purchases', profileId: scope, start: 1, build: (n) => ({ ...prow, number: n }) });
+        onSaved(id);
+        return;
       }
 
       if (nature === 'gasto') {
@@ -302,9 +373,9 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
 
   const field = 'input w-full';
   const numField = 'input w-full text-right tabular-nums';
-  const itbisN = Number(form.itbis) || 0;
-  const retIsrN = Number(form.retIsr) || 0;
-  const retItbisN = Number(form.retItbis) || 0;
+  const itbisN = isBill ? billRes.totals.itbis : Number(form.itbis) || 0;
+  const retIsrN = isBill ? billRes.totals.retIsr : Number(form.retIsr) || 0;
+  const retItbisN = isBill ? billRes.totals.retItbis : Number(form.retItbis) || 0;
   const total = base + itbisN;
   const net = total - retIsrN - retItbisN;
 
@@ -319,6 +390,10 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
               {n.label}
             </button>
           ))}
+          <button type="button" onClick={() => setNature('lineas')} disabled={!!editDoc}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 ${isBill ? 'bg-ink-900 text-white font-medium' : 'text-ink-500 hover:text-ink-700'}`}>
+            Por líneas
+          </button>
         </div>
         <div className="text-right">
           <div className="eyebrow-xs text-ink-400">Total</div>
@@ -335,7 +410,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
               {suppliers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
-          {!goods && (
+          {!goods && !isBill && (
             <Field label={nature === 'activo' ? 'Cuenta de activo' : 'Cuenta de gasto'}>
               <select value={form.accountCode} onChange={(e) => setForm((f) => ({ ...f, accountCode: e.target.value }))} className={field}>
                 <option value="">— Elegir cuenta —</option>
@@ -439,8 +514,81 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         </div>
       )}
 
+      {/* Por líneas: each row hits its own account with its own taxes */}
+      {isBill && (
+        <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
+          <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
+          <div className="lg:hidden space-y-2">
+            {billLines.map((l) => {
+              const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0;
+              return (
+                <div key={l.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2">
+                  <input value={l.description} onChange={(e) => patchBillLine(l.id, { description: e.target.value })} placeholder="Descripción" className="input w-full" />
+                  <select value={l.accountCode} onChange={(e) => patchBillLine(l.id, { accountCode: e.target.value })} className="input w-full">
+                    <option value="">— Cuenta —</option>
+                    {billAccountOpts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[11px] text-ink-400">Cant.<input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchBillLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
+                    <label className="text-[11px] text-ink-400">P. unit. RD$<input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchBillLine(l.id, { unitPrice: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[11px] text-ink-400">ITBIS<select value={itbisOf(l.taxIds)} onChange={(e) => setLineItbis(l, e.target.value)} className="input w-full mt-0.5">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
+                    <label className="text-[11px] text-ink-400">Retención<select value={retOf(l.taxIds)} onChange={(e) => setLineRet(l, e.target.value)} className="input w-full mt-0.5">{RET_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-ink-600 tabular-nums">Importe {formatDop(sub)}</span>
+                    <button type="button" onClick={() => delBillLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full text-sm min-w-[760px]">
+              <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
+                <tr>
+                  <th className="text-left font-medium pb-1">Descripción</th>
+                  <th className="text-left font-medium pb-1">Cuenta</th>
+                  <th className="text-right font-medium pb-1 w-16">Cant.</th>
+                  <th className="text-right font-medium pb-1 w-28 whitespace-nowrap">P. unit.</th>
+                  <th className="text-left font-medium pb-1 w-28">ITBIS</th>
+                  <th className="text-left font-medium pb-1 w-32">Retención</th>
+                  <th className="text-right font-medium pb-1 w-28">Importe</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {billLines.map((l) => {
+                  const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0;
+                  return (
+                    <tr key={l.id} className="align-top">
+                      <td className="py-0.5 pr-2"><input value={l.description} onChange={(e) => patchBillLine(l.id, { description: e.target.value })} placeholder="Concepto" className="input w-full" /></td>
+                      <td className="py-0.5 pr-2">
+                        <select value={l.accountCode} onChange={(e) => patchBillLine(l.id, { accountCode: e.target.value })} className="input w-full max-w-[16rem]">
+                          <option value="">— Cuenta —</option>
+                          {billAccountOpts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="py-0.5"><input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchBillLine(l.id, { qty: e.target.value })} className="input w-16 text-right tabular-nums" /></td>
+                      <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchBillLine(l.id, { unitPrice: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBillLine(); } }} className="input w-28 text-right tabular-nums" /></td>
+                      <td className="py-0.5 pr-1"><select value={itbisOf(l.taxIds)} onChange={(e) => setLineItbis(l, e.target.value)} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></td>
+                      <td className="py-0.5 pr-1"><select value={retOf(l.taxIds)} onChange={(e) => setLineRet(l, e.target.value)} className="input w-full">{RET_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></td>
+                      <td className="py-0.5 text-right text-ink-700 tabular-nums whitespace-nowrap pr-1 pt-2.5">{sub > 0 ? formatDop(sub) : '—'}</td>
+                      <td className="py-0.5 text-right"><button type="button" onClick={() => delBillLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" onClick={addBillLine} className="btn-ghost text-xs gap-1 mt-1 px-2"><Plus size={12} /> Línea <span className="text-ink-300 normal-case hidden sm:inline">(o Enter en P. unit.)</span></button>
+        </div>
+      )}
+
       {/* Impuestos + totales */}
       <div className="px-4 sm:px-6 py-5 border-t border-ink-100 grid gap-6 sm:grid-cols-2">
+        {!isBill && (
         <div>
           <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Impuestos y retenciones</h4>
           <div className="grid grid-cols-2 gap-3 max-w-sm">
@@ -454,6 +602,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
             <Field label="Ret. ITBIS"><input type="number" step="0.01" min="0" inputMode="decimal" value={form.retItbis} onChange={(e) => setForm((f) => ({ ...f, retItbis: e.target.value }))} className={numField} /></Field>
           </div>
         </div>
+        )}
         <div className="sm:justify-self-end w-full sm:max-w-xs space-y-1.5 text-sm self-start">
           <div className="flex justify-between gap-4"><span className="text-ink-500">Subtotal</span><span className="tabular-nums">{formatDop(base)}</span></div>
           <div className="flex justify-between gap-4"><span className="text-ink-500">ITBIS</span><span className="tabular-nums">{formatDop(itbisN)}</span></div>

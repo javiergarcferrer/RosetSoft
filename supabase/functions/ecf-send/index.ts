@@ -98,6 +98,15 @@ Deno.serve(async (req: Request) => {
   if (credErr) return json({ ok: false, error: `cert read: ${credErr.message}` }, 500);
   if (!cred) return json({ ok: false, error: 'No hay certificado .p12 cargado. Súbelo en Configuración contable.' }, 412);
 
+  // The e-CF environment's SINGLE source of truth is the visible selector in
+  // Configuración (settings.ecf_environment), so the transmission target and the
+  // printed QR's consulta-timbre URL (which reads the same setting on the Vite
+  // side) can never drift apart. Fall back to the env stored on the credential
+  // at upload, then to CerteCF.
+  const { data: cfg } = await supa
+    .from('settings').select('ecf_environment').eq('profile_id', profileId).maybeSingle();
+  const envKey = String(cfg?.ecf_environment || cred.environment || 'cert');
+
   let p12Path = '';
   try {
     // dgii-ecf reads the key from a .p12 file; materialize the bytes to a temp file.
@@ -107,7 +116,7 @@ Deno.serve(async (req: Request) => {
     const reader = new (dgii as any).P12Reader(cred.password);
     const certs = reader.getKeyFromFile(p12Path);
 
-    const environment = ENV_MAP[cred.environment as string] ?? ENV_MAP.cert;
+    const environment = ENV_MAP[envKey] ?? ENV_MAP.cert;
     const ecf = new (dgii as any).ECF(certs, environment);
 
     // op:'sign' — produce the signed XML LOCALLY (no DGII contact needed): the

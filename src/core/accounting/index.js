@@ -50,13 +50,15 @@ export { dgii606Txt, dgii607Txt, dgiiPeriod, dgiiTxtFilename, collectionSplit } 
 export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from './lrSales.js';
-export { buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
+export { buildSaleEntry, buildSalesBillEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
 export { resolveInvoiceDoc } from './invoiceDoc.js';
 export { resolveReceptorInbox } from './receptorInbox.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)
 export { resolveInventory, resolveItemKardex } from './inventory.js';
 export { buildPurchaseEntry, buildCogsEntry, planSalida, resolvePurchaseLines } from '../../lib/accounting/purchase.js';
+export { DR_TAX_PRESETS, taxPresetById, applyLineTaxes } from '../../lib/accounting/taxPresets.js';
+export { resolveBillLines, buildBillEntry } from '../../lib/accounting/bill.js';
 export { resolveKardex, weightedAverageIn, round4 } from '../../lib/accounting/inventory.js';
 
 // ── importación / liquidación DGA (landed cost)
