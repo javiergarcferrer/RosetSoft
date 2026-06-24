@@ -7,6 +7,7 @@
 import { round2 } from '../../lib/accounting/ledger.js';
 import { tipo606For, DGII_606_TIPO_LABEL } from './expenses.js';
 import { costLabel } from '../../lib/accounting/expediente.js';
+import { taxPresetById } from '../../lib/accounting/taxPresets.js';
 
 /** The three natures of a supplier invoice. `gasto` covers expenses AND the
  *  legacy service purchases; `mercancía` lands in inventory; `activo` capitalizes
@@ -195,25 +196,45 @@ export function resolvePurchaseExpenseDetail({ purchase, expense, suppliers, acc
   const retIsr = round2(doc.retentionIsr || 0);
   const retItbis = round2(doc.retentionItbis || 0);
 
+  const isLineBill = !!(purchase && purchase.lineMode);
   const accountName = doc.accountCode ? (nameByCode.get(doc.accountCode) || '') : '';
-  const articles = purchase ? (purchase.lines?.length ? purchase.lines.length : (purchase.kind === 'goods' && purchase.itemId ? 1 : 0)) : 0;
-  const destination = nature === 'mercancia'
-    ? `Inventario${articles ? ` · ${articles} artículo${articles === 1 ? '' : 's'}` : ''}`
-    : (doc.accountCode ? accountLabel(doc.accountCode, accountName) : (doc.description || NATURE_LABEL[nature]));
+  const articles = isLineBill
+    ? (purchase.lines?.length || 0)
+    : (purchase ? (purchase.lines?.length ? purchase.lines.length : (purchase.kind === 'goods' && purchase.itemId ? 1 : 0)) : 0);
+  const destination = isLineBill
+    ? `${articles} línea${articles === 1 ? '' : 's'} · varias cuentas`
+    : nature === 'mercancia'
+      ? `Inventario${articles ? ` · ${articles} artículo${articles === 1 ? '' : 's'}` : ''}`
+      : (doc.accountCode ? accountLabel(doc.accountCode, accountName) : (doc.description || NATURE_LABEL[nature]));
 
-  const lines = (purchase?.lines || []).map((l) => {
-    const item = l.itemId ? itemById.get(l.itemId) : null;
-    const qty = round2(Math.max(0, Number(l.qty) || 0));
-    const cost = round2(Math.max(0, Number(l.cost) || 0));
-    return {
-      id: l.id,
-      name: item?.name || l.name || '—',
-      reference: item?.sku || l.reference || '',
-      inInventory: !!item,
-      qty, cost,
-      unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
-    };
-  });
+  const lines = isLineBill
+    ? (purchase.lines || []).map((l) => {
+        const qty = round2(Math.max(0, Number(l.qty) || 0));
+        const unitPrice = round2(Math.max(0, Number(l.unitPrice) || 0));
+        const lineBase = round2(Number(l.base) >= 0 ? Number(l.base) : qty * unitPrice);
+        return {
+          id: l.id,
+          description: l.description || '',
+          accountCode: l.accountCode || '',
+          accountName: l.accountCode ? (nameByCode.get(l.accountCode) || '') : '',
+          qty, unitPrice, base: lineBase,
+          itbis: round2(Number(l.itbis) || 0),
+          taxLabels: (l.taxIds || []).map((id) => taxPresetById(id)?.short).filter(Boolean),
+        };
+      })
+    : (purchase?.lines || []).map((l) => {
+        const item = l.itemId ? itemById.get(l.itemId) : null;
+        const qty = round2(Math.max(0, Number(l.qty) || 0));
+        const cost = round2(Math.max(0, Number(l.cost) || 0));
+        return {
+          id: l.id,
+          name: item?.name || l.name || '—',
+          reference: item?.sku || l.reference || '',
+          inInventory: !!item,
+          qty, cost,
+          unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
+        };
+      });
 
   const exp = doc.expedienteId ? expById.get(doc.expedienteId) : null;
   const supplier = doc.supplierId ? supById.get(doc.supplierId) : null;
@@ -242,6 +263,7 @@ export function resolvePurchaseExpenseDetail({ purchase, expense, suppliers, acc
     total: round2(base + itbis),
     net: round2(base + itbis - retIsr - retItbis),
     lines,
+    isLineBill,
     reversesInventory: nature === 'mercancia',
     journalEntryId: doc.journalEntryId || null,
   };

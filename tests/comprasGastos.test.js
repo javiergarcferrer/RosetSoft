@@ -30,6 +30,30 @@ test('purchaseNature maps goods/asset/service → mercancia/activo/gasto', () =>
   assert.equal(purchaseNature('service'), 'gasto');
 });
 
+test('resolvePurchaseExpenseDetail: a line-bill projects per-line accounts + tax labels', () => {
+  const purchase = {
+    id: 'pb', supplierId: 's1', purchaseAt: 1000, ncf: 'E310000006621',
+    kind: 'service', lineMode: true, accountCode: null, description: 'Servicios varios',
+    base: 7000, itbis: 1260, retentionIsr: 0, retentionItbis: 270, paymentMethod: 'credit',
+    lines: [
+      { id: 'a', description: 'Mantenimiento', accountCode: '6-02-007-01-03-00', qty: 1, unitPrice: 5000, base: 5000, itbis: 900, taxIds: ['itbis18', 'retItbis30'] },
+      { id: 'b', description: 'Materiales', accountCode: '6-99', qty: 2, unitPrice: 1000, base: 2000, itbis: 360, taxIds: ['itbis18'] },
+    ],
+  };
+  const d = resolvePurchaseExpenseDetail({ purchase, suppliers: SUPPLIERS, accounts: ACCOUNTS, items: [], expedientes: [] });
+  assert.equal(d.isLineBill, true);
+  assert.equal(d.nature, 'gasto');                 // service → gasto nature
+  assert.equal(d.lines.length, 2);
+  assert.equal(d.lines[0].accountCode, '6-02-007-01-03-00');
+  assert.equal(d.lines[0].accountName, 'TELEFONO E INTERNET');
+  assert.equal(d.lines[0].base, 5000);
+  assert.deepEqual(d.lines[0].taxLabels, ['ITBIS 18%', 'Ret. ITBIS 30%']);
+  assert.equal(d.lines[1].base, 2000);
+  assert.equal(d.total, 8260);                     // base 7000 + itbis 1260
+  assert.equal(d.net, 7990);                       // − ret. ITBIS 270
+  assert.match(d.destination, /2 líneas/);
+});
+
 test('merges expenses + purchases, newest first, with per-nature counts', () => {
   const r = resolvePurchasesExpenses({
     expenses: EXPENSES, purchases: PURCHASES, suppliers: SUPPLIERS, accounts: ACCOUNTS, expedientes: EXPEDIENTES,
