@@ -16,7 +16,7 @@
  */
 import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
-import type { JournalEntry, JournalLine } from '../../types/domain.ts';
+import type { JournalEntry, JournalLine, PaymentMethod } from '../../types/domain.ts';
 
 export interface SalePostInput {
   /** The sales_posting id (refId of the asiento). */
@@ -74,6 +74,90 @@ export function buildSaleEntry({
     postedAt,
     source: 'sale',
     memo: sale.memo || 'Venta',
+    refTable: 'sales_postings',
+    refId: sale.id,
+    lines,
+  });
+}
+
+/** A paid invoice debits cash/bank; a credit one debits the receivable. */
+function salePayRole(method: PaymentMethod | undefined): string {
+  if (method === 'cash') return 'cash';
+  if (method === 'card' || method === 'bank') return 'bank';
+  return 'accountsReceivable';
+}
+
+export interface SalesBillPostInput {
+  /** The sales_posting id (refId of the asiento). */
+  id: string;
+  customerId?: string | null;
+  /** Revenue lines — each credits its own ingreso account; ITBIS is summed. */
+  lines: ReadonlyArray<{ accountCode: string; base: number; itbis: number }>;
+  /** Deposit already received (DOP); applied against the sale. */
+  deposit?: number;
+  /** Drives the debit side: cash/bank → cash/bank, else accounts receivable. */
+  paymentMethod?: PaymentMethod;
+  ncf?: string | null;
+  memo?: string;
+}
+
+/**
+ * Build a line-by-line SALE asiento — the credit-side mirror of buildBillEntry:
+ *
+ *   Debit  Cobros anticipados        depositApplied   (clears the liability)
+ *   Debit  <CxC | caja | banco>      total − deposit
+ *   Credit <each line's ingreso>      Σ line base, merged per account
+ *   Credit ITBIS por pagar           Σ line ITBIS
+ *
+ * Each revenue line credits its own ingreso account (so a mixed invoice —
+ * muebles + servicio + flete — splits across accounts), while the e-CF/607 read
+ * the rolled-up gravado/itbis. Retentions are NOT booked here (the customer
+ * withholds at payment, recorded by the cuentas module). Throws on a line with
+ * no account or a zero invoice. Pure: no React, no Supabase.
+ */
+export function buildSalesBillEntry({
+  newId, config, sale, postedAt,
+}: {
+  newId: () => string;
+  config: ResolvedAccountingConfig;
+  sale: SalesBillPostInput;
+  postedAt?: number;
+}): { entry: JournalEntry; lines: JournalLine[] } {
+  const itbis = round2(sale.lines.reduce((s, l) => s + round2(l.itbis || 0), 0));
+
+  // Credit each distinct revenue account once, with the line bases merged.
+  const byAccount = new Map<string, number>();
+  for (const l of sale.lines) {
+    const amt = round2(Math.max(0, Number(l.base) || 0));
+    if (amt <= 0) continue;
+    if (!l.accountCode) throw new Error('Cada línea necesita una cuenta de ingreso.');
+    byAccount.set(l.accountCode, round2((byAccount.get(l.accountCode) || 0) + amt));
+  }
+  if (byAccount.size === 0) throw new Error('La factura no tiene líneas con monto.');
+  const base = round2([...byAccount.values()].reduce((s, v) => s + v, 0));
+  const total = round2(base + itbis);
+  const applied = depositApplied(sale.deposit || 0, total);
+  const receivable = round2(total - applied);
+
+  const lines: DraftLine[] = [];
+  if (applied > 0) lines.push({ accountCode: requireAccount(config, 'customerDeposits'), debit: applied });
+  if (receivable > 0) {
+    lines.push({
+      accountCode: requireAccount(config, salePayRole(sale.paymentMethod)),
+      debit: receivable,
+      thirdPartyType: sale.customerId ? 'customer' : null,
+      thirdPartyId: sale.customerId || null,
+      ncf: sale.ncf || null,
+    });
+  }
+  for (const [accountCode, amt] of byAccount) lines.push({ accountCode, credit: amt });
+  if (itbis > 0) lines.push({ accountCode: requireAccount(config, 'itbisPayable'), credit: itbis });
+
+  return buildJournalEntry({
+    newId,
+    postedAt,
+    source: 'sale',
+    memo: sale.memo || 'Factura de venta',
     refTable: 'sales_postings',
     refId: sale.id,
     lines,
