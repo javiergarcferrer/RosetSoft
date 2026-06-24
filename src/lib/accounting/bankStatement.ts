@@ -60,8 +60,12 @@ export function normalizeText(s: unknown): string {
     .toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-/** Parse a DOP amount: handles "1,234.56", "1.234,56", "(1,234.56)" (negative),
- *  leading "RD$"/spaces, and a trailing/leading minus. */
+/** Parse a DOP amount: handles "1,234.56", "1.234,56", "500,5" (EU one-decimal),
+ *  "1.234.567"/"1,234,567" (grouping only), "(1,234.56)" (negative), leading
+ *  "RD$"/spaces, and a leading minus. The decimal separator is decided by
+ *  position (the later of , and .) and shape (a single separator followed by
+ *  1–2 digits is a decimal; anything else — repeated separators, or 3 digits
+ *  after — is thousands grouping), so a value is never 10×-off or dropped. */
 export function parseAmount(s: unknown): number {
   if (s == null) return 0;
   let t = String(s).trim();
@@ -69,13 +73,25 @@ export function parseAmount(s: unknown): number {
   let neg = false;
   if (/^\(.*\)$/.test(t)) { neg = true; t = t.slice(1, -1); }
   t = t.replace(/[^\d.,\-]/g, '');
-  if (t.includes(',') && t.includes('.')) {
-    if (t.lastIndexOf(',') > t.lastIndexOf('.')) t = t.replace(/\./g, '').replace(',', '.');
+  if (t.startsWith('-')) neg = true;
+  t = t.replace(/-/g, '');
+
+  const lastComma = t.lastIndexOf(',');
+  const lastDot = t.lastIndexOf('.');
+  if (lastComma >= 0 && lastDot >= 0) {
+    // Both present: the LATER separator is the decimal point, the other grouping.
+    if (lastComma > lastDot) t = t.replace(/\./g, '').replace(',', '.');
     else t = t.replace(/,/g, '');
-  } else if (t.includes(',')) {
-    t = /,\d{2}$/.test(t) ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  } else if (lastComma >= 0 || lastDot >= 0) {
+    const sep = lastComma >= 0 ? ',' : '.';
+    const occurrences = t.split(sep).length - 1;
+    const afterLast = t.length - Math.max(lastComma, lastDot) - 1;
+    if (occurrences === 1 && afterLast >= 1 && afterLast <= 2) {
+      t = t.replace(sep, '.');          // a single separator + 1–2 digits = decimal
+    } else {
+      t = t.split(sep).join('');        // repeated, or 3 digits after = grouping → strip
+    }
   }
-  if (t.startsWith('-')) { neg = true; t = t.slice(1); }
   const n = Number(t);
   if (!Number.isFinite(n)) return 0;
   return neg ? -n : n;

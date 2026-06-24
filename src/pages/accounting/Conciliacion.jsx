@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import FileDropZone from '../../components/FileDropZone.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
@@ -204,6 +205,8 @@ function BankImportPanel({ scope, accountCode, rec, rules, accounts, onClose }) 
   const [posting, setPosting] = useState(false);
   const [err, setErr] = useState('');
   const [sel, setSel] = useState({}); // index -> { post, account, remember }
+  const [fileName, setFileName] = useState('');
+  const [pasteMode, setPasteMode] = useState(false);
 
   const imp = useMemo(
     () => (text.trim() ? resolveBankImport({ statementText: text, bank, rules, reconciliation: rec }) : null),
@@ -267,9 +270,28 @@ function BankImportPanel({ scope, accountCode, rec, rules, accounts, onClose }) 
           </select>
         </label>
       </div>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5}
-        placeholder={'Pega el CSV exportado de Popular en Línea (Fecha, Descripción, Débito, Crédito, Balance)…'}
-        className="input w-full font-mono text-xs" />
+      {pasteMode ? (
+        <>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5}
+            placeholder={'Pega el CSV exportado de Popular en Línea (Fecha, Descripción, Débito, Crédito, Balance)…'}
+            className="input w-full font-mono text-xs" autoFocus />
+          <button type="button" onClick={() => setPasteMode(false)} className="mt-1.5 text-xs text-ink-500 hover:text-ink-900">← subir un archivo .csv</button>
+        </>
+      ) : (
+        <>
+          <FileDropZone
+            mode="text"
+            accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel"
+            hint="Arrastra el .csv exportado de tu banco (Fecha · Descripción · Débito · Crédito · Balance)"
+            fileName={fileName}
+            onClear={() => { setFileName(''); setText(''); }}
+            onText={(t, f) => { setText(t); setFileName(f?.name || 'estado.csv'); }}
+          />
+          {!fileName && (
+            <button type="button" onClick={() => setPasteMode(true)} className="mt-1.5 text-xs text-ink-500 hover:text-ink-900">o pegar el texto manualmente</button>
+          )}
+        </>
+      )}
 
       {imp && (
         <>

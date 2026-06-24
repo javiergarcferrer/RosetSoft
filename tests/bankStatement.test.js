@@ -20,6 +20,15 @@ test('parseAmount handles DOP thousands, parens and signs', () => {
   assert.equal(parseAmount(''), 0);
 });
 
+test('parseAmount classifies decimal vs grouping separators (no 10x / no drop)', () => {
+  assert.equal(parseAmount('500,5'), 500.5);       // EU one-decimal — was 5005 (10x)
+  assert.equal(parseAmount('1.234.567'), 1234567); // dot grouping only — was NaN→0 (dropped)
+  assert.equal(parseAmount('1,234,567'), 1234567); // comma grouping only
+  assert.equal(parseAmount('1,234'), 1234);        // single sep, 3 digits → thousands
+  assert.equal(parseAmount('1,23'), 1.23);         // single sep, 2 digits → decimal
+  assert.equal(parseAmount('73.670,00'), 73670);   // EU thousands + decimal
+});
+
 test('parseDate reads DD/MM/YYYY (DR) and ISO', () => {
   assert.equal(parseDate('05/01/2026'), Date.UTC(2026, 0, 5));
   assert.equal(parseDate('31-12-2025'), Date.UTC(2025, 11, 31));
