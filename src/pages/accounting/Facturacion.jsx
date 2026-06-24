@@ -132,6 +132,7 @@ export default function Facturacion() {
   const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
   const quotesById = useMemo(() => new Map(quotesQ.data.map((q) => [q.id, q])), [quotesQ.data]);
   const [transmitting, setTransmitting] = useState(null);
+  const [bulk, setBulk] = useState(null); // { done, total, failed } during "Transmitir todos"
   const [generating, setGenerating] = useState(null);
   const [checking, setChecking] = useState(null);
   const [printing, setPrinting] = useState(null);
@@ -304,30 +305,63 @@ export default function Facturacion() {
     }
   }
 
-  // Transmit one posting's e-CF to the DGII. Takes the posting OBJECT (not a
-  // row id) so postSale can auto-transmit the sale it just booked before the
-  // live query refetches; the manual Transmitir button stays the retry path.
-  async function transmitPosting(p) {
-    if (!p || !p.ncf) return;
-    // Never re-sign/re-send an e-NCF already transmitted or accepted — that
-    // would duplicate one fiscal number at the DGII. A 'pending' (auto-transmit
-    // not yet attempted or previously failed) is the legitimate retry path.
-    if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') return;
-    setErr('');
+  // Core transmit — sign+send one e-CF and persist the result; returns
+  // {ok, error} with NO global UI state, so the single button AND the bulk run
+  // share the exact same path. Never re-sends an e-NCF already at the DGII (that
+  // would duplicate one fiscal number) — that's a silent skip.
+  async function transmitOne(p) {
+    if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') return { ok: true };
     const pf = ecfPreflight(p);
-    if (pf) { setErr(pf); return; }
-    setTransmitting(p.id);
+    if (pf) return { ok: false, error: pf };
     try {
       const data = await sendEcf({ payload: buildPostingPayload(p), eNcf: p.ncf, profileId: scope });
       await db.salesPostings.update(p.id, {
         trackId: data.trackId || '', securityCode: data.securityCode || '',
         fechaFirma: data.fechaFirma || '', ecfStatus: data.status || 'sent',
       });
+      return { ok: true };
     } catch (e) {
-      setErr(userMessageFor(e));
-    } finally {
-      setTransmitting(null);
+      return { ok: false, error: userMessageFor(e) };
     }
+  }
+
+  // Transmit one posting's e-CF to the DGII. Takes the posting OBJECT (not a
+  // row id) so postSale can auto-transmit the sale it just booked before the
+  // live query refetches; the manual Transmitir button stays the retry path.
+  async function transmitPosting(p) {
+    if (!p || !p.ncf) return;
+    setErr('');
+    setTransmitting(p.id);
+    const r = await transmitOne(p);
+    if (!r.ok) setErr(r.error);
+    setTransmitting(null);
+  }
+
+  // Transmit EVERY pending e-CF in one run — the set de pruebas (and day-to-day
+  // catch-up) means many at once. Sequential on purpose: fiscal sends shouldn't
+  // be hammered in parallel, and per-doc errors stay attributable. Live progress
+  // + a final tally; one failure never aborts the rest.
+  async function transmitAllPending() {
+    const pending = postingsQ.data
+      .filter((p) => p.ncf && p.ecfStatus === 'pending' && parseENcf(p.ncf))
+      .sort((a, b) => (a.postedAt || 0) - (b.postedAt || 0));
+    if (!pending.length) return;
+    const pf = ecfPreflight(pending[0]); // one cert/RNC pre-check before looping
+    if (pf) { setErr(pf); return; }
+    setErr('');
+    let done = 0, failed = 0, firstErr = '';
+    setBulk({ done, total: pending.length, failed });
+    for (const p of pending) {
+      const r = await transmitOne(p);
+      done += 1;
+      if (!r.ok) { failed += 1; if (!firstErr) firstErr = `${p.ncf}: ${r.error}`; }
+      setBulk({ done, total: pending.length, failed });
+    }
+    invalidate();
+    setBulk(null);
+    setErr(failed
+      ? `Transmitidos ${done - failed}/${pending.length}. ${failed} con error — ${firstErr}`
+      : `✓ ${pending.length} e-CF transmitidos a la DGII.`);
   }
 
   // Ask the DGII what became of a transmitted e-CF (trackId → estado). The
@@ -637,7 +671,7 @@ export default function Facturacion() {
         { key: '607', label: `607${pendingEcfCount ? ` · ${pendingEcfCount} por transmitir` : ''}` },
         { key: 'it1', label: 'IT-1 (ITBIS)' },
       ]} active={tab} onChange={setTab} />
-      {err && <p className="text-sm text-rose-600 mb-3">{err}</p>}
+      {err && <p className={`text-sm mb-3 ${err.startsWith('✓') ? 'text-emerald-700' : 'text-rose-600'}`}>{err}</p>}
 
       {!loaded ? <ListLoading /> : tab === 'pending' ? (
         deliverables.length === 0 ? (
@@ -715,10 +749,17 @@ export default function Facturacion() {
                 placeholder="Buscar cliente, RNC, NCF…" className="input py-1.5 pl-8 text-sm w-full sm:w-56" />
             </div>
             <div className="flex flex-wrap gap-2 sm:ml-auto">
+              {pendingEcfCount > 0 ? (
+                <button type="button" onClick={transmitAllPending} disabled={!!bulk}
+                  className="btn-primary disabled:opacity-60" title="Firmar y transmitir todos los e-CF pendientes a la DGII">
+                  {bulk ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {bulk ? `Transmitiendo ${bulk.done}/${bulk.total}…` : `Transmitir todos (${pendingEcfCount})`}
+                </button>
+              ) : null}
               <button type="button" onClick={export607} disabled={sales607.count === 0}
                 className="btn-ghost"><Download size={14} /> Exportar 607 (CSV)</button>
               <button type="button" onClick={export607Txt} disabled={sales607.count === 0}
-                className="btn-primary"><Download size={14} /> TXT DGII (607)</button>
+                className="btn-ghost"><Download size={14} /> TXT DGII (607)</button>
             </div>
           </div>
           {sales607View.count === 0 ? (
