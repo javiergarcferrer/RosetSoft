@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import TabPills from '../../components/accounting/TabPills.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   computePayrollItem, payrollTotals, buildPayrollEntry, resolveAccountingConfig,
@@ -23,11 +24,11 @@ const MONTHS_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio
 const num = (v) => Number(v) || 0;
 
 const TABS = [
-  { v: 'mensual', label: 'Mensual' },
-  { v: 'regalia', label: 'Regalía' },
-  { v: 'bonificacion', label: 'Bonificación' },
-  { v: 'vacaciones', label: 'Vacaciones' },
-  { v: 'liquidacion', label: 'Liquidación' },
+  { key: 'mensual', label: 'Mensual' },
+  { key: 'regalia', label: 'Regalía' },
+  { key: 'bonificacion', label: 'Bonificación' },
+  { key: 'vacaciones', label: 'Vacaciones' },
+  { key: 'liquidacion', label: 'Liquidación' },
 ];
 const KIND_LABEL = { regalia: 'Regalía', liquidacion: 'Liquidación', bonificacion: 'Bonificación' };
 
@@ -126,15 +127,8 @@ export default function Nomina() {
     <AccountingGate title="Nómina">
       <PageHeader title="Nómina" subtitle="Nómina mensual, regalía, vacaciones y liquidación (DR)" />
       {!loaded ? <ListLoading /> : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-1.5">
-            {TABS.map((t) => (
-              <button key={t.v} type="button" onClick={() => setTab(t.v)}
-                className={`rounded-lg px-3 min-h-9 coarse:min-h-11 text-sm font-medium transition-colors ${tab === t.v ? 'bg-ink-900 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+        <div>
+          <TabPills tabs={TABS} active={tab} onChange={setTab} />
 
           {activeEmployees.length === 0 && tab !== 'liquidacion' ? (
             <EmptyState icon={Wallet} title="Sin empleados activos" description="Agrega empleados con salario en la página de Empleados." />
