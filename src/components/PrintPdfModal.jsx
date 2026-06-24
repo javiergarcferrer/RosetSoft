@@ -26,24 +26,49 @@ import { renderPdfToImages } from '../lib/loadPdfjs.js';
  * the preview, with a button to print again (or after a cancel).
  */
 export default function PrintPdfModal({ blob, title = 'Imprimir', onClose }) {
-  const [pages, setPages] = useState(null);   // [{ src, width, height }]
+  const [pages, setPages] = useState(null);   // [{ src, width, height, widthPt, heightPt }]
   const [error, setError] = useState(null);
   const autoPrinted = useRef(false);
+  const styleRef = useRef(null);
 
   // Mark the body while the modal lives so the @media print rules in
-  // index.css swap the app for the page images. The zero @page margin is
-  // injected here (not globally) because @page can't be scoped by selector
-  // and the rest of the app must keep normal Cmd+P margins.
+  // index.css swap the app for the page images. The @page rule is injected
+  // here (not globally) because @page can't be scoped by selector and the
+  // rest of the app must keep normal Cmd+P margins. It's filled in once the
+  // page size is known (effect below).
   useEffect(() => {
     document.body.setAttribute('data-print-pdf', '1');
     const style = document.createElement('style');
     style.textContent = '@page { margin: 0; }';
+    styleRef.current = style;
     document.head.appendChild(style);
     return () => {
       document.body.removeAttribute('data-print-pdf');
       style.remove();
+      styleRef.current = null;
     };
   }, []);
+
+  // Size the printed sheet to the PDF's OWN page box (in points) and fix each
+  // print page-block to the same box. Without this the sheet defaults to the
+  // user's paper and a page-filling image — a hair too tall because the raster
+  // canvas dims are ceil()'d — spills past the bottom edge, emitting a blank
+  // trailing sheet after every page (only visible on multipage docs). With the
+  // sheet matched to the document, index.css fits each image INSIDE the box
+  // (object-fit: contain), so the overshoot becomes an invisible sub-point
+  // letterbox instead of an overflow. The browser scales the declared sheet to
+  // the physical paper, exactly as it would when printing the PDF directly.
+  useEffect(() => {
+    const style = styleRef.current;
+    if (!style || !pages || !pages.length) return;
+    const { widthPt, heightPt } = pages[0];
+    if (!widthPt || !heightPt) return;   // defensive: keep the bare @page margin
+    const w = Math.round(widthPt);
+    const h = Math.round(heightPt);
+    style.textContent =
+      `@page { size: ${w}pt ${h}pt; margin: 0; }\n` +
+      `@media print { body[data-print-pdf] .print-pdf-page { width: ${w}pt !important; height: ${h}pt !important; } }`;
+  }, [pages]);
 
   // Rasterize the blob once. ~180 dpi pages — crisp on paper, light enough
   // that a long quote stays responsive.

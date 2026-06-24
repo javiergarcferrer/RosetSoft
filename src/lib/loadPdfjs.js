@@ -28,8 +28,12 @@ export async function loadPdfjs() {
 
 /**
  * Rasterize every page of a PDF blob to PNG data URLs, sized for print
- * (~180 dpi for an A4/Letter page). Returns [{ src, width, height }] in page
- * order. Pure rendering — no DOM beyond an off-screen canvas.
+ * (~180 dpi for an A4/Letter page). Returns [{ src, width, height, widthPt,
+ * heightPt }] in page order — `width`/`height` are the raster pixels, while
+ * `widthPt`/`heightPt` are the PDF page's own size in points (the print
+ * preview sizes each printed sheet to these so a page-filling image can't
+ * overflow onto a blank trailing sheet). Pure rendering — no DOM beyond an
+ * off-screen canvas.
  */
 export async function renderPdfToImages(blob, { targetWidthPx = 1500 } = {}) {
   const pdfjsLib = await loadPdfjs();
@@ -53,6 +57,8 @@ export async function renderPdfToImages(blob, { targetWidthPx = 1500 } = {}) {
         src: canvas.toDataURL('image/png'),
         width: canvas.width,
         height: canvas.height,
+        widthPt: base.width,
+        heightPt: base.height,
       });
       // Release the canvas buffer eagerly — a long quote renders many pages.
       canvas.width = 0;

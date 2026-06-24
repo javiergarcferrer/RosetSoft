@@ -972,18 +972,33 @@
   }
   body[data-print-pdf] .print-pdf-chrome { display: none !important; }
   body[data-print-pdf] .print-pdf-page {
+    /* width/height are injected by PrintPdfModal to the PDF's exact page box
+       (in pt) so each block is precisely one sheet. */
     max-width: none !important;
     margin: 0 !important;
     box-shadow: none !important;
+    overflow: hidden !important;
     break-after: page;
     break-inside: avoid;
   }
   body[data-print-pdf] .print-pdf-page:last-child { break-after: auto; }
-  body[data-print-pdf] .print-pdf-page img { width: 100% !important; height: auto !important; }
+  /* Fit the raster INSIDE the page box (object-fit: contain, centered) instead
+     of stretching it to the box width. The canvas dims are ceil()'d, so the
+     raster is a fraction too tall; contained within the definite-size box this
+     is an invisible letterbox rather than an overflow that would push a blank
+     sheet after every page. */
+  body[data-print-pdf] .print-pdf-page img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain;
+  }
 }
-/* NOTE: the @page { margin: 0 } that pairs with these rules is injected by
-   PrintPdfModal only while it's mounted — @page can't be scoped by selector,
-   and a global zero margin would mangle normal Cmd+P printing elsewhere. */
+/* NOTE: the @page { size … ; margin: 0 } that pairs with these rules — plus the
+   .print-pdf-page width/height that sizes each block to the same sheet — is
+   injected by PrintPdfModal only while it's mounted (@page can't be scoped by
+   selector, and a global zero margin would mangle normal Cmd+P printing
+   elsewhere). The size comes from the PDF's own page box (pt). */
 
 @layer utilities {
   /* Safe-area helpers. With viewport-fit=cover on the meta viewport these
