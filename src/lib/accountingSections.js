@@ -1,7 +1,9 @@
 // Accounting navigation model — cloned from QuickBooks Online's structure:
-//   • a short set of top-level CENTERS in the sidebar, ordered for an importer:
-//     the trade cycle first (Ventas → Importaciones → Inventario), then the
-//     money-out centers (Gastos, Banca, Nómina), then fiscal + books + config,
+//   • a set of top-level CENTERS in the sidebar, grouped into a few scannable
+//     BANDS (`band` per center) so the cluster reads as ~4 groups, not 10 flat
+//     rows: Resumen (the overview, leads) → Operación (the daily trade + money
+//     cycle) → Fiscal y libros (DGII + books + reports) → Configuración. The
+//     unified sidebar renders each band with its own header + bracket.
 //   • each center's pages render as a horizontal secondary tab strip in-page
 //     (AccountingSubnav),
 //   • a "+ Nuevo" quick-create menu (Clientes / Proveedores / … / Otros)
@@ -14,60 +16,65 @@ import {
   Percent, SlidersHorizontal, Ship,
 } from 'lucide-react';
 
-// The sales command screen leads: it's the daily front door (and the
-// /accounting landing). The DGII center isolates ALL Dominican fiscal logic
-// (607 · IT-1 · e-CF/comprobantes · 606) behind ONE label, so the rest of the
-// accounting stays jurisdiction-agnostic — moving DR→PR swaps this one center,
-// not the books. Everything below DGII is core Alcover accounting.
+// Order = on-screen order, grouped by band. The DGII center isolates ALL
+// Dominican fiscal logic (607 · IT-1 · e-CF/comprobantes · 606) behind ONE
+// label, so moving DR→PR swaps this one center, not the books.
 export const ACCOUNTING_SECTIONS = [
-  { key: 'ventas', label: 'Ventas', icon: FileText, tabs: [
-    { to: '/accounting/ventas', label: 'Ventas' },
-  ], extraMatch: ['/accounting/ligne-roset'] },
-  // DGII — the single "local logic" pane. The hub (Resumen) shows the ITBIS
-  // position and routes to 606/607/IT-1; Facturación issues the 607 + e-CF;
-  // Secuencias holds the authorized e-NCF ranges. 606 is filed from Gastos but
-  // surfaced here through the hub.
-  { key: 'dgii', label: 'DGII', icon: Percent, tabs: [
-    { to: '/accounting/impuestos', label: 'Resumen' },
-    { to: '/accounting/facturacion', label: '607 · IT-1 · e-CF' },
-    { to: '/accounting/ecf', label: 'Secuencias e-NCF' },
-  ] },
-  { key: 'panel', label: 'Panel', icon: Gauge, tabs: [
+  // ── Resumen ── the accounting home (QBO "Business overview"); leads the nav
+  //    and is where every primary entry point lands.
+  { key: 'panel', band: 'resumen', label: 'Resumen', icon: Gauge, tabs: [
     { to: '/accounting/dashboard', label: 'Resumen' },
   ] },
-  { key: 'importaciones', label: 'Importaciones', icon: Ship, tabs: [
+
+  // ── Operación ── the day-to-day trade + money cycle, in flow order: the sale,
+  //    the goods coming in, what we owe suppliers, the bank, and payroll.
+  { key: 'ventas', band: 'operacion', label: 'Ventas', icon: FileText, tabs: [
+    { to: '/accounting/ventas', label: 'Ventas' },
+  ], extraMatch: ['/accounting/ligne-roset'] },
+  { key: 'importaciones', band: 'operacion', label: 'Importaciones', icon: Ship, tabs: [
     { to: '/accounting/importaciones', label: 'Expedientes' },
     { to: '/accounting/importaciones/calculadora', label: 'Calculadora de costos' },
   ] },
-  // Inventario left Contabilidad — it's a standalone section now (see
-  // lib/access.js ADMIN_GROUP) while the accounting engine is in testing.
   // Compras y gastos — the supplier hub. Every supplier invoice (mercancía,
-  // activos, gastos) registers + lists here (filtro por tipo); el 606 (tab
-  // in-page) las declara todas; y los Proveedores viven junto a las facturas que
-  // se les registran. `extraMatch` mantiene encendido el centro en los paths
+  // activos, gastos) registers + lists here (filtro por tipo); el 606 (declared
+  // from the DGII center) reads them; los Proveedores viven junto a las facturas
+  // que se les registran. `extraMatch` mantiene encendido el centro en los paths
   // viejos que ahora renderizan la misma página.
-  { key: 'gastos', label: 'Compras y gastos', icon: Receipt, tabs: [
+  { key: 'gastos', band: 'operacion', label: 'Compras y gastos', icon: Receipt, tabs: [
     { to: '/accounting/compras-gastos', label: 'Compras y gastos' },
     { to: '/accounting/suppliers', label: 'Proveedores' },
   ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
-  { key: 'banca', label: 'Banca', icon: Landmark, tabs: [
+  { key: 'banca', band: 'operacion', label: 'Banca', icon: Landmark, tabs: [
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
     { to: '/accounting/planes-de-pago', label: 'Planes de pago' },
     { to: '/accounting/conciliacion', label: 'Conciliación' },
   ] },
-  { key: 'nomina', label: 'Nómina', icon: Wallet, tabs: [
+  { key: 'nomina', band: 'operacion', label: 'Nómina', icon: Wallet, tabs: [
     { to: '/accounting/nomina', label: 'Nómina' },
     { to: '/accounting/empleados', label: 'Empleados' },
   ] },
-  { key: 'informes', label: 'Informes', icon: BarChart3, tabs: [
-    { to: '/accounting/informes', label: 'Informes' },
-    { to: '/accounting/statements', label: 'Estados financieros' },
+
+  // ── Fiscal y libros ── the back-office / compliance band: Dominican fiscal
+  //    filings (DGII), the double-entry books, and the financial reports.
+  // The DGII hub (Resumen) shows the ITBIS position and routes to 606/607/IT-1;
+  // Facturación issues the 607 + e-CF; Secuencias holds the authorized e-NCF
+  // ranges.
+  { key: 'dgii', band: 'libros', label: 'DGII', icon: Percent, tabs: [
+    { to: '/accounting/impuestos', label: 'Resumen' },
+    { to: '/accounting/facturacion', label: '607 · IT-1 · e-CF' },
+    { to: '/accounting/ecf', label: 'Secuencias e-NCF' },
   ] },
-  { key: 'contabilidad', label: 'Contabilidad', icon: BookOpen, tabs: [
+  { key: 'contabilidad', band: 'libros', label: 'Libros', icon: BookOpen, tabs: [
     { to: '/accounting/ledger', label: 'Libro diario / mayor' },
     { to: '/accounting/periodos', label: 'Cierre de período' },
   ] },
-  { key: 'config', label: 'Configuración', icon: SlidersHorizontal, tabs: [
+  { key: 'informes', band: 'libros', label: 'Informes', icon: BarChart3, tabs: [
+    { to: '/accounting/informes', label: 'Informes' },
+    { to: '/accounting/statements', label: 'Estados financieros' },
+  ] },
+
+  // ── Configuración ── label-less footer band.
+  { key: 'config', band: 'config', label: 'Configuración contable', icon: SlidersHorizontal, tabs: [
     { to: '/accounting/settings', label: 'Configuración contable' },
   ] },
 ];
@@ -103,7 +110,18 @@ export const QUICK_CREATE = [
   ] },
 ];
 
-export const accountingSectionNav = ACCOUNTING_SECTIONS.map((s) => ({
+// The sidebar bands, in on-screen order. `null` label = a label-less band (the
+// Resumen lead carries the "Contabilidad" umbrella; the Configuración footer
+// needs no header). Each band becomes one `{ label, items }` nav group the
+// unified sidebar renders with its own eyebrow + bracket.
+const ACCOUNTING_BANDS = [
+  { key: 'resumen', label: 'Contabilidad' },
+  { key: 'operacion', label: 'Operación' },
+  { key: 'libros', label: 'Fiscal y libros' },
+  { key: 'config', label: null },
+];
+
+const sectionToNav = (s) => ({
   to: s.tabs[0].to,
   label: s.label,
   icon: s.icon,
@@ -111,7 +129,18 @@ export const accountingSectionNav = ACCOUNTING_SECTIONS.map((s) => ({
   // `extraMatch` (a page reached by a button, not a visible tab, e.g. the
   // Ligne Roset report under Ventas).
   match: [...s.tabs.map((t) => t.to), ...(s.extraMatch || [])],
-}));
+});
+
+// Flat list of every center — kept for consumers that want the ungrouped set.
+export const accountingSectionNav = ACCOUNTING_SECTIONS.map(sectionToNav);
+
+// Banded groups for the unified sidebar: one nav group per band, in band order.
+export const accountingSectionGroups = ACCOUNTING_BANDS
+  .map((b) => ({
+    label: b.label,
+    items: ACCOUNTING_SECTIONS.filter((s) => s.band === b.key).map(sectionToNav),
+  }))
+  .filter((g) => g.items.length > 0);
 
 export function sectionForPath(pathname) {
   return ACCOUNTING_SECTIONS.find((s) => s.tabs.some((t) => t.to === pathname)) || null;
