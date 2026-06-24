@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
   const payload = body.payload;
   const eNcf = String(body.eNcf || '');
   const trackIdIn = String(body.trackId || '');
-  if ((op === 'send' || op === 'approve') && (!payload || !eNcf)) return json({ ok: false, error: 'payload + eNcf required' }, 400);
+  if ((op === 'send' || op === 'approve' || op === 'sign') && (!payload || !eNcf)) return json({ ok: false, error: 'payload + eNcf required' }, 400);
   if (op === 'status' && !trackIdIn) return json({ ok: false, error: 'trackId required' }, 400);
 
   const profileId = body.profileId || 'team';
@@ -108,6 +108,26 @@ Deno.serve(async (req: Request) => {
 
     const environment = ENV_MAP[cred.environment as string] ?? ENV_MAP.cert;
     const ecf = new (dgii as any).ECF(certs, environment);
+
+    // op:'sign' — produce the signed XML LOCALLY (no DGII contact needed): the
+    // código de seguridad + QR derive from the signature itself, so this lets the
+    // dealer generate the set-de-pruebas XML and SEE the timbre on the
+    // representación impresa BEFORE (and independent of) transmitting.
+    if (op === 'sign') {
+      const transformer = new (dgii as any).Transformer();
+      const signature = new (dgii as any).Signature(certs.key, certs.cert);
+      const signedXml = signature.signXml(transformer.json2xml(payload));
+      const fechaFirma = fechaFirmaNow();
+      let securityCode = securityCodeFrom(signedXml);
+      let outXml = signedXml;
+      if (ecfType === '32' && typeof (dgii as any).convertECF32ToRFCE === 'function') {
+        const rfce = (dgii as any).convertECF32ToRFCE(signedXml);
+        securityCode = rfce?.securityCode || securityCode;
+        outXml = rfce?.xml || signedXml;
+      }
+      return json({ ok: true, signedXml: outXml, securityCode, fechaFirma });
+    }
+
     await ecf.authenticate();
 
     if (op === 'status') {

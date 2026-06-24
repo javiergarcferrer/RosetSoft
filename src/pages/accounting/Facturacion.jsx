@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus } from 'lucide-react';
+import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -28,7 +28,7 @@ import {
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import { sendEcf, checkEcfStatus } from '../../lib/ecfSend.js';
+import { sendEcf, signEcf, checkEcfStatus } from '../../lib/ecfSend.js';
 import { postSaleTx } from '../../lib/salePosting.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
@@ -132,6 +132,7 @@ export default function Facturacion() {
   const postingById = useMemo(() => new Map(postingsQ.data.map((p) => [p.id, p])), [postingsQ.data]);
   const quotesById = useMemo(() => new Map(quotesQ.data.map((q) => [q.id, q])), [quotesQ.data]);
   const [transmitting, setTransmitting] = useState(null);
+  const [generating, setGenerating] = useState(null);
   const [checking, setChecking] = useState(null);
   const [printing, setPrinting] = useState(null);
 
@@ -149,7 +150,7 @@ export default function Facturacion() {
     // sale (no e-NCF) prints fine without it.
     const isEcf = /^E\d{2}/.test(p.ncf || '');
     if (isEcf && !p.securityCode) {
-      setErr(`Transmite ${p.ncf} a la DGII antes de imprimir — la representación impresa requiere el timbre (QR).`);
+      setErr(`Genera el XML (o transmite) ${p.ncf} antes de imprimir — el timbre (QR) requiere la firma digital.`);
       return;
     }
     setPrinting(rowId);
@@ -236,6 +237,73 @@ export default function Facturacion() {
     if (p) await transmitPosting(p);
   }
 
+  // Signing pre-flight, shared by Generar XML + Transmitir: only a well-formed
+  // e-NCF can be signed (a manual NCF would burn a DGII rejection), and signing
+  // needs the cert + the emisor RNC. Returns an error message, or '' if ready.
+  function ecfPreflight(p) {
+    if (!parseENcf(p.ncf)) return `${p.ncf} no es un e-NCF — sólo los comprobantes electrónicos se firman.`;
+    if (!settings?.ecfCertUploadedAt) return 'Sube el certificado digital (.p12) en Configuración contable antes de firmar e-CF.';
+    if (!cleanRnc(settings?.companyRnc)) return 'Define el RNC del emisor en Configuración contable antes de firmar e-CF.';
+    return '';
+  }
+
+  // The e-CF payload for one posting — the SAME shape whether we sign to preview
+  // or sign to transmit, so the printed/downloaded doc can never disagree with
+  // the one sent. A nota de crédito (E34) carries the InformacionReferencia and
+  // transmits as contado; a sale carries its TipoPago (+ fecha límite if crédito).
+  function buildPostingPayload(p) {
+    const customer = p.customerId ? customersById.get(p.customerId) : null;
+    const isNota = /^E34/.test(p.ncf || '');
+    const original = isNota && p.modifiesPostingId ? postingById.get(p.modifiesPostingId) : null;
+    const tipoPago = isNota ? 1 : saleTipoPago(p.depositApplied, p.total);
+    return buildEcfPayload({
+      ecfType: p.ecfType || saleEcfType(!!p.rnc),
+      eNcf: p.ncf,
+      sequenceExpiresAt: p.ecfExpiresAt || null,
+      emisor: {
+        rnc: cleanRnc(settings?.companyRnc), name: settings?.companyName || '',
+        address: settings?.companyAddress || '',
+      },
+      comprador: p.rnc ? { rnc: p.rnc, name: customer?.name } : null,
+      items: [{ name: `${isNota ? 'Nota de crédito' : 'Venta'} ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
+      gravado: p.base, itbis: p.itbis, total: p.total,
+      itbisRate: config.itbisRate, fechaEmision: p.postedAt,
+      tipoPago,
+      fechaLimitePago: tipoPago === 2 ? saleDueDate(p.postedAt) : null,
+      referencia: isNota ? {
+        ncfModificado: p.modifiesNcf,
+        fechaNcfModificado: original?.postedAt ?? null,
+        codigoModificacion: p.codigoModificacion ?? 1,
+      } : null,
+    });
+  }
+
+  // Generate the SIGNED e-CF XML WITHOUT transmitting. The signature is produced
+  // locally from the .p12, so this works before the DGII link is live — it's the
+  // first step of the set de pruebas. Its código de seguridad + fecha de firma
+  // are exactly what put the timbre (QR) on the printed factura, so after this
+  // the representación impresa shows the QR. The XML downloads for validation.
+  async function generateXml(p) {
+    if (!p || !p.ncf) return;
+    if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') return;
+    setErr('');
+    const pf = ecfPreflight(p);
+    if (pf) { setErr(pf); return; }
+    setGenerating(p.id);
+    try {
+      const data = await signEcf({ payload: buildPostingPayload(p), eNcf: p.ncf, profileId: scope });
+      await db.salesPostings.update(p.id, {
+        securityCode: data.securityCode || '', fechaFirma: data.fechaFirma || '',
+      });
+      downloadText(`${cleanRnc(settings?.companyRnc)}${p.ncf}.xml`, data.signedXml || '');
+      invalidate();
+    } catch (e) {
+      setErr(userMessageFor(e));
+    } finally {
+      setGenerating(null);
+    }
+  }
+
   // Transmit one posting's e-CF to the DGII. Takes the posting OBJECT (not a
   // row id) so postSale can auto-transmit the sale it just booked before the
   // live query refetches; the manual Transmitir button stays the retry path.
@@ -246,52 +314,11 @@ export default function Facturacion() {
     // not yet attempted or previously failed) is the legitimate retry path.
     if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') return;
     setErr('');
-    // Pre-flight: only a well-formed e-NCF can be signed (a manual NCF would
-    // burn a DGII rejection), and signing needs the cert + the emisor RNC.
-    if (!parseENcf(p.ncf)) {
-      setErr(`${p.ncf} no es un e-NCF — sólo los comprobantes electrónicos se transmiten a la DGII.`);
-      return;
-    }
-    if (!settings?.ecfCertUploadedAt) {
-      setErr('Sube el certificado digital (.p12) en Configuración contable antes de transmitir e-CF.');
-      return;
-    }
-    if (!cleanRnc(settings?.companyRnc)) {
-      setErr('Define el RNC del emisor en Configuración contable antes de transmitir e-CF.');
-      return;
-    }
+    const pf = ecfPreflight(p);
+    if (pf) { setErr(pf); return; }
     setTransmitting(p.id);
     try {
-      const customer = p.customerId ? customersById.get(p.customerId) : null;
-      // A nota de crédito (E34) modifies a prior sale: it carries the
-      // InformacionReferencia pointing at the modified e-NCF and transmits as
-      // contado (no payment terms of its own).
-      const isNota = /^E34/.test(p.ncf || '');
-      const original = isNota && p.modifiesPostingId ? postingById.get(p.modifiesPostingId) : null;
-      // Contado if the deposit covered the sale; crédito if a balance remains —
-      // a crédito carries the DGII-required fecha límite de pago (net-30).
-      const tipoPago = isNota ? 1 : saleTipoPago(p.depositApplied, p.total);
-      const payload = buildEcfPayload({
-        ecfType: p.ecfType || saleEcfType(!!p.rnc),
-        eNcf: p.ncf,
-        sequenceExpiresAt: p.ecfExpiresAt || null,
-        emisor: {
-          rnc: cleanRnc(settings?.companyRnc), name: settings?.companyName || '',
-          address: settings?.companyAddress || '',
-        },
-        comprador: p.rnc ? { rnc: p.rnc, name: customer?.name } : null,
-        items: [{ name: `${isNota ? 'Nota de crédito' : 'Venta'} ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
-        gravado: p.base, itbis: p.itbis, total: p.total,
-        itbisRate: config.itbisRate, fechaEmision: p.postedAt,
-        tipoPago,
-        fechaLimitePago: tipoPago === 2 ? saleDueDate(p.postedAt) : null,
-        referencia: isNota ? {
-          ncfModificado: p.modifiesNcf,
-          fechaNcfModificado: original?.postedAt ?? null,
-          codigoModificacion: p.codigoModificacion ?? 1,
-        } : null,
-      });
-      const data = await sendEcf({ payload, eNcf: p.ncf, profileId: scope });
+      const data = await sendEcf({ payload: buildPostingPayload(p), eNcf: p.ncf, profileId: scope });
       await db.salesPostings.update(p.id, {
         trackId: data.trackId || '', securityCode: data.securityCode || '',
         fechaFirma: data.fechaFirma || '', ecfStatus: data.status || 'sent',
@@ -570,10 +597,17 @@ export default function Facturacion() {
         ) : !isEcf ? (
           <span className="text-xs text-ink-400">—</span>
         ) : (
-          <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
-            className="btn-ghost text-xs whitespace-nowrap">
-            {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
-          </button>
+          <span className="inline-flex items-center gap-2">
+            <button type="button" onClick={() => generateXml(p)} disabled={generating === r.id}
+              title="Firmar y descargar el XML (sin transmitir) — habilita el QR en la factura"
+              className="btn-ghost text-xs whitespace-nowrap">
+              {generating === r.id ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} Generar XML
+            </button>
+            <button type="button" onClick={() => transmit(r.id)} disabled={transmitting === r.id}
+              className="btn-ghost text-xs whitespace-nowrap">
+              {transmitting === r.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Transmitir
+            </button>
+          </span>
         )}
         <button type="button" onClick={() => printInvoice(r.id)} disabled={printing === r.id}
           title="Imprimir factura" className="btn-ghost text-xs whitespace-nowrap">

@@ -17,6 +17,22 @@ export async function sendEcf({ payload, eNcf, profileId }) {
   return data;
 }
 
+/**
+ * Sign one e-CF WITHOUT transmitting — local signature only, so it works before
+ * the DGII connection is live. Resolves to { signedXml, securityCode, fechaFirma };
+ * the security code + fecha de firma are what put the timbre (QR) on the printed
+ * factura, and the signed XML is the set-de-pruebas deliverable.
+ */
+export async function signEcf({ payload, eNcf, profileId }) {
+  const { data, error } = await supabase.functions.invoke('ecf-send', {
+    body: { op: 'sign', payload, eNcf, profileId },
+  });
+  if (error || !data?.ok) {
+    throw new Error(data?.error || error?.message || 'Error firmando el e-CF.');
+  }
+  return data;
+}
+
 /** Ask the DGII what became of a transmitted e-CF. Resolves to { estado }. */
 export async function checkEcfStatus({ trackId, profileId }) {
   const { data, error } = await supabase.functions.invoke('ecf-send', {
