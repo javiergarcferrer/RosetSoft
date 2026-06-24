@@ -102,53 +102,6 @@ const LINE_DEFAULT = { qty: true, fob: true, cif: true, taxes: true, landedTotal
 const LINE_COLS_KEY = 'rs.importacion.detail.lines.cols.v1';
 
 /**
- * Cost-sheet columns (Shopify-style customizable list). Read-only list of the
- * expediente's extra costs — `concept` is the fixed anchor; the rest toggle.
- * `cell`/`foot` are pure over the per-cost `ctx` (or the totals bag).
- */
-const COST_COLUMNS = [
-  {
-    key: 'concept', label: 'Concepto', canHide: false,
-    cell: ({ c }) => c.label,
-  },
-  {
-    key: 'supplier', label: 'Proveedor',
-    tdClass: 'min-w-0',
-    cell: ({ c }) => c.supplierName || '—',
-  },
-  {
-    key: 'ncf', label: 'NCF',
-    thClass: 'whitespace-nowrap', tdClass: 'font-mono text-xs whitespace-nowrap',
-    cell: ({ c }) => c.ncf || '—',
-  },
-  {
-    key: 'payment', label: 'Pago',
-    thClass: 'whitespace-nowrap', tdClass: 'text-ink-500 whitespace-nowrap',
-    cell: ({ c }) => c.payment,
-  },
-  {
-    key: 'amount', label: 'Monto',
-    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
-    cell: ({ c }) => formatDop(c.amount),
-    footClass: 'text-right tabular-nums whitespace-nowrap', foot: ({ costTotals }) => formatDop(costTotals.gross),
-  },
-  {
-    key: 'itbis', label: 'ITBIS',
-    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
-    cell: ({ c }) => formatDop(c.itbis),
-    footClass: 'text-right tabular-nums whitespace-nowrap', foot: ({ costTotals }) => formatDop(costTotals.itbis),
-  },
-  {
-    key: 'net', label: 'Neto al costo',
-    thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
-    cell: ({ c }) => formatDop(c.net),
-    footClass: 'text-right tabular-nums whitespace-nowrap', foot: ({ costTotals }) => formatDop(costTotals.net),
-  },
-];
-const COST_DEFAULT = { supplier: true, ncf: true, payment: true, amount: true, itbis: true, net: true };
-const COST_COLS_KEY = 'rs.importacion.detail.costs.cols.v1';
-
-/**
  * Detalle de un expediente de importación — the full drill-down of one saved
  * customs file: meta strip, landed-cost KPI band, every embarque with its
  * facturas and per-line cascade (FOB → CIF → impuestos → costo en destino →
@@ -193,32 +146,27 @@ export default function ImportacionDetail() {
     [jLinesQ.data],
   );
 
-  // Compras y gastos the team linked to this expediente. A reference list only:
-  // each one carries its own asiento (+ kardex for mercancía); this just makes
-  // the link visible from the file it belongs to. Reuses the unified merge VM.
+  // The ONE costs section: the expediente's own cost-sheet rows (capitalized
+  // into landed cost) AND the compras/gastos the team linked to this file, in a
+  // single list. Reuses the unified merge VM — passing the expediente folds its
+  // cost sheet in as `expediente-cost` rows alongside the linked documents.
   const linkedCompras = useMemo(() => resolvePurchasesExpenses({
     expenses: linkedExpensesQ.data, purchases: linkedPurchasesQ.data,
+    expedientes: expQ.data ? [expQ.data] : [],
     suppliers: suppliersQ.data, accounts: accountsQ.data,
-  }), [linkedExpensesQ.data, linkedPurchasesQ.data, suppliersQ.data, accountsQ.data]);
+  }), [linkedExpensesQ.data, linkedPurchasesQ.data, expQ.data, suppliersQ.data, accountsQ.data]);
 
   // Customizable columns (Shopify "Columnas") — persisted per browser. The
-  // per-factura líneas tables all share ONE choice (one hook); the cost sheet
-  // has its own. Each renders `cols` (anchor + toggled-on, in order) and feeds
-  // the full set to its <ColumnsMenu>.
+  // per-factura líneas tables all share ONE choice (one hook). Each renders
+  // `cols` (anchor + toggled-on, in order) and feeds the full set to <ColumnsMenu>.
   const lineCols = useColumns(LINE_COLUMNS, LINE_DEFAULT, LINE_COLS_KEY);
-  const costCols = useColumns(COST_COLUMNS, COST_DEFAULT, COST_COLS_KEY);
   // Drag-to-resize widths (persisted). The per-factura líneas tables share ONE
-  // widths state (one hook), same as they share one columns choice; the cost
-  // sheet has its own. tableRef points at the last-rendered líneas instance —
-  // fine, every instance reads the same widths/style/thProps.
+  // widths state (one hook). tableRef points at the last-rendered líneas
+  // instance — fine, every instance reads the same widths/style/thProps.
   const {
     tableRef: lineTableRef, tableStyle: lineTableStyle, thProps: lineThProps,
     ResizeHandle: LineResizeHandle, reset: resetLineWidths,
   } = useColumnWidths(lineCols.cols, 'rs.importacion.detail.lines.widths.v1');
-  const {
-    tableRef: costTableRef, tableStyle: costTableStyle, thProps: costThProps,
-    ResizeHandle: CostResizeHandle, reset: resetCostWidths,
-  } = useColumnWidths(costCols.cols, 'rs.importacion.detail.costs.widths.v1');
 
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState('');
@@ -242,7 +190,7 @@ export default function ImportacionDetail() {
     );
   }
 
-  const { meta, totals, embarques, costs, costTotals } = detail;
+  const { meta, totals, embarques } = detail;
   const isDraft = expQ.data.status === 'draft';
 
   /** Seed a new expediente with this one's structure — suppliers, artículos and
@@ -410,94 +358,63 @@ export default function ImportacionDetail() {
         ))}
       </div>
 
-      {/* Cost sheet */}
+      {/* Costos del expediente — ONE section: the expediente's own cost-sheet
+          rows (capitalized into landed cost) AND the linked compras/gastos, in a
+          single list. A cost row that's a standalone compra/gasto opens its own
+          document; the expediente's inline cost rows are read-only here. */}
       <div className="card overflow-hidden mt-4">
-        <div className="card-header"><h2>Costos del expediente</h2></div>
-        {costs.length === 0 ? (
-          <p className="text-xs text-ink-400 px-3 py-3">Sin costos adicionales — el costo en destino es CIF + impuestos capitalizables.</p>
+        <div className="card-header">
+          <h2 className="inline-flex items-center gap-1.5"><ShoppingCart size={14} /> Costos del expediente</h2>
+        </div>
+        {linkedCompras.count === 0 ? (
+          <p className="text-xs text-ink-400 px-3 py-3">Sin costos adicionales — el costo en destino es CIF + impuestos capitalizables. Registra un gasto o compra y enlázalo a este expediente para que aparezca aquí.</p>
         ) : (
-          <>
-          <div className="hidden md:flex justify-end px-3 pt-3">
-            <ColumnsMenu columns={costCols.columns} visible={costCols.visible} onChange={costCols.setVisible} onReset={() => { costCols.reset(); resetCostWidths(); }} />
-          </div>
           <div className="overflow-x-auto">
-          <table ref={costTableRef} style={costTableStyle} className="table min-w-[560px]">
-            <thead>
-              <tr>
-                {costCols.cols.map((col) => (
-                  <th key={col.key} className={col.thClass || ''} {...costThProps(col.key)}>{col.label}{CostResizeHandle(col.key)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {costs.map((c) => {
-                const ctx = { c };
-                return (
-                  <tr key={c.id}>
-                    {costCols.cols.map((col) => (
-                      <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-ink-200 font-semibold">
-                {costCols.cols.map((col, i) => (
-                  i === 0
-                    ? <td key={col.key} className={col.footClass || ''}>{costs.length} costo{costs.length === 1 ? '' : 's'}</td>
-                    : <td key={col.key} className={col.footClass || ''}>{col.foot ? col.foot({ costTotals }) : null}</td>
-                ))}
-              </tr>
-            </tfoot>
-          </table>
-          </div>
-          </>
-        )}
-      </div>
-
-      {/* Compras y gastos enlazados — invoices the team tied to this expediente */}
-      {linkedCompras.count > 0 && (
-        <div className="card overflow-hidden mt-4">
-          <div className="card-header">
-            <h2 className="inline-flex items-center gap-1.5"><ShoppingCart size={14} /> Compras y gastos enlazados</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="table min-w-[620px]">
+            <table className="table min-w-[680px]">
               <thead>
                 <tr>
                   <th className="whitespace-nowrap">Fecha</th>
                   <th>Proveedor</th>
-                  <th className="whitespace-nowrap">Tipo</th>
-                  <th>Destino</th>
+                  <th>Concepto</th>
                   <th className="whitespace-nowrap">NCF</th>
+                  <th className="text-right whitespace-nowrap">Neto al costo</th>
+                  <th className="text-right whitespace-nowrap">ITBIS</th>
                   <th className="text-right whitespace-nowrap">Total</th>
                 </tr>
               </thead>
               <tbody>
-                {linkedCompras.rows.map((c) => (
-                  <tr key={c.id}
-                    onClick={() => navigate(c.source === 'expediente-cost' ? `/accounting/importaciones/${c.expedienteId}` : `/accounting/compras-gastos/${c.id}`)}
-                    className="cursor-pointer hover:bg-ink-50 transition-colors">
-                    <td className="text-ink-500 whitespace-nowrap">{formatDate(c.date)}</td>
-                    <td className="min-w-0">{c.supplierName || '—'}</td>
-                    <td className="text-ink-600 whitespace-nowrap">{NATURE_LABEL[c.nature] || c.nature}</td>
-                    <td className="text-ink-600 min-w-0">{c.destination}</td>
-                    <td className="tabular-nums text-ink-500 whitespace-nowrap">{c.ncf || '—'}</td>
-                    <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(c.total)}</td>
-                  </tr>
-                ))}
+                {linkedCompras.rows.map((c) => {
+                  const own = c.source === 'expediente-cost';
+                  return (
+                    <tr key={c.id}
+                      onClick={() => { if (!own) navigate(`/accounting/compras-gastos/${c.id}`); }}
+                      className={own ? '' : 'cursor-pointer hover:bg-ink-50 transition-colors'}>
+                      <td className="text-ink-500 whitespace-nowrap">{formatDate(c.date)}</td>
+                      <td className="min-w-0">{c.supplierName || '—'}</td>
+                      <td className="text-ink-600 min-w-0">
+                        {c.destination}
+                        <span className="ml-1.5 text-[11px] text-ink-400">{own ? 'expediente' : (NATURE_LABEL[c.nature] || c.nature)}</span>
+                      </td>
+                      <td className="tabular-nums text-ink-500 whitespace-nowrap">{c.ncf || '—'}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{formatDop(c.base)}</td>
+                      <td className="text-right tabular-nums text-ink-500 whitespace-nowrap">{formatDop(c.itbis)}</td>
+                      <td className="text-right tabular-nums font-medium whitespace-nowrap">{formatDop(c.total)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-200 font-semibold">
-                  <td colSpan={5}>{linkedCompras.count} documento{linkedCompras.count === 1 ? '' : 's'}</td>
+                  <td colSpan={4}>{linkedCompras.count} costo{linkedCompras.count === 1 ? '' : 's'}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(linkedCompras.totals.base)}</td>
+                  <td className="text-right tabular-nums whitespace-nowrap">{formatDop(linkedCompras.totals.itbis)}</td>
                   <td className="text-right tabular-nums whitespace-nowrap">{formatDop(linkedCompras.totals.total)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Documentos en Google Drive — one folder per importation */}
       <DriveDocumentsCard

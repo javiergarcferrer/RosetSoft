@@ -54,9 +54,18 @@ export interface RosetInvoiceLine {
 }
 
 export interface ParsedInvoice {
+  /** EVERY article line on the invoice — seats, tables, vases, lamps, rugs,
+   *  cushions, modular parts. This is what the expediente imports: an expo-floor
+   *  invoice is ~⅔ accessories, so importing only `furniture` silently dropped
+   *  most of the order. */
   lines: RosetInvoiceLine[];
-  /** Convenience: lines.filter((l) => l.isFurniture). */
+  /** Convenience subset: lines.filter((l) => l.isFurniture) (seats/tables with
+   *  an 8-digit reference). Kept for callers that want only the big furniture. */
   furniture: RosetInvoiceLine[];
+  /** The invoice grand total in USD ("Importe … 112.172,58"), 0 if not found.
+   *  Σ(qty × unitCost) over `lines` reconciles to this — the import's veracity
+   *  check (did we capture every line?). */
+  invoiceTotal: number;
 }
 
 /** Parse a European money string ("1.488,40", "567,29") to a number. */
@@ -68,6 +77,9 @@ function money(s: string): number {
 }
 
 const ORIGIN_RE = /^[A-Z]{2}(\/[A-Z]{2})?$/; // EU/FR, IN, CH, VN, ID …
+const MONEY_RE = /^\d[\d.]*,\d{2}$/; // European money token: 1.488,40 · 567,29
+// The grand-total row ("Importe … CIP SANTO DOMINGO 112.172,58") on the last page.
+const TOTAL_RE = /\bImporte\b/i;
 // Repeating column-header rows (FR/DE/EN/ES/IT) at the top of every page.
 const HEADER_RE = /Désignation|Bezeichnung|Descrizione|Descripcion|Code NDP|Prix unitaire|Stückpreis|Precio unitario|Prezzo|Bestell|Ord\. No|Articolo/i;
 
@@ -101,12 +113,22 @@ export function parseRosetInvoice(items: readonly PdfTextItem[]): ParsedInvoice 
   let order = { orderNo: '', hsCode: '' };
   let last: RosetInvoiceLine | null = null;
   let curPage = -1;
+  let invoiceTotal = 0;
 
   for (const row of toRows(items)) {
     const its = row.slice().sort((a, b) => a.x - b.x);
     const page = its[0]?.page ?? 0;
     if (page !== curPage) { last = null; curPage = page; } // no continuation across a page break
-    if (HEADER_RE.test(its.map((i) => i.str).join(' '))) continue; // skip repeating column headers
+    const joined = its.map((i) => i.str).join(' ');
+    if (HEADER_RE.test(joined)) continue; // skip repeating column headers
+    // Grand-total row: capture the amount and DON'T let it bleed into the last
+    // article's description (it sits in the description x-band).
+    if (TOTAL_RE.test(joined)) {
+      const amt = its.map((i) => i.str).filter((s) => MONEY_RE.test(s)).map(money);
+      if (amt.length) invoiceTotal = Math.max(invoiceTotal, ...amt);
+      last = null;
+      continue;
+    }
     const band = (lo: number, hi: number) => its.filter((i) => i.x >= lo && i.x < hi);
 
     const ordCell = band(10, 35).find((i) => /^\d{5,6}$/.test(i.str));
@@ -154,5 +176,5 @@ export function parseRosetInvoice(items: readonly PdfTextItem[]): ParsedInvoice 
     }
   }
 
-  return { lines, furniture: lines.filter((l) => l.isFurniture) };
+  return { lines, furniture: lines.filter((l) => l.isFurniture), invoiceTotal };
 }

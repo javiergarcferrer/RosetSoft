@@ -89,6 +89,31 @@ test('Mini Togo fabric = ALCANTARA GOYA RED Y396', () => {
   assert.equal(mini.unitCostUsd, 567.29);
 });
 
+test('grand-total row is captured as invoiceTotal, not appended to the last piece', () => {
+  const fixture = [
+    ...FIXTURE,
+    // the "Importe CIP SANTO DOMINGO 112.172,58" row: label in the desc band,
+    // amount in the group-amount band — must not pollute the last article.
+    it(305.6, 900, 'Importe'), it(360, 900, 'CIP'), it(400, 900, 'SANTO'), it(509.8, 900, '112.172,58'),
+  ];
+  const { lines, invoiceTotal } = parseRosetInvoice(fixture);
+  assert.equal(invoiceTotal, 112172.58);
+  // the Mini Togo (last article) keeps its own clean description
+  const mini = lines.find((l) => l.reference === '14100100');
+  assert.equal(mini.description, 'MINI TOGO ALCANTARA GOYA RED Y396');
+});
+
+test('every article line is parsed — accessories included, not just furniture', () => {
+  const { lines, furniture } = parseRosetInvoice(FIXTURE);
+  // 6 article lines total; only 4 are furniture (the 2 vases are accessories)
+  assert.equal(lines.length, 6);
+  assert.equal(furniture.length, 4);
+  // Σ(qty × unitCost) over ALL lines reconciles the group totals (4197.91 +
+  // 289.45 + 1701.87 → but fixture has partial groups; assert the vases are present)
+  assert.ok(lines.some((l) => l.reference === '11230082' && !l.isFurniture));
+  assert.ok(lines.some((l) => l.reference === '11230083' && !l.isFurniture));
+});
+
 test('page-break: repeating column headers are skipped, never bleed into a piece', () => {
   const P = (x, y, str, page) => ({ x, y, str, page });
   const items = [

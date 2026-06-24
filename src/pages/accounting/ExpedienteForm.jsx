@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Check, Plus, Trash2, Upload, Ship, Receipt, History, Sparkles, Save } from 'lucide-react';
+import { Loader2, Check, Plus, Trash2, Upload, Ship, Receipt, History, Sparkles, Save, Search, Package } from 'lucide-react';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { formatDop } from '../../lib/format.js';
 import { syncShopify } from '../../lib/shopifySync.js';
@@ -113,7 +113,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
   const [costs, setCosts] = useState(seed.costs?.length ? seed.costs : []);
   const [seededFrom, setSeededFrom] = useState(seed.kind);
   const [parsing, setParsing] = useState('');
-  const [pdfNote, setPdfNote] = useState(null); // { fid, matched, toCreate }
+  const [pdfNote, setPdfNote] = useState(null); // { fid, count, matched, toCreate, importedUsd, invoiceTotal }
+  const [lineQuery, setLineQuery] = useState(''); // product search across the whole expediente
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -203,7 +204,10 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     try {
       const parsed = await parseInvoicePdf(file);
       const rate = Number(head.rate) || 0;
-      const seeded = parsed.furniture.map((l) => {
+      // Import EVERY article line — seats, tables, vases, lamps, rugs, cushions,
+      // modular parts — not just the furniture subset (an expo-floor invoice is
+      // ~⅔ accessories, so furniture-only dropped most of the order).
+      const seeded = parsed.lines.map((l) => {
         const match = items.find((i) => (i.sku || '').trim().startsWith(l.reference));
         return {
           id: newId(), itemId: match?.id || '', name: match?.name || l.description, reference: l.reference,
@@ -211,8 +215,9 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           fabric: l.fabric || '', // the material → its grade → the catalog price on save
         };
       });
-      if (!seeded.length) { setErr('No se encontraron muebles en el PDF.'); return; }
-      mapLines(eid, fid, (ls) => [...ls.filter((l) => l.name || l.fob !== ''), ...seeded]);
+      if (!seeded.length) { setErr('No se encontraron líneas de productos en el PDF.'); return; }
+      // Re-importing REPLACES the factura's lines (redo, not pile on top).
+      mapLines(eid, fid, () => seeded);
       // Keep the PDF to archive into the expediente's Drive folder on save. If
       // we're editing a draft that already has a folder, upload it now.
       facturaFilesRef.current.set(fid, file);
@@ -222,7 +227,10 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
           .catch(() => { /* will retry on save */ });
       }
       const matched = seeded.filter((l) => l.itemId).length;
-      setPdfNote({ fid, matched, toCreate: seeded.length - matched });
+      // Veracity: Σ(qty × unit cost) over every imported line vs the invoice's
+      // own grand total ("Importe …") — proves no line was dropped.
+      const importedUsd = r2(parsed.lines.reduce((s, l) => s + l.unitCostUsd * l.quantity, 0));
+      setPdfNote({ fid, count: seeded.length, matched, toCreate: seeded.length - matched, importedUsd, invoiceTotal: r2(parsed.invoiceTotal) });
     } catch (e) {
       setErr(userMessageFor(e));
     } finally {
@@ -253,6 +261,22 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
     () => embs.reduce((s, e) => s + e.facturas.reduce((a, f) => a + f.lines.filter((l) => !l.itemId && (l.name || '').trim() && Number(l.qty) > 0).length, 0), 0),
     [embs],
   );
+
+  // ── line counter + product search (verify the PDF import is complete) ──────
+  // Flatten every real product line across embarques/facturas with enough
+  // context to point the user at it (which embarque/factura it lives in).
+  const allLines = useMemo(() => embs.flatMap((e, ei) => e.facturas.flatMap((f, fi) => f.lines
+    .filter((l) => (l.name || '').trim() || l.fob !== '' || Number(l.qty) > 0)
+    .map((l) => ({ ...l, embIndex: ei + 1, facIndex: fi + 1 })))), [embs]);
+  const lineSummary = useMemo(() => allLines.reduce(
+    (s, l) => ({ count: s.count + 1, qty: s.qty + (Number(l.qty) || 0), fob: s.fob + (Number(l.fob) || 0) }),
+    { count: 0, qty: 0, fob: 0 },
+  ), [allLines]);
+  const lineMatches = useMemo(() => {
+    const q = lineQuery.trim().toLowerCase();
+    if (!q) return [];
+    return allLines.filter((l) => `${l.name || ''} ${l.reference || ''}`.toLowerCase().includes(q));
+  }, [allLines, lineQuery]);
 
   function setCost(id, patch) { setCosts((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c))); }
   function addCost() { setCosts((cs) => [...cs, { id: newId(), concept: 'agenciamiento', supplierId: '', ncf: '', amount: '', itbis: '', paymentMethod: 'bank' }]); }
@@ -487,6 +511,48 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         <Stat label="Costo en destino" value={formatDop(t.landed)} accent="text-emerald-700" />
       </div>
 
+      {/* Line counter + product search — verify the PDF import captured every
+          product, and find any piece quickly across all embarques/facturas. */}
+      <div className="mt-4 rounded-xl border border-ink-200 bg-surface p-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="text-sm text-ink-700 inline-flex items-center gap-1.5 whitespace-nowrap">
+            <Package size={15} className="text-ink-400" />
+            <b className="tabular-nums">{lineSummary.count}</b> línea{lineSummary.count === 1 ? '' : 's'}
+            <span className="text-ink-400">·</span>
+            <b className="tabular-nums">{lineSummary.qty}</b> uds
+            <span className="text-ink-400">·</span>
+            FOB <b className="tabular-nums">{formatDop(lineSummary.fob)}</b>
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+            <input
+              value={lineQuery}
+              onChange={(e) => setLineQuery(e.target.value)}
+              placeholder="Buscar producto importado (nombre o referencia)…"
+              className="input w-full pl-8"
+            />
+          </div>
+        </div>
+        {lineQuery.trim() && (
+          <div className="mt-2 text-xs">
+            <div className="text-ink-500 mb-1"><b className="tabular-nums">{lineMatches.length}</b> coincidencia{lineMatches.length === 1 ? '' : 's'}</div>
+            {lineMatches.length > 0 && (
+              <ul className="max-h-48 overflow-y-auto divide-y divide-ink-50 rounded-lg border border-ink-100">
+                {lineMatches.slice(0, 40).map((l) => (
+                  <li key={l.id} className="flex items-center gap-2 px-2.5 py-1.5">
+                    <span className="font-mono text-[11px] text-ink-400 w-20 shrink-0">{l.reference || '—'}</span>
+                    <span className="min-w-0 flex-1 truncate text-ink-700">{l.name || '—'}</span>
+                    <span className="text-ink-400 shrink-0 tabular-nums">×{l.qty || 0}</span>
+                    <span className="text-ink-500 shrink-0 tabular-nums w-24 text-right">{l.fob !== '' ? formatDop(Number(l.fob)) : '—'}</span>
+                    <span className="text-ink-300 shrink-0 text-[11px] whitespace-nowrap">E{l.embIndex}·F{l.facIndex}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Embarques → facturas → líneas */}
       <div className="mt-4 space-y-3">
         {embs.map((emb, ei) => (
@@ -528,8 +594,13 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                   </div>
                   {pdfNote?.fid === fac.id && (
                     <p className="text-xs text-ink-500 mb-1.5">
-                      PDF importado: <b>{pdfNote.matched + pdfNote.toCreate}</b> líneas — {pdfNote.matched} en inventario
+                      PDF importado (reemplazó la factura): <b>{pdfNote.count}</b> líneas — {pdfNote.matched} en inventario
                       {pdfNote.toCreate > 0 && <span className="text-amber-700">, {pdfNote.toCreate} se crearán al guardar</span>}.
+                      {pdfNote.invoiceTotal > 0 && (
+                        Math.abs(pdfNote.importedUsd - pdfNote.invoiceTotal) < 1
+                          ? <span className="text-emerald-700 inline-flex items-center gap-1"> <Check size={12} /> Cuadra con la factura (US${pdfNote.invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}).</span>
+                          : <span className="text-amber-700"> Importado US${pdfNote.importedUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })} de US${pdfNote.invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} — revisa, faltan líneas.</span>
+                      )}
                       {driveReady && <span className="text-emerald-700"> La factura se guardará en Google Drive.</span>}
                     </p>
                   )}
