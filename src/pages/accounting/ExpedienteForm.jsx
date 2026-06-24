@@ -320,9 +320,13 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
         paymentMethod: doc?.paymentMethod || 'bank',
       };
       const nextCosts = [...costs, newCost];
+      // Persist the cost onto the expediente FIRST, then reverse + delete the
+      // standalone doc. If the reverse/delete fails we're left with a visible
+      // double count (recoverable) instead of a deleted doc whose cost never
+      // landed (silent loss).
+      await db.importExpedientes.update(expedienteId, { costs: nextCosts, updatedAt: Date.now() });
       await reverseComprasGastoPosting({ id: row.id, source: row.source, journalEntryId: doc?.journalEntryId });
       if (row.source === 'purchase') await db.purchases.delete(row.id); else await db.expenses.delete(row.id);
-      await db.importExpedientes.update(expedienteId, { costs: nextCosts, updatedAt: Date.now() });
       setCosts(nextCosts);
       setImported((n) => n + 1);
     } catch (e) { setErr(userMessageFor(e)); }

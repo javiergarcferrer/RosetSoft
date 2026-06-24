@@ -93,12 +93,7 @@ export default function ComprasGastoEditor() {
   }, [id, dupId, purchaseQ.data, expenseQ.data]);
 
   const initialNature = NATURES.some((n) => n.key === params.get('tipo')) ? params.get('tipo') : 'gasto';
-  // ?expediente=<id> pre-links the new doc to an import expediente (the "registrar
-  // gasto/compra enlazado" shortcut from the expediente screen).
-  const initial = {
-    description: params.get('desc') || '', base: params.get('amount') || '', itbis: params.get('itbis') ?? '',
-    expedienteId: params.get('expediente') || '',
-  };
+  const initial = { description: params.get('desc') || '', base: params.get('amount') || '', itbis: params.get('itbis') ?? '' };
   const backTo = id ? `/accounting/compras-gastos/${id}` : '/accounting/compras-gastos';
   const title = id
     ? (editDoc ? `Editar ${NATURE_LABEL[editDoc.nature]?.toLowerCase() || 'documento'}${editDoc.number != null ? ` #${editDoc.number}` : ''}` : 'Editar')
@@ -139,7 +134,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     retItbis: String(pf.retentionItbis ?? ''), paymentMethod: pf.paymentMethod || 'bank',
   } : {
     nature: initialNature || 'gasto', supplierId: '', date: isoDate(Date.now()), ncf: '', ncfType: '',
-    accountCode: '', expedienteId: initial?.expedienteId || '', description: initial?.description || '', tipo606: '',
+    accountCode: '', expedienteId: '', description: initial?.description || '', tipo606: '',
     base: initial?.base || '', itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
   }));
   const [lines, setLines] = useState(() => (pf?.nature === 'mercancia' && pf.lines?.length
