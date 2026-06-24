@@ -202,6 +202,23 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     }));
   }
   function onBase(v) { const s = suppliersById.get(form.supplierId); setForm((f) => ({ ...f, base: v, ...recompute(v, s) })); }
+  // Create a proveedor inline (from the picker's free text) so a new vendor can
+  // be added without leaving the registro — the RNC/details are completed later
+  // in Proveedores. Selects it immediately.
+  async function createSupplier(name) {
+    const clean = (name || '').trim();
+    if (!clean) return;
+    try {
+      const id = newId();
+      await assignSequenceNumber({
+        table: 'suppliers', profileId: scope, start: 1,
+        build: (n) => ({ id, profileId: scope, number: n, name: clean }),
+      });
+      setForm((f) => ({ ...f, supplierId: id }));
+    } catch (e) {
+      setErr(userMessageFor(e));
+    }
+  }
 
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const patchLine = (id, patch) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -413,10 +430,12 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       <div className="px-4 sm:px-6 py-5 grid sm:grid-cols-2 gap-x-10 gap-y-4">
         <div className="space-y-4 min-w-0">
           <Field label="Proveedor">
-            <select value={form.supplierId} onChange={(e) => onSupplier(e.target.value)} className={field}>
-              <option value="">— Proveedor —</option>
-              {suppliers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <SearchPicker
+              options={suppliers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => ({ id: s.id, label: s.name, sublabel: s.rnc || '' }))}
+              value={form.supplierId} text={suppliersById.get(form.supplierId)?.name || ''}
+              placeholder="— Proveedor —" freeTextLabel="Crear proveedor" allowFreeText
+              onPick={(o) => onSupplier(o.id)}
+              onFreeText={(txt) => createSupplier(txt)} />
           </Field>
           {!goods && !isBill && (
             <Field label={nature === 'activo' ? 'Cuenta de activo' : 'Cuenta de gasto'}>
