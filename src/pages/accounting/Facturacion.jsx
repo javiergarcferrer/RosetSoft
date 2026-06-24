@@ -23,7 +23,7 @@ import Modal from '../../components/Modal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
-  resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
+  resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
   resolveAccountingCockpit, resolveReceivables, resolveInvoicePipeline,
 } from '../../core/accounting/index.js';
@@ -573,6 +573,13 @@ export default function Facturacion() {
     const rnc = cleanRnc(draft.rnc ?? customer?.rnc ?? '');
     if (rnc && !isValidFiscalId(rnc)) {
       setErr('RNC/cédula inválido: debe tener 9 dígitos (RNC) u 11 (cédula).');
+      return;
+    }
+    // A consumo (32) of RD$250,000+ MUST identify the buyer — block here, BEFORE
+    // assignNextENcf, or we burn an E32 that buildEcfPayload will refuse to
+    // transmit (a permanent, un-fillable fiscal-number gap).
+    if (!rnc && consumoRequiresBuyerId(book.total)) {
+      setErr('Una factura de RD$250,000 o más requiere el RNC/cédula del comprador (se emite como crédito fiscal 31). Agrégalo y vuelve a facturar.');
       return;
     }
     setPosting(quote.id);
