@@ -846,6 +846,31 @@ export interface PettyCashVoucher {
   updatedAt?: number;
 }
 
+/**
+ * A deterministic bank-feed categorization rule for the reconciliation import.
+ * When an imported statement line's description matches `pattern`, the leftover
+ * posts to `accountCode` (the contra account). Distinct from any ML guesswork —
+ * these are user-defined and predictable.
+ */
+export interface BankRule {
+  id: string;
+  profileId: string;
+  /** Restrict to a bank profile ('popular'…) or null = any. */
+  bank?: string | null;
+  /** Restrict to one bank account, or null = any. */
+  bankAccountCode?: string | null;
+  matchType: 'contains' | 'equals' | 'startsWith';
+  pattern: string;
+  /** The contra account a matched line posts to. */
+  accountCode: string;
+  label?: string;
+  priority?: number;
+  /** Auto-confirm (post without review) vs surface in the queue. */
+  autoConfirm?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export type PaymentDirection = 'in' | 'out';
 
 /**

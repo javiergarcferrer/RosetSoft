@@ -100,8 +100,12 @@ export {
   resolveImportPanel,
 } from './analytics.js';
 
-// ── conciliación bancaria
+// ── conciliación bancaria + importación de estados (Banco Popular…)
 export { resolveReconciliation } from './reconciliation.js';
+export { resolveBankImport } from './bankImport.js';
+export {
+  parseBankStatement, matchStatementToLedger, firstMatchingRule, ruleMatches, BANK_PROFILES,
+} from '../../lib/accounting/bankStatement.js';
 
 // ── caja chica (petty cash): funds + vales VM + the posting Model
 export { resolveCajaChica, resolveFundLedger } from './cajaChica.js';

@@ -37,6 +37,7 @@ import type {
   FiscalPeriod,
   PettyCashFund,
   PettyCashVoucher,
+  BankRule,
   Employee,
   PayrollRun,
   WaMessage,
@@ -120,6 +121,7 @@ const TABLES = {
   fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
   pettyCashFunds:     { db: 'petty_cash_funds',    pk: 'id' },
   pettyCashVouchers:  { db: 'petty_cash_vouchers', pk: 'id' },
+  bankRules:          { db: 'bank_rules',          pk: 'id' },
   employees:          { db: 'employees',           pk: 'id' },
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
   waMessages:         { db: 'wa_messages',         pk: 'id' },
@@ -179,6 +181,7 @@ export interface TableRowMap {
   fiscalPeriods: FiscalPeriod;
   pettyCashFunds: PettyCashFund;
   pettyCashVouchers: PettyCashVoucher;
+  bankRules: BankRule;
   employees: Employee;
   payrollRuns: PayrollRun;
   waMessages: WaMessage;

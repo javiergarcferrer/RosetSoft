@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { Landmark, Check } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Landmark, Check, Upload, X, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db } from '../../db/database.js';
+import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -11,7 +11,8 @@ import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
-import { resolveReconciliation } from '../../core/accounting/index.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
+import { resolveReconciliation, resolveBankImport, buildJournalEntry, round2 } from '../../core/accounting/index.js';
 
 // Reconciliation table columns (Shopify "edit columns"). The reconcile
 // checkbox is a fixed leading cell (closes over the toggle handler), outside
@@ -41,9 +42,11 @@ const RECON_COLUMNS = [
 const RECON_DEFAULT = { number: true, memo: true, amount: true };
 
 /**
- * Conciliación bancaria — pick a bank account, tick the ledger lines that
- * cleared the bank statement, and compare the reconciled balance to the
- * statement's ending balance. Self-gates on accounting/admin via AccountingGate.
+ * Conciliación bancaria — pick a bank account, then either tick the ledger
+ * lines that cleared the statement by hand, or IMPORT the bank's exported
+ * movements (Banco Popular first): each line auto-matches an existing asiento
+ * (Match, never duplicate) and the leftover (comisiones, intereses…) posts via
+ * a categorization rule. Self-gates on accounting/admin via AccountingGate.
  */
 export default function Conciliacion() {
   const { profileId } = useApp();
@@ -52,7 +55,8 @@ export default function Conciliacion() {
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
   const entriesQ = useLiveQueryStatus(() => db.journalEntries.where('profileId').equals(scope).toArray(), [scope], []);
   const linesQ = useLiveQueryStatus(() => db.journalLines.where('profileId').equals(scope).toArray(), [scope], []);
-  const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded;
+  const rulesQ = useLiveQueryStatus(() => db.bankRules.where('profileId').equals(scope).toArray(), [scope], []);
+  const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && rulesQ.loaded;
 
   // Bank/cash accounts = postable leaves under Cajas y Bancos (1-01-001).
   const bankAccounts = useMemo(
@@ -62,12 +66,9 @@ export default function Conciliacion() {
   const [accountCode, setAccountCode] = useState('');
   const [stmt, setStmt] = useState('');
   const [busy, setBusy] = useState(null);
+  const [importing, setImporting] = useState(false);
 
-  // Column visibility (Shopify "edit columns"), persisted per browser. Fecha is
-  // the fixed anchor; #, concepto and monto toggle. The reconcile checkbox is a
-  // fixed leading cell outside the column array (it closes over the toggle).
   const recCols = useColumns(RECON_COLUMNS, RECON_DEFAULT, 'rs.conciliacion.cols.v1');
-  // Drag-to-resize widths (persisted) for the same visible columns.
   const recW = useColumnWidths(recCols.cols, 'rs.conciliacion.widths.v1');
 
   const rec = useMemo(
@@ -88,13 +89,14 @@ export default function Conciliacion() {
 
   return (
     <AccountingGate title="Conciliación bancaria">
-      <PageHeader title="Conciliación bancaria" subtitle="Marca los movimientos que aparecen en el estado del banco" />
+      <PageHeader title="Conciliación bancaria" subtitle="Marca los movimientos del estado del banco — o importa el estado de cuenta"
+        actions={<button type="button" disabled={!accountCode} onClick={() => setImporting((v) => !v)} className="btn-ghost disabled:opacity-40"><Upload size={14} /> Importar estado</button>} />
 
       {!loaded ? <ListLoading /> : (
         <>
           <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-end gap-3 mb-4">
             <label className="text-sm">Cuenta bancaria<br />
-              <select value={accountCode} onChange={(e) => setAccountCode(e.target.value)} className={`${field} w-full sm:min-w-[240px]`}>
+              <select value={accountCode} onChange={(e) => { setAccountCode(e.target.value); setImporting(false); }} className={`${field} w-full sm:min-w-[240px]`}>
                 <option value="">— Elige una cuenta —</option>
                 {bankAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
               </select>
@@ -108,6 +110,10 @@ export default function Conciliacion() {
             <EmptyState icon={Landmark} title="Selecciona una cuenta" description="Elige una cuenta bancaria para conciliar." />
           ) : (
             <>
+              {importing && (
+                <BankImportPanel scope={scope} accountCode={accountCode} rec={rec} rules={rulesQ.data} accounts={accountsQ.data} onClose={() => setImporting(false)} />
+              )}
+
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Saldo en libros</div><div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.ledgerBalance)}</div></div>
                 <div className="card p-3 min-w-0"><div className="eyebrow mb-1">Conciliado</div><div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(rec.reconciledBalance)}</div></div>
@@ -169,4 +175,157 @@ export default function Conciliacion() {
       )}
     </AccountingGate>
   );
+}
+
+/** Post a bank-only movement (comisión, interés…) the statement carried but the
+ *  books didn't: Debit/Credit the bank account by the signed amount against the
+ *  chosen contra account, and mark the bank line reconciled (it cleared). */
+async function postBankLine({ scope, accountCode, contraCode, sl }) {
+  const abs = round2(Math.abs(sl.amount));
+  const lines = sl.amount >= 0
+    ? [{ accountCode, debit: abs }, { accountCode: contraCode, credit: abs }]
+    : [{ accountCode: contraCode, debit: abs }, { accountCode, credit: abs }];
+  const built = buildJournalEntry({ newId, profileId: scope, postedAt: sl.date, memo: sl.description || 'Movimiento bancario', source: 'manual', refTable: 'bank_statement', lines });
+  const now = Date.now();
+  const withRec = built.lines.map((l) => (l.accountCode === accountCode ? { ...l, reconciledAt: now } : l));
+  await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+  await db.journalLines.bulkPut(withRec);
+}
+
+const STATUS_BADGE = {
+  matched: { cls: 'bg-emerald-100 text-emerald-700', label: 'Emparejado' },
+  suggested: { cls: 'bg-sky-100 text-sky-700', label: 'Sugerido' },
+  unmatched: { cls: 'bg-amber-100 text-amber-700', label: 'Sin match' },
+};
+
+function BankImportPanel({ scope, accountCode, rec, rules, accounts, onClose }) {
+  const [bank, setBank] = useState('popular');
+  const [text, setText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [err, setErr] = useState('');
+  const [sel, setSel] = useState({}); // index -> { post, account, remember }
+
+  const imp = useMemo(
+    () => (text.trim() ? resolveBankImport({ statementText: text, bank, rules, reconciliation: rec }) : null),
+    [text, bank, rules, rec],
+  );
+
+  useEffect(() => {
+    if (!imp) { setSel({}); return; }
+    const next = {};
+    imp.items.forEach((it, i) => {
+      next[i] = it.status === 'matched'
+        ? { post: true, account: '', remember: false }
+        : { post: false, account: it.rule?.accountCode || '', remember: false };
+    });
+    setSel(next);
+  }, [imp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const contraAccounts = useMemo(
+    () => (accounts || []).filter((a) => a.isPostable && [4, 5, 6].includes(a.class)).sort((a, b) => a.code.localeCompare(b.code)),
+    [accounts],
+  );
+
+  const willApply = imp ? imp.items.filter((it, i) => sel[i]?.post && (it.status === 'matched' || sel[i]?.account)).length : 0;
+
+  async function apply() {
+    if (!imp) return;
+    setErr(''); setPosting(true);
+    try {
+      const now = Date.now();
+      for (let i = 0; i < imp.items.length; i++) {
+        const it = imp.items[i]; const s = sel[i] || {};
+        if (!s.post) continue;
+        if (it.status === 'matched' && it.ledgerRow?.line?.id) {
+          await db.journalLines.update(it.ledgerRow.line.id, { reconciledAt: now });
+        } else if (it.status !== 'matched' && s.account) {
+          await postBankLine({ scope, accountCode, contraCode: s.account, sl: it.statementLine });
+          if (s.remember && it.statementLine.description) {
+            await db.bankRules.put({
+              id: newId(), profileId: scope, bank, bankAccountCode: accountCode,
+              matchType: 'contains', pattern: it.statementLine.description, accountCode: s.account,
+              label: '', priority: 0, autoConfirm: false, createdAt: now, updatedAt: now,
+            });
+          }
+        }
+      }
+      onClose();
+    } catch (e) { setErr(userMessageFor(e)); setPosting(false); }
+  }
+
+  return (
+    <div className="card p-4 mb-4 border-ink-300 min-w-0">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display font-semibold">Importar estado de cuenta</h3>
+        <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-end gap-3 mb-3">
+        <label className="text-sm">Banco<br />
+          <select value={bank} onChange={(e) => setBank(e.target.value)} className="input w-full sm:w-48">
+            {(imp?.banks || [{ key: 'popular', label: 'Banco Popular' }, { key: 'generic', label: 'Genérico' }]).map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5}
+        placeholder={'Pega el CSV exportado de Popular en Línea (Fecha, Descripción, Débito, Crédito, Balance)…'}
+        className="input w-full font-mono text-xs" />
+
+      {imp && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
+            <Chip cls={STATUS_BADGE.matched.cls}>{imp.summary.matched} emparejados</Chip>
+            <Chip cls={STATUS_BADGE.suggested.cls}>{imp.summary.suggested} sugeridos</Chip>
+            <Chip cls={STATUS_BADGE.unmatched.cls}>{imp.summary.unmatched} sin match</Chip>
+            {imp.parsed.skipped > 0 && <span className="text-ink-400">{imp.parsed.skipped} filas omitidas</span>}
+            {imp.parsed.lines.length === 0 && <span className="text-rose-600">No se reconoció ninguna fila — revisa el formato.</span>}
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {imp.items.map((it, i) => {
+              const s = sel[i] || {};
+              const badge = STATUS_BADGE[it.status];
+              return (
+                <div key={i} className="border border-ink-100 rounded-lg p-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span className="text-ink-500 text-xs whitespace-nowrap tabular-nums">{formatDate(it.statementLine.date)}</span>
+                  <span className="flex-1 min-w-[140px] text-sm truncate" title={it.statementLine.description}>{it.statementLine.description || '—'}</span>
+                  <span className={`text-sm tabular-nums whitespace-nowrap ${it.statementLine.amount < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{formatDop(it.statementLine.amount)}</span>
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
+                  {it.status === 'matched' ? (
+                    <span className="text-xs text-ink-500 whitespace-nowrap">↔ #{it.ledgerRow.number ?? '—'} {it.ledgerRow.memo || ''}</span>
+                  ) : (
+                    <select value={s.account || ''} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], account: e.target.value } }))} className="input text-xs py-1 w-full sm:w-56">
+                      <option value="">— cuenta contrapartida —</option>
+                      {contraAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                    </select>
+                  )}
+                  <label className="text-xs text-ink-600 inline-flex items-center gap-1 whitespace-nowrap">
+                    <input type="checkbox" checked={!!s.post} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], post: e.target.checked } }))} />
+                    {it.status === 'matched' ? 'Conciliar' : 'Registrar'}
+                  </label>
+                  {it.status !== 'matched' && (
+                    <label className="text-xs text-ink-400 inline-flex items-center gap-1 whitespace-nowrap" title="Guardar una regla para la próxima vez">
+                      <input type="checkbox" checked={!!s.remember} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], remember: e.target.checked } }))} /> regla
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {err && <p className="text-sm text-rose-600 mt-3">{err}</p>}
+          <div className="flex justify-end gap-2 mt-4">
+            <button type="button" onClick={onClose} className="btn-ghost">Cancelar</button>
+            <button type="button" onClick={apply} disabled={posting || willApply === 0} className="btn-primary">
+              {posting ? <Loader2 size={14} className="animate-spin" /> : null} Aplicar {willApply > 0 ? `(${willApply})` : ''}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Chip({ cls, children }) {
+  return <span className={`px-1.5 py-0.5 rounded ${cls}`}>{children}</span>;
 }
