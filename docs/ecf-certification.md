@@ -101,10 +101,13 @@ the test set / CerteCF responses):
   `buildEcfPayload`. The receptor wire-format unknowns (token envelope, multipart
   field names, ARECF signature root) likewise resolve on first CerteCF contact.
 
-A future **UI** to browse the receptor inbox (`ecf_received` /
-`ecf_commercial_approvals`) is not wired yet — the tables + archival exist; a
-Contabilidad page can read them when desired (add them to `db/database.ts`
-`TABLES`).
+The **receptor inbox UI** is wired (DGII center → *Comprobantes recibidos*,
+`ReceptorInbox.jsx` + `resolveReceptorInbox`): it browses both archived streams
+and lets us send an **Aprobación / Rechazo Comercial** (ACECF) on a received
+supplier e-CF (cert step 3, receptor side) — `parseEcfFechaEmision` dates it from
+the archived XML, our decision is recorded on the row (`commercial_*`, migration
+`20260811000000`). The send path exercises end to end only once real inbound
+e-CFs arrive at `/fe/recepcion` during CerteCF.
 
 ## CerteCF validation plan (the closing loop — run on the deployed app)
 
