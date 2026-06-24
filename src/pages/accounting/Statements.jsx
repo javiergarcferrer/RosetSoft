@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Scale, TrendingUp, Download, Table2, BarChart3 } from 'lucide-react';
+import { Scale, TrendingUp, Download, Table2, BarChart3, Banknote } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -14,7 +14,7 @@ import { formatDop } from '../../lib/format.js';
 import { downloadCsv } from '../../lib/csv.js';
 import {
   resolveBalanceSheetComparison, resolveIncomeStatementComparison,
-  resolvePeriod, deltaPct,
+  resolveCashFlow, resolvePeriod, deltaPct,
 } from '../../core/accounting/index.js';
 
 // Chart palette (shared with the dashboard tokens).
@@ -148,7 +148,7 @@ export default function Statements() {
   const scope = profileId || 'team';
 
   const [params] = useSearchParams();
-  const [tab, setTab] = useState(params.get('tab') === 'income' ? 'income' : 'balance'); // 'balance' | 'income'
+  const [tab, setTab] = useState(['income', 'cashflow'].includes(params.get('tab')) ? params.get('tab') : 'balance'); // 'balance' | 'income' | 'cashflow'
   const [periodSel, setPeriodSel] = useState({ kind: 'month', ref: Date.now() });
   const [compare, setCompare] = useState('none'); // 'none' | 'prev' | 'yoy'
   const [view, setView] = useState('table'); // 'table' | 'chart'
@@ -178,9 +178,24 @@ export default function Statements() {
     });
   }, [accountsQ.data, linesQ.data, entriesQ.data, period, cmpRef, showDelta]);
 
+  const cashflow = useMemo(
+    () => resolveCashFlow({ accounts: accountsQ.data, lines: linesQ.data, entries: entriesQ.data, start: period.start, end: period.end }),
+    [accountsQ.data, linesQ.data, entriesQ.data, period],
+  );
+
   const vsLabel = showDelta ? cmpRef.label : '';
 
   function exportActive() {
+    if (tab === 'cashflow') {
+      downloadCsv(`flujo_efectivo_${slug(period.label)}.csv`, [
+        ['Concepto', period.label],
+        ['Efectivo al inicio', cashflow.opening],
+        ...cashflow.sections.flatMap((s) => [[s.label, ''], ...s.rows.map((r) => [`  ${r.label}`, r.amount]), [`Total ${s.label}`, s.total]]),
+        ['Flujo neto del período', cashflow.netChange],
+        ['Efectivo al final', cashflow.closing],
+      ]);
+      return;
+    }
     if (tab === 'balance') {
       const head = ['Cuenta', 'Nombre', ...balance.periods.map((p) => p.label)];
       downloadCsv(`balance_${slug(period.label)}${showDelta ? `_vs_${slug(cmpRef.label)}` : ''}.csv`, [
@@ -215,6 +230,7 @@ export default function Statements() {
           tabs={[
             { key: 'balance', label: <><Scale size={15} /> Balance General</> },
             { key: 'income', label: <><TrendingUp size={15} /> Estado de Resultados</> },
+            { key: 'cashflow', label: <><Banknote size={15} /> Flujo de efectivo</> },
           ]}
           active={tab} onChange={setTab} />
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -315,6 +331,8 @@ export default function Statements() {
             </div>
           )}
         </>
+      ) : tab === 'cashflow' ? (
+        <CashFlowSection cf={cashflow} period={period} />
       ) : (
         <>
           {/* KPI band — the P&L headline figures with delta vs the comparison. */}
@@ -382,5 +400,55 @@ export default function Statements() {
         </>
       )}
     </AccountingGate>
+  );
+}
+
+/**
+ * Estado de flujo de efectivo — the cash that actually moved through Cajas y
+ * Bancos in the period, grouped by activity/source, from efectivo inicial to
+ * efectivo final. A single-period projection (core/accounting/cashflow).
+ */
+function CashFlowSection({ cf, period }) {
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-3 my-4 min-w-0">
+        <StatKpi label="Efectivo inicial" amounts={[cf.opening]} />
+        <StatKpi label="Flujo neto" amounts={[cf.netChange]} tone />
+        <StatKpi label="Efectivo final" amounts={[cf.closing]} />
+      </div>
+      <div className="card p-4 overflow-x-auto min-w-0">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-ink-200">
+              <th className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Concepto</th>
+              <th className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-600 capitalize whitespace-nowrap">{period.label}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-ink-50">
+              <td className="py-2 pr-3 text-sm font-semibold text-ink-700">Efectivo al inicio</td>
+              <td className="py-2 pl-3 text-right tabular-nums text-sm font-semibold">{formatDop(cf.opening)}</td>
+            </tr>
+            {cf.sections.map((s) => (
+              <Fragment key={s.key}>
+                <SectionRow title={s.label} colCount={2} />
+                {s.rows.map((r) => (
+                  <tr key={r.source} className="border-b border-ink-50 last:border-0">
+                    <td className="py-1.5 pr-3 pl-4 text-sm text-ink-700">{r.label}</td>
+                    <td className={`py-1.5 pl-3 text-right text-sm tabular-nums whitespace-nowrap ${r.amount < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{formatDop(r.amount)}</td>
+                  </tr>
+                ))}
+                <TotalRow label={`Total ${s.label.toLowerCase()}`} amounts={[s.total]} showDelta={false} />
+              </Fragment>
+            ))}
+            {cf.sections.length === 0 && (
+              <tr><td colSpan={2} className="py-6 text-center text-sm text-ink-400">Sin movimientos de efectivo en el período.</td></tr>
+            )}
+            <TotalRow label="Flujo neto del período" amounts={[cf.netChange]} strong showDelta={false} />
+            <TotalRow label="Efectivo al final" amounts={[cf.closing]} strong showDelta={false} />
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

@@ -22,6 +22,9 @@ export {
   resolveAccountLedger,
 } from './ledger.js';
 
+// ── estado de flujo de efectivo (cash-flow statement, direct method)
+export { resolveCashFlow, CASHFLOW_SOURCE_LABEL } from './cashflow.js';
+
 // ── expenses (Gastos) ViewModels + the DGII 606 projection
 export { resolveExpensesList, resolve606 } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
