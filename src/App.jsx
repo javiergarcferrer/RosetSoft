@@ -28,6 +28,7 @@ import Integrations from './pages/Integrations.jsx';
 import Drive from './pages/Drive.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';
 import PublicContractView from './pages/PublicContractView.jsx';
+import PublicAccountStatement from './pages/PublicAccountStatement.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 // Accounting + admin pages are code-split: the CRM bundle (what every seller
@@ -393,6 +394,9 @@ export default function App() {
               `contract-share` Edge Function serves the bundle + records the
               signature. The optional `:slug` segment is cosmetic. */}
           <Route path="/contrato/:token" element={<PublicContractView />} />
+          {/* Public, logged-out estado de cuenta (#/cuenta/:token), served by
+              the account-share Edge Function. Forced light, like the quote link. */}
+          <Route path="/cuenta/:token" element={<PublicAccountStatement />} />
           <Route path="/contrato/:slug/:token" element={<PublicContractView />} />
           {/* Public, logged-out storefront ("Tienda"). Like the quote link it
               lives OUTSIDE RequireAuth so a customer never hits the login wall;

@@ -1431,6 +1431,8 @@ export interface Customer {
   /** DGII estado (e.g. "ACTIVO") cached on a successful RNC lookup — drives the
    *  permanent verification badge + locks the Empresa field. Empty ⇒ unverified. */
   rncStatus?: string;
+  /** Secret token for the public estado-de-cuenta link (account-share). Null until shared. */
+  statementToken?: string | null;
   /** Nombre comercial (the razón social goes in `name`). */
   company?: string;
   /** Person dealt with at the company — distinct from the razón social. */

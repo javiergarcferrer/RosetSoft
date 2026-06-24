@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer, Send, ListChecks } from 'lucide-react';
+import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer, Send, ListChecks, Share2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -17,6 +17,7 @@ import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { cleanRnc } from '../../lib/rncLookup.js';
+import { newShareToken, statementLinkUrl } from '../../lib/accountStatementShare.js';
 import PrintPdfModal from '../../components/PrintPdfModal.jsx';
 import {
   resolveReceivables, resolvePayables, resolveStatementFor,
@@ -158,6 +159,16 @@ export default function CuentasCobrarPagar() {
   // In-app print preview state — the modal rasterizes the PDF and prints via
   // window.print() on our own page, so printing can never become a download.
   const [printDoc, setPrintDoc] = useState(null);   // { blob, title } | null
+  // Share a customer's estado de cuenta as a public link (mints the token once).
+  async function shareStatement() {
+    if (!selected || selected.type !== 'customer') return;
+    let token = customersById.get(selected.id)?.statementToken;
+    if (!token) { token = newShareToken(); await db.customers.update(selected.id, { statementToken: token }); }
+    const url = statementLinkUrl(token);
+    try { await navigator.clipboard.writeText(url); window.alert(`Enlace del estado de cuenta copiado:\n${url}`); }
+    catch { window.prompt('Enlace del estado de cuenta:', url); }
+  }
+
   async function printStatement() {
     if (!statement || !selected) return;
     setPrintingSt(true);
@@ -338,6 +349,9 @@ export default function CuentasCobrarPagar() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <h3 className="font-display font-semibold break-words min-w-0">Estado de cuenta — {statement.name}</h3>
             <div className="flex items-center gap-2 shrink-0">
+              {selected?.type === 'customer' && (
+                <button type="button" onClick={shareStatement} className="btn-ghost"><Share2 size={14} /> Compartir</button>
+              )}
               <button type="button" onClick={printStatement} disabled={printingSt}
                 className="btn-ghost">
                 {printingSt ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Imprimir
