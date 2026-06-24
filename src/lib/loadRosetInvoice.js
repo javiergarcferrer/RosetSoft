@@ -13,7 +13,7 @@ import { loadPdfjs } from './loadPdfjs.js';
  * @returns {Promise<import('./rosetInvoice.js').ParsedInvoice>}
  */
 export async function parseInvoicePdf(file) {
-  if (!file) return { lines: [], furniture: [] };
+  if (!file) return { lines: [], furniture: [], invoiceTotal: 0 };
   const pdfjsLib = await loadPdfjs();
   const buf = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
