@@ -476,7 +476,9 @@ export default function ImportacionDetail() {
               </thead>
               <tbody>
                 {linkedCompras.rows.map((c) => (
-                  <tr key={c.id}>
+                  <tr key={c.id}
+                    onClick={() => navigate(c.source === 'expediente-cost' ? `/accounting/importaciones/${c.expedienteId}` : `/accounting/compras-gastos/${c.id}`)}
+                    className="cursor-pointer hover:bg-ink-50 transition-colors">
                     <td className="text-ink-500 whitespace-nowrap">{formatDate(c.date)}</td>
                     <td className="min-w-0">{c.supplierName || '—'}</td>
                     <td className="text-ink-600 whitespace-nowrap">{NATURE_LABEL[c.nature] || c.nature}</td>
