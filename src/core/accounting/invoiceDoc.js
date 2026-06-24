@@ -82,6 +82,7 @@ export function resolveInvoiceDoc({ posting, customer, quote, payments = [], set
     }],
     gravado: base, itbis, total, itbisRate: config?.itbisRate ?? 18,
     securityCode: p.securityCode || '',
+    fechaFirma: p.fechaFirma || '',
     payments: activity, amountPaid, balanceDue,
     // The DGII timbre QR is only meaningful for a signed e-CF.
     qrUrl: (isEcf && p.securityCode)

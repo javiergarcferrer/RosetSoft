@@ -32,6 +32,7 @@ test('an e-NCF with a security code carries the timbre QR + e-CF label', () => {
   assert.equal(doc.isEcf, true);
   assert.match(doc.docLabel, /e-CF 32/);
   assert.match(doc.qrUrl, /codigoseguridad=abc123/);
+  assert.equal(doc.fechaFirma, '01-06-2026 10:00:00'); // printed as text in the timbre block
 });
 
 test('payment activity: deposit + allocated cobros are dated, summed, and net the balance', () => {

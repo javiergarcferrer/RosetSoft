@@ -23,6 +23,9 @@ export interface InvoiceDocumentProps {
   amountPaid?: number;
   balanceDue?: number;
   securityCode?: string;
+  /** Signature timestamp (dd-mm-yyyy HH:mm:ss) — a DGII-required visible element
+   *  of the timbre, printed under the código de seguridad. */
+  fechaFirma?: string;
   /** PNG data URL of the e-CF QR (built in generate.tsx). */
   qrDataUrl?: string;
   logoDataUrl?: string;
@@ -75,6 +78,7 @@ const st = StyleSheet.create({
   qr: { width: 96, height: 96 },
   qrText: { fontSize: fs(8), color: C.inkMid, maxWidth: 320, lineHeight: 1.4 },
   code: { fontSize: fs(9), fontWeight: 'bold', color: C.ink, marginTop: 3 },
+  stamp: { fontSize: fs(8), color: C.inkMid, marginTop: 2 },
   footer: { position: 'absolute', bottom: 28, left: MARGIN, right: MARGIN, borderTopWidth: 0.4, borderTopColor: C.inkLine, paddingTop: 6 },
   footerText: { fontSize: fs(8), color: C.inkMid, textAlign: 'center' },
 });
@@ -82,7 +86,7 @@ const st = StyleSheet.create({
 const money = (v: number) => formatDop(v);
 
 export function InvoiceDocument(props: InvoiceDocumentProps) {
-  const { emisor, comprador, ecfType, eNcf, items, gravado, itbis, total, itbisRate = 18, securityCode, qrDataUrl } = props;
+  const { emisor, comprador, ecfType, eNcf, items, gravado, itbis, total, itbisRate = 18, securityCode, fechaFirma, qrDataUrl } = props;
   const payments = props.payments || [];
   const amountPaid = props.amountPaid ?? 0;
   const balanceDue = props.balanceDue ?? 0;
@@ -157,8 +161,9 @@ export function InvoiceDocument(props: InvoiceDocumentProps) {
           <View style={st.qrRow}>
             <Image src={qrDataUrl} style={st.qr} />
             <View>
-              <Text style={st.qrText}>Representación impresa de un Comprobante Fiscal Electrónico. Verifique este e-CF escaneando el código o en la Oficina Virtual de la DGII.</Text>
+              <Text style={st.qrText}>Representación Impresa de un Comprobante Fiscal Electrónico (e-CF). Verifique su validez escaneando el código QR o en la Oficina Virtual de la DGII.</Text>
               {securityCode ? <Text style={st.code}>Código de seguridad: {securityCode}</Text> : null}
+              {fechaFirma ? <Text style={st.stamp}>Fecha de firma: {fechaFirma}</Text> : null}
             </View>
           </View>
         ) : null}
