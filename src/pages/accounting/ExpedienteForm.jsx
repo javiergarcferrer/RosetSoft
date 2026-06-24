@@ -15,8 +15,7 @@ import {
   resolveExpediente, buildExpedienteEntry, expedienteCostTotals, COST_CONCEPTS, weightedAverageIn,
   resolvePurchasesExpenses, NATURE_LABEL,
 } from '../../core/accounting/index.js';
-import { reverseComprasGastoPosting } from '../../lib/comprasGastosDoc.js';
-import { reverseExpedientePosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
+import { reverseComprasGastoPosting, reverseExpedientePosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
