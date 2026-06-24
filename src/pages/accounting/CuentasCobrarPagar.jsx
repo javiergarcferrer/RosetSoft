@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer, Send } from 'lucide-react';
+import { ArrowLeftRight, Plus, Loader2, Check, X, FileText, Printer, Send, ListChecks } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -133,6 +133,7 @@ export default function CuentasCobrarPagar() {
   const urlTab = params.get('tab');
   const [tab, setTab] = useState(urlTab === 'cxc' || urlTab === 'cxp' ? urlTab : params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
   const [showForm, setShowForm] = useState(!!params.get('new'));
+  const [payBills, setPayBills] = useState(false);
   // ?statement=<partyId> deep-links straight into a party's estado de cuenta
   // (the CustomerDetail "Cuenta" card uses it).
   const [selected, setSelected] = useState(() => (params.get('statement')
@@ -217,8 +218,14 @@ export default function CuentasCobrarPagar() {
     <AccountingGate title="Cuentas por cobrar y pagar">
       <PageHeader title="Cuentas por cobrar y pagar" subtitle="Saldos, antigüedad y estados de cuenta — valores en RD$"
         actions={tab === 'cobranza' ? null : (
-          <button type="button" onClick={() => { setShowForm((v) => !v); setSelected(null); }}
-            className="btn-primary"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>
+          <div className="flex items-center gap-2">
+            {tab === 'cxp' && (
+              <button type="button" onClick={() => { setPayBills((v) => !v); setShowForm(false); setSelected(null); }}
+                className="btn-ghost"><ListChecks size={14} /> Pagar facturas</button>
+            )}
+            <button type="button" onClick={() => { setShowForm((v) => !v); setPayBills(false); setSelected(null); }}
+              className="btn-primary"><Plus size={15} /> Registrar {tab === 'cxc' ? 'cobro' : 'pago'}</button>
+          </div>
         )} />
 
       <TabPills tabs={[{ key: 'cxc', label: 'Por cobrar' }, { key: 'cxp', label: 'Por pagar' }, { key: 'cobranza', label: 'Cobranza' }]}
@@ -240,6 +247,12 @@ export default function CuentasCobrarPagar() {
             reference: params.get('ref') || '',
           }}
           onClose={() => setShowForm(false)} />
+      )}
+
+      {tab === 'cxp' && payBills && loaded && (
+        <PayBillsPanel
+          bills={payables.rows.flatMap((r) => (r.docs || []).filter((d) => d.open > 0.001).map((d) => ({ ...d, supplierId: r.partyId, supplierName: r.party?.name || '—' })))}
+          scope={scope} config={config} onClose={() => setPayBills(false)} />
       )}
 
       {!loaded ? <ListLoading /> : tab === 'cobranza' ? (
@@ -419,6 +432,83 @@ function CobranzaView({ queue, onRemind, busyId }) {
       </div>
       <p className="text-xs text-ink-400 mt-3">Los recordatorios se abren en WhatsApp para revisarlos y enviarlos — no se envían solos.</p>
     </>
+  );
+}
+
+/**
+ * Pay-bills batch — select open supplier bills and register a pago for each in
+ * one action (each allocated to its bill, posting a balanced asiento). The
+ * QuickBooks "Pay Bills" flow.
+ */
+function PayBillsPanel({ bills, scope, config, onClose }) {
+  const [sel, setSel] = useState({});
+  const [method, setMethod] = useState('bank');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const chosen = bills.filter((b) => sel[b.docId]);
+  const total = chosen.reduce((s, b) => s + b.open, 0);
+  const allOn = bills.length > 0 && chosen.length === bills.length;
+
+  async function pay() {
+    if (!chosen.length) return;
+    setErr(''); setSaving(true);
+    try {
+      const postedAt = new Date(date).getTime();
+      for (const b of chosen) {
+        const id = newId();
+        const built = buildPaymentEntry({
+          newId, config, postedAt,
+          payment: { id, direction: 'out', partyType: 'supplier', partyId: b.supplierId, amount: b.open, method, commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0 },
+        });
+        await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+        await db.journalLines.bulkPut(built.lines);
+        await assignSequenceNumber({
+          table: 'payments', profileId: scope, start: 1,
+          build: (n) => ({ id, profileId: scope, number: n, direction: 'out', partyType: 'supplier', partyId: b.supplierId, paidAt: postedAt, amount: b.open, method, commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0, allocations: [{ docId: b.docId, amount: b.open }], journalEntryId: built.entry.id }),
+        });
+      }
+      onClose();
+    } catch (e) { setErr(userMessageFor(e)); setSaving(false); }
+  }
+
+  return (
+    <div className="card p-4 mb-4 border-ink-300 min-w-0">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display font-semibold">Pagar facturas</h3>
+        <button type="button" onClick={onClose} className="btn-icon text-ink-400 shrink-0" aria-label="Cerrar"><X size={18} /></button>
+      </div>
+      {bills.length === 0 ? (
+        <p className="text-sm text-ink-500">No hay facturas a crédito con saldo.</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            <label className="text-sm">Fecha<br /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" /></label>
+            <label className="text-sm">Desde<br />
+              <select value={method} onChange={(e) => setMethod(e.target.value)} className="input">
+                <option value="bank">Banco</option><option value="cash">Efectivo</option>
+              </select>
+            </label>
+            <button type="button" onClick={() => { const next = {}; if (!allOn) bills.forEach((b) => { next[b.docId] = true; }); setSel(next); }}
+              className="text-xs text-ink-600 hover:text-ink-900 min-h-8">{allOn ? 'Quitar todos' : 'Seleccionar todos'}</button>
+          </div>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {bills.map((b) => (
+              <label key={b.docId} className="flex items-center gap-2 text-sm border border-ink-50 rounded-lg p-2 cursor-pointer">
+                <input type="checkbox" checked={!!sel[b.docId]} onChange={(e) => setSel((m) => ({ ...m, [b.docId]: e.target.checked }))} />
+                <span className="flex-1 min-w-0 truncate">{b.supplierName} · {b.label} <span className="text-ink-400">{formatDate(b.date)}</span></span>
+                <span className="tabular-nums whitespace-nowrap">{formatDop(b.open)}</span>
+              </label>
+            ))}
+          </div>
+          {err && <p className="text-sm text-rose-600 mt-3">{err}</p>}
+          <div className="flex items-center justify-between mt-4">
+            <span className="text-sm text-ink-600">{chosen.length} factura(s) · <b className="tabular-nums">{formatDop(total)}</b></span>
+            <button type="button" onClick={pay} disabled={saving || !chosen.length} className="btn-primary">{saving ? <Loader2 size={14} className="animate-spin" /> : null} Registrar pagos</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
