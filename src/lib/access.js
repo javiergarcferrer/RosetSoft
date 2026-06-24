@@ -17,7 +17,7 @@ import {
 import TogoIcon from './icons/TogoIcon.jsx';
 import WhatsAppIcon from './icons/WhatsAppIcon.jsx';
 import InstagramIcon from './icons/InstagramIcon.jsx';
-import { accountingSectionNav } from './accountingSections.js';
+import { accountingSectionGroups } from './accountingSections.js';
 
 export const ROLES = ['admin', 'employee', 'accounting', 'team'];
 
@@ -88,7 +88,10 @@ const ADMIN_GROUP = {
   ],
 };
 
-const ACCOUNTING_GROUP = { label: 'Contabilidad', items: accountingSectionNav };
+// The Contabilidad centers render as several labeled bands (Resumen / Operación
+// / Fiscal y libros / Configuración) — `accountingSectionGroups`, spread into
+// the sidebar below. The first band's "Contabilidad" label is the umbrella that
+// marks where the accounting cluster begins.
 
 // The slice of the CRM an accounting user gets, sitting ABOVE the Contabilidad
 // centers in their sidebar: quoting + the clients they quote for. They're not
@@ -129,7 +132,7 @@ const CONFIG_GROUP = {
  * `team` is the shared settings row, not a human, so it gets nothing.
  */
 export function navForRole(role, { accountingOpen = true } = {}) {
-  if (role === 'accounting') return [ACCOUNTING_SALES_GROUP, { items: accountingSectionNav }];
+  if (role === 'accounting') return [ACCOUNTING_SALES_GROUP, ...accountingSectionGroups];
   if (role === 'admin') {
     // Nested children (Materiales, Integraciones, Usuarios) always live in the
     // structure — the sidebar reveals them per-route via the `children`
@@ -137,7 +140,7 @@ export function navForRole(role, { accountingOpen = true } = {}) {
     // searchable. Only the Contabilidad workspace nav is route-gated here.
     return [
       HOME, CRM_GROUP, PEOPLE_GROUP, CHANNELS_GROUP, ADMIN_GROUP,
-      ...(accountingOpen ? [ACCOUNTING_GROUP] : []),
+      ...(accountingOpen ? accountingSectionGroups : []),
       CONFIG_GROUP,
     ];
   }
