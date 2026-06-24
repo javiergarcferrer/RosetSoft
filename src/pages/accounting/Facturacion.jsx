@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, invalidate } from '../../db/database.js';
+import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { ActionChips } from '../../components/accounting/ActionCenter.jsx';
+import InvoiceDrawer from '../../components/accounting/InvoiceDrawer.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -25,7 +26,7 @@ import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
-  resolveAccountingCockpit, resolveReceivables, resolveInvoicePipeline,
+  resolveAccountingCockpit, resolveReceivables, resolveInvoicePipeline, buildPaymentEntry,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -531,6 +532,7 @@ export default function Facturacion() {
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
+  const [drawerRow, setDrawerRow] = useState(null); // 607 row whose detail briefing is open
 
   // Column visibility (Shopify "edit columns") for the 607 table — persisted
   // per browser. The e-CF actions column stays a fixed trailing cell.
@@ -648,6 +650,43 @@ export default function Facturacion() {
       setErr(userMessageFor(e));
     } finally {
       setPosting(null);
+    }
+  }
+
+  // Registrar cobro straight from the invoice briefing — posts the cobro asiento
+  // (Debit Banco/Caja / Credit CxC via buildPaymentEntry) + the numbered payment
+  // row allocated to THIS factura, the SAME path Banca uses, so the receivable
+  // clears without ever leaving Facturación.
+  async function collectInvoice(p, { amount, method, date }) {
+    const amt = Number(amount) || 0;
+    if (!p || amt <= 0) return { ok: false, error: 'El monto debe ser mayor que cero.' };
+    try {
+      const id = newId();
+      const postedAt = date ? new Date(date).getTime() : Date.now();
+      const reference = `Cobro ${p.ncf || ''}`.trim();
+      const built = buildPaymentEntry({
+        newId, config, postedAt,
+        payment: {
+          id, direction: 'in', partyType: 'customer', partyId: p.customerId,
+          amount: amt, method, reference,
+          commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+        },
+      });
+      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
+      await db.journalLines.bulkPut(built.lines);
+      await assignSequenceNumber({
+        table: 'payments', profileId: scope, start: 1,
+        build: (n) => ({
+          id, profileId: scope, number: n, direction: 'in', partyType: 'customer', partyId: p.customerId,
+          paidAt: postedAt, amount: amt, method, reference,
+          commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+          allocations: [{ docId: p.id, amount: amt }], journalEntryId: built.entry.id,
+        }),
+      });
+      invalidate();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: userMessageFor(e) };
     }
   }
 
@@ -897,7 +936,7 @@ export default function Facturacion() {
                   ['Base', formatDop(r.creditNote ? -r.base : r.base)],
                   ['ITBIS', formatDop(r.creditNote ? -r.itbis : r.itbis)],
                 ],
-                actions: ecfActions(r),
+                onClick: () => setDrawerRow(r),
               }))}
               footer={[
                 ['Ventas', sales607View.count],
@@ -928,11 +967,11 @@ export default function Facturacion() {
                       {sales607View.rows.map((r) => {
                         const ctx = { r };
                         return (
-                          <tr key={r.id}>
+                          <tr key={r.id} className="cursor-pointer" onClick={() => setDrawerRow(r)}>
                             {cols607.map((col) => (
                               <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
                             ))}
-                            <td>{ecfActions(r)}</td>
+                            <td onClick={(e) => e.stopPropagation()}>{ecfActions(r)}</td>
                           </tr>
                         );
                       })}
@@ -982,6 +1021,20 @@ export default function Facturacion() {
           </div>
         </div>
       )}
+      {drawerRow && (() => {
+        const p = postingById.get(drawerRow.id);
+        const customer = p?.customerId ? customersById.get(p.customerId) : null;
+        const pmts = paymentsQ.data.filter((pay) => (pay.allocations || []).some((a) => a.docId === drawerRow.id));
+        return (
+          <InvoiceDrawer
+            row={drawerRow} posting={p} customer={customer} payments={pmts}
+            itbisRate={config.itbisRate}
+            fiscalActions={ecfActions(drawerRow)}
+            onCollect={(args) => collectInvoice(p, args)}
+            onClose={() => setDrawerRow(null)}
+          />
+        );
+      })()}
       {printDoc && (
         <PrintPdfModal blob={printDoc.blob} title={printDoc.title} onClose={() => setPrintDoc(null)} />
       )}
