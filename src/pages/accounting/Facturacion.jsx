@@ -60,7 +60,9 @@ const SALES607_COLUMNS = [
   {
     key: 'ncf', label: 'NCF',
     thClass: 'whitespace-nowrap', tdClass: 'tabular-nums text-ink-500 whitespace-nowrap',
-    cell: ({ r }) => r.ncf || '—',
+    cell: ({ r }) => r.creditNote
+      ? <span title={`Nota de crédito · modifica ${r.modifiesNcf}`}>{r.ncf} <span className="text-rose-500">↩ {r.modifiesNcf || ''}</span></span>
+      : (r.ncf || '—'),
   },
   {
     key: 'date', label: 'Fecha',
@@ -70,19 +72,19 @@ const SALES607_COLUMNS = [
   {
     key: 'base', label: 'Base',
     thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
-    cell: ({ r }) => formatDop(r.base),
+    cell: ({ r }) => r.creditNote ? <span className="text-rose-600">{formatDop(-r.base)}</span> : formatDop(r.base),
     foot: ({ totals }) => formatDop(totals.base),
   },
   {
     key: 'itbis', label: 'ITBIS',
     thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums whitespace-nowrap',
-    cell: ({ r }) => formatDop(r.itbis),
+    cell: ({ r }) => r.creditNote ? <span className="text-rose-600">{formatDop(-r.itbis)}</span> : formatDop(r.itbis),
     foot: ({ totals }) => formatDop(totals.itbis),
   },
   {
     key: 'total', label: 'Total',
     thClass: 'text-right whitespace-nowrap', tdClass: 'text-right tabular-nums font-medium whitespace-nowrap',
-    cell: ({ r }) => formatDop(r.total),
+    cell: ({ r }) => r.creditNote ? <span className="text-rose-600">{formatDop(-r.total)}</span> : formatDop(r.total),
     foot: ({ totals }) => formatDop(totals.total),
   },
 ];
@@ -694,12 +696,12 @@ export default function Facturacion() {
               rows={sales607View.rows.map((r) => ({
                 key: r.id,
                 title: r.name || '—',
-                right: formatDop(r.total),
-                sub: <span className="tabular-nums">{r.rnc ? `${r.rnc} · ` : ''}{r.ncf || '—'}</span>,
+                right: r.creditNote ? formatDop(-r.total) : formatDop(r.total),
+                sub: <span className="tabular-nums">{r.rnc ? `${r.rnc} · ` : ''}{r.ncf || '—'}{r.creditNote && r.modifiesNcf ? ` ↩ ${r.modifiesNcf}` : ''}</span>,
                 kv: [
                   ['Fecha', formatDate(r.date)],
-                  ['Base', formatDop(r.base)],
-                  ['ITBIS', formatDop(r.itbis)],
+                  ['Base', formatDop(r.creditNote ? -r.base : r.base)],
+                  ['ITBIS', formatDop(r.creditNote ? -r.itbis : r.itbis)],
                 ],
                 actions: ecfActions(r),
               }))}
