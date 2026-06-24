@@ -71,6 +71,7 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/impuestos', label: 'Resumen' },
     { to: '/accounting/facturacion', label: '607 · IT-1 · e-CF' },
     { to: '/accounting/ecf', label: 'Secuencias e-NCF' },
+    { to: '/accounting/recibidos', label: 'Comprobantes recibidos' },
   ] },
   { key: 'contabilidad', band: 'libros', label: 'Libros', icon: BookOpen, tabs: [
     { to: '/accounting/ledger', label: 'Libro diario / mayor' },

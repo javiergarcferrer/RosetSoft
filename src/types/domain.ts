@@ -716,6 +716,44 @@ export interface SalePosting {
 }
 
 /**
+ * An e-CF another emisor delivered to us, archived by the `fe-recepcion` Edge
+ * Function after it answered with an Acuse de Recibo. estado '0' recibido /
+ * '1' no recibido (codigoNoRecibido = DGII NoReceivedCode when '1').
+ */
+export interface EcfReceived {
+  id: string;
+  profileId: string;
+  eNcf: string;
+  tipoEcf?: string;
+  rncEmisor?: string;
+  rncComprador?: string;
+  montoTotal?: number;
+  estado?: string;
+  codigoNoRecibido?: string;
+  xml?: string;
+  receivedAt?: number;
+  createdAt?: number;
+}
+
+/**
+ * A commercial approval/rejection a buyer returned on an e-CF WE issued,
+ * archived by the `fe-aprobacioncomercial` Edge Function. estado '1' aprobado /
+ * '2' rechazado (motivoRechazo set when '2').
+ */
+export interface EcfCommercialApproval {
+  id: string;
+  profileId: string;
+  eNcf: string;
+  rncEmisor?: string;
+  rncComprador?: string;
+  estado?: string;
+  motivoRechazo?: string;
+  xml?: string;
+  receivedAt?: number;
+  createdAt?: number;
+}
+
+/**
  * An authorized e-NCF range for one e-CF type (DGII). `nextSeq` advances as
  * e-NCF are issued; `expiresAt` is the FechaVencimientoSecuencia carried on the
  * e-CF. See `lib/accounting/ecf`.

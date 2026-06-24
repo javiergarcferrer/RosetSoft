@@ -30,6 +30,8 @@ import type {
   ImportLiquidation,
   ImportExpediente,
   ECFSequence,
+  EcfReceived,
+  EcfCommercialApproval,
   Payment,
   PaymentPlan,
   FiscalPeriod,
@@ -109,6 +111,8 @@ const TABLES = {
   importLiquidations: { db: 'import_liquidations', pk: 'id' },
   importExpedientes: { db: 'import_expedientes', pk: 'id' },
   ecfSequences:       { db: 'ecf_sequences',       pk: 'id' },
+  ecfReceived:            { db: 'ecf_received',             pk: 'id' },
+  ecfCommercialApprovals: { db: 'ecf_commercial_approvals', pk: 'id' },
   payments:           { db: 'payments',            pk: 'id' },
   paymentPlans:       { db: 'payment_plans',       pk: 'id' },
   fiscalPeriods:      { db: 'fiscal_periods',      pk: 'id' },
@@ -164,6 +168,8 @@ export interface TableRowMap {
   importLiquidations: ImportLiquidation;
   importExpedientes: ImportExpediente;
   ecfSequences: ECFSequence;
+  ecfReceived: EcfReceived;
+  ecfCommercialApprovals: EcfCommercialApproval;
   payments: Payment;
   paymentPlans: PaymentPlan;
   fiscalPeriods: FiscalPeriod;

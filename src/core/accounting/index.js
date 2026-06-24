@@ -43,6 +43,7 @@ export {
 } from './lrSales.js';
 export { buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
 export { resolveInvoiceDoc } from './invoiceDoc.js';
+export { resolveReceptorInbox } from './receptorInbox.js';
 
 // ── compras (Purchases) + inventario (kardex, weighted-average costing)
 export { resolveInventory, resolveItemKardex } from './inventory.js';
