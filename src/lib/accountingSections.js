@@ -47,6 +47,7 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/compras-gastos', label: 'Compras y gastos' },
     { to: '/accounting/recurrentes', label: 'Recurrentes' },
     { to: '/accounting/suppliers', label: 'Proveedores' },
+    { to: '/accounting/proveedor-360', label: 'Proveedor 360' },
   ], extraMatch: ['/accounting/expenses', '/accounting/compras'] },
 
   // ── Ventas y tesorería ── the outbound / revenue side: the sale, the bank

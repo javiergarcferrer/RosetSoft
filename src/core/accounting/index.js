@@ -31,6 +31,9 @@ export { resolveBudgetVariance } from './budgets.js';
 // ── flujo de caja proyectado (13-week cash-flow forecast)
 export { resolveCashForecast } from './cashForecast.js';
 
+// ── proveedor 360 (vendor profile: balance + YTD spend/retentions)
+export { resolveVendorProfile } from './vendorProfile.js';
+
 // ── expenses (Gastos) ViewModels + the DGII 606 projection
 export { resolveExpensesList, resolve606 } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
