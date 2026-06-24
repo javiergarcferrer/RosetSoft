@@ -55,6 +55,18 @@ export function saleEcfType(hasFiscalId: boolean): string {
 }
 
 /**
+ * DGII: a Factura de Consumo (tipo 32) of RD$250,000 or more MUST identify the
+ * buyer (RNC/cédula). Below the threshold an anonymous consumo is valid; at or
+ * above it the sale has to carry the buyer (and is issued as crédito fiscal 31),
+ * or the DGII rejects the e-CF.
+ */
+export const CONSUMO_BUYER_ID_THRESHOLD = 250000;
+
+export function consumoRequiresBuyerId(total: number): boolean {
+  return (Number(total) || 0) >= CONSUMO_BUYER_ID_THRESHOLD;
+}
+
+/**
  * TipoPago for a sale's e-CF: 1 (contado) when the deposit already covered the
  * total, else 2 (crédito) — a balance remains at posting. The single rule shared
  * by the transmitted payload and the printed factura, so they never disagree.
