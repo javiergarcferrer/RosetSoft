@@ -12,7 +12,7 @@
  */
 import { safeDynamicImport } from '../dynamicImport.js';
 import { meshPlanFromTriangles } from './meshToPlan.js';
-import { TOGO_HEIGHT_CM } from './togoModel.js';
+import { autoUnitScale } from './togoModel.js';
 
 const extOf = (url) => String(url || '').split('?')[0].split('.').pop().toLowerCase();
 
@@ -58,7 +58,10 @@ function floorTriangles(THREE, object, upAxis, cutFrac = 0.4) {
   const fb = upAxis === 'z' ? 1 : 2;          // floor axis B (y if z-up, else z)
   const sUp = size.getComponent(up);
   if (!(sUp > 0)) return [];
-  const k = TOGO_HEIGHT_CM / sUp;
+  // Auto-unit guard — the SAME factor placeRealModel applies to the 3D model (both
+  // from the native height), so the plan footprint matches the rendered piece. It
+  // only corrects a gross mm/cm/m export; a cm export keeps its true footprint.
+  const k = autoUnitScale(sUp);
   const cut = box.min.getComponent(up) + sUp * cutFrac;
   const oa = box.min.getComponent(fa), ob = box.min.getComponent(fb);
   const tris = [];

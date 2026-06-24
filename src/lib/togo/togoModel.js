@@ -137,3 +137,23 @@ export function togoMeshFit(size, heightCm = TOGO_HEIGHT_CM) {
   const H = Math.max(1, Number(heightCm) || TOGO_HEIGHT_CM);
   return { s: H / sy0 };
 }
+
+/**
+ * Auto-unit scale for an uploaded mesh — render it at its TRUE size, correcting only
+ * a gross UNIT mismatch. Picks the power of ten that brings the mesh's native height
+ * closest to the real Togo height (~72 cm): a centimetre export renders 1:1, a
+ * millimetre export ÷10, a metre export ×100 — while a genuine size difference within
+ * the right unit (a slightly taller or shorter piece) is PRESERVED, never forced to
+ * exactly 72 the way togoMeshFit does. A pure ratio, so it's unit-testable and
+ * independent of the file's origin. Returns 1 for a degenerate height.
+ *
+ * This is the unit GUARD behind placeRealModel (the 3D scale) and floorTriangles (the
+ * plan footprint): both derive it from the SAME native height, so the tile and the
+ * model can never disagree, and a stray mm/m export still lands at real-world cm.
+ */
+export function autoUnitScale(nativeHeight, targetCm = TOGO_HEIGHT_CM) {
+  const h = Number(nativeHeight) || 0;
+  if (!(h > 0)) return 1;
+  const T = Math.max(1, Number(targetCm) || TOGO_HEIGHT_CM);
+  return 10 ** Math.round(Math.log10(T / h));
+}

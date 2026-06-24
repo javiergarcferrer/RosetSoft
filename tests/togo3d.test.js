@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { inferTogoForm, inferTogoKind, togoParts, togoMeshFit, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
+import { inferTogoForm, inferTogoKind, togoParts, togoMeshFit, autoUnitScale, TOGO_HEIGHT_CM } from '../src/lib/togo/togoModel.js';
 import { glbFor, hasTogoGlb } from '../src/assets/togo/togoModels3d.js';
 import { resolveTogoScene, scenePlacementsFromPlaced, compactPlaced } from '../src/core/quote/views/configuratorView.js';
 
@@ -124,6 +124,31 @@ test('togoMeshFit normalises HEIGHT with a UNIFORM scale and never distorts the 
 
   // Degenerate height → finite, never NaN/Infinity.
   assert.ok(Number.isFinite(togoMeshFit({ x: 50, y: 0, z: 50 }, 72).s));
+});
+
+test('autoUnitScale corrects ONLY a gross mm/cm/m export, by a power of ten', () => {
+  // Centimetre exports render 1:1 — the TRUE size is kept, NOT forced to exactly 72
+  // (this is the difference from togoMeshFit): a 70 cm piece stays 70, an 85 stays 85.
+  assert.equal(autoUnitScale(72), 1);
+  assert.equal(autoUnitScale(70), 1);
+  assert.equal(autoUnitScale(85), 1);
+  assert.equal(autoUnitScale(45), 1);
+  // A gross unit mismatch is snapped by the nearest power of ten to real-world cm.
+  assert.equal(autoUnitScale(700), 0.1);     // millimetres → ÷10
+  assert.equal(autoUnitScale(7200), 0.01);   // tenths of a mm → ÷100
+  assert.equal(autoUnitScale(0.72), 100);    // metres → ×100
+  assert.equal(autoUnitScale(0.7), 100);
+  // It only EVER multiplies by a power of ten — never a fractional fudge that would
+  // distort the modelled size.
+  for (const h of [12, 60, 73, 130, 410, 950, 1.1, 0.5]) {
+    const f = autoUnitScale(h);
+    const log = Math.log10(f);
+    assert.ok(Math.abs(log - Math.round(log)) < 1e-9, `power of ten, got ${f} for h=${h}`);
+  }
+  // Degenerate height → 1 (no scaling), never NaN/Infinity.
+  assert.equal(autoUnitScale(0), 1);
+  assert.equal(autoUnitScale(-5), 1);
+  assert.ok(Number.isFinite(autoUnitScale(NaN)));
 });
 
 test('the 3D mirrors the 2D EXACTLY: flush plan → flush 3D, plan gap → identical 3D gap', () => {

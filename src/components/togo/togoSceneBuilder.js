@@ -12,7 +12,7 @@
  * (the dealer's pCon/OFML channel), swap the per-piece build for a glTF load —
  * the layout/material wiring here is unchanged.
  */
-import { togoParts, togoMeshFit, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
+import { togoParts, autoUnitScale } from '../../lib/togo/togoModel.js';
 
 // sRGB ↔ linear-light transfer (the exact IEC 61966-2-1 curve). Used to average
 // swatch pixels in LINEAR light (gamma-correct) so the sampled colour isn't
@@ -191,15 +191,15 @@ function placeRealModel(THREE, object, material, desc, pieceGroup) {
   if (desc?.rotateY) clone.rotation.y += (desc.rotateY * Math.PI) / 180;
   clone.updateMatrixWorld(true);
 
-  // ONE uniform scale — the FBX keeps its TRUE proportions (a square corner stays
-  // square; a per-axis "fit to tile" is what once turned it rectangular). A
-  // dealer-set desc.scale wins (a manual unit override); otherwise normalise the
-  // height to the Togo's real ~72 cm — every piece IS that height, and the ratio
-  // also absorbs whatever unit (mm/cm/m) the FBX was exported in.
+  // ONE uniform scale — the FBX keeps its TRUE size and proportions (a square corner
+  // stays square; a per-axis "fit to tile" is what once turned it rectangular). A
+  // dealer-set desc.scale wins (a manual override); otherwise the auto-unit guard
+  // only corrects a gross mm/cm/m export (a power of ten off the real ~72 cm Togo
+  // height), so the model renders at its real modelled size — true to the FBX.
   const wrap = new THREE.Group();
   wrap.add(clone);
   const size0 = new THREE.Box3().setFromObject(clone).getSize(new THREE.Vector3());
-  wrap.scale.setScalar(Number(desc?.scale) > 0 ? Number(desc.scale) : togoMeshFit(size0, TOGO_HEIGHT_CM).s);
+  wrap.scale.setScalar(Number(desc?.scale) > 0 ? Number(desc.scale) : autoUnitScale(size0.y));
   wrap.updateMatrixWorld(true);
 
   // Recentre on the footprint and sit it on the floor — the export's own origin and
