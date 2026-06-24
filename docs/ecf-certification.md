@@ -79,6 +79,15 @@ needs them).
   (migration `20260809000000`). `fe-recepcion` archives inbound e-CFs and rejects
   duplicates (NoReceivedCode 3); `fe-aprobacioncomercial` archives approvals.
   Both writes are best-effort — they never block the DGII acuse/response.
+- **Nota de crédito (tipo 34) issuance — full + partial** (migration
+  `20260810000000`). A nota is a `sales_postings` row (ecf_type 34, its own E34
+  e-NCF, positive credited amounts) referencing the modified sale; `Facturación`
+  has a "N. crédito" action (anulación total / corrección parcial), it posts the
+  reversing asiento + transmits like any e-CF with the `InformacionReferencia`,
+  and the 607 + IT-1 NET it out (`isCreditNote`, the 607 TXT's NCF-modificado
+  field). Pure logic `resolveCreditNoteDraft`; pinned in `tests/sales.test.js` +
+  `tests/dgiiFormats.test.js`. Live prerequisite: authorize an **E34 sequence**
+  range in Secuencias e-CF (the type-34 option is already in the picker).
 
 **Gated on the live cert** (not buildable from the sandbox — needs DGII creds /
 the test set / CerteCF responses):
