@@ -1,7 +1,7 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Loader2, Check, Trash2, FileText, Receipt } from 'lucide-react';
+import { Plus, Loader2, Check, Trash2, FileText, Receipt, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -13,6 +13,7 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import SearchPicker from '../../components/SearchPicker.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
+import { lookupRnc, cleanRnc, isValidRncOrCedula } from '../../lib/rncLookup.js';
 import {
   NATURES, NATURE_LABEL, purchaseNature, buildExpenseEntry, buildPurchaseEntry, computeExpenseTaxes,
   resolvePurchaseLines, resolveAccountingConfig, classOf, postableAccounts, weightedAverageIn,
@@ -144,6 +145,8 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     : [blankBillLine()]));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [rncDraft, setRncDraft] = useState('');
+  const [lookingRnc, setLookingRnc] = useState(false);
 
   const nature = form.nature;
   const goods = nature === 'mercancia';
@@ -156,6 +159,10 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     return tipo606For({ kind }, 'purchase');
   }, [nature, form.accountCode]);
   const tipo606 = form.tipo606 || derivedTipo606;
+  // A compra's supplier RNC drives the 606 — surface an inline RNC field when the
+  // selected proveedor (often just created) has none yet.
+  const selectedSupplier = suppliersById.get(form.supplierId) || null;
+  useEffect(() => { setRncDraft(''); }, [form.supplierId]);
 
   const accountOpts = useMemo(() => {
     const cls = nature === 'activo' ? 1 : 6;
@@ -218,6 +225,24 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     } catch (e) {
       setErr(userMessageFor(e));
     }
+  }
+  // Persist the RNC (and any looked-up fiscal name) onto the selected supplier —
+  // the 606 reads it from there, not from the compra.
+  async function saveSupplierRnc(rawRnc, name) {
+    const clean = cleanRnc(rawRnc);
+    if (!form.supplierId || !isValidRncOrCedula(clean)) return;
+    try { await db.suppliers.update(form.supplierId, { rnc: clean, ...(name ? { name } : {}) }); }
+    catch (e) { setErr(userMessageFor(e)); }
+  }
+  async function lookupSupplierRnc() {
+    const clean = cleanRnc(rncDraft);
+    if (!isValidRncOrCedula(clean)) { setErr('RNC (9 dígitos) o cédula (11) inválido.'); return; }
+    setErr(''); setLookingRnc(true);
+    try {
+      const res = await lookupRnc(clean);
+      await saveSupplierRnc(clean, res?.found ? (res.name || '') : '');
+    } catch (e) { setErr(userMessageFor(e)); }
+    finally { setLookingRnc(false); }
   }
 
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
@@ -437,6 +462,18 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
               onPick={(o) => onSupplier(o.id)}
               onFreeText={(txt) => createSupplier(txt)} />
           </Field>
+          {selectedSupplier && !selectedSupplier.rnc && (
+            <Field label="RNC / Cédula del proveedor" hint={<span className="text-[11px] text-amber-600">para el 606</span>}>
+              <div className="flex gap-2">
+                <input value={rncDraft} onChange={(e) => setRncDraft(e.target.value)} onBlur={() => saveSupplierRnc(rncDraft)}
+                  placeholder="RNC o cédula" className={`${field} flex-1 tabular-nums min-w-0`} />
+                <button type="button" onClick={lookupSupplierRnc} disabled={lookingRnc}
+                  className="btn-ghost inline-flex items-center gap-1.5 disabled:opacity-40 whitespace-nowrap flex-shrink-0">
+                  {lookingRnc ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Buscar
+                </button>
+              </div>
+            </Field>
+          )}
           {!goods && !isBill && (
             <Field label={nature === 'activo' ? 'Cuenta de activo' : 'Cuenta de gasto'}>
               <select value={form.accountCode} onChange={(e) => setForm((f) => ({ ...f, accountCode: e.target.value }))} className={field}>
