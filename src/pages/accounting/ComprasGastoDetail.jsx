@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy } from 'lucide-react';
+import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy, Paperclip } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -41,6 +41,43 @@ function Field({ label, children }) {
  * recomputes from what's LEFT; an item minted only by this invoice is removed).
  * Self-gates on accounting/admin.
  */
+/** Receipt attachment + review/approval flag for a supplier document. */
+function DocExtras({ doc, table }) {
+  const [url, setUrl] = useState(doc.attachmentUrl || '');
+  const [editing, setEditing] = useState(!doc.attachmentUrl);
+  const [saving, setSaving] = useState(false);
+  const status = doc.approvalStatus || 'approved';
+  const STATUS = { approved: ['Aprobada', 'bg-emerald-100 text-emerald-700'], rejected: ['Rechazada', 'bg-rose-100 text-rose-700'], pending: ['Pendiente', 'bg-amber-100 text-amber-800'] };
+  async function saveUrl() { setSaving(true); try { await db[table].update(doc.id, { attachmentUrl: url.trim() || null, updatedAt: Date.now() }); setEditing(false); } finally { setSaving(false); } }
+  async function setApproval(s) { await db[table].update(doc.id, { approvalStatus: s, approvedAt: Date.now(), updatedAt: Date.now() }); }
+  const [label, cls] = STATUS[status] || STATUS.approved;
+  return (
+    <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+      <div className="flex items-center gap-2 text-sm min-w-0">
+        <Paperclip size={14} className="text-ink-400 shrink-0" />
+        {doc.attachmentUrl && !editing ? (
+          <>
+            <a href={doc.attachmentUrl} target="_blank" rel="noreferrer" className="text-brand-600 hover:text-brand-700 truncate">Ver adjunto</a>
+            <button type="button" onClick={() => setEditing(true)} className="text-xs text-ink-400 hover:text-ink-700">cambiar</button>
+          </>
+        ) : (
+          <>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL del comprobante (Drive…)" className="input py-1 w-56" />
+            <button type="button" onClick={saveUrl} disabled={saving} className="btn-ghost text-xs">{saving ? '…' : 'Guardar'}</button>
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-ink-500">Aprobación:</span>
+        <span className={`status-pill ${cls}`}>{label}</span>
+        {status !== 'approved' && <button type="button" onClick={() => setApproval('approved')} className="btn-ghost text-xs">Aprobar</button>}
+        {status !== 'pending' && <button type="button" onClick={() => setApproval('pending')} className="btn-ghost text-xs">Marcar pendiente</button>}
+        {status !== 'rejected' && <button type="button" onClick={() => setApproval('rejected')} className="btn-ghost text-xs text-rose-600">Rechazar</button>}
+      </div>
+    </div>
+  );
+}
+
 export default function ComprasGastoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -105,6 +142,8 @@ export default function ComprasGastoDetail() {
   }
 
   const d = detail;
+  const doc = purchaseQ.data || expenseQ.data;
+  const docTable = detail.source === 'purchase' ? 'purchases' : 'expenses';
   const TABS = [
     { key: 'lines', label: 'Líneas de factura' },
     { key: 'asiento', label: 'Apuntes contables' },
@@ -178,6 +217,13 @@ export default function ComprasGastoDetail() {
             </dl>
           </div>
         </div>
+
+        {/* Adjunto + aprobación */}
+        {doc && (
+          <div className="px-4 sm:px-6 py-4 border-t border-ink-100">
+            <DocExtras doc={doc} table={docTable} />
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="px-4 sm:px-6 border-t border-ink-100 pt-4">
