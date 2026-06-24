@@ -24,6 +24,7 @@ import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
+  resolveReceivables, resolveInvoicePipeline,
 } from '../../core/accounting/index.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
@@ -120,6 +121,15 @@ export default function Facturacion() {
   const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && postingsQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
+  // Invoice pipeline (AR funnel) — por cobrar / vencida / cobrada + e-CF backlog.
+  const pipelineReceivables = useMemo(
+    () => resolveReceivables({ salesPostings: postingsQ.data, payments: paymentsQ.data, customersById }),
+    [postingsQ.data, paymentsQ.data, customersById],
+  );
+  const pipeline = useMemo(
+    () => resolveInvoicePipeline({ salesPostings: postingsQ.data, receivables: pipelineReceivables, customersById, now: Date.now() }),
+    [postingsQ.data, pipelineReceivables, customersById],
+  );
   const linesByQuote = useMemo(() => {
     const m = new Map();
     for (const ln of linesQ.data) {
@@ -631,6 +641,23 @@ export default function Facturacion() {
   return (
     <AccountingGate title="Facturación">
       <PageHeader title="Facturación" subtitle="Ventas al entregar · 607 · liquidación de ITBIS (IT-1)" />
+
+      {loaded && pipeline.count > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          {pipeline.buckets.map((b) => (
+            <div key={b.key} className="card p-3 min-w-0">
+              <div className="eyebrow-xs text-ink-500 mb-1">{b.label}</div>
+              <div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(b.amount)}</div>
+              <div className="text-[11px] text-ink-400">{b.count} {b.count === 1 ? 'factura' : 'facturas'}</div>
+            </div>
+          ))}
+          <div className={`card p-3 min-w-0 ${pipeline.pendingEcf.count > 0 ? 'border-amber-300' : ''}`}>
+            <div className={`eyebrow-xs mb-1 ${pipeline.pendingEcf.count > 0 ? 'text-amber-600' : 'text-ink-500'}`}>e-CF pendiente</div>
+            <div className="font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(pipeline.pendingEcf.amount)}</div>
+            <div className="text-[11px] text-ink-400">{pipeline.pendingEcf.count} por transmitir</div>
+          </div>
+        </div>
+      )}
 
       <TabPills tabs={[
         { key: 'pending', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
