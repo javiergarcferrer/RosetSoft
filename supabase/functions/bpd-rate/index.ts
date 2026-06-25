@@ -189,21 +189,38 @@ Deno.serve(async (req) => {
     return json({ error: 'Server misconfigured' }, 500);
   }
 
-  // Require a logged-in dealer so the bank's quota can't be drained by
-  // anonymous traffic. verify_jwt is off at the gateway (so the CORS
-  // preflight passes — browsers don't send Authorization on OPTIONS); we
-  // verify the token here instead.
+  // Optional JSON body. The browser invokes us with no body (user path); the
+  // pg_cron schedule (migration *_bpd_rate_cron) posts `{cron:true}`. Tolerate
+  // an empty/absent/invalid body — it just means the user path.
+  let body: { cron?: boolean } = {};
+  try {
+    if (req.method === 'POST') body = (await req.json()) ?? {};
+  } catch { /* no/!JSON body — user path */ }
+
+  // Two callers, two auth modes (verify_jwt is off at the gateway — so the CORS
+  // preflight, which carries no Authorization, passes — and we authenticate
+  // here instead):
+  //   • cron: the scheduled job, identified by the service-role key as Bearer.
+  //     Checked first, because the service key is NOT a user JWT.
+  //   • user: a logged-in dealer, whose JWT we verify — so the bank's quota
+  //     can't be drained by anonymous traffic.
   const authHeader = req.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return json({ error: 'Authorization header required' }, 401);
-  }
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-    const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data, error } = await caller.auth.getUser();
-    if (error || !data?.user) return json({ error: 'Invalid or expired session' }, 401);
+  const isCron = body?.cron === true;
+  if (isCron) {
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Server misconfigured' }, 500);
+    if (authHeader !== `Bearer ${SERVICE_ROLE_KEY}`) return json({ error: 'forbidden' }, 403);
+  } else {
+    if (!authHeader.startsWith('Bearer ')) {
+      return json({ error: 'Authorization header required' }, 401);
+    }
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+      const caller = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await caller.auth.getUser();
+      if (error || !data?.user) return json({ error: 'Invalid or expired session' }, 401);
+    }
   }
 
   try {
@@ -301,6 +318,18 @@ Deno.serve(async (req) => {
       } else {
         persisted = true;
       }
+
+      // Self-heal the daily schedule: (re)register the pg_cron job that posts
+      // `{cron:true}` back here through the business morning (migration
+      // *_bpd_rate_cron). Idempotent, and driven off the function's own URL +
+      // service key, so the schedule survives a project restore/reset without
+      // anyone wiring it up — the next successful pull (browser OR cron) re-arms
+      // it. Fire-and-forget: a registration hiccup must never fail the rate.
+      const { error: cronErr } = await admin.rpc('ensure_bpd_rate_cron', {
+        p_url: `${SUPABASE_URL}/functions/v1/bpd-rate`,
+        p_secret: SERVICE_ROLE_KEY,
+      });
+      if (cronErr) console.error('bpd-rate: failed to register cron:', cronErr.message);
     }
 
     console.log('[bpd-rate] ok', { usd: rates.USD, eur: rates.EUR ?? null, persisted });
