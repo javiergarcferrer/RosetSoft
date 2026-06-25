@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
-  companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote,
+  companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote, quoteMargin,
   initialQuoteTerms, resolveTermsPresetPicker,
   lineHasTogoPlan, placementsFromComponents, resolveTogoDxf,
 } from '../core/quote/index.js';
@@ -727,6 +727,13 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // line is quoted by range (material-less). Collapses to a point (and the UI
   // falls back to the single figure) once every line carries a real price.
   const totalsRange = computeTotalsRange(orderLines, totalsQuote, { taxExempt: isCompanyQuote });
+  // Per-product margin (interno) on the company (house) account: each catalog
+  // line's real cost (frozen unitCost) vs its list price gives the dealer's
+  // margin — the per-SKU "63%" the Catálogo shows, rolled up. Admin-only (the
+  // cost view is) and only on the company account, where the dealer reads their
+  // own orders' margins. Computed from the RAW list lines (not the cost-scaled
+  // orderLines): margin is list-vs-catalog-cost, independent of the flat view.
+  const margin = (isCompanyQuote && isAdmin) ? quoteMargin(lines) : null;
 
   /* ---------------------------- render ---------------------------- */
 
@@ -998,6 +1005,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           rateLocked={rateState.locked}
           totals={totals}
           totalsRange={totalsRange}
+          margin={margin}
           professional={professional}
           onUpdateQuote={hx(updateQuote)}
           onExport={exportPdf}

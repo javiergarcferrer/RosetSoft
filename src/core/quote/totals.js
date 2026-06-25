@@ -10,7 +10,7 @@
 // for the surfaces that only need a quote's bottom line.
 import {
   computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
-  isCompanyAccountQuote,
+  isCompanyAccountQuote, isCompoundLine, lineBasePrice, lineQty,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 
@@ -45,3 +45,45 @@ export function quoteTotals(quote, lines, settings) {
 
 // The single figure most list/detail rows show.
 export const quoteGrandTotal = (quote, lines, settings) => quoteTotals(quote, lines, settings).grandTotal;
+
+// Per-product margin roll-up — the dealer-cost view behind "calcular el margen
+// con el margen asignado a cada producto". Each catalog line snapshots its
+// wholesale `unitCost` when added (frozen, so a later price-list change never
+// rewrites it), and the catalog's per-SKU margin IS (list − cost) / list — the
+// "63%" the dealer reads in the Catálogo. This sums the LIST value vs the real
+// catalog COST across a quote's priced lines and returns the resulting profit +
+// blended margin %, so a surface can show the dealer what they make.
+//
+// Only lines that carry a real per-product cost contribute: a compound prices
+// by components (which don't snapshot a cost) and a hand-typed line has none, so
+// both are EXCLUDED from the figures and merely counted — the caller surfaces
+// the coverage ("margen sobre N de M líneas") instead of quoting a margin that
+// silently ignored half the order. `sell` is the catalog list (pre line-level
+// adjustment) so the margin reflects the product, not a one-off discount. Pure.
+export function quoteMargin(lines) {
+  let sell = 0;
+  let cost = 0;
+  let linesPriced = 0;
+  let linesWithCost = 0;
+  for (const l of lines || []) {
+    if (!isPricedLine(l)) continue;
+    linesPriced += 1;
+    const unitCost = Number(l?.unitCost);
+    // A compound (no component-level cost) or a line with no/zero catalog cost
+    // can't yield a per-product margin — count it, but keep it out of the math.
+    if (isCompoundLine(l) || !Number.isFinite(unitCost) || unitCost <= 0) continue;
+    const qty = lineQty(l);
+    sell += lineBasePrice(l) * qty;   // catalog LIST value (unitPrice × qty)
+    cost += unitCost * qty;           // real catalog COST
+    linesWithCost += 1;
+  }
+  const profit = sell - cost;
+  return {
+    sell,
+    cost,
+    profit,
+    marginPct: sell > 0 ? (profit / sell) * 100 : 0,
+    linesPriced,
+    linesWithCost,
+  };
+}

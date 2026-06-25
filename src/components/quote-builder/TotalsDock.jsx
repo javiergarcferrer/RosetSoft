@@ -45,7 +45,7 @@ import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
  * design — so a quote-wide margin gauge shows only when one is actually set.
  */
 export default function TotalsDock({
-  quote, rateLocked, totals, totalsRange, professional, onUpdateQuote,
+  quote, rateLocked, totals, totalsRange, margin = null, professional, onUpdateQuote,
   onExport, exporting, onPrint, printing, onWarehouse, warehousing, onTogoPlan, onShare,
   shareLabel = 'Enviar', shareTitle, shareAriaLabel, shareBusy = false,
 }) {
@@ -129,6 +129,7 @@ export default function TotalsDock({
         <Row label="Total" value={totalLabel} bold />
       </div>
       {showMarginMeter && <MarginMeter marginPct={marginPct} />}
+      {margin && margin.linesWithCost > 0 && <MarginCard margin={margin} fmt={fmt} />}
       {professional && (
         <CommissionCard
           commissionPct={commissionPct}
@@ -620,6 +621,39 @@ function MarginMeter({ marginPct }) {
         aria-label={`Margen aplicado ${marginPct}%`}
         title={`Margen aplicado: ${marginPct}%`}
       />
+    </div>
+  );
+}
+
+/**
+ * Internal (dealer-only) per-product margin readout for a company-account
+ * order: the catalog LIST value vs the real catalog COST (each line's frozen
+ * unitCost), and the resulting profit + blended margin % — the per-SKU "63%" the
+ * Catálogo shows, rolled up over the order. Never on the client PDF; rendered
+ * only for an admin on the company account (gated upstream in QuoteBuilder).
+ * When some lines carry no catalog cost (a compound, or a hand-typed line) it
+ * says so, so the figure is honest about the lines it could actually price.
+ */
+function MarginCard({ margin, fmt }) {
+  const pct = Math.round(margin.marginPct);
+  const partial = margin.linesWithCost < margin.linesPriced;
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-2 mt-1 shadow-xs">
+      <div className="flex items-center justify-between">
+        <h3 className="font-display font-semibold text-sm">Margen del pedido</h3>
+        <span className="eyebrow-xs text-ink-400">Interno</span>
+      </div>
+      <Row label="Venta (precio de lista)" value={fmt(margin.sell)} />
+      <Row label="Costo (catálogo)" value={fmt(margin.cost)} muted />
+      <div className="border-t border-emerald-200/60 pt-2 mt-1">
+        <Row label={`Margen (${pct}%)`} value={fmt(margin.profit)} bold />
+      </div>
+      <MarginMeter marginPct={pct} />
+      <p className="text-[10px] text-ink-500">
+        {partial
+          ? `Calculado sobre ${margin.linesWithCost} de ${margin.linesPriced} línea${margin.linesPriced === 1 ? '' : 's'} con costo de catálogo. Las composiciones y las líneas sin costo no se incluyen.`
+          : 'Usa el costo real de catálogo de cada producto (el margen por SKU del Catálogo).'}
+      </p>
     </div>
   );
 }
