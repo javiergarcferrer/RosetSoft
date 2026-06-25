@@ -61,11 +61,11 @@ export default function Bitacora() {
           {trail.count === 0 ? (
             <EmptyState icon={ScrollText} title="Sin registros" description="Los cambios en facturas, gastos, pagos y asientos aparecerán aquí." />
           ) : (
-            <div className="space-y-1.5">
+            <div className="card overflow-hidden divide-y divide-ink-100">
               {trail.rows.map((e) => {
                 const Icon = ACTION_ICON[e.action] || Pencil;
                 return (
-                  <div key={e.id} className="card p-2.5 flex items-center gap-3">
+                  <div key={e.id} className="px-3 py-2 flex items-center gap-3">
                     <Icon size={15} className={`shrink-0 ${ACTION_CLS[e.action] || 'text-ink-500'}`} />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm"><b>{e.userName}</b> {e.actionLabel.toLowerCase()} {e.tableLabel} <code className="text-[11px] text-ink-400">{e.rowId}</code></div>
@@ -75,7 +75,7 @@ export default function Bitacora() {
                   </div>
                 );
               })}
-              {trail.count > trail.rows.length && <p className="text-xs text-ink-400 text-center py-2">Mostrando {trail.rows.length} de {trail.count}.</p>}
+              {trail.count > trail.rows.length && <p className="text-xs text-ink-400 text-center py-2 bg-ink-50/40">Mostrando {trail.rows.length} de {trail.count}.</p>}
             </div>
           )}
         </>

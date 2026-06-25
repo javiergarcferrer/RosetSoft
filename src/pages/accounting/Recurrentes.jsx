@@ -69,7 +69,7 @@ export default function Recurrentes() {
   }
 
   const Row = ({ r, due }) => (
-    <div className={`card p-3 flex flex-wrap items-center gap-x-4 gap-y-2 ${due ? 'border-amber-300' : ''}`}>
+    <div className={`px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 ${due ? 'bg-amber-50' : ''}`}>
       <div className="min-w-0 flex-1">
         <div className="font-medium truncate">{r.name}</div>
         <div className="text-xs text-ink-500">{r.scheduleLabel} · {due ? 'vence' : 'próx.'} {formatDate(r.nextRunAt)}{r.lastRunAt ? ` · última ${formatDate(r.lastRunAt)}` : ''}</div>
@@ -98,26 +98,26 @@ export default function Recurrentes() {
               {agenda.due.length > 0 && (
                 <section>
                   <h3 className="eyebrow font-semibold text-amber-600 mb-2">Para generar hoy · {formatDop(agenda.dueTotal)}</h3>
-                  <div className="space-y-2">{agenda.due.map((r) => <Row key={r.template.id} r={r} due />)}</div>
+                  <div className="card overflow-hidden divide-y divide-ink-100">{agenda.due.map((r) => <Row key={r.template.id} r={r} due />)}</div>
                   <p className="text-xs text-ink-400 mt-2">Al generar se crea el gasto y su asiento con NCF en blanco — agrega el NCF del proveedor en Compras y gastos para el 606.</p>
                 </section>
               )}
               {agenda.upcoming.length > 0 && (
                 <section>
                   <h3 className="eyebrow font-semibold text-ink-600 mb-2">Próximas</h3>
-                  <div className="space-y-2">{agenda.upcoming.map((r) => <Row key={r.template.id} r={r} />)}</div>
+                  <div className="card overflow-hidden divide-y divide-ink-100">{agenda.upcoming.map((r) => <Row key={r.template.id} r={r} />)}</div>
                 </section>
               )}
               {agenda.paused.length > 0 && (
                 <section>
                   <h3 className="eyebrow font-semibold text-ink-400 mb-2">Pausadas</h3>
-                  <div className="space-y-2">{agenda.paused.map((r) => <Row key={r.template.id} r={r} />)}</div>
+                  <div className="card overflow-hidden divide-y divide-ink-100">{agenda.paused.map((r) => <Row key={r.template.id} r={r} />)}</div>
                 </section>
               )}
               {agenda.ended.length > 0 && (
                 <section>
                   <h3 className="eyebrow font-semibold text-ink-400 mb-2">Finalizadas</h3>
-                  <div className="space-y-2">{agenda.ended.map((r) => <Row key={r.template.id} r={r} />)}</div>
+                  <div className="card overflow-hidden divide-y divide-ink-100">{agenda.ended.map((r) => <Row key={r.template.id} r={r} />)}</div>
                 </section>
               )}
             </div>

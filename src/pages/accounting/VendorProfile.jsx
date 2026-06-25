@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Building2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -25,7 +26,17 @@ export default function VendorProfile() {
   const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = suppliersQ.loaded && expensesQ.loaded && purchasesQ.loaded && paymentsQ.loaded;
 
-  const [sid, setSid] = useState('');
+  // The selected supplier is URL-driven (?supplier=id) so other pages can deep-
+  // link straight to a vendor's 360 (relational navigation). The dropdown keeps
+  // the URL in sync so the view stays shareable/bookmarkable.
+  const [params, setParams] = useSearchParams();
+  const paramSupplier = params.get('supplier') || '';
+  const [sid, setSid] = useState(paramSupplier);
+  useEffect(() => { setSid(paramSupplier); }, [paramSupplier]);
+  function selectSupplier(id) {
+    setSid(id);
+    setParams(id ? { supplier: id } : {}, { replace: true });
+  }
   const supplier = useMemo(() => suppliersQ.data.find((s) => s.id === sid) || null, [suppliersQ.data, sid]);
   const v = useMemo(
     () => (supplier ? resolveVendorProfile({ supplier, expenses: expensesQ.data, purchases: purchasesQ.data, payments: paymentsQ.data, year }) : null),
@@ -36,7 +47,7 @@ export default function VendorProfile() {
     <AccountingGate title="Proveedor 360">
       <PageHeader title="Proveedor 360" subtitle="Balance, compras y retenciones del año por proveedor — valores en RD$"
         actions={(
-          <select value={sid} onChange={(e) => setSid(e.target.value)} className="input sm:min-w-[220px]">
+          <select value={sid} onChange={(e) => selectSupplier(e.target.value)} className="input sm:min-w-[220px]">
             <option value="">— Elige un proveedor —</option>
             {suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>

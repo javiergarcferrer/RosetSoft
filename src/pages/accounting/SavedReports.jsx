@@ -36,15 +36,17 @@ export default function SavedReports() {
       {!q.loaded ? <ListLoading /> : rows.length === 0 ? (
         <EmptyState icon={Bookmark} title="Sin vistas guardadas" description="Desde un reporte, usa “Guardar vista” para fijarlo aquí." />
       ) : (
-        <div className="space-y-2">
+        <div className="card overflow-hidden divide-y divide-ink-100">
           {rows.map((r) => (
-            <div key={r.id} className="card p-3 flex items-center gap-3">
-              <Bookmark size={15} className="text-ink-400 shrink-0" />
-              <Link to={`${r.path}${r.search || ''}`} className="flex-1 min-w-0 hover:text-ink-900">
-                <div className="font-medium truncate">{r.name}</div>
-                <div className="text-xs text-ink-500">{ROUTE_LABEL[r.path] || r.path}{r.createdAt ? ` · ${formatDate(r.createdAt)}` : ''}</div>
+            <div key={r.id} className="flex items-center gap-3 hover:bg-ink-50 transition-colors">
+              <Link to={`${r.path}${r.search || ''}`} className="flex items-center gap-3 flex-1 min-w-0 px-3 py-2.5">
+                <Bookmark size={15} className="text-ink-400 shrink-0" />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium truncate">{r.name}</span>
+                  <span className="block text-xs text-ink-500">{ROUTE_LABEL[r.path] || r.path}{r.createdAt ? ` · ${formatDate(r.createdAt)}` : ''}</span>
+                </span>
               </Link>
-              <button type="button" onClick={() => remove(r)} className="btn-icon text-ink-400" aria-label="Eliminar"><Trash2 size={15} /></button>
+              <button type="button" onClick={() => remove(r)} className="btn-icon text-ink-400 mr-2 shrink-0" aria-label="Eliminar"><Trash2 size={15} /></button>
             </div>
           ))}
         </div>

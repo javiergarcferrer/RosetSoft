@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { ClipboardList, Plus, X, Loader2, Trash2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -60,11 +60,16 @@ export default function OrdenesCompra() {
           {list.count === 0 ? (
             <EmptyState icon={ClipboardList} title="Sin órdenes" description="Crea una orden de compra para seguir un pedido a un proveedor." />
           ) : (
-            <div className="space-y-2">
+            <div className="card overflow-hidden divide-y divide-ink-100">
               {list.rows.map((r) => (
-                <div key={r.po.id} className="card p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div key={r.po.id} className="px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">#{r.po.number ?? '—'} · {r.supplier?.name || 'Proveedor'}</div>
+                    <div className="font-medium truncate">
+                      #{r.po.number ?? '—'} ·{' '}
+                      {r.supplier?.id
+                        ? <Link to={`/accounting/proveedor-360?supplier=${r.supplier.id}`} className="text-brand-600 hover:text-brand-700 hover:underline">{r.supplier.name}</Link>
+                        : (r.supplier?.name || 'Proveedor')}
+                    </div>
                     <div className="text-xs text-ink-500">{formatDate(r.po.orderedAt)} · {r.lineCount} línea(s){r.po.notes ? ` · ${r.po.notes}` : ''}</div>
                   </div>
                   <span className={`text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap ${STATUS_CLS[r.status] || ''}`}>{r.statusLabel}</span>
