@@ -250,10 +250,10 @@ export default function Suppliers() {
                 {suppliersQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => {
                   const ctx = { s, acctByCode };
                   return (
-                    <tr key={s.id} className="border-t border-ink-50">
+                    <tr key={s.id} onClick={() => openEdit(s)} className="border-t border-ink-50 cursor-pointer hover:bg-ink-50">
                       {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
                       <td className="py-1.5 px-3 text-right">
-                        <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar proveedor"><Pencil size={13} /> Editar</button>
+                        <button type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(s); }} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar proveedor"><Pencil size={13} /> Editar</button>
                       </td>
                     </tr>
                   );

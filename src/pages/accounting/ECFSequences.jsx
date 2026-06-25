@@ -169,10 +169,10 @@ export default function ECFSequences() {
                 const pill = status === 'Activa' ? 'status-pill-active' : status === 'Inactiva' ? 'status-pill-inactive' : 'status-pill-declined';
                 const ctx = { s, st, status, pill };
                 return (
-                  <tr key={s.id}>
+                  <tr key={s.id} onClick={() => openEdit(s)} className="cursor-pointer hover:bg-ink-50">
                     {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
                     <td className="text-right">
-                      <button type="button" onClick={() => openEdit(s)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar secuencia"><Pencil size={13} /> Editar</button>
+                      <button type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(s); }} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar secuencia"><Pencil size={13} /> Editar</button>
                     </td>
                   </tr>
                 );

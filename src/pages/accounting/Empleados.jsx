@@ -135,7 +135,7 @@ export default function Empleados() {
           {/* Mobile: stacked cards */}
           <div className="sm:hidden divide-y divide-ink-50">
             {empQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((e) => (
-              <div key={e.id} className="px-3 py-3 space-y-1">
+              <div key={e.id} onClick={() => openEdit(e)} className="px-3 py-3 space-y-1 cursor-pointer active:bg-ink-50">
                 <div className="flex items-start justify-between gap-2 min-w-0">
                   <div className="min-w-0">
                     <span className="font-semibold text-ink-900 block break-words">{e.name}</span>
@@ -143,7 +143,7 @@ export default function Empleados() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className={`status-pill ${e.active !== false ? 'status-pill-active' : 'status-pill-inactive'}`}>{e.active !== false ? 'Activo' : 'Inactivo'}</span>
-                    <button type="button" onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors" title="Editar empleado"><Pencil size={13} /> Editar</button>
+                    <button type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors" title="Editar empleado"><Pencil size={13} /> Editar</button>
                   </div>
                 </div>
                 <div className="text-sm tabular-nums font-medium text-ink-700">{formatDop(e.monthlySalary)}</div>
@@ -167,9 +167,9 @@ export default function Empleados() {
                   {empQ.data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((e) => {
                     const ctx = { e };
                     return (
-                      <tr key={e.id}>
+                      <tr key={e.id} onClick={() => openEdit(e)} className="cursor-pointer">
                         {cols.map((c) => <td key={c.key} className={c.tdClass}>{c.cell(ctx)}</td>)}
-                        <td className="text-right"><button type="button" onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar empleado"><Pencil size={13} /> Editar</button></td>
+                        <td className="text-right"><button type="button" onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="inline-flex items-center gap-1 rounded-md px-2 min-h-8 coarse:min-h-11 text-xs font-medium text-ink-600 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors whitespace-nowrap" title="Editar empleado"><Pencil size={13} /> Editar</button></td>
                       </tr>
                     );
                   })}
