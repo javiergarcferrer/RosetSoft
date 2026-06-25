@@ -70,15 +70,17 @@ export default function RowCards({ rows, footer, empty = null, inCard = false })
     return empty != null ? <div className="md:hidden">{empty}</div> : null;
   }
   const rowClass = 'block px-3.5 py-2.5';
+  // Keyboard nav must be visible: a focus-visible ring + tint on the touch target.
+  const focusClass = 'focus:outline-none focus-visible:bg-ink-50 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-inset';
   const items = rows.map((row) => {
     const body = <RowBody row={row} />;
     if (row.to) {
-      return <Link key={row.key} to={row.to} className={`${rowClass} hover:bg-ink-50 transition-colors`}>{body}</Link>;
+      return <Link key={row.key} to={row.to} className={`${rowClass} ${focusClass} hover:bg-ink-50 transition-colors`}>{body}</Link>;
     }
     if (row.onClick) {
       return (
         <button key={row.key} type="button" onClick={row.onClick}
-          className={`${rowClass} w-full text-left hover:bg-ink-50 transition-colors`}>{body}</button>
+          className={`${rowClass} ${focusClass} w-full text-left hover:bg-ink-50 transition-colors`}>{body}</button>
       );
     }
     return <div key={row.key} className={rowClass}>{body}</div>;

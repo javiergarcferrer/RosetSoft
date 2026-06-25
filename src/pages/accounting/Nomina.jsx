@@ -95,10 +95,12 @@ const RUNS_COLS_KEY = 'rs.nomina.runs.cols.v1';
 
 /** A labelled numeric input used across the calculators. */
 function NumIn({ value, onChange, placeholder, className = '' }) {
+  // Full-width by default; a caller that pins its own width (w-XX) opts out.
+  const width = /\bw-/.test(className) ? '' : 'w-full';
   return (
     <input type="number" step="0.01" min="0" inputMode="decimal" value={value ?? ''}
       onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      className={`input text-right tabular-nums ${className}`} />
+      className={`input ${width} min-w-0 text-right tabular-nums ${className}`} />
   );
 }
 

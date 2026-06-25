@@ -45,12 +45,12 @@ export default function PeriodPicker({ from, to, onChange }) {
           </button>
         );
       })}
-      <div className="flex items-center gap-1.5 text-sm text-ink-500">
+      <div className="flex items-center gap-2 min-w-0 text-sm text-ink-500">
         <input type="date" value={from} onChange={(e) => onChange({ from: e.target.value, to })}
-          className="input py-1.5 text-sm" aria-label="Desde" />
-        <span>–</span>
+          className="input w-full min-w-0 flex-1 py-1.5 text-sm" aria-label="Desde" />
+        <span className="shrink-0">–</span>
         <input type="date" value={to} onChange={(e) => onChange({ from, to: e.target.value })}
-          className="input py-1.5 text-sm" aria-label="Hasta" />
+          className="input w-full min-w-0 flex-1 py-1.5 text-sm" aria-label="Hasta" />
       </div>
     </div>
   );

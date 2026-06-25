@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Loader2, Check, Trash2 } from 'lucide-react';
+import { Loader2, Check } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -9,6 +9,8 @@ import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import BackLink from '../../components/BackLink.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import { FieldRow as Field } from '../../components/accounting/FormFields.jsx';
+import LineItemsEditor from '../../components/accounting/LineItemsEditor.jsx';
 import { formatDop } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { cleanRnc } from '../../lib/rncLookup.js';
@@ -23,15 +25,6 @@ import {
 const blankLine = () => ({ id: newId(), description: '', accountCode: '', qty: '1', unitPrice: '', taxIds: ['itbis18'] });
 const ITBIS_OPTS = [{ id: 'itbis18', label: 'ITBIS 18%' }, { id: 'itbis16', label: 'ITBIS 16%' }, { id: 'exento', label: 'Exento' }];
 const itbisOf = (taxIds) => (taxIds || []).find((id) => /^itbis|^exento/.test(id)) || 'itbis18';
-
-function Field({ label, children }) {
-  return (
-    <label className="flex items-baseline gap-3 py-2 border-b border-ink-100 min-w-0">
-      <span className="text-xs text-ink-500 w-32 shrink-0 leading-tight">{label}</span>
-      <div className="flex-1 min-w-0">{children}</div>
-    </label>
-  );
-}
 
 /**
  * Factura de venta por líneas — a DIRECT sales invoice (not tied to a quote):
@@ -151,7 +144,7 @@ export default function FacturaVentaEditor() {
           </div>
 
           {/* Document fields */}
-          <div className="px-4 sm:px-6 py-2 grid sm:grid-cols-2 gap-x-10 gap-y-0">
+          <div className="px-4 sm:px-6 py-2 grid sm:grid-cols-2 gap-x-4 lg:gap-x-10 gap-y-0">
             <div className="min-w-0">
               <Field label="Cliente">
                 <select value={form.customerId} onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))} className={field}>
@@ -177,44 +170,30 @@ export default function FacturaVentaEditor() {
 
           {/* Líneas */}
           <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
-            <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[680px]">
-                <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
-                  <tr>
-                    <th className="text-left font-medium pb-1">Descripción</th>
-                    <th className="text-left font-medium pb-1">Cuenta de ingreso</th>
-                    <th className="text-right font-medium pb-1 w-16">Cant.</th>
-                    <th className="text-right font-medium pb-1 w-28 whitespace-nowrap">P. unit.</th>
-                    <th className="text-left font-medium pb-1 w-28">ITBIS</th>
-                    <th className="text-right font-medium pb-1 w-28">Importe</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((l) => {
-                    const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0;
-                    return (
-                      <tr key={l.id} className="align-top">
-                        <td className="py-0.5 pr-2"><input value={l.description} onChange={(e) => patchLine(l.id, { description: e.target.value })} placeholder="Concepto" className="input w-full" /></td>
-                        <td className="py-0.5 pr-2">
-                          <select value={l.accountCode} onChange={(e) => patchLine(l.id, { accountCode: e.target.value })} className="input w-full max-w-[16rem]">
-                            <option value="">— Cuenta —</option>
-                            {incomeAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
-                          </select>
-                        </td>
-                        <td className="py-0.5"><input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-16 text-right tabular-nums" /></td>
-                        <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchLine(l.id, { unitPrice: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} className="input w-28 text-right tabular-nums" /></td>
-                        <td className="py-0.5 pr-1"><select value={itbisOf(l.taxIds)} onChange={(e) => patchLine(l.id, { taxIds: [e.target.value] })} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></td>
-                        <td className="py-0.5 text-right text-ink-700 tabular-nums whitespace-nowrap pr-1 pt-2.5">{sub > 0 ? formatDop(sub) : '—'}</td>
-                        <td className="py-0.5 text-right"><button type="button" onClick={() => delLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <button type="button" onClick={addLine} className="btn-ghost text-xs gap-1 mt-1 px-2"><Plus size={12} /> Línea <span className="text-ink-300 normal-case hidden sm:inline">(o Enter en P. unit.)</span></button>
+            <h4 className="eyebrow-xs text-ink-400 mb-2">Líneas de la factura</h4>
+            <LineItemsEditor
+              rows={lines} onAdd={addLine} onDelete={(l) => delLine(l.id)}
+              addLabel="Agregar línea" addHint="o Enter en P. unit."
+              columns={[
+                { key: 'desc', header: 'Descripción',
+                  render: (l) => <input value={l.description} onChange={(e) => patchLine(l.id, { description: e.target.value })} placeholder="Concepto" className="input w-full" /> },
+                { key: 'acct', header: 'Cuenta de ingreso',
+                  render: (l) => (
+                    <select value={l.accountCode} onChange={(e) => patchLine(l.id, { accountCode: e.target.value })} className="input w-full">
+                      <option value="">— Cuenta —</option>
+                      {incomeAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                    </select>
+                  ) },
+                { key: 'qty', header: 'Cant.', align: 'right', width: 'w-20',
+                  render: (l) => <input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums" /> },
+                { key: 'price', header: 'P. unit.', align: 'right', width: 'w-28',
+                  render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchLine(l.id, { unitPrice: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} className="input w-full text-right tabular-nums" /> },
+                { key: 'itbis', header: 'ITBIS', width: 'w-28',
+                  render: (l) => <select value={itbisOf(l.taxIds)} onChange={(e) => patchLine(l.id, { taxIds: [e.target.value] })} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select> },
+                { key: 'amt', header: 'Importe', align: 'right', width: 'w-28',
+                  render: (l) => { const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0; return <span className="text-ink-700 tabular-nums">{sub > 0 ? formatDop(sub) : '—'}</span>; } },
+              ]}
+            />
           </div>
 
           {/* Totales */}

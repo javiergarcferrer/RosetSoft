@@ -473,16 +473,16 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
 
       {/* Expediente meta */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <label className="text-xs text-ink-500">Fecha<input type="date" value={head.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} className={`${field} w-full mt-0.5`} /></label>
+        <label className="block min-w-0 text-xs text-ink-500">Fecha<input type="date" value={head.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} className={`${field} w-full min-w-0 mt-0.5`} /></label>
         {orders.length > 0 && (
-          <label className="text-xs text-ink-500">Pedido<select value={head.orderId} onChange={(e) => setHead((h) => ({ ...h, orderId: e.target.value }))} className={`${field} w-full mt-0.5`}>
+          <label className="block min-w-0 text-xs text-ink-500">Pedido<select value={head.orderId} onChange={(e) => setHead((h) => ({ ...h, orderId: e.target.value }))} className={`${field} w-full min-w-0 mt-0.5`}>
             <option value="">— Opcional —</option>
             {orders.map((o) => <option key={o.id} value={o.id}>#{o.number} {o.name || ''}</option>)}
           </select>
           </label>
         )}
-        <label className="text-xs text-ink-500">Tasa USD→DOP <span className="text-ink-400">(importar PDF)</span><input type="number" step="0.01" min="0" inputMode="decimal" value={head.rate} onChange={(e) => setHead((h) => ({ ...h, rate: e.target.value }))} className={`${field} w-full mt-0.5 text-right tabular-nums`} /></label>
-        <label className="text-xs text-ink-500">Pago aduanas<select value={head.paymentMethod} onChange={(e) => setHead((h) => ({ ...h, paymentMethod: e.target.value }))} className={`${field} w-full mt-0.5`}>
+        <label className="block min-w-0 text-xs text-ink-500">Tasa USD→DOP <span className="text-ink-400">(importar PDF)</span><input type="number" step="0.01" min="0" inputMode="decimal" value={head.rate} onChange={(e) => setHead((h) => ({ ...h, rate: e.target.value }))} className={`${field} w-full min-w-0 mt-0.5 text-right tabular-nums`} /></label>
+        <label className="block min-w-0 text-xs text-ink-500">Pago aduanas<select value={head.paymentMethod} onChange={(e) => setHead((h) => ({ ...h, paymentMethod: e.target.value }))} className={`${field} w-full min-w-0 mt-0.5`}>
           <option value="bank">Banco</option><option value="credit">Crédito</option><option value="cash">Efectivo</option><option value="card">Tarjeta</option>
         </select></label>
       </div>
@@ -549,8 +549,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               <input value={emb.bl} onChange={(e) => patchEmb(emb.id, { bl: e.target.value })} placeholder="BL / conocimiento" className={`${field} w-full lg:col-span-2`} />
               <input value={emb.customsRef} onChange={(e) => patchEmb(emb.id, { customsRef: e.target.value })} placeholder="DUA" className={`${field} w-full`} />
-              <input type="number" step="0.01" min="0" inputMode="decimal" value={emb.flete} onChange={(e) => patchEmb(emb.id, { flete: e.target.value })} placeholder="Flete RD$" className={`${field} w-full text-right tabular-nums`} />
-              <input type="number" step="0.01" min="0" inputMode="decimal" value={emb.seguro} onChange={(e) => patchEmb(emb.id, { seguro: e.target.value })} placeholder="Seguro RD$" className={`${field} w-full text-right tabular-nums`} />
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={emb.flete} onChange={(e) => patchEmb(emb.id, { flete: e.target.value })} placeholder="Flete RD$" className={`${field} w-full min-w-0 text-right tabular-nums`} />
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={emb.seguro} onChange={(e) => patchEmb(emb.id, { seguro: e.target.value })} placeholder="Seguro RD$" className={`${field} w-full min-w-0 text-right tabular-nums`} />
             </div>
             {containers?.length > 0 && (
               <select value={emb.containerId} onChange={(e) => patchEmb(emb.id, { containerId: e.target.value })} className={`${field} mt-2 w-full sm:w-64`}>
