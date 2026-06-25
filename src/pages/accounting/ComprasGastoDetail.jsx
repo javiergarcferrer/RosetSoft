@@ -386,6 +386,7 @@ export default function ComprasGastoDetail() {
                       <th>Cuenta</th>
                       <th className="text-right whitespace-nowrap">Cant.</th>
                       <th className="text-right whitespace-nowrap">P. unit.</th>
+                      <th className="text-right whitespace-nowrap">Desc.</th>
                       <th>Impuestos</th>
                       <th className="text-right whitespace-nowrap">Importe</th>
                     </tr>
@@ -397,6 +398,7 @@ export default function ComprasGastoDetail() {
                         <td className="text-ink-600 min-w-0"><span className="font-mono text-xs text-ink-400 mr-1">{l.accountCode}</span>{l.accountName}</td>
                         <td className="text-right tabular-nums whitespace-nowrap">{l.qty || '—'}</td>
                         <td className="text-right tabular-nums whitespace-nowrap">{l.unitPrice > 0 ? formatDop(l.unitPrice) : '—'}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{l.discount > 0 ? `−${formatDop(l.discount)}` : '—'}</td>
                         <td className="text-ink-500 text-xs">{l.taxLabels.length ? l.taxLabels.join(' · ') : '—'}</td>
                         <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.base)}</td>
                       </tr>
@@ -404,17 +406,21 @@ export default function ComprasGastoDetail() {
                   </tbody>
                 </table>
               ) : d.lines.length > 0 ? (
-                <table className="table min-w-[520px]">
+                <table className="table min-w-[640px]">
                   <thead>
                     <tr>
                       <th>Producto</th>
                       <th className="text-right whitespace-nowrap">Cant.</th>
-                      <th className="text-right whitespace-nowrap">Costo</th>
-                      <th className="text-right whitespace-nowrap">C. unit.</th>
+                      <th className="text-right whitespace-nowrap">Costo unit.</th>
+                      <th className="text-right whitespace-nowrap">Desc.</th>
+                      <th>ITBIS</th>
+                      <th className="text-right whitespace-nowrap">Importe</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {d.lines.map((l) => (
+                    {d.lines.map((l) => {
+                      const grossUnit = l.qty > 0 ? (l.cost + (l.discount || 0)) / l.qty : 0;
+                      return (
                       <tr key={l.id}>
                         <td className="min-w-0">
                           {l.name}
@@ -422,10 +428,13 @@ export default function ComprasGastoDetail() {
                           {!l.inInventory && <span className="ml-1.5 text-[11px] text-amber-700">sin artículo</span>}
                         </td>
                         <td className="text-right tabular-nums whitespace-nowrap">{l.qty || '—'}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{grossUnit > 0 ? formatDop(grossUnit) : '—'}</td>
+                        <td className="text-right tabular-nums whitespace-nowrap">{l.discount > 0 ? `−${formatDop(l.discount)}` : '—'}</td>
+                        <td className="text-ink-500 text-xs">{l.taxLabels?.length ? l.taxLabels.join(' · ') : '—'}</td>
                         <td className="text-right tabular-nums whitespace-nowrap">{formatDop(l.cost)}</td>
-                        <td className="text-right tabular-nums whitespace-nowrap">{l.unitCost > 0 ? formatDop(l.unitCost) : '—'}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               ) : (

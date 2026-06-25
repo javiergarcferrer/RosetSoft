@@ -1,5 +1,5 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Loader2, Check, Trash2, FileText, Receipt, Search } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -24,13 +24,17 @@ import {
 } from '../../core/accounting/index.js';
 import { reverseComprasGastoPosting, recomputeItems } from '../../lib/comprasGastosDoc.js';
 
-const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty: '', cost: '' });
+// A mercancía line is a full DGII factura line: artículo · cant. · costo unit. ·
+// descuento · ITBIS. A new row defaults to ITBIS 18% (the common case for goods).
+const blankLine = () => ({ id: newId(), itemId: '', name: '', reference: '', qty: '', unitCost: '', discount: '', taxIds: ['itbis18'] });
 const expOptLabel = (e) => `#${e.number ?? ''}${e.bl ? ` · ${e.bl}` : ''}`.trim();
 
 // "Por líneas" = the Odoo-style bill where each row hits its own account with its
 // own taxes (vs the single-account natures). A new row defaults to qty 1 + ITBIS 18%.
-const blankBillLine = () => ({ id: newId(), description: '', accountCode: '', qty: '1', unitPrice: '', taxIds: ['itbis18'] });
+const blankBillLine = () => ({ id: newId(), description: '', accountCode: '', qty: '1', unitPrice: '', discount: '', taxIds: ['itbis18'] });
 const ITBIS_OPTS = [{ id: 'itbis18', label: 'ITBIS 18%' }, { id: 'itbis16', label: 'ITBIS 16%' }, { id: 'exento', label: 'Exento' }];
+// The nature segmented control: the three single-account natures + "Por líneas".
+const NATURE_TABS = [...NATURES, { key: 'lineas', label: 'Por líneas' }];
 const RET_OPTS = [
   { id: '', label: 'Sin retención' },
   { id: 'retItbis30', label: 'Ret. ITBIS 30%' }, { id: 'retItbis100', label: 'Ret. ITBIS 100%' },
@@ -131,11 +135,28 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     accountCode: '', expedienteId: '', description: initial?.description || '', tipo606: '',
     base: initial?.base || '', itbis: initial?.itbis ?? '', retIsr: '', retItbis: '', paymentMethod: 'bank',
   }));
-  const [lines, setLines] = useState(() => (pf?.nature === 'mercancia' && pf.lines?.length
-    ? pf.lines.map((l) => ({ id: newId(), itemId: l.itemId || '', name: l.name || '', reference: l.reference || '', qty: String(l.qty ?? ''), cost: String(l.cost ?? '') }))
-    : [blankLine()]));
+  const [lines, setLines] = useState(() => {
+    if (!(pf?.nature === 'mercancia' && pf.lines?.length)) return [blankLine()];
+    // Older docs stored only a net `cost`; rehydrate the unit cost from it and
+    // default the per-line ITBIS to match whether the doc carried any (so a
+    // re-save doesn't silently add/drop tax). New docs carry the fields directly.
+    const fallbackTax = (Number(pf?.itbis) || 0) > 0 ? ['itbis18'] : ['exento'];
+    return pf.lines.map((l) => {
+      const qty = Number(l.qty) || 0;
+      // Reconstruct the GROSS unit cost (cost is NET = gross − discount) when the
+      // doc didn't store the entered unit; new docs store `unitCost` directly.
+      const unitCost = l.unitCost != null
+        ? l.unitCost
+        : (qty > 0 ? ((Number(l.cost) || 0) + (Number(l.discount) || 0)) / qty : '');
+      return {
+        id: newId(), itemId: l.itemId || '', name: l.name || '', reference: l.reference || '',
+        qty: String(l.qty ?? ''), unitCost: String(unitCost ?? ''), discount: String(l.discount ?? ''),
+        taxIds: Array.isArray(l.taxIds) && l.taxIds.length ? l.taxIds : fallbackTax,
+      };
+    });
+  });
   const [billLines, setBillLines] = useState(() => (pf?.lineMode && pf.lines?.length
-    ? pf.lines.map((l) => ({ id: newId(), description: l.description || '', accountCode: l.accountCode || '', qty: String(l.qty ?? ''), unitPrice: String(l.unitPrice ?? ''), taxIds: Array.isArray(l.taxIds) ? l.taxIds : [] }))
+    ? pf.lines.map((l) => ({ id: newId(), description: l.description || '', accountCode: l.accountCode || '', qty: String(l.qty ?? ''), unitPrice: String(l.unitPrice ?? ''), discount: String(l.discount ?? ''), taxIds: Array.isArray(l.taxIds) ? l.taxIds : [] }))
     : [blankBillLine()]));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -177,19 +198,13 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
   const billRes = useMemo(() => resolveBillLines(billLines), [billLines]);
   const base = goods ? lineRes.base : isBill ? billRes.totals.base : (Number(form.base) || 0);
 
+  // Gasto/activo derive their suggested ITBIS + retentions from the single base.
+  // Mercancía and Por líneas carry tax PER LINE instead (Σ líneas → totals), so
+  // they don't touch these header fields.
   function recompute(amount, supplier) {
     const t = computeExpenseTaxes({ base: Number(amount) || 0, retainIsr: !!supplier?.retainIsr, retainItbis: !!supplier?.retainItbis, config });
     return { itbis: String(t.itbis), retIsr: String(t.retIsr), retItbis: String(t.retItbis) };
   }
-  // Mercancía has no base input (it's Σ líneas) → recompute the suggested taxes
-  // whenever the líneas/supplier move. On an EDIT keep the stored taxes on first
-  // render — only recompute once the user actually changes the líneas/supplier.
-  const skipFirstTaxCalc = useRef(!!(editDoc || seedDoc));
-  useEffect(() => {
-    if (!goods) return;
-    if (skipFirstTaxCalc.current) { skipFirstTaxCalc.current = false; return; }
-    setForm((f) => ({ ...f, ...recompute(lineRes.base, suppliersById.get(f.supplierId)) }));
-  }, [goods, lineRes.base, form.supplierId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setNature(n) {
     setForm((f) => ({ ...f, nature: n, accountCode: n === 'gasto' ? (suppliersById.get(f.supplierId)?.defaultAccountCode || '') : '' }));
@@ -242,6 +257,9 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
   const addLine = () => setLines((ls) => [...ls, blankLine()]);
   const patchLine = (id, patch) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const delLine = (id) => setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.id !== id) : ls.map((l) => (l.id === id ? blankLine() : l))));
+  // A mercancía line carries a single ITBIS preset (goods don't take retentions).
+  const setMercItbis = (l, itbisId) => patchLine(l.id, { taxIds: itbisId ? [itbisId] : [] });
+  const lineById = useMemo(() => new Map(lineRes.lines.map((l) => [l.id, l])), [lineRes]);
 
   const addBillLine = () => setBillLines((ls) => [...ls, blankBillLine()]);
   const patchBillLine = (id, patch) => setBillLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
@@ -253,9 +271,11 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
 
   async function save() {
     setErr('');
-    const itbis = Number(form.itbis) || 0;
-    const retIsr = Number(form.retIsr) || 0;
-    const retItbis = Number(form.retItbis) || 0;
+    // Mercancía drives its ITBIS from the líneas (no header tax / retentions);
+    // gasto/activo read the header fields.
+    const itbis = goods ? lineRes.itbis : Number(form.itbis) || 0;
+    const retIsr = goods ? 0 : Number(form.retIsr) || 0;
+    const retItbis = goods ? 0 : Number(form.retItbis) || 0;
     if (isBill) {
       const bl = billRes.lines;
       if (bl.length === 0) { setErr('Agrega al menos una línea con cuenta y monto.'); return; }
@@ -305,7 +325,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         await db.journalLines.bulkPut(built.lines);
         const storedLines = billRes.lines.map((l) => ({
           id: l.id || newId(), description: l.description, accountCode: l.accountCode,
-          qty: l.qty, unitPrice: l.unitPrice, taxIds: l.taxIds,
+          qty: l.qty, unitPrice: l.unitPrice, discount: l.discount, taxIds: l.taxIds,
           base: l.base, itbis: l.itbis, retIsr: l.retIsr, retItbis: l.retItbis,
         }));
         const prow = {
@@ -355,7 +375,13 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         const variantKey = (sku, name) => JSON.stringify([(sku || '').trim(), (name || '').trim()]);
         const idByVariant = new Map(baseItems.map((i) => [variantKey(i.sku, i.name), i.id]));
         storedLines = lineRes.lines.map((l) => {
-          const row = { id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty, cost: l.cost };
+          // `cost` is the NET line total (capitalizes + feeds the kardex);
+          // unitCost/discount/taxIds/itbis round-trip the factura line on edit.
+          const row = {
+            id: l.id, itemId: l.itemId, name: l.name, reference: l.reference, qty: l.qty,
+            unitCost: l.qty > 0 ? Math.round((l.gross / l.qty) * 10000) / 10000 : 0,
+            discount: l.discount, cost: l.cost, taxIds: l.taxIds, itbis: l.itbis,
+          };
           if (l.itemId || !l.name) return row;
           const reuse = idByVariant.get(variantKey(l.reference, l.name));
           if (reuse) return { ...row, itemId: reuse };
@@ -417,9 +443,11 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
 
   const field = 'input w-full';
   const numField = 'input w-full text-right tabular-nums';
-  const itbisN = isBill ? billRes.totals.itbis : Number(form.itbis) || 0;
-  const retIsrN = isBill ? billRes.totals.retIsr : Number(form.retIsr) || 0;
-  const retItbisN = isBill ? billRes.totals.retItbis : Number(form.retItbis) || 0;
+  // Mercancía + Por líneas roll their taxes up from the líneas; gasto/activo
+  // read the header fields.
+  const itbisN = isBill ? billRes.totals.itbis : goods ? lineRes.itbis : Number(form.itbis) || 0;
+  const retIsrN = isBill ? billRes.totals.retIsr : goods ? 0 : Number(form.retIsr) || 0;
+  const retItbisN = isBill ? billRes.totals.retItbis : goods ? 0 : Number(form.retItbis) || 0;
   const total = base + itbisN;
   const net = total - retIsrN - retItbisN;
 
@@ -427,17 +455,13 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
     <div className="card overflow-hidden min-w-0">
       {/* Nature toggle + live total */}
       <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-ink-100 bg-ink-50/40">
-        <div className="inline-flex rounded-lg border border-ink-200 p-0.5 bg-surface">
-          {NATURES.map((n) => (
+        <div className="inline-flex flex-wrap rounded-lg border border-ink-200 p-0.5 bg-surface gap-0.5">
+          {NATURE_TABS.map((n) => (
             <button key={n.key} type="button" onClick={() => setNature(n.key)} disabled={!!editDoc}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 ${nature === n.key ? 'bg-ink-900 text-white font-medium' : 'text-ink-500 hover:text-ink-700'}`}>
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${nature === n.key ? 'bg-ink-900 text-ink-50 font-medium shadow-sm' : 'text-ink-500 hover:text-ink-700 hover:bg-ink-50'}`}>
               {n.label}
             </button>
           ))}
-          <button type="button" onClick={() => setNature('lineas')} disabled={!!editDoc}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 ${isBill ? 'bg-ink-900 text-white font-medium' : 'text-ink-500 hover:text-ink-700'}`}>
-            Por líneas
-          </button>
         </div>
         <div className="text-right">
           <div className="eyebrow-xs text-ink-400">Total</div>
@@ -514,7 +538,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
           <h4 className="eyebrow-xs text-ink-400 mb-2">Líneas de la factura</h4>
           <LineItemsEditor
             rows={lines} onAdd={addLine} onDelete={(l) => delLine(l.id)}
-            addLabel="Agregar línea" addHint="o Enter en Costo"
+            addLabel="Agregar línea" addHint="o Enter en Costo unit."
             columns={[
               { key: 'item', header: 'Artículo', headerHint: '(busca o escribe uno nuevo)',
                 render: (l) => (
@@ -531,12 +555,16 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
                     )}
                   </>
                 ) },
-              { key: 'qty', header: 'Cant.', align: 'right', width: 'w-24',
+              { key: 'qty', header: 'Cant.', align: 'right', width: 'w-20',
                 render: (l) => <input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums" /> },
-              { key: 'cost', header: 'Costo RD$', align: 'right', width: 'w-32',
-                render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.cost} onChange={(e) => patchLine(l.id, { cost: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} className="input w-full text-right tabular-nums" /> },
-              { key: 'unit', header: 'C. unit.', align: 'right', width: 'w-28',
-                render: (l) => { const q = Number(l.qty) || 0; const c = Number(l.cost) || 0; const unit = q > 0 ? c / q : 0; return <span className="text-xs text-ink-500 tabular-nums">{unit > 0 ? formatDop(unit) : '—'}</span>; } },
+              { key: 'unit', header: 'Costo unit.', align: 'right', width: 'w-28',
+                render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitCost} onChange={(e) => patchLine(l.id, { unitCost: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} className="input w-full text-right tabular-nums" /> },
+              { key: 'disc', header: 'Desc. RD$', align: 'right', width: 'w-24',
+                render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.discount} onChange={(e) => patchLine(l.id, { discount: e.target.value })} placeholder="0" className="input w-full text-right tabular-nums" /> },
+              { key: 'itbis', header: 'ITBIS', width: 'w-28',
+                render: (l) => <select value={itbisOf(l.taxIds)} onChange={(e) => setMercItbis(l, e.target.value)} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select> },
+              { key: 'amt', header: 'Importe', align: 'right', width: 'w-28',
+                render: (l) => { const sub = lineById.get(l.id)?.cost || 0; return <span className="text-ink-700 tabular-nums">{sub > 0 ? formatDop(sub) : '—'}</span>; } },
             ]}
           />
         </div>
@@ -563,6 +591,8 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
                 render: (l) => <input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchBillLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums" /> },
               { key: 'price', header: 'P. unit.', align: 'right', width: 'w-28',
                 render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchBillLine(l.id, { unitPrice: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBillLine(); } }} className="input w-full text-right tabular-nums" /> },
+              { key: 'disc', header: 'Desc. RD$', align: 'right', width: 'w-24',
+                render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.discount} onChange={(e) => patchBillLine(l.id, { discount: e.target.value })} placeholder="0" className="input w-full text-right tabular-nums" /> },
               { key: 'itbis', header: 'ITBIS', width: 'w-28',
                 render: (l) => <select value={itbisOf(l.taxIds)} onChange={(e) => setLineItbis(l, e.target.value)} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select> },
               { key: 'ret', header: 'Retención', width: 'w-32',
@@ -576,14 +606,14 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
 
       {/* Impuestos + totales */}
       <div className="px-4 sm:px-6 py-5 border-t border-ink-100 grid gap-6 sm:grid-cols-2">
-        {!isBill && (
+        {/* Single-account natures (gasto/activo) carry header tax; mercancía and
+            Por líneas roll their taxes up from the líneas instead. */}
+        {!isBill && !goods && (
         <div>
           <h4 className="eyebrow-xs text-ink-400 mb-2">Impuestos y retenciones</h4>
           <div className="max-w-sm border-t border-ink-100">
             <Field label="Base">
-              {goods
-                ? <input type="number" value={lineRes.base} readOnly tabIndex={-1} className={`${numField} bg-ink-50 text-ink-500`} />
-                : <input type="number" step="0.01" min="0" inputMode="decimal" value={form.base} onChange={(e) => onBase(e.target.value)} className={numField} />}
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={form.base} onChange={(e) => onBase(e.target.value)} className={numField} />
             </Field>
             <Field label="ITBIS"><input type="number" step="0.01" min="0" inputMode="decimal" value={form.itbis} onChange={(e) => setForm((f) => ({ ...f, itbis: e.target.value }))} className={numField} /></Field>
             <Field label="Ret. ISR"><input type="number" step="0.01" min="0" inputMode="decimal" value={form.retIsr} onChange={(e) => setForm((f) => ({ ...f, retIsr: e.target.value }))} className={numField} /></Field>

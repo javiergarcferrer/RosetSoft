@@ -12,6 +12,7 @@
  */
 import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
+import { applyLineTaxes } from './taxPresets.js';
 import type { JournalEntry, JournalLine, PaymentMethod, PurchaseKind } from '../../types/domain.ts';
 
 function payRole(method: PaymentMethod): string {
@@ -20,14 +21,27 @@ function payRole(method: PaymentMethod): string {
   return 'bank';
 }
 
-/** Raw line as the Compras form holds it (qty/cost may be empty-string inputs). */
+/**
+ * Raw line as the Compras (mercancía) form holds it. A DGII-aligned factura
+ * line: qty × unit cost, minus a per-line `discount` (RD$), with its own ITBIS
+ * preset(s) in `taxIds`. `cost` is the LEGACY pre-unit-cost total (still read
+ * when `unitCost` is absent, so old stored docs keep working). All numeric
+ * fields tolerate empty-string inputs.
+ */
 export interface PurchaseLineInput {
   id?: string;
   itemId?: string | null;
   name?: string;
   reference?: string;
   qty?: number | string | null;
+  /** Unit cost (price per unit) — the canonical input. */
+  unitCost?: number | string | null;
+  /** Legacy whole-line total (used only when `unitCost` is absent). */
   cost?: number | string | null;
+  /** Per-line discount in money (RD$), applied to the gross. */
+  discount?: number | string | null;
+  /** Per-line ITBIS preset id(s) (e.g. `['itbis18']`). */
+  taxIds?: readonly string[] | null;
 }
 
 export interface ResolvedPurchaseLine {
@@ -36,40 +50,65 @@ export interface ResolvedPurchaseLine {
   name: string;
   reference: string;
   qty: number;
+  /** Gross before discount = qty × entered unit cost. */
+  gross: number;
+  /** Per-line discount (RD$), clamped to [0, gross]. */
+  discount: number;
+  /** NET line total = gross − discount. Capitalizes into inventory. */
   cost: number;
-  /** Kardex IN unit cost = cost / qty (4 dp, matching the expediente). */
+  /** Creditable ITBIS on the NET line (from `taxIds`). */
+  itbis: number;
+  taxIds: string[];
+  /** Kardex IN unit cost = NET cost / qty (4 dp, matching the expediente). */
   unitCost: number;
 }
 
 /**
- * Resolve a goods purchase's article lines into the per-line kardex unit cost +
- * the invoice base. Each line's NET `cost` capitalizes into inventory; the
- * invoice `base` the asiento debits is Σ(line cost). Blank lines (no item, no
- * name, no qty, no cost) are dropped so a half-filled form row is ignored.
- * Money is clamped at 0 and rounded to cents; the unit cost keeps 4 dp. Pure —
- * the single source the form preview, the asiento base and the kardex INs read.
+ * Resolve a goods purchase's article lines into per-line money + the invoice
+ * roll-up. Each line: gross = qty × unit cost; NET `cost` = gross − discount
+ * (this is what capitalizes into inventory and feeds the kardex unit cost);
+ * ITBIS = the line's taxes applied to the NET cost (creditable, NOT part of the
+ * inventory cost). The invoice `base` the asiento debits is Σ(net cost) and its
+ * `itbis` is Σ(line ITBIS). Blank lines (no item, no name, no qty, no amount)
+ * are dropped so a half-filled form row is ignored. Money is clamped at 0 and
+ * rounded to cents; the unit cost keeps 4 dp. Pure — the single source the form
+ * preview, the asiento base/itbis and the kardex INs read.
  */
 export function resolvePurchaseLines(
   lines: readonly PurchaseLineInput[] | null | undefined,
-): { lines: ResolvedPurchaseLine[]; base: number; qty: number } {
+): { lines: ResolvedPurchaseLine[]; base: number; itbis: number; qty: number } {
   const resolved: ResolvedPurchaseLine[] = (lines || [])
     .map((l) => {
       const qty = round2(Math.max(0, Number(l?.qty) || 0));
-      const cost = round2(Math.max(0, Number(l?.cost) || 0));
+      // `unitCost` is the canonical input (qty × unit); `cost` is the legacy
+      // whole-line total, read only when no unit cost is given.
+      const hasUnit = l?.unitCost != null && l?.unitCost !== '';
+      const gross = hasUnit
+        ? round2(qty * Math.max(0, Number(l?.unitCost) || 0))
+        : round2(Math.max(0, Number(l?.cost) || 0));
+      const discount = round2(Math.min(Math.max(0, Number(l?.discount) || 0), gross));
+      const cost = round2(gross - discount);
+      const taxIds = ((l?.taxIds || []) as string[]).filter(Boolean);
+      const itbis = taxIds.length ? applyLineTaxes(cost, taxIds).itbis : 0;
       return {
         id: l?.id || '',
         itemId: l?.itemId || null,
         name: (l?.name || '').trim(),
         reference: (l?.reference || '').trim(),
         qty,
+        gross,
+        discount,
         cost,
+        itbis,
+        taxIds,
         unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
       };
     })
     .filter((l) => l.itemId || l.name || l.qty > 0 || l.cost > 0);
   const base = round2(resolved.reduce((s, l) => s + l.cost, 0));
+  const itbis = round2(resolved.reduce((s, l) => s + l.itbis, 0));
   const qty = round2(resolved.reduce((s, l) => s + l.qty, 0));
-  return { lines: resolved, base, qty };
+  return { lines: resolved, base, itbis, qty };
 }
 
 export interface PurchasePostInput {

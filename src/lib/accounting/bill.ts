@@ -31,6 +31,8 @@ export interface BillLineInput {
   accountCode?: string | null;
   qty?: number | string | null;
   unitPrice?: number | string | null;
+  /** Per-line discount in money (RD$), applied to the gross. */
+  discount?: number | string | null;
   taxIds?: readonly string[] | null;
   itemId?: string | null;
   reference?: string;
@@ -44,6 +46,11 @@ export interface ResolvedBillLine {
   reference: string;
   qty: number;
   unitPrice: number;
+  /** Gross before discount = qty × unit price. */
+  gross: number;
+  /** Per-line discount (RD$), clamped to [0, gross]. */
+  discount: number;
+  /** NET base = gross − discount (taxes + the asiento debit compute on this). */
   base: number;
   itbis: number;
   retIsr: number;
@@ -69,7 +76,9 @@ export function resolveBillLines(
     .map((l) => {
       const qty = round2(Math.max(0, Number(l?.qty) || 0));
       const unitPrice = round2(Math.max(0, Number(l?.unitPrice) || 0));
-      const base = round2(qty * unitPrice);
+      const gross = round2(qty * unitPrice);
+      const discount = round2(Math.min(Math.max(0, Number(l?.discount) || 0), gross));
+      const base = round2(gross - discount);
       const taxIds = ((l?.taxIds || []) as string[]).filter(Boolean);
       const t = applyLineTaxes(base, taxIds);
       return {
@@ -78,7 +87,7 @@ export function resolveBillLines(
         accountCode: l?.accountCode || '',
         itemId: l?.itemId || null,
         reference: (l?.reference || '').trim(),
-        qty, unitPrice, base,
+        qty, unitPrice, gross, discount, base,
         itbis: t.itbis, retIsr: t.retIsr, retItbis: t.retItbis,
         taxIds,
       };

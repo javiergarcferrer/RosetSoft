@@ -218,6 +218,7 @@ export function resolvePurchaseExpenseDetail({ purchase, expense, suppliers, acc
           accountCode: l.accountCode || '',
           accountName: l.accountCode ? (nameByCode.get(l.accountCode) || '') : '',
           qty, unitPrice, base: lineBase,
+          discount: round2(Math.max(0, Number(l.discount) || 0)),
           itbis: round2(Number(l.itbis) || 0),
           taxLabels: (l.taxIds || []).map((id) => taxPresetById(id)?.short).filter(Boolean),
         };
@@ -226,12 +227,15 @@ export function resolvePurchaseExpenseDetail({ purchase, expense, suppliers, acc
         const item = l.itemId ? itemById.get(l.itemId) : null;
         const qty = round2(Math.max(0, Number(l.qty) || 0));
         const cost = round2(Math.max(0, Number(l.cost) || 0));
+        const discount = round2(Math.max(0, Number(l.discount) || 0));
         return {
           id: l.id,
           name: item?.name || l.name || '—',
           reference: item?.sku || l.reference || '',
           inInventory: !!item,
-          qty, cost,
+          qty, cost, discount,
+          itbis: round2(Math.max(0, Number(l.itbis) || 0)),
+          taxLabels: (l.taxIds || []).map((id) => taxPresetById(id)?.short).filter(Boolean),
           unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
         };
       });

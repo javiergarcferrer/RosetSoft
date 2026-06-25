@@ -249,8 +249,8 @@ export default function ComprasGastos() {
             const n = c.key === 'all' ? list.counts.all : (list.counts[c.key] || 0);
             return (
               <button key={c.key} type="button" onClick={() => setNature(c.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm border transition-colors ${active ? 'bg-ink-900 text-white border-ink-900' : 'bg-surface text-ink-600 border-ink-200 hover:border-ink-300'}`}>
-                {c.label}<span className={`tabular-nums text-xs ${active ? 'text-white/70' : 'text-ink-400'}`}>{n}</span>
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm border transition-colors ${active ? 'bg-ink-900 text-ink-50 border-ink-900' : 'bg-surface text-ink-600 border-ink-200 hover:border-ink-300'}`}>
+                {c.label}<span className={`tabular-nums text-xs ${active ? 'text-ink-50/70' : 'text-ink-400'}`}>{n}</span>
               </button>
             );
           })}

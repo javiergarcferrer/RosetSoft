@@ -55,6 +55,32 @@ test('resolvePurchaseLines: clamps negatives and tolerates string inputs', () =>
   assert.equal(r.base, 1200.5);
 });
 
+test('resolvePurchaseLines: unit cost × qty − discount = net cost, with per-line ITBIS', () => {
+  const r = resolvePurchaseLines([
+    // 2 × 16 000 = 32 000 gross, −2 000 desc = 30 000 net; ITBIS 18% of net = 5 400
+    { id: 'l1', itemId: 'i1', name: 'Sofá', qty: 2, unitCost: 16000, discount: 2000, taxIds: ['itbis18'] },
+    // exento line: net 5 000, no ITBIS
+    { id: 'l2', itemId: 'i2', name: 'Puff', qty: 1, unitCost: 5000, taxIds: ['exento'] },
+  ]);
+  assert.equal(r.lines[0].gross, 32000);
+  assert.equal(r.lines[0].discount, 2000);
+  assert.equal(r.lines[0].cost, 30000);          // net capitalizes into inventory
+  assert.equal(r.lines[0].itbis, 5400);          // creditable, not part of cost
+  assert.equal(r.lines[0].unitCost, 15000);      // kardex unit = net / qty
+  assert.equal(r.lines[1].itbis, 0);
+  assert.equal(r.base, 35000);                   // Σ net cost
+  assert.equal(r.itbis, 5400);                   // Σ line ITBIS
+});
+
+test('resolvePurchaseLines: a discount can never drive the net cost below zero', () => {
+  const r = resolvePurchaseLines([
+    { id: 'l1', itemId: 'i1', name: 'A', qty: 1, unitCost: 1000, discount: 5000, taxIds: ['itbis18'] },
+  ]);
+  assert.equal(r.lines[0].discount, 1000);       // clamped to the gross
+  assert.equal(r.lines[0].cost, 0);
+  assert.equal(r.lines[0].itbis, 0);
+});
+
 /* --------------------------- buildPurchaseEntry -------------------------- */
 
 test('buildPurchaseEntry: goods debit inventory + ITBIS, credit suplidores; balances', () => {

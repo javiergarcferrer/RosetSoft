@@ -237,6 +237,7 @@ export default function Ledger() {
   const [showForm, setShowForm] = useState(false);
   const [mayorCode, setMayorCode] = useState('');
   const [reversing, setReversing] = useState(null);
+  const [renameErr, setRenameErr] = useState('');
   // Deep-link: /accounting/ledger?cuenta=<code> opens the Mayor for that account
   // (account drill-down from the Balanza and the financial statements).
   const [params] = useSearchParams();
@@ -297,6 +298,19 @@ export default function Ledger() {
     tableRef: balanzaTableRef, tableStyle: balanzaTableStyle, thProps: balanzaThProps,
     ResizeHandle: BalanzaHandle, reset: resetBalanzaWidths,
   } = useColumnWidths(balanzaCols.cols, 'rs.ledger.balanza.widths.v1');
+
+  // Rename a postable account in place — the advisor's catálogo ships placeholder
+  // leaves ("NOMBRE DEL INGRESO", "GASTO DISPONIBLE") the business renames to its
+  // real accounts. Keyed by `code` (the accounts PK); the liveQuery refreshes the
+  // tree + every account selector that reads the same rows.
+  async function renameAccount(code, name) {
+    setRenameErr('');
+    try {
+      await db.accounts.update(code, { name });
+    } catch (e) {
+      setRenameErr(userMessageFor(e));
+    }
+  }
 
   async function reverse(entry, lines) {
     const ok = await confirm({
@@ -416,7 +430,9 @@ export default function Ledger() {
           {/* Desktop: interactive catálogo navigator with live roll-up saldos —
               click a postable account to open its mayor in the detail pane. */}
           <div className="hidden md:block md:w-80 lg:w-96 shrink-0">
-            <AccountTree roots={chartTree.roots} selectedCode={mayorCode} onSelect={setMayorCode} />
+            <AccountTree roots={chartTree.roots} selectedCode={mayorCode} onSelect={setMayorCode} onRename={renameAccount} />
+            {renameErr && <p className="text-xs text-rose-600 mt-2">{renameErr}</p>}
+            <p className="text-[11px] text-ink-400 mt-2 px-1">Pasa el cursor sobre una cuenta imputable y usa el lápiz para renombrarla.</p>
           </div>
           {/* Mobile: the flat picker (the tree would crowd a phone). */}
           <select value={mayorCode} onChange={(e) => setMayorCode(e.target.value)}

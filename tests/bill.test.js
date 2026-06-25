@@ -30,6 +30,19 @@ test('resolveBillLines: base = qty×price, per-line taxes, totals, blanks droppe
   assert.deepEqual(totals, { base: 7000, itbis: 1260, retIsr: 0, retItbis: 270, total: 8260, net: 7990 });
 });
 
+test('resolveBillLines: a per-line discount nets the base before tax', () => {
+  const { lines, totals } = resolveBillLines([
+    // 2 × 3 000 = 6 000 gross, −1 000 desc = 5 000 base; ITBIS 18% = 900
+    { id: 'a', accountCode: 'A', qty: 2, unitPrice: 3000, discount: 1000, taxIds: ['itbis18'] },
+  ]);
+  assert.equal(lines[0].gross, 6000);
+  assert.equal(lines[0].discount, 1000);
+  assert.equal(lines[0].base, 5000);
+  assert.equal(lines[0].itbis, 900);
+  assert.equal(totals.base, 5000);
+  assert.equal(totals.itbis, 900);
+});
+
 test('buildBillEntry: the reference single-line bill posts balanced (net 5 630)', () => {
   const { lines } = buildBillEntry({
     newId: ids(), config,
