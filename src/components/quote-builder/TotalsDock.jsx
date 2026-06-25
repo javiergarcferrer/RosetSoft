@@ -179,14 +179,26 @@ export default function TotalsDock({
             />
           </div>
           <div>
-            <div className="label">Envío ({currency})</div>
+            {/* The dealer pays transport to a local trucker in PESOS, so the
+                envío is TYPED in DOP. It's still STORED in USD (quote.shipping)
+                like every other figure — converted here on the way in/out via
+                the quote's DOP rate — so the totals, the PDF and the accounting
+                bridge stay USD-based and unchanged. Envío is added AFTER ITBIS
+                (see computeTotals), i.e. it's free of tax. With no DOP rate
+                (never, in practice) we fall back to entering it in USD. */}
+            <div className="label">Envío ({dopRate ? 'RD$' : currency})</div>
             <DebouncedInput
               type="number"
               min="0"
               className="input disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={financiallyLocked}
-              value={quote.shipping ?? 0}
-              onCommit={(v) => { if (financiallyLocked) return; onUpdateQuote({ shipping: Math.max(0, Number(v) || 0) }); }}
+              value={dopRate ? Math.round((quote.shipping ?? 0) * dopRate) : (quote.shipping ?? 0)}
+              onCommit={(v) => {
+                if (financiallyLocked) return;
+                const typed = Math.max(0, Number(v) || 0);
+                const usd = dopRate ? typed / dopRate : typed;
+                onUpdateQuote({ shipping: usd });
+              }}
             />
           </div>
         </div>
