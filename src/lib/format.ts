@@ -34,6 +34,20 @@ export function formatMoney(
 }
 
 /**
+ * Format a percentage for display — strips floating-point noise.
+ *
+ * Discounts/margins are often *computed* (list-vs-net ratios, margin factors),
+ * so a stored value can carry the full float tail — 63.636298932384335 instead
+ * of a clean 63.64. Rounds to at most 2 decimals and drops trailing zeros, so
+ * 10 stays "10" while 63.636298932384335 reads "63.64". The caller owns the %
+ * sign and any +/- prefix (a negative value keeps its own "-").
+ */
+export function formatPct(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return '0';
+  return String(Number(Number(value).toFixed(2)));
+}
+
+/**
  * Format an amount ALREADY expressed in DOP — no rate conversion. The ledger
  * and financial statements are booked in the fiscal/functional currency (DOP),
  * unlike `formatMoney`, which converts a USD base by the live rate. Two

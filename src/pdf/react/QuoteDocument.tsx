@@ -1,7 +1,7 @@
 import { Document, Page, View, Text, Image } from '@react-pdf/renderer';
 import { resolveQuoteView } from '../../core/quote/views/quoteView.js';
 import { displayRatesFor } from '../../lib/exchangeRate.js';
-import { formatMoney, formatDate } from '../../lib/format.js';
+import { formatMoney, formatDate, formatPct } from '../../lib/format.js';
 import { isPricedLine } from '../../lib/constants.js';
 import {
   ITBIS_PCT, lineQty, lineTotal, lineListUnit, lineHasRange, lineTotalRange,
@@ -614,8 +614,8 @@ function TotalsBlock({
   const plain = (v: number) => `RD$ ${Math.round(v).toLocaleString('en-US')}`;
 
   const subRows: Array<[string, number, string, boolean]> = [['Subtotal', totals.subtotal, C.inkHigh, false]];
-  if (quote.discountPct) subRows.push([`Descuento (${quote.discountPct}%)`, -totals.discountAmt, C.brand700, true]);
-  if (quote.courtesyDiscountPct) subRows.push([`Cortesía amigos y familia (${quote.courtesyDiscountPct}%)`, -totals.courtesyDiscountAmt, C.brand700, true]);
+  if (quote.discountPct) subRows.push([`Descuento (${formatPct(quote.discountPct)}%)`, -totals.discountAmt, C.brand700, true]);
+  if (quote.courtesyDiscountPct) subRows.push([`Cortesía amigos y familia (${formatPct(quote.courtesyDiscountPct)}%)`, -totals.courtesyDiscountAmt, C.brand700, true]);
   subRows.push([`ITBIS (${ITBIS_PCT}%)`, totals.taxAmt, C.inkMid, false]);
   if (quote.shipping) subRows.push(['Envío', totals.shipping, C.inkMid, false]);
 

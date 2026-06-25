@@ -18,7 +18,7 @@ import {
 } from '../../lib/pricing.js';
 import { isModularLine, modulesOf, moduleSubtotal } from '../../lib/modules.js';
 import { resolveQuoteView } from '../../core/quote/views/quoteView.js';
-import { formatMoney, formatDate } from '../../lib/format.js';
+import { formatMoney, formatDate, formatPct } from '../../lib/format.js';
 import { colorCodeFromSubtype } from '../../lib/swatchMatch.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 
@@ -437,14 +437,14 @@ export default function ClientPreview({ quote, settings, lines, quoteGroups, tot
               // lines, which buried the concession the customer was
               // supposed to perceive.
               <TotalRow
-                label={`Descuento (${quote.discountPct}%)`}
+                label={`Descuento (${formatPct(quote.discountPct)}%)`}
                 value={`–${fmt(totals.discountAmt)}`}
                 accent
               />
             ) : null}
             {quote.courtesyDiscountPct ? (
               <TotalRow
-                label={`Cortesía amigos y familia (${quote.courtesyDiscountPct}%)`}
+                label={`Cortesía amigos y familia (${formatPct(quote.courtesyDiscountPct)}%)`}
                 value={`–${fmt(totals.courtesyDiscountAmt)}`}
                 accent
               />
@@ -572,7 +572,7 @@ function LinePriceCell({ priced, fmt }) {
             {discounted && (
               <div className="mt-0.5 whitespace-nowrap">
                 <span className="text-[13px] text-ink-400 line-through">{fmt(listUnit)}</span>
-                <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+                <span className="ml-2 text-[11px] font-semibold text-brand-700">−{formatPct(discount)}%</span>
               </div>
             )}
           </div>
@@ -1424,7 +1424,7 @@ function CompoundClientLine({ line, quoteMarginPct, currency, rates, fmt, famili
               {discounted && !ranged && (
                 <div className="whitespace-nowrap">
                   <span className="text-[13px] text-ink-400 line-through">{fmt(subtotal)}</span>
-                  <span className="ml-2 text-[11px] font-semibold text-brand-700">−{discount}%</span>
+                  <span className="ml-2 text-[11px] font-semibold text-brand-700">−{formatPct(discount)}%</span>
                 </div>
               )}
               <div className="eyebrow-xs tracking-wide text-ink-500 whitespace-nowrap mt-0.5">

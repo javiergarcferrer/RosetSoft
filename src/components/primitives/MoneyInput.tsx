@@ -48,6 +48,14 @@ const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyI
   ...inputProps
 }, ref) {
   const symbol = currencyGlyph(currency);
+  // Money is 2-decimal cents, but a stored price can carry float noise from an
+  // upstream margin/discount multiply (1419.9999999999998 instead of 1420).
+  // Round the *displayed* value so the field reads clean; the committed value
+  // still flows through onCommit untouched while the user is typing.
+  const display =
+    typeof value === 'number' && Number.isFinite(value)
+      ? Number(value.toFixed(2))
+      : value ?? '';
   return (
     <div className="relative inline-block max-w-full">
       <span
@@ -63,7 +71,7 @@ const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyI
         min="0"
         step="any"
         placeholder={placeholder}
-        value={value ?? ''}
+        value={display}
         onCommit={(v) => onCommit(Math.max(0, Number(v) || 0))}
         className={`qli-grow ${widthClass} max-w-full text-right tabular-nums input min-h-9 coarse:min-h-10 py-1.5 pl-6 pr-2 ${className}`}
         {...inputProps}

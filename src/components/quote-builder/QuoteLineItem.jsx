@@ -23,7 +23,7 @@ import { swatchUrl } from '../../lib/swatchImage.js';
 import { materialOptionDeltas } from '../../lib/pricing.js';
 import { splitSkuGrade, productForGrade, materiallessRangePatch, skuFillPatch } from '../../lib/catalog.js';
 import { groupComponents, ungroupModule, renameModule, setModuleOptional, addModuleAlternative, selectModuleAlternative, isModularLine } from '../../lib/modules.js';
-import { formatMoney } from '../../lib/format.js';
+import { formatMoney, formatPct } from '../../lib/format.js';
 import { resolveLineItem } from '../../core/quote/views/lineItem.js';
 import { parseSubtype, composeSubtype, GRADE_GROUPS, SPECIAL_GRADES, LEGACY_NAMED_GRADES } from '../../lib/subtype.js';
 import { db, newId, saveImage } from '../../db/database.js';
@@ -2241,8 +2241,8 @@ function AdjustmentChip({ line }) {
   const margin = Number(line.lineMarginPct) || 0;
   const discount = Number(line.lineDiscountPct) || 0;
   const parts = [];
-  if (margin) parts.push(`${margin > 0 ? '+' : ''}${margin}%`);
-  if (discount) parts.push(`–${discount}%`);
+  if (margin) parts.push(`${margin > 0 ? '+' : ''}${formatPct(margin)}%`);
+  if (discount) parts.push(`–${formatPct(discount)}%`);
   if (parts.length === 0) return null;
   return <span className="ml-1 text-brand-700 font-medium">{parts.join(' ')}</span>;
 }
