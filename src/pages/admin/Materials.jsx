@@ -2,12 +2,13 @@ import { userMessageFor } from '../../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Layers, Plus, Pencil, Trash2, Shield, Check,
-  Loader2, X, GripVertical, AlertTriangle, FileText,
+  Loader2, X, GripVertical, AlertTriangle, FileText, RefreshCw,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { supabase } from '../../db/supabaseClient.js';
 import { syncCatalog } from '../../lib/catalogSync.js';
+import { mergeCatalog } from '../../lib/lrCatalog.js';
 import { parsePriceListPdfs } from '../../lib/loadMaterialsPdf.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
@@ -141,7 +142,8 @@ export default function Materials() {
   const [filters, setFilters] = useState({}); // { grade: <grade> }
   const [sort, setSort] = useState({ key: 'category', dir: 'asc' });
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
-  const [importing, setImporting] = useState(false); // catalog import modal open?
+  const [importing, setImporting] = useState(false); // PDF price-list import modal open?
+  const [syncing, setSyncing] = useState(false);     // website-only sync modal open?
 
   // Column visibility (Shopify "edit columns") — persisted per browser. The
   // table renders `cols` (photo anchor + the toggled-on columns, in order);
@@ -263,10 +265,19 @@ export default function Materials() {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setSyncing(true)}
+              className="btn-ghost"
+              title="Traer colores, fotos y telas nuevas desde ligne-roset.com (sin PDF)"
+            >
+              <RefreshCw size={14} /> Sincronizar
+            </button>
+            <button
+              type="button"
               onClick={() => setImporting(true)}
               className="btn-ghost"
+              title="Subir la lista de precios (PDF) de Ligne Roset"
             >
-              <FileText size={14} /> Importar
+              <FileText size={14} /> Importar precios
             </button>
             <button
               type="button"
@@ -423,6 +434,14 @@ export default function Materials() {
           materials={materials}
           profileId={profileId}
           onClose={() => setImporting(false)}
+        />
+      )}
+
+      {syncing && (
+        <SyncWebsiteModal
+          materials={materials}
+          profileId={profileId}
+          onClose={() => setSyncing(false)}
         />
       )}
     </>
@@ -967,24 +986,175 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
   );
 }
 
-function SyncSummaryList({ summary }) {
-  const rows = [
-    ['Telas nuevas', summary.newMaterials],
-    ['Telas actualizadas', summary.updatedMaterials],
-    ['Colores añadidos', summary.colorsAdded],
-    ['Duplicados “/FR” fusionados', summary.consolidated],
-    ['Marcadas “no en lista”', summary.flaggedNoList],
-    ['Marcadas “no en sitio”', summary.flaggedNoSite],
-  ].filter(([, n]) => n > 0);
-  if (!rows.length) return null;
+/* -------------------------------------------------------------------------- */
+/*  Website sync — colors / photos / fabrics from the site (no PDF)           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sync the catalog straight from ligne-roset.com — no PDF required.
+ *
+ * This is the SAME website-only sweep + merge the weekly Monday cron runs
+ * unattended (lr-catalog `runWeeklySync` → `mergeCatalog`), but triggered on
+ * demand and shown as a preview before anything is written. The site owns
+ * colors, photos, care notes, and which fabrics exist (new + discontinued);
+ * grade / price / width / composition stay whatever the price-list PDF set —
+ * `mergeCatalog` preserves them. Discontinuation is flagged (never deleted) and
+ * ONLY on a COMPLETE sweep, exactly the cron's rule; a flagged fabric that
+ * reappears on the site is un-flagged. The "Importar precios" PDF flow is still
+ * how grade/price get updated — this just keeps colors and the fabric roster
+ * current between those occasional price lists.
+ */
+function SyncWebsiteModal({ materials, profileId, onClose }) {
+  const [busy, setBusy] = useState(null);        // null | 'sync' | 'apply'
+  const [error, setError] = useState(null);
+  const [preview, setPreview] = useState(null);  // { rows, summary, complete, siteCount }
+  const [done, setDone] = useState(null);
+
+  async function sync() {
+    setError(null);
+    setBusy('sync');
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('lr-catalog', { body: { all: true } });
+      if (fnError || data?.error || !Array.isArray(data?.patterns) || !data.patterns.length) {
+        throw new Error('No se pudo leer ligne-roset.com en este momento. Inténtalo de nuevo en un minuto.');
+      }
+      // A partial sweep (we saw more fabrics than we could read) must NOT flag
+      // a still-offered fabric as discontinued — same guard the cron uses.
+      const complete = !data.source?.partial;
+      const { rows, summary } = mergeCatalog(materials, data.patterns, {
+        profileId, now: Date.now(), newId, complete,
+      });
+      setPreview({ rows, summary, complete, siteCount: data.patterns.length });
+    } catch (e) {
+      setError(userMessageFor(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function apply() {
+    if (!preview) return;
+    setError(null);
+    setBusy('apply');
+    try {
+      if (preview.rows.length) await db.materials.bulkPut(preview.rows);
+      setDone(preview);
+    } catch (e) {
+      setError(userMessageFor(e));
+      setBusy(null);
+    }
+  }
+
+  const changeCount = preview ? preview.rows.length : 0;
+  const summaryRows = (s) => [
+    ['Telas nuevas', s.newMaterials],
+    ['Telas actualizadas', s.updatedMaterials],
+    ['Colores añadidos', s.newColors],
+    ['Colores retirados', s.removedColors],
+    ['Marcadas “no en sitio”', s.flaggedMissing],
+    ['Reactivadas (de vuelta en el sitio)', s.restored],
+  ];
+
+  return (
+    <Modal open onClose={onClose} title="Sincronizar con el sitio">
+      <div className="space-y-4">
+        {error && (
+          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        {done ? (
+          <>
+            <div className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+              <Check size={16} className="flex-shrink-0 mt-0.5" />
+              <span>Catálogo sincronizado con ligne-roset.com.</span>
+            </div>
+            <SummaryRows rows={summaryRows(done.summary)} />
+            <div className="flex items-center justify-end pt-2 border-t border-ink-100">
+              <button type="button" onClick={onClose} className="btn-primary"><Check size={14} /> Listo</button>
+            </div>
+          </>
+        ) : preview ? (
+          <>
+            <p className="text-sm text-ink-600">
+              {preview.siteCount} telas en el sitio de Ligne Roset.
+            </p>
+            {!preview.complete && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                Solo se pudo leer parte del catálogo esta vez — se añaden colores y telas nuevas, pero no se marcará ninguna como “no en sitio”.
+              </p>
+            )}
+            <SummaryRows rows={summaryRows(preview.summary)} />
+            {changeCount === 0 ? (
+              <p className="text-sm text-ink-500 italic">El catálogo ya está al día con el sitio — no hay cambios que aplicar.</p>
+            ) : (
+              <p className="text-xs text-ink-500">
+                El sitio aporta colores, fotos y telas nuevas; grade, precio, ancho y composición se conservan (los pone la lista de precios). No se borra nada — las telas retiradas solo se marcan “no en sitio”.
+              </p>
+            )}
+            <div className="flex items-center justify-between pt-2 border-t border-ink-100">
+              <button type="button" onClick={() => setPreview(null)} className="btn-ghost" disabled={!!busy}>Volver</button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
+                <button type="button" onClick={apply} disabled={!!busy || changeCount === 0} className="btn-primary">
+                  {busy === 'apply'
+                    ? <><Loader2 size={14} className="animate-spin" /> Aplicando…</>
+                    : <><Check size={14} /> Aplicar ({changeCount})</>}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-ink-600">
+              Trae los colores, fotos y telas nuevas directamente desde ligne-roset.com — sin subir ningún PDF.
+              Verás un resumen de los cambios antes de aplicar nada.
+            </p>
+            <p className="text-xs text-ink-500">
+              Es la misma sincronización que corre sola cada lunes; aquí puedes ejecutarla cuando quieras. La lectura del sitio tarda ~1 minuto.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-ink-100">
+              <button type="button" onClick={onClose} className="btn-ghost" disabled={!!busy}>Cancelar</button>
+              <button type="button" onClick={sync} disabled={!!busy} className="btn-primary">
+                {busy === 'sync'
+                  ? <><Loader2 size={14} className="animate-spin" /> Leyendo el sitio… (~1 min)</>
+                  : <><RefreshCw size={14} /> Sincronizar ahora</>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Presentational tally shared by the PDF import and the website sync previews:
+// `[label, count]` pairs, zero-count rows hidden, nothing rendered when empty.
+function SummaryRows({ rows }) {
+  const visible = rows.filter(([, n]) => n > 0);
+  if (!visible.length) return null;
   return (
     <ul className="text-sm border border-ink-100 rounded-lg overflow-hidden divide-y divide-ink-100">
-      {rows.map(([label, n]) => (
+      {visible.map(([label, n]) => (
         <li key={label} className="flex items-center justify-between px-3 py-1.5">
           <span className="text-ink-600">{label}</span>
           <span className="tabular-nums font-semibold text-ink-900">{n}</span>
         </li>
       ))}
     </ul>
+  );
+}
+
+function SyncSummaryList({ summary }) {
+  return (
+    <SummaryRows rows={[
+      ['Telas nuevas', summary.newMaterials],
+      ['Telas actualizadas', summary.updatedMaterials],
+      ['Colores añadidos', summary.colorsAdded],
+      ['Duplicados “/FR” fusionados', summary.consolidated],
+      ['Marcadas “no en lista”', summary.flaggedNoList],
+      ['Marcadas “no en sitio”', summary.flaggedNoSite],
+    ]} />
   );
 }
