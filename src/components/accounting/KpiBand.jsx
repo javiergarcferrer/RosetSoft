@@ -9,14 +9,14 @@ export default function KpiBand({ items }) {
   const toneClass = (tone) =>
     tone === 'pos' ? 'text-emerald-700' : tone === 'neg' ? 'text-rose-700' : 'text-ink-900';
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
       {list.map((it) => (
-        <div key={it.label} className="card p-4 min-w-0">
-          <div className="eyebrow mb-1">{it.label}</div>
-          <div className={`font-display text-lg sm:text-xl font-semibold tabular-nums whitespace-nowrap ${toneClass(it.tone)}`}>
+        <div key={it.label} className="card px-3 py-2 min-w-0">
+          <div className="eyebrow-xs mb-0.5">{it.label}</div>
+          <div className={`font-display text-base sm:text-lg font-semibold tabular-nums whitespace-nowrap ${toneClass(it.tone)}`}>
             {it.value}
           </div>
-          {it.hint && <div className="text-xs text-ink-400 mt-0.5">{it.hint}</div>}
+          {it.hint && <div className="text-[11px] text-ink-400 mt-0.5">{it.hint}</div>}
         </div>
       ))}
     </div>

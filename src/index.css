@@ -1263,3 +1263,36 @@ body.togo-rams {
   --brand-900: 23 22 18;
 }
 body.togo-rams .card { box-shadow: none; background-image: none; border-color: rgb(var(--ink-200) / 0.65); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Accounting density — a tighter Palantir / QuickBooks read for the whole
+   /accounting surface. Scoped to `.acct-dense` (set in Layout when the path is
+   under /accounting) and deliberately UNLAYERED so it overrides the Tailwind
+   utilities the pages apply inline (p-4, text-2xl, gap-3, …) without changing
+   the radius/shadow/spacing language anywhere else in the app.
+   ────────────────────────────────────────────────────────────────────────── */
+/* Flat data surfaces: square the editorial 2xl radius, drop the sheen, and
+   reduce the soft shadow to a single crisp hairline lift. */
+.acct-dense .card {
+  border-radius: 0.5rem;
+  background-image: none;
+  box-shadow: 0 1px 1px rgb(var(--ink-900) / 0.04);
+}
+/* Trim the generous container padding on cards used as section panels. (Cards
+   with no padding — e.g. those wrapping a full-bleed table — are left alone.) */
+.acct-dense .card.p-5,
+.acct-dense .card.card-pad { padding: 0.875rem; }
+.acct-dense .card.p-4 { padding: 0.75rem; }
+
+/* Page title: a compact toolbar heading, not an editorial splash. */
+.acct-dense h1 { font-size: 1.375rem; line-height: 1.75rem; }
+
+/* Tables read as a dense register: tighter rows, hairline rhythm. */
+.acct-dense .table th { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+.acct-dense .table td { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+
+/* Inputs/selects tighten on a precise pointer (desktop data entry); coarse
+   (touch) keeps its full tap target via the base .input min-height. */
+@media (pointer: fine) {
+  .acct-dense .input { padding-top: 0.3rem; padding-bottom: 0.3rem; min-height: 2rem; }
+}
