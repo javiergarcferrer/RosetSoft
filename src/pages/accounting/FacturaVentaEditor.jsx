@@ -176,30 +176,7 @@ export default function FacturaVentaEditor() {
           {/* Líneas */}
           <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
             <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
-            <div className="lg:hidden space-y-2">
-              {lines.map((l) => {
-                const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0;
-                return (
-                  <div key={l.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2">
-                    <input value={l.description} onChange={(e) => patchLine(l.id, { description: e.target.value })} placeholder="Descripción" className="input w-full" />
-                    <select value={l.accountCode} onChange={(e) => patchLine(l.id, { accountCode: e.target.value })} className="input w-full">
-                      <option value="">— Cuenta de ingreso —</option>
-                      {incomeAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
-                    </select>
-                    <div className="grid grid-cols-3 gap-2">
-                      <label className="text-[11px] text-ink-400">Cant.<input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                      <label className="text-[11px] text-ink-400">P. unit.<input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchLine(l.id, { unitPrice: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                      <label className="text-[11px] text-ink-400">ITBIS<select value={itbisOf(l.taxIds)} onChange={(e) => patchLine(l.id, { taxIds: [e.target.value] })} className="input w-full mt-0.5">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-ink-600 tabular-nums">Importe {formatDop(sub)}</span>
-                      <button type="button" onClick={() => delLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="hidden lg:block overflow-x-auto">
+            <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[680px]">
                 <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
                   <tr>

@@ -518,28 +518,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       {goods && (
         <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
           <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
-          <div className="md:hidden space-y-2">
-            {lines.map((l) => (
-              <div key={l.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2">
-                <SearchPicker options={itemOptions} value={l.itemId} text={l.name}
-                  placeholder="— Artículo a inventariar —" freeTextLabel="Crear artículo" allowFreeText
-                  onPick={(o) => patchLine(l.id, { itemId: o.id, name: o.label, reference: o.sublabel || '' })}
-                  onFreeText={(txt) => patchLine(l.id, { itemId: '', name: txt })} />
-                {(l.name || '').trim() !== '' && (!l.itemId || l.reference) && (
-                  <div className="inline-flex items-center gap-1.5 text-[11px] text-amber-700">
-                    {!l.itemId && <span className="inline-flex items-center gap-1"><Plus size={11} /> Nuevo en inventario</span>}
-                    {l.reference && <span className="font-mono text-amber-600">{l.reference}</span>}
-                  </div>
-                )}
-                <div className="grid grid-cols-3 gap-2 items-end">
-                  <label className="text-[11px] text-ink-400">Cant.<input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                  <label className="text-[11px] text-ink-400">Costo RD$<input type="number" min="0" step="0.01" inputMode="decimal" value={l.cost} onChange={(e) => patchLine(l.id, { cost: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                  <button type="button" onClick={() => delLine(l.id)} className="btn-icon-danger justify-self-end" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="hidden md:block overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[480px]">
               <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
                 <tr>
@@ -587,33 +566,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       {isBill && (
         <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
           <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
-          <div className="lg:hidden space-y-2">
-            {billLines.map((l) => {
-              const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0;
-              return (
-                <div key={l.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2">
-                  <input value={l.description} onChange={(e) => patchBillLine(l.id, { description: e.target.value })} placeholder="Descripción" className="input w-full" />
-                  <select value={l.accountCode} onChange={(e) => patchBillLine(l.id, { accountCode: e.target.value })} className="input w-full">
-                    <option value="">— Cuenta —</option>
-                    {billAccountOpts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-[11px] text-ink-400">Cant.<input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchBillLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                    <label className="text-[11px] text-ink-400">P. unit. RD$<input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchBillLine(l.id, { unitPrice: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-[11px] text-ink-400">ITBIS<select value={itbisOf(l.taxIds)} onChange={(e) => setLineItbis(l, e.target.value)} className="input w-full mt-0.5">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
-                    <label className="text-[11px] text-ink-400">Retención<select value={retOf(l.taxIds)} onChange={(e) => setLineRet(l, e.target.value)} className="input w-full mt-0.5">{RET_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-ink-600 tabular-nums">Importe {formatDop(sub)}</span>
-                    <button type="button" onClick={() => delBillLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="hidden lg:block overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[760px]">
               <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
                 <tr>

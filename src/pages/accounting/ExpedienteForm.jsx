@@ -589,44 +589,8 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                     </p>
                   )}
 
-                  {/* Líneas */}
-                  {/* Mobile: stacked cards (the desktop table scrolls sideways on phones) */}
-                  <div className="md:hidden space-y-2">
-                    {fac.lines.map((l) => (
-                      <div key={l.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-2 space-y-2">
-                        <SearchPicker
-                          options={itemOptions}
-                          value={l.itemId}
-                          text={l.name}
-                          placeholder="— Artículo a inventariar —"
-                          freeTextLabel="Crear artículo"
-                          onPick={(o) => patchLine(emb.id, fac.id, l.id, { itemId: o.id, name: o.label, reference: o.sublabel || '' })}
-                          allowFreeText
-                          onFreeText={(txt) => patchLine(emb.id, fac.id, l.id, { itemId: '', name: txt })}
-                        />
-                        {(l.name || '').trim() !== '' && (!l.itemId || l.reference) && (
-                          <div className="inline-flex items-center gap-1.5 text-[11px] text-amber-700">
-                            {!l.itemId && <span className="inline-flex items-center gap-1"><Plus size={11} /> Nuevo en inventario</span>}
-                            {l.reference && <span className="font-mono text-amber-600">{l.reference}</span>}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-3 gap-2">
-                          <label className="text-[11px] text-ink-400">Cant.
-                            <input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(emb.id, fac.id, l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                          <label className="text-[11px] text-ink-400">FOB RD$
-                            <input type="number" min="0" step="0.01" inputMode="decimal" value={l.fob} onChange={(e) => patchLine(emb.id, fac.id, l.id, { fob: e.target.value })} className="input w-full text-right tabular-nums mt-0.5" /></label>
-                          <label className="text-[11px] text-ink-400">Selectivo
-                            <input type="number" min="0" step="0.01" inputMode="decimal" value={l.selectivo} onChange={(e) => patchLine(emb.id, fac.id, l.id, { selectivo: e.target.value })} placeholder="0" className="input w-full text-right tabular-nums mt-0.5" /></label>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs text-ink-500 tabular-nums">C. unit. {byLine[l.id]?.landedUnitCost > 0 ? formatDop(byLine[l.id].landedUnitCost) : '—'}</span>
-                          <button type="button" onClick={() => delLine(emb.id, fac.id, l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Desktop: dense table */}
-                  <div className="hidden md:block overflow-x-auto -mx-2.5">
+                  {/* Líneas — one scrollable table (swipes sideways on phones) */}
+                  <div className="overflow-x-auto -mx-2.5">
                   <table className="w-full text-sm min-w-[560px]">
                     <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
                       <tr>
