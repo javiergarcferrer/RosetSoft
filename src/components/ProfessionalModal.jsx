@@ -44,6 +44,7 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       rnc: professional?.rnc || '',
       rncStatus: professional?.rncStatus || '',
       company: professional?.company || '',
+      tradeNumber: professional?.tradeNumber || '',
       email: professional?.email || '',
       phone: professional?.phone || '',
       notes: professional?.notes || '',
@@ -81,6 +82,8 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
       rnc: data.rnc || '',
       rncStatus: data.rncStatus || '',
       company: data.company.trim(),
+      // Ligne Roset trade-account number — printed on the order-registration PDF.
+      tradeNumber: data.tradeNumber.trim(),
       email: data.email.trim(),
       phone,
       notes: data.notes,
@@ -177,6 +180,19 @@ export default function ProfessionalModal({ professional, onClose, onAfterDelete
             autoComplete="tel"
           />
           {phoneErr && <p className="text-xs mt-1.5 text-rose-600">{phoneErr}</p>}
+        </div>
+        <div className="sm:col-span-2">
+          <div className="label">N.º de comercio Ligne Roset</div>
+          <input
+            className="input"
+            value={data.tradeNumber}
+            onChange={(e) => set('tradeNumber', e.target.value)}
+            placeholder="Cuenta de comercio que asigna Ligne Roset"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
+          <p className="text-[11px] text-ink-400 mt-1">Aparece junto al decorador en el PDF de registro de pedido para Ligne Roset.</p>
         </div>
         <div className="sm:col-span-2">
           <div className="label">Notas</div>

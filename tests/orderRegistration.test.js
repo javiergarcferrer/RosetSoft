@@ -22,7 +22,7 @@ function resolve(overrides = {}) {
       id: 'q1', number: 1010, customerId: 'c1', professionalId: 'p1', createdByUserId: 'u1',
     }],
     customers: [{ id: 'c1', name: 'Eduardo García', company: 'García Interiores' }],
-    professionals: [{ id: 'p1', name: 'María Pérez' }],
+    professionals: [{ id: 'p1', name: 'María Pérez', tradeNumber: 'LR-4521' }],
     profiles: [{ id: 'u1', name: 'Javier Alcover' }],
     lines: [],
     ...overrides,
@@ -77,7 +77,17 @@ test('group context carries customer (company first), decorator and seller names
   assert.equal(g.quoteNumber, 1010);
   assert.equal(g.customerName, 'García Interiores');
   assert.equal(g.professionalName, 'María Pérez');
+  // The decorator's Ligne Roset trade-account number rides along for the PDF.
+  assert.equal(g.professionalTradeNumber, 'LR-4521');
   assert.equal(g.sellerName, 'Javier Alcover');
+});
+
+test('a professional without a trade number yields null (PDF omits the segment)', () => {
+  const d = resolve({
+    professionals: [{ id: 'p1', name: 'María Pérez' }],
+    lines: [{ id: 'l1', quoteId: 'q1', kind: 'item', reference: 'R1', name: 'TOGO', qty: 1 }],
+  });
+  assert.equal(d.groups[0].professionalTradeNumber, null);
 });
 
 test('quotes with nothing to register are dropped; quotes sort by number', () => {

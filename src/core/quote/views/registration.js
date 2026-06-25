@@ -79,6 +79,9 @@ export function resolveOrderRegistration({
         quoteNumber: q.number || null,
         customerName: customer ? (customer.company || customer.name || '') : '',
         professionalName: professional?.name || null,
+        // The decorator's Ligne Roset trade-account number — printed beside their
+        // name so LR books this quote's order to the right account. '' ⇒ omitted.
+        professionalTradeNumber: professional?.tradeNumber || null,
         sellerName: seller?.name || null,
         rows,
         pieces: rows.reduce((s, r) => s + r.qty, 0),

@@ -1478,6 +1478,12 @@ export interface Professional {
   /** DGII estado cached on a successful lookup — permanent badge + Empresa lock. */
   rncStatus?: string;
   company?: string;
+  /**
+   * Ligne Roset trade-account number issued to this professional (architect /
+   * decorator). Printed next to the decorator on the order-registration
+   * document so Ligne Roset books each quote's order to the right trade account.
+   */
+  tradeNumber?: string;
   email?: string;
   phone?: string;
   /** Delivery/visit address — kept separate from freeform `notes`. */

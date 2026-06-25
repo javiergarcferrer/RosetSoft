@@ -21,6 +21,7 @@ export interface RegistrationGroup {
   quoteNumber: number | null;
   customerName: string;
   professionalName: string | null;
+  professionalTradeNumber?: string | null;
   sellerName: string | null;
   rows: RegistrationRow[];
   pieces: number;
@@ -106,10 +107,11 @@ export function RegistrationDocument({
                   Cotización {g.quoteNumber ? `#${g.quoteNumber}` : '—'}
                   {g.customerName ? ` · ${g.customerName}` : ''}
                 </Text>
-                {(g.professionalName || g.sellerName) ? (
+                {(g.professionalName || g.professionalTradeNumber || g.sellerName) ? (
                   <Text style={st.groupMeta}>
                     {[
                       g.professionalName ? `Decorador: ${g.professionalName}` : null,
+                      g.professionalTradeNumber ? `Comercio LR: ${g.professionalTradeNumber}` : null,
                       g.sellerName ? `Vendedor: ${g.sellerName}` : null,
                     ].filter(Boolean).join(' · ')}
                   </Text>

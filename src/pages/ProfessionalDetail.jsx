@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil, FileText } from 'lucide-react';
+import { UserSquare2, ExternalLink, Mail, Phone, Building2, Pencil, FileText, Hash } from 'lucide-react';
 import BackLink from '../components/BackLink.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
@@ -133,9 +133,19 @@ export default function ProfessionalDetail() {
       />
 
       {/* Contact strip — small, dense, only shown if there's anything */}
-      {(pro.email || pro.phone || pro.notes) && (
+      {(pro.email || pro.phone || pro.tradeNumber || pro.notes) && (
         <div className="card overflow-hidden mb-5">
           <div className="card-pad space-y-2.5 text-sm">
+            {pro.tradeNumber && (
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-md bg-amber-50 text-amber-700 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">
+                  <Hash size={12} />
+                </span>
+                <span className="text-ink-700">
+                  Comercio Ligne Roset: <span className="font-medium">{pro.tradeNumber}</span>
+                </span>
+              </div>
+            )}
             {pro.email && (
               <div className="flex items-center gap-2.5">
                 <span className="w-6 h-6 rounded-md bg-brand-50 text-brand-600 ring-1 ring-inset ring-black/5 flex items-center justify-center flex-shrink-0">

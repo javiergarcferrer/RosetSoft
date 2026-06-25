@@ -837,6 +837,7 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
           <PanelField label="Empresa" value={pro.company} onCommit={(v) => onCommit('company', v)} locked={!!pro.rncStatus} />
           <PanelField label="Dirección" value={pro.address} onCommit={(v) => onCommit('address', v)} className="col-span-2" />
           <PanelField label="Ciudad" value={pro.city} onCommit={(v) => onCommit('city', v)} className="col-span-2 sm:col-span-1" />
+          <PanelField label="N.º comercio LR" value={pro.tradeNumber} onCommit={(v) => onCommit('tradeNumber', v)} className="col-span-2 sm:col-span-1" />
         </div>
         <PanelTextArea
           label="Notas"
