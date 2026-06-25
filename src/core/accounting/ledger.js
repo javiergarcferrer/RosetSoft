@@ -319,6 +319,7 @@ export function resolveAccountLedger({ accounts, entries, lines, accountCode } =
   const dates = entryDateMap(entries);
   const numbers = new Map((entries || []).map((e) => [e.id, e.number]));
   const memos = new Map((entries || []).map((e) => [e.id, e.memo]));
+  const refs = new Map((entries || []).map((e) => [e.id, { refTable: e.refTable || null, refId: e.refId || null, source: e.source || null }]));
   const ls = (lines || [])
     .filter((l) => l.accountCode === accountCode)
     .map((l) => ({
@@ -326,6 +327,9 @@ export function resolveAccountLedger({ accounts, entries, lines, accountCode } =
       postedAt: dates.get(l.entryId) || 0,
       entryNumber: numbers.get(l.entryId) ?? null,
       entryMemo: memos.get(l.entryId) || '',
+      entryRefTable: refs.get(l.entryId)?.refTable || null,
+      entryRefId: refs.get(l.entryId)?.refId || null,
+      entrySource: refs.get(l.entryId)?.source || null,
     }));
   ls.sort((a, b) => (a.postedAt || 0) - (b.postedAt || 0) || (a.entryNumber || 0) - (b.entryNumber || 0));
   let running = 0;
@@ -340,4 +344,21 @@ export function resolveAccountLedger({ accounts, entries, lines, accountCode } =
     credit: round2(ls.reduce((s, l) => s + (Number(l.credit) || 0), 0)),
     balance: round2(running),
   };
+}
+
+// Map a posted entry's operational back-reference (refTable, refId — stamped by
+// every poster) to the in-app route of the document that generated it, so a
+// ledger line drills straight back to its source (QuickBooks/NetSuite-style).
+// Returns null for entries with no navigable source (manual asientos, payroll
+// runs / petty-cash / inventory moves that have no per-document detail page).
+const SOURCE_DOC_ROUTE = {
+  expenses: (id) => `/accounting/compras-gastos/${id}`,
+  purchases: (id) => `/accounting/compras-gastos/${id}`,
+  import_expedientes: (id) => `/accounting/importaciones/${id}`,
+};
+
+export function sourceDocHref(refTable, refId) {
+  if (!refTable || !refId) return null;
+  const make = SOURCE_DOC_ROUTE[refTable];
+  return make ? make(refId) : null;
 }

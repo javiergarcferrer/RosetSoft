@@ -20,6 +20,7 @@ export {
   resolveChartTree,
   resolveJournal,
   resolveAccountLedger,
+  sourceDocHref,
 } from './ledger.js';
 
 // ── estado de flujo de efectivo (cash-flow statement, direct method)

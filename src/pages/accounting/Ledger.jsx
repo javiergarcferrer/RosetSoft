@@ -1,6 +1,6 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { useMemo, useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { BookOpen, Plus, Trash2, Loader2, Check, X, RotateCcw, Download } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
@@ -20,7 +20,7 @@ import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import {
-  resolveJournal, resolveTrialBalance, resolveAccountLedger, resolveChartTree,
+  resolveJournal, resolveTrialBalance, resolveAccountLedger, resolveChartTree, sourceDocHref,
   postableAccounts, assertBalanced, buildJournalEntry, buildReversalEntry, debitTotal, creditTotal,
 } from '../../core/accounting/index.js';
 
@@ -64,7 +64,13 @@ const MAYOR_COLUMNS = [
     key: 'concepto', label: 'Concepto',
     thClass: 'text-left py-2 px-3',
     tdClass: 'py-1.5 px-3 min-w-0',
-    cell: ({ line }) => line.entryMemo || '—',
+    cell: ({ line }) => {
+      const href = sourceDocHref(line.entryRefTable, line.entryRefId);
+      const memo = line.entryMemo || '—';
+      return href
+        ? <Link to={href} className="text-brand-600 hover:text-brand-700 hover:underline">{memo}</Link>
+        : memo;
+    },
   },
   {
     key: 'debito', label: 'Débito',
@@ -372,7 +378,9 @@ export default function Ledger() {
                   <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-ink-100 text-ink-600 whitespace-nowrap">
                     {SOURCE_LABEL[entry.source] || entry.source}
                   </span>
-                  <span className="text-sm font-medium text-ink-800 min-w-0 break-words">{entry.memo || '—'}</span>
+                  {sourceDocHref(entry.refTable, entry.refId)
+                    ? <Link to={sourceDocHref(entry.refTable, entry.refId)} className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline min-w-0 break-words">{entry.memo || '—'}</Link>
+                    : <span className="text-sm font-medium text-ink-800 min-w-0 break-words">{entry.memo || '—'}</span>}
                   <span className="ml-auto text-sm font-semibold tabular-nums whitespace-nowrap">{formatDop(debit)}</span>
                   {entry.reversedById ? (
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 whitespace-nowrap">Reversado</span>
