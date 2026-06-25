@@ -171,3 +171,58 @@ export const accountingSectionGroups = ACCOUNTING_BANDS
 export function sectionForPath(pathname) {
   return ACCOUNTING_SECTIONS.find((s) => s.tabs.some((t) => t.to === pathname)) || null;
 }
+
+// Label for a detail/editor sub-path's trailing segment, used as the breadcrumb
+// leaf when a page hasn't supplied a richer one (an entity name) via context.
+function subPathLeaf(pathname) {
+  if (/\/editar$/.test(pathname)) return 'Editar';
+  if (/\/nuevo$/.test(pathname) || /\/nueva$/.test(pathname)) return 'Nuevo';
+  return 'Detalle';
+}
+
+/**
+ * Intelligent breadcrumb trail for any /accounting route — derived from the
+ * same section model the sidebar + subnav use, so the hierarchy never drifts.
+ * Returns [{ label, to? }]; the last crumb is the current page (no `to`).
+ *   • root         → Contabilidad (links to the Resumen home)
+ *   • center       → the QBO center the path belongs to (links to its landing)
+ *   • tab          → the active secondary tab, when it isn't the landing
+ *   • leaf         → a detail/editor page: the live entity name (`leaf` arg)
+ *                    or a generic fallback (Nuevo / Editar / Detalle)
+ * `leaf` is the dynamic label a detail page injects (vendor, expediente, …).
+ */
+export function breadcrumbTrail(pathname, leaf) {
+  const crumbs = [{ label: 'Contabilidad', to: '/accounting/dashboard' }];
+
+  // Longest-prefix match across every center's tabs + extraMatch paths.
+  let best = null, bestLen = -1;
+  for (const s of ACCOUNTING_SECTIONS) {
+    for (const p of [...s.tabs.map((t) => t.to), ...(s.extraMatch || [])]) {
+      if ((pathname === p || pathname.startsWith(`${p}/`)) && p.length > bestLen) {
+        best = s; bestLen = p.length;
+      }
+    }
+  }
+  if (!best) {
+    crumbs[0].to = undefined; // on the bare dashboard, root IS the current page
+    return crumbs;
+  }
+
+  const landing = best.tabs[0].to;
+  const exactTab = best.tabs.find((t) => t.to === pathname);
+
+  // The center crumb (skip for the Resumen center — it equals the root).
+  if (best.key !== 'panel') crumbs.push({ label: best.label, to: landing });
+
+  if (exactTab && exactTab.to !== landing) {
+    // A secondary tab of the center.
+    crumbs.push({ label: exactTab.label, to: exactTab.to });
+  } else if (!exactTab) {
+    // A detail/editor sub-path under the center.
+    crumbs.push({ label: leaf || subPathLeaf(pathname) });
+  }
+
+  // The last crumb is the current page — strip its link.
+  crumbs[crumbs.length - 1] = { ...crumbs[crumbs.length - 1], to: undefined };
+  return crumbs;
+}

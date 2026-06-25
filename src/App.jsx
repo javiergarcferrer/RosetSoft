@@ -4,6 +4,7 @@ import { RefreshCw, Hourglass, LogOut } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { NavMemoryProvider } from './context/NavMemory.jsx';
+import { BreadcrumbProvider } from './context/Breadcrumbs.jsx';
 import { ConfirmProvider } from './components/ConfirmProvider.jsx';
 import { safeDynamicImport } from './lib/dynamicImport.js';
 import Layout from './components/Layout.jsx';
@@ -381,6 +382,7 @@ export default function App() {
           you actually came from, not a fixed section list (see NavMemory). */}
       <NavMemoryProvider>
         <ConfirmProvider>
+        <BreadcrumbProvider>
         <Routes>
           <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
           {/* Public, logged-out interactive quote view. Lives OUTSIDE
@@ -422,6 +424,7 @@ export default function App() {
           <Route path="/eliminar-datos" element={<DataDeletion />} />
           <Route path="/*" element={<RequireAuth><ProtectedApp /></RequireAuth>} />
         </Routes>
+        </BreadcrumbProvider>
         </ConfirmProvider>
       </NavMemoryProvider>
     </AuthProvider>

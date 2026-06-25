@@ -2,6 +2,7 @@ import { useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Receipt, Trash2, Loader2, BookOpen, FileText, Ship, CheckCircle2, Clock, Pencil, Copy, Paperclip, UploadCloud, RefreshCw, ExternalLink, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
+import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import { useLiveQueryStatus } from '../../db/hooks.js';
@@ -241,6 +242,8 @@ export default function ComprasGastoDetail() {
   const [tab, setTab] = useState('lines'); // 'lines' | 'asiento' | 'dgii'
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState('');
+
+  useSetBreadcrumb(detail ? `${detail.natureLabel}${detail.number != null ? ` #${detail.number}` : ''}` : null);
 
   const bothLoaded = purchaseQ.loaded && expenseQ.loaded;
   if (!bothLoaded || !suppliersQ.loaded) return <AccountingGate title="Compras y gastos"><ListLoading /></AccountingGate>;

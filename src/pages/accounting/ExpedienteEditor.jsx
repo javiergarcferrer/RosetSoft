@@ -5,6 +5,7 @@ import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import BackLink from '../../components/BackLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
@@ -43,6 +44,7 @@ export default function ExpedienteEditor() {
   const loaded = suppliersQ.loaded && itemsQ.loaded && (!id || expQ.loaded);
   const existing = id ? expQ.data : null;
   const backTo = id ? `/accounting/importaciones/${id}` : '/accounting/importaciones';
+  useSetBreadcrumb(id ? `Editar expediente${existing?.number != null ? ` #${existing.number}` : ''}` : 'Nuevo expediente');
 
   if (!allowed) {
     return (

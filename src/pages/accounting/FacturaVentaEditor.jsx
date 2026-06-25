@@ -5,6 +5,7 @@ import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import BackLink from '../../components/BackLink.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
@@ -129,6 +130,7 @@ export default function FacturaVentaEditor() {
   }
 
   const field = 'input w-full';
+  useSetBreadcrumb('Nueva factura');
 
   return (
     <AccountingGate title="Facturación">

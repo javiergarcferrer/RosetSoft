@@ -6,6 +6,7 @@ import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import BackLink from '../../components/BackLink.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
@@ -98,6 +99,7 @@ export default function ComprasGastoEditor() {
   const title = id
     ? (editDoc ? `Editar ${NATURE_LABEL[editDoc.nature]?.toLowerCase() || 'documento'}${editDoc.number != null ? ` #${editDoc.number}` : ''}` : 'Editar')
     : (seedDoc ? 'Duplicar compra o gasto' : 'Nueva compra o gasto');
+  useSetBreadcrumb(title);
 
   return (
     <AccountingGate title="Compras y gastos">

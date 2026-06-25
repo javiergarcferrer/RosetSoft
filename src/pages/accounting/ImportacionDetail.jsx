@@ -7,6 +7,7 @@ import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -126,6 +127,7 @@ export default function ImportacionDetail() {
   const containersQ = useLiveQueryStatus(() => db.containers.where('profileId').equals(scope).toArray(), [scope], []);
   const ordersQ = useLiveQueryStatus(() => db.orders.where('profileId').equals(scope).toArray(), [scope], []);
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
+  useSetBreadcrumb(expQ.data ? `Expediente${expQ.data.number != null ? ` #${expQ.data.number}` : ''}` : null);
   const jeId = expQ.data?.journalEntryId || '';
   const jLinesQ = useLiveQueryStatus(
     () => (jeId ? db.journalLines.where('entryId').equals(jeId).toArray() : []),

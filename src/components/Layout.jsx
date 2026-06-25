@@ -8,6 +8,7 @@ import ViewAsToggle from './ViewAsToggle.jsx';
 import ImageView from './ImageView.jsx';
 import ListLoading from './ListLoading.jsx';
 import AccountingSubnav from './AccountingSubnav.jsx';
+import AccountingBreadcrumbs from './accounting/Breadcrumbs.jsx';
 import QuickCreate from './QuickCreate.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
 import { useScrollRestoration } from '../context/NavMemory.jsx';
@@ -437,6 +438,7 @@ function MainContent() {
   return (
     <div className="px-4 py-4 md:px-8 md:py-6 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-8 md:pr-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6">
       <div className={`max-w-[1400px] mx-auto${location.pathname.startsWith('/accounting') ? ' acct-dense' : ''}`}>
+        <AccountingBreadcrumbs />
         <AccountingSubnav />
         <Suspense fallback={<ListLoading />}>
           <Outlet key={location.pathname} />
