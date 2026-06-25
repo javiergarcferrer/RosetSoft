@@ -17,9 +17,7 @@ import Dropdown, { DropdownItem } from '../../components/primitives/Dropdown.jsx
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import { formatDate, formatMoney } from '../../lib/format.js';
 import { displayRatesFor, effectiveDopRate } from '../../lib/exchangeRate.js';
-import {
-  computeTotals, applyLineAdjustments, lineForTotals, isCompoundLine,
-} from '../../lib/pricing.js';
+import { computeTotals, lineForTotals } from '../../lib/pricing.js';
 import { downloadCsv } from '../../lib/csv.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { isPricedLine, QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
@@ -34,6 +32,7 @@ import { resolveSales, resolveWorkspaceEntries } from '../../core/accounting/sal
 import { activeFiscalPlugin } from '../../core/accounting/index.js';
 import { groupFamilies } from '../../lib/catalog.js';
 import { resolveWarehouseOrder } from '../../core/quote/index.js';
+import { invoiceLinesForQuote, QuoteLinesTable } from '../../components/accounting/QuoteLinesDetail.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -1023,34 +1022,7 @@ function QuoteAccountingDetail({ invLines, totals, currency, rates, taxName, onE
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-ink-100 bg-surface shadow-xs">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-ink-500 bg-ink-50 border-b border-ink-100">
-              <th className="font-semibold py-1.5 px-2.5 uppercase tracking-wide text-[10px]">Producto</th>
-              <th className="font-semibold py-1.5 px-2.5 text-right whitespace-nowrap uppercase tracking-wide text-[10px]">Cant.</th>
-              <th className="font-semibold py-1.5 px-2.5 text-right whitespace-nowrap uppercase tracking-wide text-[10px]">Precio unit.</th>
-              <th className="font-semibold py-1.5 px-2.5 text-right whitespace-nowrap uppercase tracking-wide text-[10px]">Subtotal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invLines.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center text-ink-400 py-4">
-                  Sin líneas facturables
-                </td>
-              </tr>
-            ) : invLines.map((il, i) => (
-              <tr key={i} className="border-b border-ink-50 last:border-0 hover:bg-ink-50/60 transition-colors">
-                <td className="py-1.5 px-2.5 text-ink-800">{il.name || '—'}</td>
-                <td className="py-1.5 px-2.5 text-right tabular-nums text-ink-700">{il.qty}</td>
-                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap text-ink-700">{fmt(il.unit)}</td>
-                <td className="py-1.5 px-2.5 text-right tabular-nums whitespace-nowrap font-medium text-ink-900">{fmt(il.subtotal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <QuoteLinesTable invLines={invLines} currency={currency} rates={rates} />
 
       <div className="w-full sm:ml-auto sm:w-72 text-xs tabular-nums">
         <TotalLine label="Subtotal" value={fmt(totals.subtotal)} />
@@ -1253,37 +1225,6 @@ const ODOO_INVOICE_HEADER = [
  * the per-row dropdown, the per-quote CSV, and the bulk export so all
  * three agree on product name, qty and price math.
  */
-function invoiceLinesForQuote(quote, lines) {
-  const out = [];
-  const itemLines = (lines || [])
-    .filter(isPricedLine)
-    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-  for (const l of itemLines) {
-    if (isCompoundLine(l)) {
-      const familyName = (l.name || '').trim();
-      for (const c of l.components || []) {
-        const unit = applyLineAdjustments(c.unitPrice, l.lineMarginPct, l.lineDiscountPct);
-        const qty = Number(c.qty) || 0;
-        const componentName = [c.name, c.reference, c.dimensions]
-          .map((s) => (s || '').trim()).filter(Boolean).join(' · ');
-        out.push({
-          name: familyName ? `${familyName} — ${componentName}` : componentName,
-          qty, unit, subtotal: unit * qty,
-        });
-      }
-    } else {
-      const unit = applyLineAdjustments(l.unitPrice, l.lineMarginPct, l.lineDiscountPct);
-      const qty = Number(l.qty) || 0;
-      out.push({
-        name: [l.name, l.reference, l.dimensions]
-          .map((s) => (s || '').trim()).filter(Boolean).join(' · '),
-        qty, unit, subtotal: unit * qty,
-      });
-    }
-  }
-  return out;
-}
-
 // One CSV row from a quote + customer + an invoiceLinesForQuote entry.
 function invoiceCsvRow(quote, customer, il) {
   const partnerName = customer ? (customer.company || customer.name || '') : '';

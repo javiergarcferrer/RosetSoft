@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, ArrowDownCircle, Ban } from 'lucide-react';
 import { formatDop, formatDate } from '../../lib/format.js';
+import { QuoteLinesTable } from './QuoteLinesDetail.jsx';
 
 /**
  * InvoiceDrawer — the "click a factura, the briefing comes up in place" panel.
@@ -43,7 +44,7 @@ function Row({ label, value, strong, big, rule, tone }) {
   );
 }
 
-export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, fiscalActions, fiscalMsg, onCollect, onVoid, onClose }) {
+export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, invLines, invCurrency = 'USD', invRates, fiscalActions, fiscalMsg, onCollect, onVoid, onClose }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('transfer');
   const [date, setDate] = useState(todayInput());
@@ -148,21 +149,28 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
             {!isNote && <Row label="Balance pendiente" value={formatDop(balance)} strong big tone={balance > 0 ? 'brand' : 'emerald'} />}
           </div>
 
+          {invLines?.length > 0 && (
+            <div>
+              <div className="eyebrow-xs text-ink-400 mb-1.5">Detalle de la factura</div>
+              <QuoteLinesTable invLines={invLines} currency={invCurrency} rates={invRates} />
+            </div>
+          )}
+
           {!isNote && !voided && balance > 0 && (
             <div className="surface-subtle p-3.5">
               <div className="eyebrow-xs text-ink-500 mb-2 inline-flex items-center gap-1.5"><ArrowDownCircle size={13} aria-hidden /> Registrar cobro</div>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-ink-500 col-span-2 sm:col-span-1">Monto
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="block min-w-0 text-[11px] text-ink-500">Monto
                   <input type="number" min="0" step="0.01" inputMode="decimal" value={amount} placeholder={balance.toFixed(2)}
-                    onChange={(e) => setAmount(e.target.value)} className="input mt-1 text-right tabular-nums" />
+                    onChange={(e) => setAmount(e.target.value)} className="input w-full min-w-0 mt-1 text-right tabular-nums" />
                 </label>
-                <label className="text-[11px] text-ink-500">Método
-                  <select value={method} onChange={(e) => setMethod(e.target.value)} className="input mt-1">
+                <label className="block min-w-0 text-[11px] text-ink-500">Método
+                  <select value={method} onChange={(e) => setMethod(e.target.value)} className="input w-full min-w-0 mt-1">
                     {METHODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                   </select>
                 </label>
-                <label className="text-[11px] text-ink-500 col-span-2 sm:col-span-1">Fecha
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input mt-1" />
+                <label className="block min-w-0 text-[11px] text-ink-500 sm:col-span-2">Fecha
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input w-full min-w-0 mt-1" />
                 </label>
               </div>
               <button type="button" onClick={submitCobro} disabled={saving} className="btn-primary w-full justify-center mt-2.5">

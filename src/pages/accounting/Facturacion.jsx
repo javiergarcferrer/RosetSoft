@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import KpiBand from '../../components/accounting/KpiBand.jsx';
+import { invoiceLinesForQuote } from '../../components/accounting/QuoteLinesDetail.jsx';
 import { ActionChips } from '../../components/accounting/ActionCenter.jsx';
 import InvoiceDrawer from '../../components/accounting/InvoiceDrawer.jsx';
 import RowCards from '../../components/RowCards.jsx';
@@ -1151,10 +1152,13 @@ export default function Facturacion() {
         const p = postingById.get(drawerRow.id);
         const customer = p?.customerId ? customersById.get(p.customerId) : null;
         const pmts = paymentsQ.data.filter((pay) => (pay.allocations || []).some((a) => a.docId === drawerRow.id));
+        const quote = p?.quoteId ? quotesById.get(p.quoteId) : null;
+        const invLines = quote ? invoiceLinesForQuote(quote, linesByQuote.get(quote.id) || []) : null;
         return (
           <InvoiceDrawer
             row={drawerRow} posting={p} customer={customer} payments={pmts}
             itbisRate={config.itbisRate}
+            invLines={invLines} invCurrency={quote?.currencyCode || 'USD'} invRates={quote ? displayRatesFor(quote, settings) : undefined}
             fiscalActions={ecfActions(drawerRow)}
             fiscalMsg={err}
             onCollect={(args) => collectInvoice(p, args)}
