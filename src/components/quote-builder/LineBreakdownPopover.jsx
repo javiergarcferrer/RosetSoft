@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import {
   applyLineAdjustments, isCompoundLine, lineBasePrice, lineQty,
 } from '../../lib/pricing.js';
-import { formatMoney } from '../../lib/format.js';
+import { formatMoney, formatPct } from '../../lib/format.js';
 
 /**
  * The "show me the math" popover. Anchored to the line total — opens on
@@ -76,10 +76,10 @@ export default function LineBreakdownPopover({ line, currency, rates, onClose, a
       )}
       <Row label={compound ? 'Subtotal componentes' : 'Base'} value={fmt(base)} />
       {margin !== 0 && (
-        <Row label={`Margen ${margin > 0 ? '+' : ''}${margin}%`} value={`${marginAmt >= 0 ? '+' : ''}${fmt(marginAmt)}`} muted />
+        <Row label={`Margen ${margin > 0 ? '+' : ''}${formatPct(margin)}%`} value={`${marginAmt >= 0 ? '+' : ''}${fmt(marginAmt)}`} muted />
       )}
       {discount !== 0 && (
-        <Row label={`Descuento ${discount > 0 ? '–' : ''}${discount}%`} value={`–${fmt(discountAmt)}`} muted />
+        <Row label={`Descuento ${discount > 0 ? '–' : ''}${formatPct(discount)}%`} value={`–${fmt(discountAmt)}`} muted />
       )}
       {!compound && (
         <>

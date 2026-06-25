@@ -61,9 +61,10 @@ import { useLiveQuery } from '../../db/hooks.js';
  * Yardage, line-level margin AND the per-line discount input are
  * intentionally absent from the editor. Old quotes that carry
  * `lineMarginPct` / `lineDiscountPct` in the DB still calculate correctly
- * (pricing.js respects the value, and the read-only AdjustmentChip surfaces
- * it on the total), but new lines never set them and the UI never lets you
- * edit them.
+ * (pricing.js respects the value), but new lines never set them, the UI
+ * never lets you edit them, and the editor no longer surfaces the stored
+ * percentage on the line — margin is read once at the quote end, from each
+ * line's price (`unitPrice`) and cost (`unitCost`), via the totals dock.
  *
  * autoFocus targets the REF input — the dealer's primary entry point when
  * reading from a paper price list.
@@ -1568,7 +1569,7 @@ function PricingRow({
   // When provided, the Total is a button that toggles the breakdown popover
   // and renders the c/u adjustment caption. Components pass none of these
   // (their total is a plain read-out; the parent line owns the breakdown).
-  onToggleBreakdown, breakdownOpen, breakdown, adjustmentLine, unitForCaption, hasAdjustment,
+  onToggleBreakdown, breakdownOpen, breakdown, unitForCaption, hasAdjustment,
   // Company (house) account: the Total already reads at dealer cost, so badge it
   // "−N%" next to the label — the editable Unitario stays at list, so the badge
   // is what explains why qty × unit ≠ the shown (discounted) Total.
@@ -1635,7 +1636,6 @@ function PricingRow({
                   {unitForCaption != null && (
                     <span className="whitespace-nowrap">{fmt(unitForCaption)} c/u</span>
                   )}
-                  {adjustmentLine && <AdjustmentChip line={adjustmentLine} />}
                 </div>
               ) : null}
             </button>
@@ -1679,7 +1679,6 @@ function CalculatorBand({
         breakdownOpen={breakdownOpen}
         hasAdjustment={hasAdjustment}
         unitForCaption={unit}
-        adjustmentLine={line}
         breakdown={(
           <LineBreakdownPopover
             line={factor !== 1 ? applyCompanyDiscount([line], companyDiscountPct)[0] : line}
@@ -1779,11 +1778,6 @@ function CompoundCalculatorBand({
                 ? <>{fmt(tr.min)} <span className="text-ink-300 mx-0.5" aria-hidden>–</span> {fmt(tr.max)}</>
                 : fmt(rowTotal)}
             </div>
-            {hasAdjustment ? (
-              <div className="text-[10px] text-ink-500 tabular-nums leading-tight mt-0.5">
-                <AdjustmentChip line={line} />
-              </div>
-            ) : null}
           </button>
           {breakdownOpen && (
             <LineBreakdownPopover
@@ -2438,20 +2432,6 @@ function CalcCell({ label, children }) {
       {children}
     </div>
   );
-}
-
-// Renders the live adjustments on a line. New lines can carry NEITHER a
-// discount nor a margin from the editor anymore (the per-line discount input
-// was removed); this read-only chip only surfaces a value that a legacy quote
-// already stored, so an old discount/margin still explains the adjusted total.
-function AdjustmentChip({ line }) {
-  const margin = Number(line.lineMarginPct) || 0;
-  const discount = Number(line.lineDiscountPct) || 0;
-  const parts = [];
-  if (margin) parts.push(`${margin > 0 ? '+' : ''}${margin}%`);
-  if (discount) parts.push(`–${discount}%`);
-  if (parts.length === 0) return null;
-  return <span className="ml-1 text-brand-700 font-medium">{parts.join(' ')}</span>;
 }
 
 // ---------------------------------------------------------------------------

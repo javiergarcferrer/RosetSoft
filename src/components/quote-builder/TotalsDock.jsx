@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { DebouncedInput } from '../DebouncedInput.jsx';
 import { clampPct, ITBIS_PCT } from '../../lib/pricing.js';
-import { formatMoney } from '../../lib/format.js';
+import { formatMoney, formatPct } from '../../lib/format.js';
 import { baseCommissionPct, commissionBreakdown, decoratorBilling } from '../../lib/commissions.js';
 import { useExchangeRatePull } from '../../lib/useExchangeRatePull.js';
 
@@ -121,8 +121,8 @@ export default function TotalsDock({
     <div className="py-4 space-y-2">
       <Row label="Subtotal" value={fmt(totals.subtotal)} />
       {totals.marginAmt !== 0 && <Row label="Margen aplicado" value={fmt(totals.marginAmt)} muted />}
-      {discountPct ? <Row label={`Descuento (${discountPct}%)`} value={`–${fmt(totals.discountAmt)}`} muted /> : null}
-      {courtesyPct ? <Row label={`Cortesía amigos y familia (${courtesyPct}%)`} value={`–${fmt(totals.courtesyDiscountAmt)}`} muted /> : null}
+      {discountPct ? <Row label={`Descuento (${formatPct(discountPct)}%)`} value={`–${fmt(totals.discountAmt)}`} muted /> : null}
+      {courtesyPct ? <Row label={`Cortesía amigos y familia (${formatPct(courtesyPct)}%)`} value={`–${fmt(totals.courtesyDiscountAmt)}`} muted /> : null}
       <Row label={`ITBIS (${ITBIS_PCT}%)`} value={`+${fmt(totals.taxAmt)}`} muted />
       {shipping ? <Row label="Envío" value={`+${fmt(totals.shipping)}`} muted /> : null}
       <div className="border-t-2 border-brand-500/20 pt-3 mt-2">
@@ -354,7 +354,7 @@ export default function TotalsDock({
               <span className="eyebrow-xs flex-shrink-0 hidden sm:inline-block text-brand-600 font-bold tracking-widest">Total</span>
               <span className="text-2xl font-bold tabular-nums leading-none flex-shrink-0 text-ink-900 tracking-tight whitespace-nowrap">{totalLabel}</span>
               {discountPct > 0 && (
-                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 ring-1 ring-inset ring-emerald-200/60 flex-shrink-0">−{discountPct}%</span>
+                <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 ring-1 ring-inset ring-emerald-200/60 flex-shrink-0">−{formatPct(discountPct)}%</span>
               )}
               {/* Live DOP conversion. On phones `order-last w-full` parks it on
                   its own line beneath the amount (always shown, never clipped);
@@ -608,7 +608,7 @@ function MarginMeter({ marginPct }) {
     <div className="space-y-1 pt-0.5">
       <div className="flex items-center justify-between text-[10px] text-ink-500">
         <span className="eyebrow-xs">Margen</span>
-        <span className="tabular-nums text-ink-700 font-medium">{marginPct}%</span>
+        <span className="tabular-nums text-ink-700 font-medium">{formatPct(marginPct)}%</span>
       </div>
       <meter
         className="w-full"
@@ -618,8 +618,8 @@ function MarginMeter({ marginPct }) {
         high={40}
         optimum={27}
         value={Math.max(0, Math.min(60, marginPct))}
-        aria-label={`Margen aplicado ${marginPct}%`}
-        title={`Margen aplicado: ${marginPct}%`}
+        aria-label={`Margen aplicado ${formatPct(marginPct)}%`}
+        title={`Margen aplicado: ${formatPct(marginPct)}%`}
       />
     </div>
   );
@@ -662,8 +662,8 @@ function BreakdownExplainer({ quote, totals, fmt }) {
   const lines = [];
   lines.push(['Suma de líneas', fmt(totals.subtotal)]);
   if (totals.marginAmt !== 0) lines.push(['+ Margen', fmt(totals.marginAmt)]);
-  if (quote.discountPct) lines.push([`– Descuento ${quote.discountPct}%`, `–${fmt(totals.discountAmt)}`]);
-  if (quote.courtesyDiscountPct) lines.push([`– Cortesía amigos y familia ${quote.courtesyDiscountPct}%`, `–${fmt(totals.courtesyDiscountAmt)}`]);
+  if (quote.discountPct) lines.push([`– Descuento ${formatPct(quote.discountPct)}%`, `–${fmt(totals.discountAmt)}`]);
+  if (quote.courtesyDiscountPct) lines.push([`– Cortesía amigos y familia ${formatPct(quote.courtesyDiscountPct)}%`, `–${fmt(totals.courtesyDiscountAmt)}`]);
   lines.push(['= Base imponible', fmt(totals.taxableBase)]);
   lines.push([`+ ITBIS ${ITBIS_PCT}%`, fmt(totals.taxAmt)]);
   if (totals.shipping) lines.push(['+ Envío', fmt(totals.shipping)]);
