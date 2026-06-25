@@ -42,9 +42,9 @@ const joinTax = (itbisId, retId) => [itbisId, retId].filter(Boolean);
 /** A labeled control in the document grid. */
 function Field({ label, hint, children, className = '' }) {
   return (
-    <label className={`block min-w-0 ${className}`}>
-      <span className="text-xs text-ink-500 inline-flex items-center gap-1">{label}{hint}</span>
-      <div className="mt-1">{children}</div>
+    <label className={`flex items-baseline gap-3 py-2 border-b border-ink-100 min-w-0 ${className}`}>
+      <span className="text-xs text-ink-500 inline-flex items-center gap-1 w-32 shrink-0 leading-tight">{label}{hint}</span>
+      <div className="flex-1 min-w-0">{children}</div>
     </label>
   );
 }
@@ -452,8 +452,8 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       </div>
 
       {/* Document fields */}
-      <div className="px-4 sm:px-6 py-5 grid sm:grid-cols-2 gap-x-10 gap-y-4">
-        <div className="space-y-4 min-w-0">
+      <div className="px-4 sm:px-6 py-2 grid sm:grid-cols-2 gap-x-10 gap-y-0">
+        <div className="min-w-0">
           <Field label="Proveedor">
             <SearchPicker
               options={suppliers.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map((s) => ({ id: s.id, label: s.name, sublabel: s.rnc || '' }))}
@@ -494,7 +494,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
             <input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={goods ? 'Referencia de la factura' : 'Descripción'} className={field} />
           </Field>
         </div>
-        <div className="space-y-4 min-w-0">
+        <div className="min-w-0">
           <Field label="Fecha">
             <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={field} />
           </Field>
@@ -613,7 +613,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         {!isBill && (
         <div>
           <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Impuestos y retenciones</h4>
-          <div className="grid grid-cols-2 gap-3 max-w-sm">
+          <div className="max-w-sm border-t border-ink-100">
             <Field label="Base">
               {goods
                 ? <input type="number" value={lineRes.base} readOnly tabIndex={-1} className={`${numField} bg-ink-50 text-ink-500`} />

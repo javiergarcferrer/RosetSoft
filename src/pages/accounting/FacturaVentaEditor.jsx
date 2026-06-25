@@ -25,9 +25,9 @@ const itbisOf = (taxIds) => (taxIds || []).find((id) => /^itbis|^exento/.test(id
 
 function Field({ label, children }) {
   return (
-    <label className="block min-w-0">
-      <span className="text-xs text-ink-500">{label}</span>
-      <div className="mt-1">{children}</div>
+    <label className="flex items-baseline gap-3 py-2 border-b border-ink-100 min-w-0">
+      <span className="text-xs text-ink-500 w-32 shrink-0 leading-tight">{label}</span>
+      <div className="flex-1 min-w-0">{children}</div>
     </label>
   );
 }
@@ -149,8 +149,8 @@ export default function FacturaVentaEditor() {
           </div>
 
           {/* Document fields */}
-          <div className="px-4 sm:px-6 py-5 grid sm:grid-cols-2 gap-x-10 gap-y-4">
-            <div className="space-y-4 min-w-0">
+          <div className="px-4 sm:px-6 py-2 grid sm:grid-cols-2 gap-x-10 gap-y-0">
+            <div className="min-w-0">
               <Field label="Cliente">
                 <select value={form.customerId} onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))} className={field}>
                   <option value="">— Consumidor final —</option>
@@ -161,7 +161,7 @@ export default function FacturaVentaEditor() {
                 <input value={form.ncf} onChange={(e) => setForm((f) => ({ ...f, ncf: e.target.value }))} placeholder="Se asigna automáticamente" className={`${field} tabular-nums`} />
               </Field>
             </div>
-            <div className="space-y-4 min-w-0">
+            <div className="min-w-0">
               <Field label="Fecha">
                 <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={field} />
               </Field>
