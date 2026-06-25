@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, ArrowDownCircle, Ban } from 'lucide-react';
 import { formatDop, formatDate } from '../../lib/format.js';
 
@@ -118,7 +119,11 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
               Cerrar <span className="kbd ml-1">Esc</span>
             </button>
           </div>
-          <h2 className="font-display text-lg font-semibold text-ink-900 truncate">{customer?.name || 'Cliente'}</h2>
+          <h2 className="font-display text-lg font-semibold text-ink-900 truncate">
+            {customer?.id
+              ? <Link to={`/customers/${customer.id}`} className="hover:text-brand-600 hover:underline">{customer.name}</Link>
+              : (customer?.name || 'Cliente')}
+          </h2>
           <div className="text-xs text-ink-500 mt-0.5">{tipoLabel}{posting.rnc ? ` · RNC ${posting.rnc}` : ''}</div>
           <div className="flex items-baseline gap-3 mt-3">
             <span className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(isNote ? -total : total)}</span>

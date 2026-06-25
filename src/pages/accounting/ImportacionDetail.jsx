@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Shield, Ship, Receipt, Plus, Copy, Container, BookOpen, Trash2, Loader2, Pencil, ShoppingCart } from 'lucide-react';
 import BackLink from '../../components/BackLink.jsx';
 import { useConfirm } from '../../components/ConfirmProvider.jsx';
@@ -286,7 +286,9 @@ export default function ImportacionDetail() {
 
       {/* Meta strip */}
       <div className="card p-3 mb-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Meta label="Proveedor">{meta.supplierName}</Meta>
+        <Meta label="Proveedor">{meta.supplierId
+          ? <Link to={`/accounting/proveedor-360?supplier=${meta.supplierId}`} className="text-brand-600 hover:text-brand-700 hover:underline">{meta.supplierName}</Link>
+          : meta.supplierName}</Meta>
         <Meta label="DUA">{meta.customsRef}</Meta>
         <Meta label="Contenedor">{meta.containerCode}</Meta>
         <Meta label="Pedido">{meta.orderLabel}</Meta>
@@ -320,7 +322,9 @@ export default function ImportacionDetail() {
                 <div key={f.id} className="rounded-lg border border-ink-200 bg-surface p-2.5">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1.5 text-sm">
                     <Receipt size={14} className="text-ink-400 shrink-0" />
-                    <span className="font-medium text-ink-700">{f.supplierName || 'Factura'}</span>
+                    {f.supplierId
+                      ? <Link to={`/accounting/proveedor-360?supplier=${f.supplierId}`} className="font-medium text-brand-600 hover:text-brand-700 hover:underline">{f.supplierName || 'Factura'}</Link>
+                      : <span className="font-medium text-ink-700">{f.supplierName || 'Factura'}</span>}
                     {f.invoiceRef && <span className="text-xs text-ink-500">No. {f.invoiceRef}</span>}
                     {f.ncf && <span className="font-mono text-xs text-ink-500">{f.ncf}</span>}
                     <span className="ml-auto text-xs text-ink-500 tabular-nums">{f.lines.length} línea{f.lines.length === 1 ? '' : 's'}</span>

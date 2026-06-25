@@ -340,7 +340,9 @@ export default function ComprasGastoDetail() {
           <div className="grid sm:grid-cols-2 gap-x-10 gap-y-3">
             <dl className="space-y-3 min-w-0">
               <Field label="Proveedor">
-                {d.supplierName || '—'}
+                {d.supplierId
+                  ? <Link to={`/accounting/proveedor-360?supplier=${d.supplierId}`} className="text-brand-600 hover:text-brand-700 hover:underline">{d.supplierName || '—'}</Link>
+                  : (d.supplierName || '—')}
                 {d.supplierRnc && <div className="text-xs text-ink-400 tabular-nums">RNC/Céd. {d.supplierRnc}</div>}
               </Field>
               {d.ncf && <Field label="No. de comprobante">{<span className="tabular-nums">{d.ncf}</span>}</Field>}
