@@ -198,7 +198,7 @@ export default function FacturaVentaEditor() {
 
           {/* Totales */}
           <div className="px-4 sm:px-6 py-5 border-t border-ink-100 flex justify-end">
-            <div className="w-full sm:max-w-xs space-y-1.5 text-sm">
+            <div className="w-full sm:max-w-xs space-y-1.5 text-sm surface-subtle rounded-lg p-3.5">
               <div className="flex justify-between gap-4"><span className="text-ink-500">Gravado</span><span className="tabular-nums">{formatDop(totals.base)}</span></div>
               <div className="flex justify-between gap-4"><span className="text-ink-500">ITBIS</span><span className="tabular-nums">{formatDop(totals.itbis)}</span></div>
               <div className="flex justify-between gap-4 pt-1.5 border-t border-ink-100 font-semibold text-ink-900"><span>Total</span><span className="tabular-nums">{formatDop(totals.total)}</span></div>

@@ -578,7 +578,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       <div className="px-4 sm:px-6 py-5 border-t border-ink-100 grid gap-6 sm:grid-cols-2">
         {!isBill && (
         <div>
-          <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Impuestos y retenciones</h4>
+          <h4 className="eyebrow-xs text-ink-400 mb-2">Impuestos y retenciones</h4>
           <div className="max-w-sm border-t border-ink-100">
             <Field label="Base">
               {goods
@@ -591,7 +591,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
           </div>
         </div>
         )}
-        <div className="sm:justify-self-end w-full sm:max-w-xs space-y-1.5 text-sm self-start">
+        <div className="sm:justify-self-end w-full sm:max-w-xs space-y-1.5 text-sm self-start surface-subtle rounded-lg p-3.5">
           <div className="flex justify-between gap-4"><span className="text-ink-500">Subtotal</span><span className="tabular-nums">{formatDop(base)}</span></div>
           <div className="flex justify-between gap-4"><span className="text-ink-500">ITBIS</span><span className="tabular-nums">{formatDop(itbisN)}</span></div>
           {(retIsrN > 0 || retItbisN > 0) && (
