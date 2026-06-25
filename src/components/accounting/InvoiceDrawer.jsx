@@ -42,7 +42,7 @@ function Row({ label, value, strong, big, rule, tone }) {
   );
 }
 
-export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, fiscalActions, onCollect, onVoid, onClose }) {
+export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, fiscalActions, fiscalMsg, onCollect, onVoid, onClose }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('transfer');
   const [date, setDate] = useState(todayInput());
@@ -252,9 +252,12 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
           )}
         </div>
 
-        {fiscalActions && (
-          <div className="px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-t border-ink-100 flex flex-wrap items-center gap-2">
-            {fiscalActions}
+        {(fiscalActions || fiscalMsg) && (
+          <div className="px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-t border-ink-100">
+            {fiscalActions && <div className="flex flex-wrap items-center gap-2">{fiscalActions}</div>}
+            {fiscalMsg && (
+              <p className={`text-sm ${fiscalActions ? 'mt-2' : ''} ${fiscalMsg.startsWith('✓') ? 'text-emerald-700' : 'text-rose-600'}`}>{fiscalMsg}</p>
+            )}
           </div>
         )}
       </aside>

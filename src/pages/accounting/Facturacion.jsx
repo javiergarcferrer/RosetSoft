@@ -615,6 +615,10 @@ export default function Facturacion() {
   const [focusIdx, setFocusIdx] = useState(0);
   // Reset the keyboard cursor when the visible row set changes.
   useEffect(() => { setFocusIdx(0); }, [tab, q607]);
+  // Clear the shared message when the drawer opens/closes so a stale page error
+  // never leaks into the fiscal-action footer (the drawer covers the page banner,
+  // so fiscalMsg is the only place transmit/imprimir feedback is visible there).
+  useEffect(() => { setErr(''); }, [drawerRow]);
   useEffect(() => { focusedRowRef.current?.scrollIntoView({ block: 'nearest' }); }, [focusIdx]);
   // Palantir-style keyboard nav over the register (desktop). Overlays own the
   // keyboard when open; typing in a field is never intercepted (except '/').
@@ -1152,6 +1156,7 @@ export default function Facturacion() {
             row={drawerRow} posting={p} customer={customer} payments={pmts}
             itbisRate={config.itbisRate}
             fiscalActions={ecfActions(drawerRow)}
+            fiscalMsg={err}
             onCollect={(args) => collectInvoice(p, args)}
             onVoid={(reason) => voidInvoice(p, reason)}
             onClose={() => setDrawerRow(null)}
