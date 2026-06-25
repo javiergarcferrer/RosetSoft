@@ -238,6 +238,32 @@
     -moz-appearance: textfield;
   }
 
+  /* Native date/time fields (date, datetime-local, month) render their
+     formatted value inside a WebKit pseudo-element. On iOS Safari that
+     pseudo carries a default margin and centers itself, so the value
+     ("Jun 25, 2026") spills out of the box every place a date input is
+     styled with `.input`. Strip the native chrome and pin the value box
+     flush-left inside the field so it sits within bounds and reads like
+     every other text input. */
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value,
+  input[type="month"]::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+    min-height: 1.2em;
+  }
+  input[type="date"]::-webkit-datetime-edit,
+  input[type="datetime-local"]::-webkit-datetime-edit,
+  input[type="month"]::-webkit-datetime-edit {
+    padding: 0;
+  }
+
   /* ===========================================================
      Native interactive elements, themed to the design system.
      Generic on purpose — any component can reach for a bare
