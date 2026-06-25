@@ -320,7 +320,7 @@ Deno.serve(async (req) => {
       }
 
       // Self-heal the daily schedule: (re)register the pg_cron job that posts
-      // `{cron:true}` back here through the business morning (migration
+      // `{cron:true}` back here once a day at 08:35 AST (migration
       // *_bpd_rate_cron). Idempotent, and driven off the function's own URL +
       // service key, so the schedule survives a project restore/reset without
       // anyone wiring it up — the next successful pull (browser OR cron) re-arms
