@@ -10,7 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import KpiBand from '../../components/accounting/KpiBand.jsx';
-import { invoiceLinesForQuote } from '../../components/accounting/QuoteLinesDetail.jsx';
+import { invoiceLinesForQuote, QuoteLinesTable } from '../../components/accounting/QuoteLinesDetail.jsx';
 import { ActionChips } from '../../components/accounting/ActionCenter.jsx';
 import InvoiceDrawer from '../../components/accounting/InvoiceDrawer.jsx';
 import RowCards from '../../components/RowCards.jsx';
@@ -1000,6 +1000,17 @@ export default function Facturacion() {
                 className="btn-ghost"><Download size={14} /> TXT DGII (607)</button>
             </div>
           </div>
+          {/* Live result context — changes on every tab/search change so the
+              filter visibly "does something" right next to the controls. */}
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2 px-0.5 text-xs">
+            <span className="text-ink-500">
+              <span className="font-semibold text-ink-800 tabular-nums">{registerView.count}</span> {registerView.count === 1 ? 'factura' : 'facturas'}
+              {q607 && <> · filtrado por “<span className="text-ink-700">{q607}</span>”</>}
+            </span>
+            {registerView.count > 0 && (
+              <span className="text-ink-500 tabular-nums">Total <span className="font-semibold text-ink-900">{formatDop(registerView.totals.total)}</span></span>
+            )}
+          </div>
           {registerView.count === 0 ? (
             <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin facturas'}
               description={q607 ? 'Ninguna factura coincide con la búsqueda.' : 'Las facturas emitidas aparecen aquí. Crea una con “Nueva factura”, o factura una entrega desde “Por facturar”.'} />
@@ -1110,42 +1121,89 @@ export default function Facturacion() {
         const book = bookFor(q);
         const customer = q.customerId ? customersById.get(q.customerId) : null;
         const draft = drafts[q.id] || {};
-        const stocked = (linesByQuote.get(q.id) || []).filter((l) => l.inventoryItemId);
+        const qLines = linesByQuote.get(q.id) || [];
+        const stocked = qLines.filter((l) => l.inventoryItemId);
+        const invLines = invoiceLinesForQuote(q, qLines);
+        const busy = posting === q.id;
+        const close = () => { if (!busy) { setErr(''); setFacturarQuote(null); } };
+        // Same drawer chrome as InvoiceDrawer so facturar → factura is ONE
+        // consistent surface (not a separate modal): the desglose, the reclaimed
+        // line detail, then the fiscal fields + Facturar action.
         return (
-          <Modal open onClose={() => { if (posting !== q.id) { setErr(''); setFacturarQuote(null); } }}
-            title={`Facturar — ${customer?.name || 'Cliente'}`} size="md" footer={
-            <>
-              <button onClick={() => { setErr(''); setFacturarQuote(null); }} disabled={posting === q.id} className="btn-ghost">Cancelar</button>
-              <button onClick={() => postSale(q)} disabled={posting === q.id} className="btn-primary disabled:opacity-40 inline-flex items-center gap-1.5">
-                {posting === q.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Facturar
-              </button>
-            </>
-          }>
-            <div className="mb-3">
-              <div className="font-display text-xl font-semibold tabular-nums text-ink-900">{formatDop(book.total)} <span className="text-sm text-ink-400 font-normal">({formatMoney(book.usdTotal, 'USD')})</span></div>
-              <div className="text-xs text-ink-500 mt-1 tabular-nums">Base {formatDop(book.base)} · ITBIS {formatDop(book.itbis)}{book.deposit > 0 && <> · Depósito aplicado {formatDop(Math.min(book.deposit, book.total))}</>}</div>
-              <div className="text-xs text-ink-400 mt-0.5">{q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`} · cotización #{q.number ?? '—'}</div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex gap-1">
-                <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
-                  onChange={(e) => setDraft(q.id, { rnc: e.target.value })} className="input flex-1" />
-                <button type="button" onClick={() => lookupFor(q)} disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
-                  className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
-                  {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                </button>
+          <>
+            <div className="fixed inset-0 z-40 bg-ink-900/40" onClick={close} aria-hidden />
+            <aside className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[460px] bg-surface border-l border-ink-200 shadow-2xl flex flex-col"
+              role="dialog" aria-modal="true" aria-label={`Facturar cotización ${q.number ?? ''}`}>
+              <div className="px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-b border-ink-100">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="inline-flex items-center gap-2 text-xs font-medium text-amber-700">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" aria-hidden />
+                    Por facturar · cotización #{q.number ?? '—'}
+                  </span>
+                  <button type="button" onClick={close} className="btn-ghost text-xs" aria-label="Cerrar">Cerrar</button>
+                </div>
+                <h2 className="font-display text-lg font-semibold text-ink-900 truncate">
+                  {customer?.id
+                    ? <Link to={`/customers/${customer.id}`} className="hover:text-brand-600 hover:underline">{customer.name}</Link>
+                    : (customer?.name || 'Cliente')}
+                </h2>
+                <div className="flex items-baseline gap-3 mt-3">
+                  <span className="font-display text-2xl font-semibold tabular-nums text-ink-900">{formatDop(book.total)}</span>
+                  <span className="text-sm text-ink-400">({formatMoney(book.usdTotal, 'USD')})</span>
+                </div>
               </div>
-              <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
-                onChange={(e) => setDraft(q.id, { ncf: e.target.value })} className="input w-full" />
-              {draft.msg && <p className="text-xs text-ink-500 break-words">{draft.msg}</p>}
-              {stocked.length > 0 && (
-                <Link to={`/inventario/existencias?item=${stocked[0].inventoryItemId}&qty=${Number(stocked[0].qty) || 1}`} className="btn-ghost text-xs">
-                  <Boxes size={12} aria-hidden /> Salida de inventario{stocked.length > 1 ? ` (${stocked.length} artículos)` : ''}
-                </Link>
-              )}
-              {err && <p className="text-sm text-rose-600">{err}</p>}
-            </div>
-          </Modal>
+
+              <div className="flex-1 overflow-y-auto px-5 py-4 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] space-y-5">
+                <div>
+                  <div className="eyebrow-xs text-ink-400 mb-1.5">Desglose</div>
+                  <div className="flex items-baseline justify-between py-1.5 border-b border-ink-100"><span className="text-sm text-ink-500">Base imponible</span><span className="text-sm tabular-nums">{formatDop(book.base)}</span></div>
+                  <div className="flex items-baseline justify-between py-1.5 border-b border-ink-100"><span className="text-sm text-ink-500">ITBIS</span><span className="text-sm tabular-nums">{formatDop(book.itbis)}</span></div>
+                  {book.deposit > 0 && <div className="flex items-baseline justify-between py-1.5 border-b border-ink-100"><span className="text-sm text-ink-500">Depósito aplicado</span><span className="text-sm tabular-nums text-emerald-700">− {formatDop(Math.min(book.deposit, book.total))}</span></div>}
+                  <div className="flex items-baseline justify-between py-1.5"><span className="text-sm font-medium text-ink-900">Total</span><span className="text-sm font-semibold tabular-nums">{formatDop(book.total)}</span></div>
+                  <div className="text-xs text-ink-400 mt-1">{q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`}</div>
+                </div>
+
+                {invLines.length > 0 && (
+                  <div>
+                    <div className="eyebrow-xs text-ink-400 mb-1.5">Detalle de la factura</div>
+                    <QuoteLinesTable invLines={invLines} currency={q.currencyCode || 'USD'} rates={displayRatesFor(q, settings)} />
+                  </div>
+                )}
+
+                <div>
+                  <div className="eyebrow-xs text-ink-400 mb-1.5">Datos fiscales</div>
+                  <div className="space-y-2">
+                    <div className="flex gap-1">
+                      <input value={draft.rnc ?? (customer?.rnc || '')} placeholder="RNC / Cédula"
+                        onChange={(e) => setDraft(q.id, { rnc: e.target.value })} className="input flex-1 min-w-0" />
+                      <button type="button" onClick={() => lookupFor(q)} disabled={lookingId === q.id || !cleanRnc(draft.rnc ?? customer?.rnc)}
+                        className="btn-icon shrink-0" title="Buscar nombre en el registro DGII" aria-label="Buscar nombre en el registro DGII">
+                        {lookingId === q.id ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      </button>
+                    </div>
+                    <input value={draft.ncf || ''} placeholder="NCF (auto si hay secuencia)"
+                      onChange={(e) => setDraft(q.id, { ncf: e.target.value })} className="input w-full min-w-0" />
+                    {draft.msg && <p className="text-xs text-ink-500 break-words">{draft.msg}</p>}
+                    {stocked.length > 0 && (
+                      <Link to={`/inventario/existencias?item=${stocked[0].inventoryItemId}&qty=${Number(stocked[0].qty) || 1}`} className="btn-ghost text-xs">
+                        <Boxes size={12} aria-hidden /> Salida de inventario{stocked.length > 1 ? ` (${stocked.length} artículos)` : ''}
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-t border-ink-100">
+                {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
+                <div className="flex items-center justify-end gap-2">
+                  <button onClick={close} disabled={busy} className="btn-ghost">Cancelar</button>
+                  <button onClick={() => postSale(q)} disabled={busy} className="btn-primary disabled:opacity-40 inline-flex items-center gap-1.5">
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Facturar
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </>
         );
       })()}
       {drawerRow && (() => {
