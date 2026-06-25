@@ -12,6 +12,8 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import SearchPicker from '../../components/SearchPicker.jsx';
+import { FieldRow as Field } from '../../components/accounting/FormFields.jsx';
+import LineItemsEditor from '../../components/accounting/LineItemsEditor.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { lookupRnc, cleanRnc, isValidRncOrCedula } from '../../lib/rncLookup.js';
@@ -39,16 +41,6 @@ const isRetKind = (k) => k === 'retIsr' || k === 'retItbis';
 const itbisOf = (taxIds) => (taxIds || []).find((id) => taxPresetById(id)?.kind === 'itbis') || '';
 const retOf = (taxIds) => (taxIds || []).find((id) => isRetKind(taxPresetById(id)?.kind)) || '';
 const joinTax = (itbisId, retId) => [itbisId, retId].filter(Boolean);
-
-/** A labeled control in the document grid. */
-function Field({ label, hint, children, className = '' }) {
-  return (
-    <label className={`flex items-baseline gap-3 py-2 border-b border-ink-100 min-w-0 ${className}`}>
-      <span className="text-xs text-ink-500 inline-flex items-center gap-1 w-32 shrink-0 leading-tight">{label}{hint}</span>
-      <div className="flex-1 min-w-0">{children}</div>
-    </label>
-  );
-}
 
 /**
  * Compra o gasto — the full-page registration/edit DOCUMENT (mirrors the detail
@@ -454,7 +446,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       </div>
 
       {/* Document fields */}
-      <div className="px-4 sm:px-6 py-2 grid sm:grid-cols-2 gap-x-10 gap-y-0">
+      <div className="px-4 sm:px-6 py-2 grid sm:grid-cols-2 gap-x-4 lg:gap-x-10 gap-y-0">
         <div className="min-w-0">
           <Field label="Proveedor">
             <SearchPicker
@@ -519,94 +511,66 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
       {/* Mercancía: article líneas → inventory (one kardex IN each) */}
       {goods && (
         <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
-          <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[480px]">
-              <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
-                <tr>
-                  <th className="text-left font-medium pb-1">Artículo <span className="normal-case font-normal">(busca o escribe uno nuevo)</span></th>
-                  <th className="text-right font-medium pb-1 w-20 whitespace-nowrap">Cant.</th>
-                  <th className="text-right font-medium pb-1 w-32 whitespace-nowrap">Costo RD$</th>
-                  <th className="text-right font-medium pb-1 w-28 whitespace-nowrap">C. unit.</th>
-                  <th className="w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l) => {
-                  const q = Number(l.qty) || 0;
-                  const c = Number(l.cost) || 0;
-                  const unit = q > 0 ? c / q : 0;
-                  return (
-                    <tr key={l.id} className="align-top">
-                      <td className="py-0.5 pr-2">
-                        <SearchPicker options={itemOptions} value={l.itemId} text={l.name}
-                          placeholder="— Artículo a inventariar —" freeTextLabel="Crear artículo" allowFreeText
-                          onPick={(o) => patchLine(l.id, { itemId: o.id, name: o.label, reference: o.sublabel || '' })}
-                          onFreeText={(txt) => patchLine(l.id, { itemId: '', name: txt })} />
-                        {(l.name || '').trim() !== '' && (!l.itemId || l.reference) && (
-                          <div className="mt-0.5 inline-flex items-center gap-1.5 text-[11px] text-amber-700">
-                            {!l.itemId && <span className="inline-flex items-center gap-1"><Plus size={11} /> Nuevo en inventario</span>}
-                            {l.reference && <span className="font-mono text-amber-600">{l.reference}</span>}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-0.5"><input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-20 text-right tabular-nums" /></td>
-                      <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.cost} onChange={(e) => patchLine(l.id, { cost: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} className="input w-32 text-right tabular-nums" /></td>
-                      <td className="py-0.5 text-right text-xs text-ink-500 tabular-nums whitespace-nowrap pr-1 pt-2.5">{unit > 0 ? formatDop(unit) : '—'}</td>
-                      <td className="py-0.5 text-right"><button type="button" onClick={() => delLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" onClick={addLine} className="btn-ghost text-xs gap-1 mt-1 px-2"><Plus size={12} /> Línea <span className="text-ink-300 normal-case hidden sm:inline">(o Enter en Costo)</span></button>
+          <h4 className="eyebrow-xs text-ink-400 mb-2">Líneas de la factura</h4>
+          <LineItemsEditor
+            rows={lines} onAdd={addLine} onDelete={(l) => delLine(l.id)}
+            addLabel="Agregar línea" addHint="o Enter en Costo"
+            columns={[
+              { key: 'item', header: 'Artículo', headerHint: '(busca o escribe uno nuevo)',
+                render: (l) => (
+                  <>
+                    <SearchPicker options={itemOptions} value={l.itemId} text={l.name}
+                      placeholder="— Artículo a inventariar —" freeTextLabel="Crear artículo" allowFreeText
+                      onPick={(o) => patchLine(l.id, { itemId: o.id, name: o.label, reference: o.sublabel || '' })}
+                      onFreeText={(txt) => patchLine(l.id, { itemId: '', name: txt })} />
+                    {(l.name || '').trim() !== '' && (!l.itemId || l.reference) && (
+                      <div className="mt-0.5 inline-flex items-center gap-1.5 text-[11px] text-amber-700">
+                        {!l.itemId && <span className="inline-flex items-center gap-1"><Plus size={11} /> Nuevo en inventario</span>}
+                        {l.reference && <span className="font-mono text-amber-600">{l.reference}</span>}
+                      </div>
+                    )}
+                  </>
+                ) },
+              { key: 'qty', header: 'Cant.', align: 'right', width: 'w-24',
+                render: (l) => <input type="number" min="0" step="1" inputMode="numeric" value={l.qty} onChange={(e) => patchLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums" /> },
+              { key: 'cost', header: 'Costo RD$', align: 'right', width: 'w-32',
+                render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.cost} onChange={(e) => patchLine(l.id, { cost: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLine(); } }} className="input w-full text-right tabular-nums" /> },
+              { key: 'unit', header: 'C. unit.', align: 'right', width: 'w-28',
+                render: (l) => { const q = Number(l.qty) || 0; const c = Number(l.cost) || 0; const unit = q > 0 ? c / q : 0; return <span className="text-xs text-ink-500 tabular-nums">{unit > 0 ? formatDop(unit) : '—'}</span>; } },
+            ]}
+          />
         </div>
       )}
 
       {/* Por líneas: each row hits its own account with its own taxes */}
       {isBill && (
         <div className="px-4 sm:px-6 pb-4 border-t border-ink-100 pt-4">
-          <h4 className="font-display text-sm font-medium text-ink-700 mb-2">Líneas de la factura</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[760px]">
-              <thead className="text-ink-400 text-[11px] uppercase tracking-wide">
-                <tr>
-                  <th className="text-left font-medium pb-1">Descripción</th>
-                  <th className="text-left font-medium pb-1">Cuenta</th>
-                  <th className="text-right font-medium pb-1 w-16">Cant.</th>
-                  <th className="text-right font-medium pb-1 w-28 whitespace-nowrap">P. unit.</th>
-                  <th className="text-left font-medium pb-1 w-28">ITBIS</th>
-                  <th className="text-left font-medium pb-1 w-32">Retención</th>
-                  <th className="text-right font-medium pb-1 w-28">Importe</th>
-                  <th className="w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {billLines.map((l) => {
-                  const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0;
-                  return (
-                    <tr key={l.id} className="align-top">
-                      <td className="py-0.5 pr-2"><input value={l.description} onChange={(e) => patchBillLine(l.id, { description: e.target.value })} placeholder="Concepto" className="input w-full" /></td>
-                      <td className="py-0.5 pr-2">
-                        <select value={l.accountCode} onChange={(e) => patchBillLine(l.id, { accountCode: e.target.value })} className="input w-full max-w-[16rem]">
-                          <option value="">— Cuenta —</option>
-                          {billAccountOpts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
-                        </select>
-                      </td>
-                      <td className="py-0.5"><input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchBillLine(l.id, { qty: e.target.value })} className="input w-16 text-right tabular-nums" /></td>
-                      <td className="py-0.5"><input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchBillLine(l.id, { unitPrice: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBillLine(); } }} className="input w-28 text-right tabular-nums" /></td>
-                      <td className="py-0.5 pr-1"><select value={itbisOf(l.taxIds)} onChange={(e) => setLineItbis(l, e.target.value)} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></td>
-                      <td className="py-0.5 pr-1"><select value={retOf(l.taxIds)} onChange={(e) => setLineRet(l, e.target.value)} className="input w-full">{RET_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></td>
-                      <td className="py-0.5 text-right text-ink-700 tabular-nums whitespace-nowrap pr-1 pt-2.5">{sub > 0 ? formatDop(sub) : '—'}</td>
-                      <td className="py-0.5 text-right"><button type="button" onClick={() => delBillLine(l.id)} className="btn-icon-danger" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={14} /></button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" onClick={addBillLine} className="btn-ghost text-xs gap-1 mt-1 px-2"><Plus size={12} /> Línea <span className="text-ink-300 normal-case hidden sm:inline">(o Enter en P. unit.)</span></button>
+          <h4 className="eyebrow-xs text-ink-400 mb-2">Líneas de la factura</h4>
+          <LineItemsEditor
+            rows={billLines} onAdd={addBillLine} onDelete={(l) => delBillLine(l.id)}
+            addLabel="Agregar línea" addHint="o Enter en P. unit."
+            columns={[
+              { key: 'desc', header: 'Descripción',
+                render: (l) => <input value={l.description} onChange={(e) => patchBillLine(l.id, { description: e.target.value })} placeholder="Concepto" className="input w-full" /> },
+              { key: 'acct', header: 'Cuenta',
+                render: (l) => (
+                  <select value={l.accountCode} onChange={(e) => patchBillLine(l.id, { accountCode: e.target.value })} className="input w-full">
+                    <option value="">— Cuenta —</option>
+                    {billAccountOpts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                  </select>
+                ) },
+              { key: 'qty', header: 'Cant.', align: 'right', width: 'w-20',
+                render: (l) => <input type="number" min="0" step="1" inputMode="decimal" value={l.qty} onChange={(e) => patchBillLine(l.id, { qty: e.target.value })} className="input w-full text-right tabular-nums" /> },
+              { key: 'price', header: 'P. unit.', align: 'right', width: 'w-28',
+                render: (l) => <input type="number" min="0" step="0.01" inputMode="decimal" value={l.unitPrice} onChange={(e) => patchBillLine(l.id, { unitPrice: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addBillLine(); } }} className="input w-full text-right tabular-nums" /> },
+              { key: 'itbis', header: 'ITBIS', width: 'w-28',
+                render: (l) => <select value={itbisOf(l.taxIds)} onChange={(e) => setLineItbis(l, e.target.value)} className="input w-full">{ITBIS_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select> },
+              { key: 'ret', header: 'Retención', width: 'w-32',
+                render: (l) => <select value={retOf(l.taxIds)} onChange={(e) => setLineRet(l, e.target.value)} className="input w-full">{RET_OPTS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select> },
+              { key: 'amt', header: 'Importe', align: 'right', width: 'w-28',
+                render: (l) => { const sub = billRes.lines.find((x) => x.id === l.id)?.base || 0; return <span className="text-ink-700 tabular-nums">{sub > 0 ? formatDop(sub) : '—'}</span>; } },
+            ]}
+          />
         </div>
       )}
 
