@@ -12,6 +12,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { useToast } from '../../components/ConfirmProvider.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import ResultBar from '../../components/accounting/ResultBar.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
@@ -276,6 +277,8 @@ export default function CuentasCobrarPagar() {
           description={tab === 'cxc' ? 'Las facturas con saldo pendiente aparecen aquí.' : 'Las compras y gastos a crédito con saldo aparecen aquí.'} />
       ) : (
         <>
+        <ResultBar count={view.count} singular={partyLabel.toLowerCase()} plural={`${partyLabel.toLowerCase()}s`}
+          total={view.count > 0 ? formatDop(view.totals.balance) : null} />
         <RowCards
           rows={view.rows.map((r) => ({
             key: r.partyId,

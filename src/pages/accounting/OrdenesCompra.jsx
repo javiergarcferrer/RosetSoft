@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import ResultBar from '../../components/accounting/ResultBar.jsx';
 import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
@@ -56,6 +57,8 @@ export default function OrdenesCompra() {
           <TabPills
             tabs={[{ key: '', label: 'Todas' }, { key: 'open', label: 'Abiertas' }, { key: 'received', label: 'Recibidas' }, { key: 'billed', label: 'Facturadas' }]}
             active={statusFilter} onChange={setStatusFilter} />
+
+          <ResultBar count={list.count} singular="orden" plural="órdenes" total={null} />
 
           {list.count === 0 ? (
             <EmptyState icon={ClipboardList} title="Sin órdenes" description="Crea una orden de compra para seguir un pedido a un proveedor." />

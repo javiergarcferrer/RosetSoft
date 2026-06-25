@@ -40,7 +40,7 @@ export default function PeriodPicker({ from, to, onChange }) {
         return (
           <button key={p.key} type="button"
             onClick={() => onChange({ from: p.from, to: p.to })}
-            className={`btn ${active ? 'tab-pill-active' : 'tab-pill'}`}>
+            className={`btn ${active ? 'tab-pill-active border border-transparent' : 'tab-pill border border-ink-200'}`}>
             {p.label}
           </button>
         );

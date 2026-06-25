@@ -10,6 +10,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
+import ResultBar from '../../components/accounting/ResultBar.jsx';
 import PeriodPicker, { periodWindow } from '../../components/accounting/PeriodPicker.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -261,6 +262,9 @@ export default function ComprasGastos() {
           <EmptyState icon={Receipt} title="Sin movimientos en el período" description="Registra una compra o gasto con “Nuevo”." />
         ) : (
           <>
+          <ResultBar count={list.count} singular="documento" plural="documentos"
+            total={list.count > 0 ? formatDop(list.totals.total) : null}
+            note={listQuery.trim() ? <> · filtrado por “{listQuery.trim()}”</> : null} />
           <RowCards
             rows={list.rows.map((r) => ({
               key: r.id,

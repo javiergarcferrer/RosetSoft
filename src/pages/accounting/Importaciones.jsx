@@ -12,6 +12,7 @@ import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import RowCards from '../../components/RowCards.jsx';
+import ResultBar from '../../components/accounting/ResultBar.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { resolveImportacionesList } from '../../core/accounting/index.js';
 
@@ -257,6 +258,12 @@ export default function Importaciones() {
             resultCount={onHistorico ? vm.legacy.count : vm.rows.length}
             resultNoun={onHistorico ? ['liquidación', 'liquidaciones'] : ['expediente', 'expedientes']}
           />
+
+          {!onHistorico && (
+            <ResultBar count={vm.rows.length} singular="expediente" plural="expedientes"
+              total={vm.rows.length > 0 ? formatDop(vm.kpis.landed) : null}
+              note={search ? <> · filtrado por “{search}”</> : null} />
+          )}
 
           {onHistorico ? (
             <LegacyTable list={vm.legacy} />

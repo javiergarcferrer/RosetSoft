@@ -183,25 +183,25 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
       </div>
       <div className="flex flex-wrap gap-3 mb-3">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="input w-auto" />
+          className="input w-40 min-w-0" />
         <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Concepto / descripción"
-          className="input flex-1 min-w-[180px]" />
+          className="input flex-1 min-w-0" />
       </div>
 
       <div className="space-y-2">
         {lines.map((l, i) => (
           <div key={i} className="flex flex-wrap gap-2 items-center">
             <select value={l.accountCode} onChange={(e) => setLine(i, { accountCode: e.target.value })}
-              className="input flex-1 min-w-[180px]">
+              className="input flex-1 min-w-0">
               <option value="">— Cuenta —</option>
               {options.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
             </select>
             <input type="number" step="0.01" min="0" inputMode="decimal" value={l.debit} placeholder="Débito"
               onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })}
-              className="input w-28 text-right tabular-nums" />
+              className="input w-28 min-w-0 text-right tabular-nums" />
             <input type="number" step="0.01" min="0" inputMode="decimal" value={l.credit} placeholder="Crédito"
               onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
-              className="input w-28 text-right tabular-nums" />
+              className="input w-28 min-w-0 text-right tabular-nums" />
             <button type="button" onClick={() => setLines((arr) => arr.length > 2 ? arr.filter((_, idx) => idx !== i) : arr)}
               className="btn-icon text-ink-400 hover:text-rose-600 hover:bg-rose-50" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={15} /></button>
           </div>

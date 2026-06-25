@@ -11,6 +11,7 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import KpiBand from '../../components/accounting/KpiBand.jsx';
 import { invoiceLinesForQuote, QuoteLinesTable } from '../../components/accounting/QuoteLinesDetail.jsx';
+import ResultBar from '../../components/accounting/ResultBar.jsx';
 import { ActionChips } from '../../components/accounting/ActionCenter.jsx';
 import InvoiceDrawer from '../../components/accounting/InvoiceDrawer.jsx';
 import RowCards from '../../components/RowCards.jsx';
@@ -1002,15 +1003,11 @@ export default function Facturacion() {
           </div>
           {/* Live result context — changes on every tab/search change so the
               filter visibly "does something" right next to the controls. */}
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-2 px-0.5 text-xs">
-            <span className="text-ink-500">
-              <span className="font-semibold text-ink-800 tabular-nums">{registerView.count}</span> {registerView.count === 1 ? 'factura' : 'facturas'}
-              {q607 && <> · filtrado por “<span className="text-ink-700">{q607}</span>”</>}
-            </span>
-            {registerView.count > 0 && (
-              <span className="text-ink-500 tabular-nums">Total <span className="font-semibold text-ink-900">{formatDop(registerView.totals.total)}</span></span>
-            )}
-          </div>
+          <ResultBar
+            count={registerView.count} singular="factura" plural="facturas"
+            total={registerView.count > 0 ? formatDop(registerView.totals.total) : null}
+            note={q607 ? <> · filtrado por “<span className="text-ink-700">{q607}</span>”</> : null}
+          />
           {registerView.count === 0 ? (
             <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin facturas'}
               description={q607 ? 'Ninguna factura coincide con la búsqueda.' : 'Las facturas emitidas aparecen aquí. Crea una con “Nueva factura”, o factura una entrega desde “Por facturar”.'} />
