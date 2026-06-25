@@ -58,9 +58,10 @@ test('action center: e-CF backlog, overdue AP/AR, quotes to invoice — prioriti
       { id: 'sp1', quoteId: 'q1', ncf: 'E310000001', ecfStatus: 'draft' }, // pending e-CF + invoices q1
     ],
     quotes: [
-      { id: 'q1', status: 'accepted' }, // invoiced (sp1) → not counted
-      { id: 'q2', status: 'accepted' }, // NOT invoiced → to-invoice
+      { id: 'q1', status: 'accepted', depositReceivedAt: NOW - DAY }, // ready, but invoiced (sp1) → not counted
+      { id: 'q2', status: 'accepted', depositReceivedAt: NOW - DAY }, // floor sale, deposit in, not invoiced → to-invoice
       { id: 'q3', status: 'sent' },     // not accepted → ignored
+      { id: 'q4', status: 'accepted' }, // accepted but NOT ready (no delivery / no deposit) → not counted
     ],
     // a credit purchase 120 days old → overdue payable (+90 → danger)
     purchases: [{ id: 'p1', supplierId: 's1', purchaseAt: NOW - 120 * DAY, paymentMethod: 'credit', base: 10000, itbis: 1800 }],

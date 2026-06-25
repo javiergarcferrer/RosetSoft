@@ -9,7 +9,7 @@ import { round2 } from '../../lib/accounting/ledger.js';
 import { resolveReceivables, resolvePayables } from './receivables.js';
 import { resolveEcfSequenceAlerts } from './dashboard.js';
 import { activeFiscalPlugin, resolveFilingDeadline } from './fiscal/index.js';
-import { QUOTE_STATUS_ACCEPTED } from '../../lib/constants.js';
+import { readyToInvoice } from '../../lib/quoteMilestones.js';
 
 const MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const SEV_RANK = { danger: 0, warn: 1, info: 2 };
@@ -81,9 +81,11 @@ export function resolveAccountingCockpit({
     .filter((s) => !s.voidedAt && /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
   const ecfSeqAlerts = resolveEcfSequenceAlerts(ecfSequences, { now });
 
-  // ── 5) Accepted quotes not yet invoiced (a sales posting links by quoteId) ─
+  // ── 5) Quotes READY to invoice, not yet invoiced (a sales posting links by
+  // quoteId). Uses the SAME readyToInvoice gate as Facturación's "Por facturar"
+  // queue, so the chip count never disagrees with the tab it lands on. ────────
   const invoiced = new Set((salesPostings || []).filter((s) => !s.voidedAt).map((s) => s.quoteId).filter(Boolean));
-  const toInvoice = (quotes || []).filter((q) => q.status === QUOTE_STATUS_ACCEPTED && !invoiced.has(q.id)).length;
+  const toInvoice = (quotes || []).filter((q) => readyToInvoice(q) && !invoiced.has(q.id)).length;
 
   // ── Build the prioritized action center ──────────────────────────────────
   const actions = [];
