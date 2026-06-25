@@ -42,21 +42,6 @@ export async function signEcf({ payload, eNcf, profileId }) {
   return data;
 }
 
-/**
- * Sign an ARBITRARY XML — the DGII postulación form — with the team's stored
- * certificate, so the dealer signs it in-app instead of DGII's Windows-only
- * "App de Firma Digital". Resolves to the signed XML string (upload it back to
- * the OFV). The certificate must be the registered representante legal's
- * Certificado para Procedimientos Tributarios.
- */
-export async function signPostulacionXml({ xml, profileId }) {
-  const { data, error } = await supabase.functions.invoke('ecf-send', {
-    body: { op: 'sign-xml', xml, profileId },
-  });
-  if (error || !data?.ok) throw new Error(await fnError(error, data, 'Error firmando el archivo de postulación.'));
-  return data.signedXml;
-}
-
 /** Ask the DGII what became of a transmitted e-CF. Resolves to { estado }. */
 export async function checkEcfStatus({ trackId, profileId }) {
   const { data, error } = await supabase.functions.invoke('ecf-send', {
