@@ -150,6 +150,51 @@ export function applyCompanyDiscount(
 }
 
 /**
+ * The effective company-account cost discount FOR ONE LINE. The company (house)
+ * account reads at DEALER COST, and each catalog line froze its real wholesale
+ * `unitCost` when added — so a product's cost is ITS OWN cost: the per-SKU margin
+ * the Catálogo shows (1 − cost/list), NOT a single flat number. This returns that
+ * per-product percent when the line carries a usable cost, and the flat
+ * `fallbackPct` otherwise — a hand-typed line (no cost), a material-less RANGE
+ * (only the low grade's cost is known) or a COMPOUND (its components don't
+ * snapshot a cost). Returns 0 when `fallbackPct` is 0 (a normal quote / the
+ * employee view) so a non-company surface is never discounted. Pure.
+ */
+export function companyLineDiscountPct(
+  line: Pick<QuoteLine, 'unitPrice' | 'unitCost' | 'priceMin' | 'priceMax' | 'components'> | null | undefined,
+  fallbackPct: unknown,
+): number {
+  const fb = clampPct(fallbackPct);
+  if (fb <= 0) return 0;
+  const isCompound = Array.isArray(line?.components) && line!.components!.length > 0;
+  const isRange = line?.priceMin != null || line?.priceMax != null;
+  const cost = safeNum(line?.unitCost, NaN);
+  const list = safeNum(line?.unitPrice, NaN);
+  if (!isCompound && !isRange && Number.isFinite(cost) && cost > 0 && Number.isFinite(list) && list > 0) {
+    // A product priced below cost would be a negative discount; clamp to [0,100]
+    // (reads as "no margin", never a price-up).
+    return clampPct((1 - cost / list) * 100);
+  }
+  return fb;
+}
+
+/**
+ * Company (house) account COST view, PER PRODUCT — price each line at its OWN
+ * cost (companyLineDiscountPct), reusing applyCompanyDiscount one line at a time
+ * so the compound / range / fallback branches behave exactly as the flat version
+ * did. Returns fresh objects; never mutates. Display/totals only — the STORED
+ * line keeps the list price. The per-product twin of applyCompanyDiscount.
+ */
+export function applyCompanyCost(
+  lines: readonly QuoteLine[] | null | undefined,
+  fallbackPct: unknown,
+): QuoteLine[] {
+  return (lines || []).map((l) =>
+    (l ? applyCompanyDiscount([l], companyLineDiscountPct(l, fallbackPct))[0] : l),
+  );
+}
+
+/**
  * Settings as a given VIEWER may see the company-account COST. The dealer's
  * permanent cost discount (`companyDiscountPct`) is admin-only — an employee
  * gets it zeroed so company-account surfaces read at LIST price for them. The

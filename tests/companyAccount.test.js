@@ -24,6 +24,8 @@ import {
   isCompanyAccountQuote,
   companyDiscountPctFor,
   applyCompanyDiscount,
+  companyLineDiscountPct,
+  applyCompanyCost,
   viewerCompanySettings,
   computeTotals,
   lineForTotals,
@@ -121,6 +123,43 @@ test('viewerCompanySettings: cost is admin-only, but ITBIS stays exempt for an e
   assert.equal(empSettings.companyDiscountPct, 0);
   assert.equal(empSettings.storeCustomerId, 'acct-1');
   assert.equal(quoteTotals(COMPANY_QUOTE, lines, empSettings).grandTotal, 1000); // list, no ITBIS
+});
+
+test('companyLineDiscountPct: a catalog line uses its OWN margin; others fall back to the flat', () => {
+  // 1000 list, 370 cost → the product's own 63% margin (not the flat 60).
+  assert.equal(companyLineDiscountPct({ unitPrice: 1000, unitCost: 370 }, 60), 63);
+  assert.equal(companyLineDiscountPct({ unitPrice: 1000, unitCost: 250 }, 60), 75);
+  // No cost / compound / range → the flat fallback (we can't price per product).
+  assert.equal(companyLineDiscountPct({ unitPrice: 1000 }, 60), 60);
+  assert.equal(companyLineDiscountPct({ unitPrice: 0, unitCost: 0, components: [{ id: 'c', unitPrice: 500 }] }, 60), 60);
+  assert.equal(companyLineDiscountPct({ unitPrice: 500, unitCost: 200, priceMin: 500, priceMax: 800 }, 60), 60);
+  // Not a company view (fallback 0) → 0, never discounts.
+  assert.equal(companyLineDiscountPct({ unitPrice: 1000, unitCost: 370 }, 0), 0);
+  // A product priced below cost clamps to 0 (no negative "discount" / price-up).
+  assert.equal(companyLineDiscountPct({ unitPrice: 100, unitCost: 150 }, 60), 0);
+});
+
+test('applyCompanyCost prices each line at its OWN cost, flat fallback otherwise', () => {
+  const lines = [
+    { id: 'l1', kind: 'item', qty: 1, unitPrice: 1000, unitCost: 370 }, // its real cost
+    { id: 'l2', kind: 'item', qty: 1, unitPrice: 1000 },                // no cost → flat 60%
+    { id: 'l3', kind: 'item', qty: 1, unitPrice: 0, components: [{ id: 'c', qty: 1, unitPrice: 300, unitCost: 100 }] }, // compound → flat
+  ];
+  const out = applyCompanyCost(lines, 60);
+  assert.equal(out[0].unitPrice, 370);                 // 1000 → its cost
+  assert.equal(out[1].unitPrice, 400);                 // 1000 × 0.4 (flat fallback)
+  assert.equal(out[2].components[0].unitPrice, 120);   // 300 × 0.4 (compound falls back)
+  assert.equal(lines[0].unitPrice, 1000);              // never mutates the input
+});
+
+test('quoteTotals on a company quote reads at PER-PRODUCT cost (not the flat %)', () => {
+  // 1000 list at its real 370 cost (63% margin), ×2 = 740, no ITBIS — NOT 800
+  // (which the old flat 60% would have given).
+  const lines = [{ id: 'l1', kind: 'item', qty: 2, unitPrice: 1000, unitCost: 370 }];
+  assert.equal(quoteTotals(COMPANY_QUOTE, lines, SETTINGS).grandTotal, 740);
+  // A line with no catalog cost still falls back to the flat 60% (→ 400).
+  const noCost = [{ id: 'l2', kind: 'item', qty: 1, unitPrice: 1000 }];
+  assert.equal(quoteTotals(COMPANY_QUOTE, noCost, SETTINGS).grandTotal, 400);
 });
 
 test('quoteTotals never discounts a regular customer quote', () => {

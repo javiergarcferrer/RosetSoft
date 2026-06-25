@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   computeTotals, computeTotalsRange, lineForTotals, isPricedLine,
   effectiveRates, quoteRateState, applyAction, reanchorMaterial,
-  companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote, quoteMargin,
+  companyDiscountPctFor, applyCompanyCost, isCompanyAccountQuote, quoteMargin,
   initialQuoteTerms, resolveTermsPresetPicker,
   lineHasTogoPlan, placementsFromComponents, resolveTogoDxf,
 } from '../core/quote/index.js';
@@ -721,7 +721,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // an internal store-stock order, never a taxable customer sale.
   const isCompanyQuote = isCompanyAccountQuote(quote, settings);
   const companyDiscountPct = isAdmin ? companyDiscountPctFor(quote, settings) : 0;
-  const orderLines = companyDiscountPct ? applyCompanyDiscount(lines, companyDiscountPct) : lines;
+  // Each line reads at its OWN catalog cost (per-product margin); companyDiscountPct
+  // is only the flat fallback for lines without a snapshotted cost.
+  const orderLines = companyDiscountPct ? applyCompanyCost(lines, companyDiscountPct) : lines;
   const totals = computeTotals(orderLines.filter(isPricedLine).map(lineForTotals), totalsQuote, { taxExempt: isCompanyQuote });
   // Range twin of the grand total — widens to "min … max" while any priced
   // line is quoted by range (material-less). Collapses to a point (and the UI
@@ -894,9 +896,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
                 <span className="font-semibold">Cuenta empresa</span>{' '}
                 <span className="text-brand-500">· sin ITBIS.</span>{' '}
                 {companyDiscountPct > 0 ? (
-                  <>Todos los precios muestran tu costo, con{' '}
-                  <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>{' '}
-                  aplicado (precio del pedido para la tienda).</>
+                  <>Cada producto muestra tu costo real de catálogo (su margen por producto).
+                  Las líneas sin costo usan{' '}
+                  <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>.</>
                 ) : (
                   <>Los precios mostrados son de lista.</>
                 )}

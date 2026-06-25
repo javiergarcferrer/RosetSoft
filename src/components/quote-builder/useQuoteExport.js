@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount, isCompanyAccountQuote,
+  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyCost, isCompanyAccountQuote,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
 import { resolveWarehouseOrder } from '../../core/quote/index.js';
@@ -75,7 +75,9 @@ export function useQuoteExport({
     // pct 0, not exempt, lines untouched.
     const isCompanyQuote = isCompanyAccountQuote(quote, settings);
     const companyPct = isAdmin ? companyDiscountPctFor(quote, settings) : 0;
-    const orderLines = companyPct ? applyCompanyDiscount(lines, companyPct) : lines;
+    // Per-product cost (each line at its own catalog cost; flat companyPct only
+    // as the fallback) so the PDF matches the on-screen per-product figures.
+    const orderLines = companyPct ? applyCompanyCost(lines, companyPct) : lines;
     const totals = computeTotals(
       orderLines.filter(isPricedLine).map(lineForTotals),
       { marginPct: quote.marginPct, discountPct: quote.discountPct, courtesyDiscountPct: quote.courtesyDiscountPct, shipping: quote.shipping },

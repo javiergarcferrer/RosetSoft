@@ -6,12 +6,13 @@ import AddSourceButtons from './AddSourceButtons.jsx';
 import SwatchPicker from './SwatchPicker.jsx';
 import ImageView from '../ImageView.jsx';
 import { FamiliesContext } from './FamiliesContext.js';
+import { CompanyDiscountContext } from './CompanyDiscountContext.js';
 import { useQuoteActions } from './QuoteActionsContext.js';
 import { LINE_KIND_SECTION } from '../../lib/constants.js';
 import {
   setSubtotal, alternativeSubtotal, groupRuns,
   selectedAlternative, lineTotal, isRangeLine, lineTotalRange,
-  setSubtotalRange, lineHasRange, isCompoundLine,
+  setSubtotalRange, lineHasRange, isCompoundLine, companyLineDiscountPct,
 } from '../../lib/pricing.js';
 import { resolveLineList } from '../../core/quote/views/editor.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
@@ -79,6 +80,10 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   // exactly as a single line's GradeFabricRow.commit does. Consumed via context
   // (the same escape hatch QuoteLineItem uses) so we don't thread it as a prop.
   const families = useContext(FamiliesContext);
+  // Company (house) account: the flat fallback discount the subtree reads. Each
+  // line below re-provides its OWN per-product rate (companyLineDiscountPct) so
+  // the editor shows each product's real margin, not this single number.
+  const flatCompanyPct = useContext(CompanyDiscountContext);
 
   // "Aplicar material a todo" on a Conjunto header — stamp the chosen grade +
   // fabric (subtype) and swatch onto EVERY member line of the set, and reprice a
@@ -296,23 +301,28 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
             }
           />
         ) : (
-          <QuoteLineItem
-            line={l}
-            quote={quote}
-            onChange={(patch) => onChangeLine(l.id, patch)}
-            onRemove={() => onRemoveLine(l)}
-            onDuplicate={() => onDuplicateLine(l)}
-            onToggleOptional={() => onToggleOptional?.(l)}
-            onAddAlternative={() => onAddAlternative?.(l)}
-            onSelectAlternative={() => onSelectAlternative?.(l)}
-            onSeparateFromSet={() => onSeparateFromSet?.(l)}
-            onUngroup={() => onUngroup?.(l)}
-            insideGroupCard={insideGroupCard}
-            groupInfo={groupInfo.get(l.id)}
-            setInfo={setInfo.get(l.id)}
-            autoFocus={l.id === focusLineId}
-            dragHandleProps={handleProps}
-          />
+          // Each line reads its OWN company-account cost rate (its product's
+          // catalog margin) — re-provided here so the line editor, its badge and
+          // its breakdown all read at that product's real cost, not a flat %.
+          <CompanyDiscountContext.Provider value={companyLineDiscountPct(l, flatCompanyPct)}>
+            <QuoteLineItem
+              line={l}
+              quote={quote}
+              onChange={(patch) => onChangeLine(l.id, patch)}
+              onRemove={() => onRemoveLine(l)}
+              onDuplicate={() => onDuplicateLine(l)}
+              onToggleOptional={() => onToggleOptional?.(l)}
+              onAddAlternative={() => onAddAlternative?.(l)}
+              onSelectAlternative={() => onSelectAlternative?.(l)}
+              onSeparateFromSet={() => onSeparateFromSet?.(l)}
+              onUngroup={() => onUngroup?.(l)}
+              insideGroupCard={insideGroupCard}
+              groupInfo={groupInfo.get(l.id)}
+              setInfo={setInfo.get(l.id)}
+              autoFocus={l.id === focusLineId}
+              dragHandleProps={handleProps}
+            />
+          </CompanyDiscountContext.Provider>
         )}
       </div>
     );

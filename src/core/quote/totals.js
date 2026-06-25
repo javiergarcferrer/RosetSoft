@@ -9,7 +9,7 @@
 // resolve the richer section/group tree via resolveQuoteView. This module is
 // for the surfaces that only need a quote's bottom line.
 import {
-  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyDiscount,
+  computeTotals, lineForTotals, companyDiscountPctFor, applyCompanyCost,
   isCompanyAccountQuote, isCompoundLine, lineBasePrice, lineQty,
 } from '../../lib/pricing.js';
 import { isPricedLine } from '../../lib/constants.js';
@@ -35,7 +35,9 @@ export function linesByQuoteId(lines) {
 // through untouched, so the default behaviour is unchanged.
 export function quoteTotals(quote, lines, settings) {
   const pct = companyDiscountPctFor(quote, settings);
-  const eff = pct ? applyCompanyDiscount(lines, pct) : (lines || []);
+  // Per PRODUCT: each line reads at its own catalog cost (the per-SKU margin),
+  // with `pct` only the flat fallback for lines that carry no cost.
+  const eff = pct ? applyCompanyCost(lines, pct) : (lines || []);
   const rows = eff.filter(isPricedLine).map(lineForTotals);
   // A company-account quote is never taxed (internal order/cost doc), regardless
   // of whether THIS viewer sees cost (admin) or list (employee) — the discount
