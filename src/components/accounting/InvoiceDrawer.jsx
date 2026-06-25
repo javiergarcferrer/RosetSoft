@@ -107,7 +107,7 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
       <div className="fixed inset-0 z-40 bg-ink-900/40" onClick={onClose} aria-hidden />
       <aside className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[460px] bg-surface border-l border-ink-200 shadow-2xl flex flex-col"
         role="dialog" aria-modal="true" aria-label={`Factura ${posting.ncf || ''}`}>
-        <div className="px-5 py-4 border-b border-ink-100">
+        <div className="px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-b border-ink-100">
           <div className="flex items-center justify-between mb-3">
             <span className={`inline-flex items-center gap-2 text-xs font-medium ${ecf.cls}`}>
               <span className={`w-2 h-2 rounded-full ${ecf.dot}`} aria-hidden />
@@ -127,7 +127,7 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        <div className={`flex-1 overflow-y-auto px-5 py-4 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] space-y-5 ${fiscalActions ? '' : 'pb-[max(1rem,env(safe-area-inset-bottom))]'}`}>
           {voided && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
               Factura anulada el {formatDate(posting.voidedAt)}{posting.voidedReason ? ` · ${posting.voidedReason}` : ''}. El asiento fue revertido y el e-NCF quedó anulado.
@@ -253,7 +253,7 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
         </div>
 
         {fiscalActions && (
-          <div className="px-5 py-3 border-t border-ink-100 flex flex-wrap items-center gap-2">
+          <div className="px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-t border-ink-100 flex flex-wrap items-center gap-2">
             {fiscalActions}
           </div>
         )}
