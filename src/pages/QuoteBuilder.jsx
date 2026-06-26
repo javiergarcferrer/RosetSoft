@@ -645,7 +645,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   // the header, and the pdfjs-dist dependency itself. The quote
   // builder now stays focused on quote construction; price-list lookup
   // happens outside the app.
-  const [view, setView] = useState('compose'); // 'compose' | 'client' | 'chat'
+  const [view, setView] = useState('compose'); // 'compose' | 'plan' | 'client' | 'chat'
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
 
@@ -683,6 +683,14 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
   useEffect(() => {
     if (!isAdmin && view === 'chat') changeView('compose');
   }, [isAdmin, view, changeView]);
+
+  // Company/house quotes have no payment plan (they're internal store-stock
+  // orders, never a financed sale) — the ModeBar hides the Plan de pago tab, so
+  // if `view` ever lands on 'plan' for one, fall back to the editor.
+  const planHidden = isCompanyAccountQuote(quote, settings);
+  useEffect(() => {
+    if (planHidden && view === 'plan') changeView('compose');
+  }, [planHidden, view, changeView]);
 
   /* ---------------------------- shortcuts ----------------------------
    * Kept deliberately small to avoid clashing with the browser:
@@ -879,6 +887,20 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
           onToggleOptional={hx((id, on) => applyEditorPick({ optionals: { [id]: on } }))}
           onSelectAlternative={hx((group, lineId) => applyEditorPick({ alternatives: { [group]: lineId } }))}
         />
+      ) : view === 'plan' ? (
+        // Plan de pago + contract gets the whole pane, like the Cliente preview —
+        // it's a focused sub-app (financed/staged schedule, collections, the
+        // signable contract link). Hidden for company/house quotes (the effect
+        // above bounces 'plan' → 'compose' there, and the ModeBar omits the tab).
+        <div className="min-w-0">
+          <PaymentPlanCard
+            quote={quote}
+            customer={customer}
+            settings={settings}
+            totalUsd={totals.grandTotal}
+            standalone
+          />
+        </div>
       ) : (
         // Single full-width column: the totals live in the persistent bottom
         // dock now (not a right rail), so the line items get the full width.
@@ -970,17 +992,9 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
               embedded inline in the editor, where it sat between the line items
               and Notas and got in the way while quoting. */}
           <NotesAndTermsCard quote={quote} settings={settings} onUpdateQuote={hx(updateQuote)} />
-          {/* Per-quote payment plan + digital contract (50% down + financed
-              cuotas, a signable public link). Not for company/house quotes —
-              those are internal store-stock orders, never a financed sale. */}
-          {!isCompanyQuote && (
-            <PaymentPlanCard
-              quote={quote}
-              customer={customer}
-              settings={settings}
-              totalUsd={totals.grandTotal}
-            />
-          )}
+          {/* The per-quote payment plan + digital contract now lives on its own
+              ModeBar tab (Plan de pago, second from the editor) instead of inline
+              here — see the `view === 'plan'` surface above. */}
           {/* Shipment tracking — renders only when this quote's order has a
               trackable container; one quote per page, so the map stays open. */}
           {quote.orderId && <ShipmentTracking orderId={quote.orderId} />}
@@ -1029,7 +1043,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
 
       {/* Mobile mode switcher — compose / client preview / WhatsApp chat (the
           WhatsApp tab shows for admins only while the inbox is in testing). */}
-      <ModeBar view={view} onChange={changeView} customer={customer} showChat={isAdmin} />
+      <ModeBar view={view} onChange={changeView} customer={customer} showChat={isAdmin} showPlan={!isCompanyQuote} />
 
       <CatalogPicker
         open={catalogOpen}

@@ -27,8 +27,10 @@ function defaultSplits() {
  * share token, shows the signed state, and downloads the contract PDF. The plan
  * persists to the `payment_plans` table keyed on this quote.
  */
-export default function PaymentPlanCard({ quote, customer, settings, totalUsd }) {
-  const [open, setOpen] = useState(false); // collapsed by default — only usable when opened.
+export default function PaymentPlanCard({ quote, customer, settings, totalUsd, standalone = false }) {
+  // On its own ModeBar tab the card owns the whole surface, so it opens expanded
+  // and drops the collapse toggle; inline it stays collapsed until tapped.
+  const [open, setOpen] = useState(standalone);
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
@@ -310,24 +312,37 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd })
 
   return (
     <section className="card">
-      {/* Collapsible header — the plan/contract editor is only usable once opened. */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className={`card-header w-full text-left ${open ? '' : 'border-b-0'}`}
-      >
-        <h2 className="flex items-center gap-2"><FileSignature size={15} className="text-brand-500" aria-hidden /> Plan de pago y contrato</h2>
-        <div className="flex items-center gap-2">
+      {/* On its own tab the header is a plain title; inline it's a collapse
+          toggle (the plan/contract editor is only usable once opened). */}
+      {standalone ? (
+        <div className="card-header">
+          <h2 className="flex items-center gap-2"><FileSignature size={15} className="text-brand-500" aria-hidden /> Plan de pago y contrato</h2>
           {plan ? (
-            <>
+            <div className="flex items-center gap-2">
               <span className="hidden sm:inline text-[11px] text-ink-400 tabular-nums">{usd(summary.grandTotalToPayUsd)}</span>
               <StatusPill status={status} />
-            </>
+            </div>
           ) : null}
-          <ChevronDown size={16} className={`text-ink-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden />
         </div>
-      </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className={`card-header w-full text-left ${open ? '' : 'border-b-0'}`}
+        >
+          <h2 className="flex items-center gap-2"><FileSignature size={15} className="text-brand-500" aria-hidden /> Plan de pago y contrato</h2>
+          <div className="flex items-center gap-2">
+            {plan ? (
+              <>
+                <span className="hidden sm:inline text-[11px] text-ink-400 tabular-nums">{usd(summary.grandTotalToPayUsd)}</span>
+                <StatusPill status={status} />
+              </>
+            ) : null}
+            <ChevronDown size={16} className={`text-ink-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden />
+          </div>
+        </button>
+      )}
 
       {!open ? null : loading ? (
         <div className="p-5 flex items-center gap-2 text-ink-500 text-sm"><Loader2 size={15} className="animate-spin" /> Cargando plan de pago…</div>

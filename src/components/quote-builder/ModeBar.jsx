@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { Eye, MessageCircle, Pencil } from 'lucide-react';
+import { Eye, MessageCircle, Pencil, Wallet } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { useLiveQuery } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
@@ -17,10 +17,11 @@ function Badge({ count }) {
 }
 
 /**
- * Mode switcher for the quote workspace — one tap between the page's three
- * surfaces: the editor (Cotización), the client preview (Cliente) and the
- * customer's WhatsApp conversation (WhatsApp). The three tabs are identical in
- * both layouts; only the chrome flips with the viewport:
+ * Mode switcher for the quote workspace — one tap between the page's
+ * surfaces: the editor (Cotización), the payment plan + contract (Plan de
+ * pago), the client preview (Cliente) and the customer's WhatsApp conversation
+ * (WhatsApp). The tabs are identical in both layouts; only the chrome flips
+ * with the viewport:
  *   • phones (< md): a thumb-reach bottom bar — the native pattern there.
  *   • desktop (md+): a floating vertical siderail pinned to the right edge,
  *     clear of the left nav and the bottom TotalsDock.
@@ -43,7 +44,7 @@ function Badge({ count }) {
  * carries the thread's unread count so an unanswered client is visible from
  * any mode.
  */
-export default function ModeBar({ view, onChange, customer, showChat = true }) {
+export default function ModeBar({ view, onChange, customer, showChat = true, showPlan = true }) {
   const { profileId, settings } = useApp();
   const connected = !!settings?.whatsappConnectedAt;
   const key = phoneKey(customer?.phone);
@@ -56,14 +57,17 @@ export default function ModeBar({ view, onChange, customer, showChat = true }) {
     ? messages.reduce((n, m) => n + (phoneKey(m.phone) === key && m.direction === 'in' && !m.readAt ? 1 : 0), 0)
     : 0;
 
-  // The WhatsApp conversation tab is gated to its own surface — while the
-  // inbox is in admin-only testing, employees get only compose / client and
-  // the bar collapses to a two-up switch.
+  // The Plan de pago tab sits second (right after the editor) and the WhatsApp
+  // conversation tab is gated to its own surface — while the inbox is in
+  // admin-only testing, employees get only compose / client. Plan is hidden for
+  // company/house quotes (no financed sale), so the bar grows/shrinks 2–4 up.
   const tabs = [
     { id: 'compose', label: 'Cotización', icon: Pencil, badge: 0 },
+    ...(showPlan ? [{ id: 'plan', label: 'Plan de pago', icon: Wallet, badge: 0 }] : []),
     { id: 'client', label: 'Cliente', icon: Eye, badge: 0 },
     ...(showChat ? [{ id: 'chat', label: 'WhatsApp', icon: MessageCircle, badge: connected ? unread : 0 }] : []),
   ];
+  const gridCols = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4' }[tabs.length] || 'grid-cols-3';
 
   return createPortal(
     <>
@@ -75,7 +79,7 @@ export default function ModeBar({ view, onChange, customer, showChat = true }) {
         className="fixed inset-x-0 bottom-0 z-30 md:hidden print:hidden kb-hide-when-open"
       >
         <div className="bg-surface border-t border-ink-200 shadow-pop pb-safe-standalone">
-          <div className={`grid ${tabs.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className={`grid ${gridCols}`}>
             {tabs.map(({ id, label, icon: Icon, badge }) => {
               const active = view === id;
               return (
