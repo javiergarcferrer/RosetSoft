@@ -162,7 +162,6 @@ export default function Orders() {
         customerId: null,
         status: 'draft',
         notes: '',
-        depositAmount: 0,
         deliveryAddress: '',
         createdAt: now,
         updatedAt: now,

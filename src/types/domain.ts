@@ -2019,11 +2019,12 @@ export interface Quote {
   declinedAt?: number | null;
   archivedAt?: number | null;
 
-  /* Accepted-quote milestones (live on the QUOTE, not the order). */
+  /* Accepted-quote milestones (live on the QUOTE, not the order). The deposit
+   * is only SIGNALLED here (depositReceivedAt); the amount lives in the books
+   * as a cobro — see core/accounting/deposits. */
   depositReceivedAt?: number | null;
   balancePaidAt?: number | null;
   deliveredAt?: number | null;
-  depositAmount?: number | null;
 
   /* When the assigned professional's commission on this quote was PAID
    * OUT (Contabilidad tracking). null = pending. See commissionOwedAt()
@@ -2087,7 +2088,6 @@ export interface Order {
   name?: string;
   status: OrderStatus;
   notes?: string;
-  depositAmount?: number;
   deliveryAddress?: string;
 
   /* Stage timestamps — match orderStages.js timestampField names. */

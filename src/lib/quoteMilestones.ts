@@ -123,37 +123,35 @@ export function quoteMilestoneState(quote: Quote | null | undefined): QuoteMiles
 }
 
 /**
- * What the customer still owes on an accepted quote, in the same
- * currency as `total` (the quote's grand total, USD base):
+ * What the customer still owes on an accepted quote, as a CRM-side estimate in
+ * the same currency as `total` (the quote's grand total, USD base):
  *
- *   • nothing paid yet        → the full total (the deposit hasn't landed).
+ *   • balance paid            → 0 — nothing outstanding, delivered or not
+ *     (the dealer's rule: goods don't leave until the balance is paid, so
+ *     delivery never adds money owed).
  *   • floor sale + deposit    → 0 — a floor (stock) sale has no order and no
  *     balance cycle: the piece leaves the floor at the deposit, which IS the
  *     full collection (the same rule that makes it ready to invoice). Once the
  *     deposit lands there's nothing left to chase.
- *   • deposit received        → total − depositAmount (the balance) — for an
- *     order in flight, where the balance is collected on landing.
- *   • balance paid            → 0 — nothing outstanding, delivered or not
- *     (the dealer's rule: goods don't leave until the balance is paid,
- *     so delivery never adds money owed).
+ *   • otherwise               → the full total.
  *
- * A deposit recorded without an amount (`depositAmount` null/0) on an order in
- * flight leaves the full total outstanding — better to over-state what's owed
- * than to silently forgive the balance. Clamped at 0 so an over-collected
- * deposit can't show a negative receivable.
+ * The quote no longer carries a deposit AMOUNT — that money lives in the books
+ * as a cobro (see core/accounting/deposits), and the authoritative open balance
+ * is the receivables center's (resolveReceivables), which nets the cobro. So an
+ * order in flight with a deposit signalled still shows the full total here:
+ * better to over-state what's owed on the CRM glance than to silently forgive a
+ * balance the books actually track.
  */
 export function quoteOutstanding(
-  quote: Pick<Quote, 'orderId' | 'depositReceivedAt' | 'balancePaidAt' | 'depositAmount'> | null | undefined,
+  quote: Pick<Quote, 'orderId' | 'depositReceivedAt' | 'balancePaidAt'> | null | undefined,
   total: number,
 ): number {
   if (!quote) return 0;
   if (quote.balancePaidAt) return 0;
-  const safeTotal = Math.max(0, Number(total) || 0);
-  if (!quote.depositReceivedAt) return safeTotal;
   // Floor sale (no order): the deposit is the full collection — there's no
   // later balance to chase, so nothing is outstanding once it lands.
-  if (isFloorSale(quote)) return 0;
-  return Math.max(0, safeTotal - (Number(quote.depositAmount) || 0));
+  if (quote.depositReceivedAt && isFloorSale(quote)) return 0;
+  return Math.max(0, Number(total) || 0);
 }
 
 /**

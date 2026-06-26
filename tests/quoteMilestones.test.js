@@ -220,33 +220,32 @@ test('the new stage chain is draft → placed → confirmed → in_transit → i
 /* ----------------------------- outstanding ----------------------------- */
 
 test('quoteOutstanding: nothing paid → the full total is owed', () => {
-  assert.equal(quoteOutstanding({ depositAmount: 4000 }, 10000), 10000);
+  assert.equal(quoteOutstanding({}, 10000), 10000);
 });
 
-test('quoteOutstanding: order in flight, deposit received → total minus the deposit', () => {
-  const q = { orderId: 'o1', depositReceivedAt: 1, depositAmount: 4000 };
-  assert.equal(quoteOutstanding(q, 10000), 6000);
-});
-
-test('quoteOutstanding: order in flight, deposit without an amount leaves the full total owed', () => {
-  // Better to over-state what's owed than silently forgive the balance.
-  const q = { orderId: 'o1', depositReceivedAt: 1, depositAmount: null };
+test('quoteOutstanding: order in flight, deposit signalled → still the full total', () => {
+  // The quote no longer carries a deposit amount — that money lives in the books
+  // (a cobro), and the receivables center is the authoritative open balance. On
+  // the CRM glance, over-state what's owed rather than forgive a tracked balance.
+  const q = { orderId: 'o1', depositReceivedAt: 1 };
   assert.equal(quoteOutstanding(q, 10000), 10000);
 });
 
 test('quoteOutstanding: floor sale (no order) + deposit → zero — the deposit is the full collection', () => {
   // A floor/stock sale has no balance cycle: once the deposit lands the piece
-  // leaves the floor, so nothing is outstanding regardless of depositAmount.
-  assert.equal(quoteOutstanding({ depositReceivedAt: 1, depositAmount: 4000 }, 10000), 0);
-  assert.equal(quoteOutstanding({ depositReceivedAt: 1, depositAmount: null }, 10000), 0);
+  // leaves the floor, so nothing is outstanding.
+  assert.equal(quoteOutstanding({ depositReceivedAt: 1 }, 10000), 0);
+});
+
+test('quoteOutstanding: floor sale without a deposit yet still owes the full total', () => {
+  assert.equal(quoteOutstanding({}, 10000), 10000);
 });
 
 test('quoteOutstanding: balance paid → zero, delivered or not', () => {
-  assert.equal(quoteOutstanding({ orderId: 'o1', depositReceivedAt: 1, balancePaidAt: 2, depositAmount: 4000 }, 10000), 0);
+  assert.equal(quoteOutstanding({ orderId: 'o1', depositReceivedAt: 1, balancePaidAt: 2 }, 10000), 0);
   assert.equal(quoteOutstanding({ orderId: 'o1', depositReceivedAt: 1, balancePaidAt: 2, deliveredAt: 3 }, 10000), 0);
 });
 
-test('quoteOutstanding: never negative (over-collected deposit on an order clamps to 0)', () => {
-  const q = { orderId: 'o1', depositReceivedAt: 1, depositAmount: 12000 };
-  assert.equal(quoteOutstanding(q, 10000), 0);
+test('quoteOutstanding: never negative', () => {
+  assert.equal(quoteOutstanding({ orderId: 'o1', depositReceivedAt: 1 }, -5), 0);
 });

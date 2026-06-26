@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Plus, Trash2, ExternalLink, Truck, Ban, MoreHorizontal, X,
-  FileText, CheckCircle2, Package, DollarSign, Wallet, Landmark,
+  FileText, CheckCircle2, Package, DollarSign, Wallet,
   AlertCircle, FileDown, Loader2,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
@@ -16,7 +16,7 @@ import { useLiveQuery } from '../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
-import { displayRatesFor, quoteRateState } from '../lib/exchangeRate.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { ORDER_STAGES, orderStageIndex } from '../lib/orderStages.js';
 import {
   canMarkDeposit, canMarkBalance, canMarkDelivered, deliveryBlockedReason,
@@ -605,9 +605,6 @@ function ContainerNoHint({ validation, carrier }) {
 // ordered) so handing them over isn't possible.
 // ---------------------------------------------------------------------------
 function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }) {
-  const { currentProfile } = useApp();
-  // The deposit→cobro handoff is for whoever can open Banca.
-  const canBank = currentProfile?.role === 'admin' || currentProfile?.role === 'accounting';
   // Three commerce milestones live on the quote (not the order):
   //
   //   1. depositReceivedAt — the act of receiving the deposit IS what
@@ -712,25 +709,6 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
           onToggle={() => setMilestone('deliveredAt', !delivered)}
           tone="emerald"
         />
-        {/* Deposit → cobro handoff: the seller already recorded the amount
-            (USD, rate locked at accept) — offer Banca a prefilled cobro
-            instead of making the accountant re-type it. Pure affordance;
-            recording it stays a human act in CuentasCobrarPagar. */}
-        {deposit && canBank && customer?.id && (quote.depositAmount || 0) > 0 && (() => {
-          const { dopRate } = quoteRateState(quote, settings);
-          if (!dopRate) return null;
-          const dop = Math.round(quote.depositAmount * dopRate * 100) / 100;
-          const ref = encodeURIComponent(`Depósito cot. #${quote.number ?? ''}`);
-          return (
-            <Link
-              to={`/accounting/cuentas?new=in&party=${customer.id}&amount=${dop}&ref=${ref}`}
-              className="btn-ghost text-xs"
-              title="Abre Banca con el cobro prellenado al tipo de cambio bloqueado de la cotización"
-            >
-              <Landmark size={13} aria-hidden /> Registrar cobro
-            </Link>
-          );
-        })()}
       </div>
     </li>
   );

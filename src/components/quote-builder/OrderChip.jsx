@@ -241,7 +241,6 @@ async function createOrderFromQuote({ quote, profileId, onAttach }) {
       customerId: quote.customerId || null,
       status: 'draft',
       notes: '',
-      depositAmount: 0,
       deliveryAddress: '',
       createdAt: now,
       updatedAt: now,

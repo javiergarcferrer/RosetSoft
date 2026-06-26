@@ -74,14 +74,15 @@ test('outstanding receivable follows the milestone rules per accepted quote', ()
   const quotes = [
     // nothing paid → owes the full total
     { id: 'a1', status: 'accepted', acceptedAt: NOW },
-    // order in flight, deposit landed → owes total − deposit
-    { id: 'a2', status: 'accepted', orderId: 'o2', acceptedAt: NOW, depositReceivedAt: NOW, depositAmount: 100 },
+    // order in flight, deposit signalled → still owes the full total (the
+    // deposit money lives in the books, not subtracted on the quote)
+    { id: 'a2', status: 'accepted', orderId: 'o2', acceptedAt: NOW, depositReceivedAt: NOW },
     // balance paid → owes nothing
     { id: 'a3', status: 'accepted', acceptedAt: NOW, balancePaidAt: NOW },
   ];
   const lines = [line('a1', 100), line('a2', 1000), line('a3', 500)];
   const { outstandingUsd } = resolveBusinessPulse({ quotes, lines, now: NOW });
-  assert.ok(Math.abs(outstandingUsd - (100 * TAX + (1000 * TAX - 100))) < 1e-9);
+  assert.ok(Math.abs(outstandingUsd - (100 * TAX + 1000 * TAX)) < 1e-9);
 });
 
 test('won this month counts acceptedAt since the 1st', () => {
