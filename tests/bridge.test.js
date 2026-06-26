@@ -10,7 +10,7 @@ import { quoteToSale, resolveQuoteInvoiceStatus, resolveCustomerAccount } from '
 import { computeTotals, lineForTotals } from '../src/lib/pricing.js';
 import { isPricedLine } from '../src/lib/constants.js';
 
-const quote = { id: 'q1', number: 5, customerId: 'c1', depositAmount: 50, marginPct: 0, discountPct: 0, shipping: 0 };
+const quote = { id: 'q1', number: 5, customerId: 'c1', marginPct: 0, discountPct: 0, shipping: 0 };
 const lines = [{ id: 'l1', quoteId: 'q1', kind: 'item', qty: 1, unitPrice: 100 }];
 const r2 = (n) => Math.round(n * 100) / 100;
 
@@ -20,7 +20,10 @@ test('quoteToSale converts a USD quote into DOP accounting figures at the rate',
   assert.equal(sale.base, r2(t.taxableBase * 60));
   assert.equal(sale.itbis, r2(t.taxAmt * 60));
   assert.equal(sale.total, r2(t.grandTotal * 60));
-  assert.equal(sale.deposit, 3000); // 50 × 60
+  // The deposit deliberately does NOT cross the bridge — the quote only signals
+  // it; accounting books the money as a cobro and the sale carries the full
+  // receivable. Carrying a deposit here would double-count it.
+  assert.equal(sale.deposit, undefined);
   assert.equal(sale.customerId, 'c1');
   assert.equal(sale.quoteId, 'q1');
 });

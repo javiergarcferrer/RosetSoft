@@ -27,8 +27,16 @@ import { saleEcfType } from '../../lib/accounting/ecf.js';
  * (screen ≠ books). The bridge owns this CRM→books determination (it already
  * prices via lib/pricing); the caller just passes `settings`.
  *
+ * The deposit is deliberately NOT carried across. A quote only SIGNALS that a
+ * deposit was taken (its `deposito recibido` milestone); the money is recorded
+ * — once — as a cobro in the books, which nets against this sale via the
+ * receivables FIFO when it's invoiced. Letting the quote also inject a deposit
+ * amount here would double-count it (the cobro already credited CxC), so the
+ * sale books the FULL receivable and accounting stays the single source of
+ * truth for the money. See core/accounting/deposits (the confirm queue).
+ *
  * @returns {{ quoteId, customerId, rate, usdTotal, base, itbis, total,
- *   deposit, ecfType, items }}
+ *   ecfType, items }}
  */
 export function quoteToSale({ quote, lines, rate, hasFiscalId, settings = null }) {
   const r = Number(rate) || 0;
@@ -47,7 +55,6 @@ export function quoteToSale({ quote, lines, rate, hasFiscalId, settings = null }
     base: round2(t.taxableBase * r),
     itbis: round2(t.taxAmt * r),
     total: round2(t.grandTotal * r),
-    deposit: round2((quote?.depositAmount || 0) * r),
     ecfType: saleEcfType(!!hasFiscalId),
     items,
   };

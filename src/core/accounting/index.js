@@ -106,6 +106,9 @@ export { activeFiscalPlugin, dgiiPlugin, FISCAL_PLUGINS, resolveFilingDeadline }
 export { resolveReceivables, resolvePayables, resolvePartyStatement, resolveStatementFor } from './receivables.js';
 export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 
+// ── depósitos por confirmar (quote deposit SIGNAL → cobro in the books)
+export { resolveDepositConfirmations } from './deposits.js';
+
 // ── dashboard KPIs
 export { resolveAccountingDashboard } from './dashboard.js';
 

@@ -64,7 +64,7 @@ export const QUOTE_STAGES: readonly QuoteStage[] = [
   {
     key: 'deposito_recibido',
     label: 'Depósito recibido',
-    description: 'Cliente pagó el depósito; la venta queda confirmada y entra a comisión.',
+    description: 'Señala que el cliente pagó el depósito: la venta queda confirmada y entra a comisión. Contabilidad lo confirma registrando el cobro.',
     timestampField: 'depositReceivedAt',
     milestone: true,
   },

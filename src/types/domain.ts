@@ -1030,6 +1030,13 @@ export interface Payment {
   isrRetained: number;
   /** Invoice-level allocation: which documents this payment settles. */
   allocations?: { docId: string; docType?: string; amount: number }[];
+  /**
+   * The quote this cobro confirms a deposit for. Set on the advance cobro the
+   * dealer registers from "Depósitos por confirmar" to close the loop from the
+   * quote's deposit SIGNAL to the actual money in the books; null on every other
+   * payment (regular cobros allocate to a factura instead, pagos to a supplier).
+   */
+  quoteId?: string | null;
   notes?: string;
   journalEntryId?: string | null;
   createdAt?: number;

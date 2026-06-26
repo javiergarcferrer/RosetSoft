@@ -196,7 +196,7 @@ export default function QuoteStatusStepper({ quote, onTransition, profileId, onA
               className="btn-primary active:scale-[0.98] w-full sm:w-auto justify-center whitespace-nowrap"
               title={`Avanzar a ${next.label}`}
             >
-              {next.key === 'deposito_recibido' ? 'Registrar depósito' : `Marcar ${next.label.toLowerCase()}`}
+              {next.key === 'deposito_recibido' ? 'Marcar depósito recibido' : `Marcar ${next.label.toLowerCase()}`}
               <ChevronRight size={14} />
             </button>
           )}

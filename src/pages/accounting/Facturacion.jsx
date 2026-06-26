@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown } from 'lucide-react';
+import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown, HandCoins } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -30,7 +30,9 @@ import {
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
   resolveAccountingCockpit, resolveReceivables, resolveInvoiceRegister, invoiceRowTotals, buildPaymentEntry,
+  resolveDepositConfirmations,
 } from '../../core/accounting/index.js';
+import { postPaymentTx } from '../../lib/paymentPosting.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
@@ -529,8 +531,8 @@ export default function Facturacion() {
     // A company-account (house-stock) quote suppresses ITBIS on screen and in the
     // PDF — the bridge books it the same way (from settings) so the asiento/e-CF
     // match what the dealer saw.
-    const { usdTotal, base, itbis, total, deposit } = quoteToSale({ quote, lines, rate, hasFiscalId: false, settings });
-    return { rate, usdTotal, base, itbis, total, deposit };
+    const { usdTotal, base, itbis, total } = quoteToSale({ quote, lines, rate, hasFiscalId: false, settings });
+    return { rate, usdTotal, base, itbis, total };
   }
 
   const deliverables = useMemo(() => {
@@ -539,6 +541,23 @@ export default function Facturacion() {
       .filter((q) => readyToInvoice(q) && !postedQuoteIds.has(q.id))
       .sort((a, b) => invoiceReadyAt(a) - invoiceReadyAt(b));
   }, [quotesQ.data, postedQuoteIds, loaded]);
+
+  // Depósitos por confirmar — quotes that SIGNALLED a deposit (the CRM milestone)
+  // but whose money the books haven't captured yet. The dealer confirms by
+  // registering the cobro (tagged with the quote id), the single place the
+  // deposit lives. The USD reference is only informative — the amount is the
+  // dealer's to enter (the quote never dictates it).
+  const depositPending = useMemo(() => {
+    if (!loaded) return { rows: [], count: 0 };
+    const totalsByQuote = new Map();
+    for (const q of quotesQ.data) {
+      if (q.status === 'accepted' && q.depositReceivedAt) totalsByQuote.set(q.id, bookFor(q).usdTotal);
+    }
+    return resolveDepositConfirmations({
+      quotes: quotesQ.data, payments: paymentsQ.data, salesPostings: postingsQ.data,
+      totalsByQuote, customersById,
+    });
+  }, [quotesQ.data, paymentsQ.data, postingsQ.data, customersById, linesByQuote, settings, loaded]);
 
   const today = useMemo(() => new Date(), []);
   const [params] = useSearchParams();
@@ -626,6 +645,7 @@ export default function Facturacion() {
   const [err, setErr] = useState('');
   const [drawerRow, setDrawerRow] = useState(null); // posted factura whose detail briefing is open
   const [facturarQuote, setFacturarQuote] = useState(null); // por-facturar quote whose facturar modal is open
+  const [depositConfirm, setDepositConfirm] = useState(null); // { quote, customer, usdTotal } whose confirm-cobro modal is open
   const navigate = useNavigate();
   const searchRef = useRef(null);
   const focusedRowRef = useRef(null);
@@ -752,7 +772,9 @@ export default function Facturacion() {
         newId, config, postedAt,
         sale: {
           id, quoteId: quote.id, customerId: quote.customerId,
-          base: book.base, itbis: book.itbis, deposit: book.deposit,
+          // No deposit applied from the quote — the sale books the FULL
+          // receivable; any advance cobro nets it via the receivables FIFO.
+          base: book.base, itbis: book.itbis,
           ncf, memo: `Venta #${quote.number ?? ''}`.trim(),
         },
       });
@@ -767,7 +789,7 @@ export default function Facturacion() {
           ecfStatus: assigned ? 'pending' : '',
           ecfExpiresAt: assigned?.expiresAt ?? null,
           base: book.base, itbis: book.itbis, total: book.total,
-          depositApplied: Math.min(book.deposit, book.total), rate: book.rate, usdTotal: book.usdTotal,
+          depositApplied: 0, rate: book.rate, usdTotal: book.usdTotal,
         },
       });
       invalidate();
@@ -785,7 +807,7 @@ export default function Facturacion() {
           id, customerId: quote.customerId, ncf, rnc, ecfType: ecfTypeForNcf,
           ecfExpiresAt: assigned?.expiresAt ?? null, postedAt,
           base: book.base, itbis: book.itbis, total: book.total,
-          depositApplied: Math.min(book.deposit, book.total),
+          depositApplied: 0,
         }).catch(() => { /* surfaced via setErr inside; badge keeps the count */ });
       }
     } catch (e) {
@@ -824,6 +846,39 @@ export default function Facturacion() {
           commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
           allocations: [{ docId: p.id, amount: amt }], journalEntryId: built.entry.id,
         }),
+      });
+      invalidate();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: userMessageFor(e) };
+    }
+  }
+
+  // Confirmar un depósito señalado en la cotización — registra el cobro real (la
+  // ÚNICA fuente del dinero). Es un anticipo: no se asigna a ninguna factura
+  // (aún no existe), lleva el id de la cotización para cerrar el lazo
+  // cotización → contabilidad, y neutraliza la CxC vía el FIFO cuando se
+  // facture. Asiento + línea + cobro en UNA transacción (post_payment).
+  async function collectDeposit(quote, { amount, method, date }) {
+    const amt = Number(amount) || 0;
+    if (!quote || amt <= 0) return { ok: false, error: 'El monto debe ser mayor que cero.' };
+    try {
+      const id = newId();
+      const postedAt = date ? new Date(date).getTime() : Date.now();
+      const reference = `Depósito · Cotización #${quote.number ?? ''}`.trim();
+      const payment = {
+        id, direction: 'in', partyType: 'customer', partyId: quote.customerId,
+        amount: amt, method, reference,
+        commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+      };
+      const built = buildPaymentEntry({ newId, config, postedAt, payment });
+      await postPaymentTx({
+        entry: built.entry,
+        lines: built.lines,
+        payment: {
+          ...payment, profileId: scope, paidAt: postedAt,
+          quoteId: quote.id, allocations: [], journalEntryId: built.entry.id,
+        },
       });
       invalidate();
       return { ok: true };
@@ -994,6 +1049,37 @@ export default function Facturacion() {
             hint: pipelineReceivables.totals.d90 > 0 ? `${formatDop(pipelineReceivables.totals.d90)} vencido +90 d` : undefined },
           { label: itbis.aPagar > 0 ? 'ITBIS a pagar' : 'ITBIS a favor', value: formatDop(itbis.aPagar > 0 ? itbis.aPagar : itbis.aFavor) },
         ]} />
+      )}
+
+      {loaded && depositPending.count > 0 && (
+        <div className="card card-pad mb-4 border-amber-200 bg-amber-50/40">
+          <div className="flex items-center gap-2 mb-2.5">
+            <HandCoins size={16} className="text-amber-600" aria-hidden />
+            <h3 className="font-display text-sm font-bold text-ink-900">Depósitos por confirmar</h3>
+            <span className="rounded-full bg-amber-100 text-amber-700 text-xs font-semibold px-2 py-0.5 tabular-nums">{depositPending.count}</span>
+          </div>
+          <p className="text-xs text-ink-500 mb-3 leading-relaxed">
+            Estas cotizaciones marcaron <strong>depósito recibido</strong>, pero el cobro aún no está en
+            la contabilidad. Registra el cobro real para confirmarlo — el monto lo defines aquí.
+          </p>
+          <div className="space-y-1.5">
+            {depositPending.rows.map((r) => (
+              <div key={r.quoteId} className="flex items-center gap-3 rounded-lg border border-amber-100 bg-surface px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-ink-900 truncate">{r.customer?.name || 'Cliente'}</div>
+                  <div className="text-xs text-ink-400 tabular-nums">
+                    Cotización #{r.quote.number ?? '—'} · señalado {formatDate(r.signalledAt)}
+                    {r.usdTotal > 0 && <> · hasta {formatMoney(r.usdTotal, 'USD')}</>}
+                  </div>
+                </div>
+                <button type="button" onClick={() => setDepositConfirm(r)}
+                  className="btn-secondary text-xs whitespace-nowrap shrink-0">
+                  <HandCoins size={13} /> Registrar cobro
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <TabPills tabs={[
@@ -1196,7 +1282,6 @@ export default function Facturacion() {
                   <div className="eyebrow-xs text-ink-400 mb-1.5">Desglose</div>
                   <div className="flex items-baseline justify-between py-1.5 border-b border-ink-100"><span className="text-sm text-ink-500">Base imponible</span><span className="text-sm tabular-nums">{formatDop(book.base)}</span></div>
                   <div className="flex items-baseline justify-between py-1.5 border-b border-ink-100"><span className="text-sm text-ink-500">ITBIS</span><span className="text-sm tabular-nums">{formatDop(book.itbis)}</span></div>
-                  {book.deposit > 0 && <div className="flex items-baseline justify-between py-1.5 border-b border-ink-100"><span className="text-sm text-ink-500">Depósito aplicado</span><span className="text-sm tabular-nums text-emerald-700">− {formatDop(Math.min(book.deposit, book.total))}</span></div>}
                   <div className="flex items-baseline justify-between py-1.5"><span className="text-sm font-medium text-ink-900">Total</span><span className="text-sm font-semibold tabular-nums">{formatDop(book.total)}</span></div>
                   <div className="text-xs text-ink-400 mt-1">{q.deliveredAt ? `Entregado ${formatDate(q.deliveredAt)}` : `Depósito ${formatDate(q.depositReceivedAt)}`}</div>
                 </div>
@@ -1310,6 +1395,76 @@ export default function Facturacion() {
           </Modal>
         );
       })()}
+
+      {depositConfirm && (
+        <DepositConfirmModal
+          row={depositConfirm}
+          dopRef={bookFor(depositConfirm.quote).total}
+          onCollect={collectDeposit}
+          onClose={() => setDepositConfirm(null)}
+        />
+      )}
     </AccountingGate>
+  );
+}
+
+/**
+ * Confirm a quote's signalled deposit by recording the real cobro. The amount is
+ * the dealer's to enter (a deposit is usually partial); `dopRef` is the quote's
+ * full DOP total, shown only as a ceiling reference. Posts an advance cobro
+ * tagged with the quote id via the page's `collectDeposit`.
+ */
+function DepositConfirmModal({ row, dopRef, onCollect, onClose }) {
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('bank');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) { setErr('El monto debe ser mayor que cero.'); return; }
+    setErr(''); setSaving(true);
+    const r = await onCollect(row.quote, { amount: amt, method, date });
+    if (!r?.ok) { setErr(r?.error || 'No se pudo registrar el cobro.'); setSaving(false); return; }
+    onClose();
+  }
+
+  return (
+    <Modal open onClose={() => { if (!saving) onClose(); }} title="Confirmar depósito" size="sm" footer={
+      <>
+        <button onClick={() => { if (!saving) onClose(); }} disabled={saving} className="btn-ghost">Cancelar</button>
+        <button onClick={submit} disabled={saving} className="btn-primary disabled:opacity-40 inline-flex items-center gap-1.5">
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <HandCoins size={14} />} Registrar cobro
+        </button>
+      </>
+    }>
+      <p className="text-sm text-ink-600">
+        Cobro de <span className="font-medium">{row.customer?.name || 'el cliente'}</span> por la
+        cotización <span className="font-medium tabular-nums">#{row.quote.number ?? '—'}</span>.
+        Se registra como anticipo y queda ligado a la cotización.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <label className="col-span-2 text-sm">
+          <span className="label">Monto del depósito (DOP)</span>
+          <input type="number" min="0" step="0.01" className="input" value={amount} autoFocus
+            onChange={(e) => setAmount(e.target.value)} placeholder={dopRef > 0 ? dopRef.toFixed(2) : '0.00'} />
+        </label>
+        <label className="text-sm">
+          <span className="label">Vía</span>
+          <select value={method} onChange={(e) => setMethod(e.target.value)} className="input">
+            <option value="bank">Banco</option>
+            <option value="cash">Efectivo</option>
+            <option value="transfer">Transferencia</option>
+            <option value="card">Tarjeta</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="label">Fecha</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
+        </label>
+      </div>
+      {err ? <p className="mt-3 text-sm text-rose-600">{err}</p> : null}
+    </Modal>
   );
 }
