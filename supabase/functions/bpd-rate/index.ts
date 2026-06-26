@@ -13,11 +13,18 @@
 // On every successful fetch it also writes the rate to the team
 // settings row (settings.exchange_rate — the single source of truth) with
 // the service-role key, so the number the whole app quotes on is the bank's
-// published rate — nobody types it in. It's called from a logged-in
-// dealer's browser: automatically on the first app load at/after 08:00 AST
-// each day (see AppContext / shouldPullDailyRate) and on demand from the
-// Settings or quote-workspace refresh button. Both carry the user's JWT,
-// verified here — no cron, no extra secrets, no manual setup.
+// published rate — nobody types it in.
+//
+// Two callers (see the auth block below):
+//   • cron — the watertight backbone: pg_cron pings here hourly across the DR
+//     business day (08:00–18:00 AST, migration *_bpd_rate_cron_hourly) with the
+//     service key, so the bank's unpredictable morning publish is caught within
+//     the hour with NO browser dependency.
+//   • user — a logged-in dealer's browser, whose JWT we verify: every app
+//     session (throttled, see AppContext / shouldPullSessionRate) for instant
+//     refresh + to BOOTSTRAP the cron on a fresh deploy, plus on demand from the
+//     Settings / quote-workspace refresh button.
+// No extra secrets, no manual setup — the cron self-registers (ensure_bpd_rate_cron).
 //
 // Endpoints come from the API spec, pinned to the production gateway
 // (apipublico.bpd.com.do). The base is hardcoded below — there is NO
@@ -319,9 +326,11 @@ Deno.serve(async (req) => {
         persisted = true;
       }
 
-      // Self-heal the daily schedule: (re)register the pg_cron job that posts
-      // `{cron:true}` back here once a day at 08:35 AST (migration
-      // *_bpd_rate_cron). Idempotent, and driven off the function's own URL +
+      // Self-heal the schedule: (re)register the pg_cron job that posts
+      // `{cron:true}` back here hourly across the DR business day, 08:00–18:00
+      // AST (migration *_bpd_rate_cron_hourly) — the watertight backbone that
+      // catches the bank's unpredictable morning publish within the hour with no
+      // browser dependency. Idempotent, and driven off the function's own URL +
       // service key, so the schedule survives a project restore/reset without
       // anyone wiring it up — the next successful pull (browser OR cron) re-arms
       // it. Fire-and-forget: a registration hiccup must never fail the rate.

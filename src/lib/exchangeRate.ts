@@ -2,13 +2,19 @@
  * Exchange-rate semantics for USD ↔ DOP (Dominican Peso).
  *
  * The catalog is priced in USD (Ligne Roset's official list). To quote
- * in pesos the app applies Banco Popular Dominicano's published rate.
- * The rate is pulled automatically — on every app session (see
- * `shouldPullSessionRate`), plus on demand from Settings — by the
- * `bpd-rate` Edge Function, which writes the bank's
- * compra/venta to the team settings row. Nobody types it in or overrides
- * it; the app shows the bank's number as-is. We quote on the *venta*
- * (sell) rate — what the client pays to acquire USD.
+ * in pesos the app applies Banco Popular Dominicano's published rate — a
+ * single value the bank fixes each morning (~08:30 AST) for the whole day.
+ * The `bpd-rate` Edge Function fetches it and writes the bank's compra/venta
+ * to the team settings row. Nobody types it in or overrides it; the app shows
+ * the bank's number as-is. We quote on the *venta* (sell) rate — what the
+ * client pays to acquire USD.
+ *
+ * Reliability is server-side: a pg_cron job pulls hourly across the DR
+ * business day (migration *_bpd_rate_cron_hourly), so the bank's once-a-day
+ * publish always lands even if it runs a little late or a single attempt fails
+ * — re-pulling a fixed daily rate is idempotent. The browser session-pull
+ * below (`shouldPullSessionRate`) and the on-demand Settings button are layered
+ * on top only for instant refresh + to bootstrap the cron on a fresh deploy.
  *
  * Storage note: the rate lives under `settings.exchangeRate`. The column
  * was renamed `bsc` (Banco Santa Cruz) → `exchange_rate` once the source
@@ -113,17 +119,17 @@ export function displayRatesFor(
 const SESSION_RATE_THROTTLE_MS = 30 * 60_000; // 30 minutes
 
 /**
- * True when the BPD pull should fire for this app session. AppContext calls
- * it on every load, so the rate is refreshed each time someone opens the
- * app instead of only once a day — which is what let a day slip by unupdated
- * (no one logged in after the morning publish, or that single daily pull hit
- * an upstream hiccup and never retried).
+ * True when the browser session-pull should fire for this app session. This is
+ * NOT the reliability mechanism — the server-side hourly cron is (see the
+ * file header). It's layered on top for two things: instant refresh when a
+ * dealer opens the app, and bootstrapping the cron on a fresh deploy (a
+ * migration can't know the project URL + service key, so the first authenticated
+ * invoke arms the schedule).
  *
- * It still pulls when the rate was never fetched, and otherwise whenever the
- * stored figure is older than {@link SESSION_RATE_THROTTLE_MS}. The bank
- * publishes one rate each morning, so an early pull simply re-fetches the
- * same number; the next session past the throttle picks up the new one once
- * the bank posts it. No 08:00 gate, no once-per-day marker to miss.
+ * It pulls when the rate was never fetched, and otherwise whenever the stored
+ * figure is older than {@link SESSION_RATE_THROTTLE_MS}. The bank publishes one
+ * rate each morning, so an early pull simply re-fetches the same number; it's
+ * idempotent. No 08:00 gate, no once-per-day marker to miss.
  */
 export function shouldPullSessionRate(
   settings: Settings | null | undefined,

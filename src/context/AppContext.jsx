@@ -98,12 +98,14 @@ export function AppProvider({ children }) {
         if (cancelled) return;
         setSettings(s);
 
-        // Every app session refreshes the BPD exchange rate, so the figure
-        // everyone quotes on stays current with no cron and no manual step —
-        // opening the app is enough. The Edge Function persists the rate and
-        // we re-read it once it lands. A short throttle (shouldPullSessionRate)
-        // keeps rapid reloads from hammering the bank. Fire-and-forget — it
-        // must never block app readiness or fail the boot if the bank is down.
+        // Instant-refresh + cron bootstrap for the BPD exchange rate. The
+        // RELIABLE pull is the server-side hourly cron (migration
+        // *_bpd_rate_cron_hourly); this browser pull just lands the figure
+        // immediately for an open session and arms the cron on a fresh deploy.
+        // The Edge Function persists the rate and we re-read it once it lands.
+        // A short throttle (shouldPullSessionRate) keeps rapid reloads from
+        // hammering the bank. Fire-and-forget — it must never block app
+        // readiness or fail the boot if the bank is down.
         // Gated off until production (EXCHANGE_RATE_PULL_ENABLED); the stored
         // rate and the manual override in Settings stay in effect.
         if (EXCHANGE_RATE_PULL_ENABLED && shouldPullSessionRate(s)) {
