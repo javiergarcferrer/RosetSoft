@@ -45,15 +45,14 @@ export const SCOPE_TEAM = 'equipo';
  * on the first login at/after 08:00 AST, via the `bpd-rate` edge function →
  * apipublico.bpd.com.do).
  *
- * This gates ONLY the automatic daily pull. The manual on-demand refresh
+ * This gates ONLY the automatic pull. The manual on-demand refresh
  * (Settings' "Actualizar ahora" and the quote workspace's "Actualizar tasa")
  * is ALWAYS available regardless of this flag.
  *
  * ENABLED: the production subscription is approved and the rate pulls
- * successfully end-to-end. The pull fires once per day on the first app load
- * at/after 08:00 AST (see `shouldPullDailyRate` in lib/exchangeRate +
- * AppContext) — gated on 08:00 because BPD publishes a single daily rate in
- * the morning, and not hourly thereafter.
+ * successfully end-to-end. The pull fires on every app session (see
+ * `shouldPullSessionRate` in lib/exchangeRate + AppContext), throttled so
+ * rapid reloads don't hammer BPD's rate-limited API.
  */
 export const EXCHANGE_RATE_PULL_ENABLED = true;
 

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { db, ensureDefaultProfile, getSettings, updateSettings, invalidate } from '../db/database.js';
 import { supabase } from '../db/supabaseClient.js';
-import { shouldPullDailyRate } from '../lib/exchangeRate.js';
+import { shouldPullSessionRate } from '../lib/exchangeRate.js';
 import { EXCHANGE_RATE_PULL_ENABLED } from '../lib/constants.js';
 import { quotesToAutoArchive } from '../lib/quoteStages.js';
 import { useAuth } from './AuthContext.jsx';
@@ -98,15 +98,15 @@ export function AppProvider({ children }) {
         if (cancelled) return;
         setSettings(s);
 
-        // First app load at/after 08:00 Santo Domingo time refreshes the
-        // BPD exchange rate, so the figure everyone quotes on stays
-        // current with no cron and no manual step. Whoever opens the app
-        // first past 08:00 triggers it; the Edge Function persists the rate
-        // and we re-read it once it lands. Fire-and-forget — it must
-        // never block app readiness or fail the boot if the bank is down.
-        // Gated off until production (EXCHANGE_RATE_PULL_ENABLED); the
-        // stored rate and the manual override in Settings stay in effect.
-        if (EXCHANGE_RATE_PULL_ENABLED && shouldPullDailyRate(s)) {
+        // Every app session refreshes the BPD exchange rate, so the figure
+        // everyone quotes on stays current with no cron and no manual step —
+        // opening the app is enough. The Edge Function persists the rate and
+        // we re-read it once it lands. A short throttle (shouldPullSessionRate)
+        // keeps rapid reloads from hammering the bank. Fire-and-forget — it
+        // must never block app readiness or fail the boot if the bank is down.
+        // Gated off until production (EXCHANGE_RATE_PULL_ENABLED); the stored
+        // rate and the manual override in Settings stay in effect.
+        if (EXCHANGE_RATE_PULL_ENABLED && shouldPullSessionRate(s)) {
           supabase.functions
             .invoke('bpd-rate')
             .then(async ({ error }) => {

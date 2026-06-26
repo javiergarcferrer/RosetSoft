@@ -1,62 +1,64 @@
 /**
- * Tests for shouldPullDailyRate in src/lib/exchangeRate.ts.
+ * Tests for shouldPullSessionRate in src/lib/exchangeRate.ts.
  *
- * The rule: the daily Banco Popular pull fires on the first app load
- * at/after 08:00 Santo Domingo time (AST, UTC-4, no DST) on a day whose
- * post-08:00 rate hasn't been captured yet. The bank publishes one rate
- * each morning, so pulling earlier would only re-fetch yesterday's figure
- * and then mark the day done — the gate at 08:00 prevents that.
+ * The rule: the Banco Popular pull fires on EVERY app session, so today's
+ * rate always lands — opening the app is enough, no 08:00 gate and no
+ * once-a-day marker that a quiet morning or an upstream hiccup could let
+ * slip by. The only guard is a short throttle: a dealer reloading the app
+ * a few times in a row (or StrictMode's double mount) reuses the figure
+ * just fetched instead of hammering the bank's rate-limited API.
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldPullDailyRate, displayRatesFor, quoteRateState } from '../src/lib/exchangeRate.js';
+import { shouldPullSessionRate, displayRatesFor, quoteRateState } from '../src/lib/exchangeRate.js';
 
 // Build a ms timestamp for a given AST wall-clock by pinning the -04:00 offset.
 const ast = (iso) => Date.parse(`${iso}-04:00`);
 const withRate = (updatedAt) => ({ exchangeRate: { buy: 58, sell: 60, updatedAt } });
+const MINUTE = 60_000;
 
 test('pulls when the rate was never fetched', () => {
-  assert.equal(shouldPullDailyRate(null), true);
-  assert.equal(shouldPullDailyRate({}), true);
-  assert.equal(shouldPullDailyRate(withRate(null)), true);
+  assert.equal(shouldPullSessionRate(null), true);
+  assert.equal(shouldPullSessionRate({}), true);
+  assert.equal(shouldPullSessionRate(withRate(null)), true);
 });
 
-test('pulls on the first login at/after 08:00 with a prior-day rate', () => {
+test('pulls on a new session once the throttle window has passed', () => {
+  const updatedAt = ast('2026-05-28T09:00:00');
+  const now = updatedAt + 31 * MINUTE; // 31 min later — a genuine new session
+  assert.equal(shouldPullSessionRate(withRate(updatedAt), now), true);
+});
+
+test('does NOT re-pull within the throttle window (rapid reloads)', () => {
+  const updatedAt = ast('2026-05-28T09:00:00');
+  const now = updatedAt + 5 * MINUTE; // reloaded 5 min later
+  assert.equal(shouldPullSessionRate(withRate(updatedAt), now), false);
+});
+
+test('pulls on the first session of the day with a prior-day rate', () => {
   const updatedAt = ast('2026-05-27T15:00:00'); // yesterday afternoon
-  const now = ast('2026-05-28T09:00:00');        // today, after 08:00
-  assert.equal(shouldPullDailyRate(withRate(updatedAt), now), true);
+  const now = ast('2026-05-28T09:00:00');        // today
+  assert.equal(shouldPullSessionRate(withRate(updatedAt), now), true);
 });
 
-test('does NOT pull before 08:00 when yesterday’s rate is still fresh', () => {
+test('pulls even before 08:00 — no morning gate to miss', () => {
   const updatedAt = ast('2026-05-27T15:00:00'); // yesterday afternoon
   const now = ast('2026-05-28T06:00:00');        // today, before 08:00
-  assert.equal(shouldPullDailyRate(withRate(updatedAt), now), false);
+  assert.equal(shouldPullSessionRate(withRate(updatedAt), now), true);
 });
 
-test('does NOT pull again once today’s post-08:00 rate is captured', () => {
-  const updatedAt = ast('2026-05-28T08:30:00'); // today, just after publish
-  const now = ast('2026-05-28T11:00:00');        // later today
-  assert.equal(shouldPullDailyRate(withRate(updatedAt), now), false);
-});
-
-test('a pre-08:00 pull does not satisfy the day — re-pulls after 08:00', () => {
-  const updatedAt = ast('2026-05-28T06:00:00'); // pulled before publish
-  const now = ast('2026-05-28T09:00:00');        // now after publish
-  assert.equal(shouldPullDailyRate(withRate(updatedAt), now), true);
-});
-
-test('refreshes a multi-day-stale rate even before 08:00', () => {
+test('refreshes a multi-day-stale rate', () => {
   const updatedAt = ast('2026-05-25T10:00:00'); // 3 days old
-  const now = ast('2026-05-28T06:00:00');        // before today’s 08:00
-  assert.equal(shouldPullDailyRate(withRate(updatedAt), now), true);
+  const now = ast('2026-05-28T06:00:00');
+  assert.equal(shouldPullSessionRate(withRate(updatedAt), now), true);
 });
 
-test('fires exactly at the 08:00 boundary', () => {
-  const updatedAt = ast('2026-05-27T15:00:00');
-  const now = ast('2026-05-28T08:00:00');        // exactly 08:00 AST
-  assert.equal(shouldPullDailyRate(withRate(updatedAt), now), true);
+test('fires exactly at the throttle boundary', () => {
+  const updatedAt = ast('2026-05-28T09:00:00');
+  const now = updatedAt + 30 * MINUTE; // exactly 30 min later
+  assert.equal(shouldPullSessionRate(withRate(updatedAt), now), true);
 });
 
 /* ----------------------- quoteRateState (single source of truth) ---------------------- */
@@ -100,10 +102,10 @@ test('displayRatesFor — live until ACCEPTED, then the frozen snapshot', () => 
 test('reads the legacy bsc / bpd shapes as fallbacks', () => {
   const now = ast('2026-05-28T09:00:00');
   const stale = ast('2026-05-27T15:00:00');
-  assert.equal(shouldPullDailyRate({ bsc: { sell: 60, updatedAt: stale } }, now), true);
-  // a fresh today-after-08:00 figure under the legacy key → no pull
+  assert.equal(shouldPullSessionRate({ bsc: { sell: 60, updatedAt: stale } }, now), true);
+  // a figure pulled minutes ago under the legacy key → still within the throttle
   assert.equal(
-    shouldPullDailyRate({ bpd: { sell: 60, updatedAt: ast('2026-05-28T08:15:00') } }, now),
+    shouldPullSessionRate({ bpd: { sell: 60, updatedAt: now - 5 * MINUTE } }, now),
     false,
   );
 });

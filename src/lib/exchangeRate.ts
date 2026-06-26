@@ -3,9 +3,9 @@
  *
  * The catalog is priced in USD (Ligne Roset's official list). To quote
  * in pesos the app applies Banco Popular Dominicano's published rate.
- * The rate is pulled automatically — on the first app load at/after 08:00
- * each day (Santo Domingo time; see `shouldPullDailyRate`), plus on demand
- * from Settings — by the `bpd-rate` Edge Function, which writes the bank's
+ * The rate is pulled automatically — on every app session (see
+ * `shouldPullSessionRate`), plus on demand from Settings — by the
+ * `bpd-rate` Edge Function, which writes the bank's
  * compra/venta to the team settings row. Nobody types it in or overrides
  * it; the app shows the bank's number as-is. We quote on the *venta*
  * (sell) rate — what the client pays to acquire USD.
@@ -103,50 +103,33 @@ export function displayRatesFor(
 }
 
 /**
- * AST (America/Santo_Domingo, UTC-4, no DST) calendar-day key for a ms
- * timestamp, e.g. "2026-05-20".
+ * Minimum gap between two automatic pulls. The rate is refreshed on every
+ * app session so today's figure always lands — but a logged-in dealer who
+ * reloads the app a few times in a row (or React StrictMode's double mount
+ * in dev) shouldn't hammer the bank's rate-limited API for a number that
+ * only changes once each morning. A genuine new session past this window
+ * re-pulls; rapid reloads inside it reuse the figure just fetched.
  */
-function astDayKey(ms: number): string {
-  return new Date(ms - 4 * 3_600_000).toISOString().slice(0, 10);
-}
+const SESSION_RATE_THROTTLE_MS = 30 * 60_000; // 30 minutes
 
 /**
- * AST hour at which Banco Popular publishes the day's rate. The daily pull
- * waits for it: pulling earlier would just re-fetch yesterday's figure and
- * then mark the day done, so today's real rate would never land.
- */
-const RATE_PUBLISH_HOUR_AST = 8;
-
-/**
- * Timestamp (ms) of the most recent {@link RATE_PUBLISH_HOUR_AST}:00 AST
- * that has already passed at `now`. AST is UTC-4 with no DST, so a day is
- * exactly 24h — if `now` is still before today's 08:00 we step back a
- * whole day to yesterday's boundary.
- */
-function ratePublishBoundary(now: number): number {
-  // Midnight AST of now's day, expressed in UTC ms (AST midnight = 04:00Z),
-  // then advanced to the publish hour.
-  const astMidnightUtc = Date.parse(`${astDayKey(now)}T00:00:00.000Z`) + 4 * 3_600_000;
-  const todays = astMidnightUtc + RATE_PUBLISH_HOUR_AST * 3_600_000;
-  return now >= todays ? todays : todays - 86_400_000;
-}
-
-/**
- * True when the daily BPD pull should fire: the first app load at/after
- * 08:00 Santo Domingo time on a day whose post-08:00 rate hasn't been
- * captured yet (or the rate was never pulled). AppContext uses this to
- * refresh once a day without a cron — whoever opens the app first past
- * 08:00 triggers the pull, and the persisted rate serves everyone else.
+ * True when the BPD pull should fire for this app session. AppContext calls
+ * it on every load, so the rate is refreshed each time someone opens the
+ * app instead of only once a day — which is what let a day slip by unupdated
+ * (no one logged in after the morning publish, or that single daily pull hit
+ * an upstream hiccup and never retried).
  *
- * Gating on 08:00 matters: the bank publishes the new rate in the morning,
- * so a pre-08:00 login keeps yesterday's figure instead of locking in a
- * stale one and skipping the real update.
+ * It still pulls when the rate was never fetched, and otherwise whenever the
+ * stored figure is older than {@link SESSION_RATE_THROTTLE_MS}. The bank
+ * publishes one rate each morning, so an early pull simply re-fetches the
+ * same number; the next session past the throttle picks up the new one once
+ * the bank posts it. No 08:00 gate, no once-per-day marker to miss.
  */
-export function shouldPullDailyRate(
+export function shouldPullSessionRate(
   settings: Settings | null | undefined,
   now: number = Date.now(),
 ): boolean {
   const { updatedAt } = readExchangeRate(settings);
   if (!updatedAt) return true;
-  return updatedAt < ratePublishBoundary(now);
+  return now - updatedAt >= SESSION_RATE_THROTTLE_MS;
 }
