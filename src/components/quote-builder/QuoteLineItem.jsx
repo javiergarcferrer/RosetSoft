@@ -1618,7 +1618,7 @@ function PricingRow({
         <div className="eyebrow-xs tracking-wide">
           {totalLabel}
           {companyDiscountPct > 0 && (
-            <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{companyDiscountPct}%</span>
+            <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{Math.round(companyDiscountPct)}%</span>
           )}
         </div>
         {onToggleBreakdown ? (
@@ -1720,7 +1720,7 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
           <div className="eyebrow-xs tracking-wide text-brand-700">
             Rango · sin material
             {companyDiscountPct > 0 && (
-              <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{companyDiscountPct}%</span>
+              <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{Math.round(companyDiscountPct)}%</span>
             )}
           </div>
           <div className="qli-total-val text-lg font-bold tabular-nums text-ink-900 leading-tight whitespace-nowrap">
@@ -1763,7 +1763,7 @@ function CompoundCalculatorBand({
           <div className="eyebrow-xs tracking-wide mb-0.5">
             {ranged ? 'Total modular · rango' : 'Total modular'}
             {companyDiscountPct > 0 && (
-              <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{companyDiscountPct}%</span>
+              <span className="ml-1 inline-flex items-center rounded bg-emerald-100 px-1 py-px text-[9px] font-semibold leading-none text-emerald-700 align-middle">−{Math.round(companyDiscountPct)}%</span>
             )}
           </div>
           <button

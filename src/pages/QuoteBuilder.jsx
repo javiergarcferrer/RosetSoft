@@ -898,7 +898,7 @@ function Workspace({ quoteId, navigate, draftQuote, materialize }) {
                 {companyDiscountPct > 0 ? (
                   <>Cada producto muestra tu costo real de catálogo (su margen por producto).
                   Las líneas sin costo usan{' '}
-                  <span className="font-semibold tabular-nums">−{companyDiscountPct}%</span>.</>
+                  <span className="font-semibold tabular-nums">−{Math.round(companyDiscountPct)}%</span>.</>
                 ) : (
                   <>Los precios mostrados son de lista.</>
                 )}
