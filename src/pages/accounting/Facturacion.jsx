@@ -54,6 +54,8 @@ function ymd(ts) {
  */
 // e-CF status → the leading dot color in the NCF cell (pending pulses).
 const ECF_DOT = { accepted: 'bg-emerald-500', sent: 'bg-emerald-500', pending: 'bg-amber-500', rejected: 'bg-rose-500' };
+// e-CF status → short label for the mobile card (the desktop row has the action cluster).
+const ECF_LABEL = { pending: 'Pendiente', sent: 'Transmitido', accepted: 'Aceptado', rejected: 'Rechazado' };
 // Payment status → the estado pill [label, skin].
 const STATUS_PILL = {
   paid: ['Pagada', 'bg-emerald-100 text-emerald-700'],
@@ -140,6 +142,18 @@ const SALES607_DEFAULT = {
   name: true, ncf: true, tipo: true, date: true, base: true, itbis: true, total: true, balance: true, vence: true, estado: true,
 };
 const SALES607_COLS_KEY = 'rs.facturacion.cols.v2';
+
+// Empty-state copy per tab — so a tab with nothing reads as "nothing of THIS
+// kind" instead of a generic "sin facturas" that misframes (e.g. "Por facturar"
+// is about pending deliveries, not emitted invoices).
+const EMPTY_BY_TAB = {
+  todas: { title: 'Sin facturas', description: 'Las facturas emitidas aparecen aquí. Crea una con “Nueva factura”, o factura una entrega desde “Por facturar”.' },
+  cobrar: { title: 'Nada por cobrar', description: 'Todo lo facturado está saldado — sin balances pendientes.' },
+  pagadas: { title: 'Sin facturas pagadas', description: 'Las facturas saldadas en el período aparecen aquí.' },
+  ecf: { title: 'Sin e-CF pendientes', description: 'No hay comprobantes electrónicos pendientes de transmitir a la DGII.' },
+  porfacturar: { title: 'Sin entregas pendientes', description: 'No hay entregas pendientes de facturar. Una cotización entregada aparece aquí lista para facturar.' },
+  anuladas: { title: 'Sin facturas anuladas', description: 'Las facturas anuladas (e-NCF no transmitidos) aparecen aquí.' },
+};
 
 // The "ready to invoice" gate + effective invoice date are SHARED with the
 // CRM dashboard's "Por facturar" tile — one rule, lib/quoteMilestones.
@@ -367,6 +381,7 @@ export default function Facturacion() {
   // share the exact same path. Never re-sends an e-NCF already at the DGII (that
   // would duplicate one fiscal number) — that's a silent skip.
   async function transmitOne(p) {
+    if (p.voidedAt) return { ok: true }; // anulada — never (re)transmit a cancelled sale's e-NCF
     if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') return { ok: true };
     const pf = ecfPreflight(p);
     if (pf) return { ok: false, error: pf };
@@ -400,7 +415,7 @@ export default function Facturacion() {
   // + a final tally; one failure never aborts the rest.
   async function transmitAllPending() {
     const pending = postingsQ.data
-      .filter((p) => p.ncf && p.ecfStatus === 'pending' && parseENcf(p.ncf))
+      .filter((p) => p.ncf && p.ecfStatus === 'pending' && !p.voidedAt && parseENcf(p.ncf))
       .sort((a, b) => (a.postedAt || 0) - (b.postedAt || 0));
     if (!pending.length) return;
     const pf = ecfPreflight(pending[0]); // one cert/RNC pre-check before looping
@@ -597,7 +612,7 @@ export default function Facturacion() {
   // e-NCFs assigned but never transmitted — the count the 607 tab badges so
   // signed-but-unsent invoices can't sit invisible.
   const pendingEcfCount = useMemo(
-    () => postingsQ.data.filter((p) => p.ecfStatus === 'pending').length,
+    () => postingsQ.data.filter((p) => p.ecfStatus === 'pending' && !p.voidedAt).length,
     [postingsQ.data],
   );
   const sentEcfCount = useMemo(
@@ -614,6 +629,10 @@ export default function Facturacion() {
   const navigate = useNavigate();
   const searchRef = useRef(null);
   const focusedRowRef = useRef(null);
+  // Did the last focus change come from the keyboard? Only then do we
+  // scrollIntoView — otherwise a keyboard scroll slides a new row under a
+  // stationary cursor, whose mouse handler resets focusIdx, fighting J/K nav.
+  const kbdNav = useRef(false);
   const [focusIdx, setFocusIdx] = useState(0);
   // Reset the keyboard cursor when the visible row set changes.
   useEffect(() => { setFocusIdx(0); }, [tab, q607]);
@@ -621,7 +640,11 @@ export default function Facturacion() {
   // never leaks into the fiscal-action footer (the drawer covers the page banner,
   // so fiscalMsg is the only place transmit/imprimir feedback is visible there).
   useEffect(() => { setErr(''); }, [drawerRow]);
-  useEffect(() => { focusedRowRef.current?.scrollIntoView({ block: 'nearest' }); }, [focusIdx]);
+  useEffect(() => {
+    if (!kbdNav.current) return;
+    kbdNav.current = false;
+    focusedRowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [focusIdx]);
   // Palantir-style keyboard nav over the register (desktop). Overlays own the
   // keyboard when open; typing in a field is never intercepted (except '/').
   useEffect(() => {
@@ -633,14 +656,25 @@ export default function Facturacion() {
       if (e.key === '/' && !typing) { e.preventDefault(); searchRef.current?.focus(); return; }
       if (typing) return;
       const rows = registerView.rows;
-      if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); setFocusIdx((i) => Math.min(i + 1, rows.length - 1)); }
-      else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); setFocusIdx((i) => Math.max(0, i - 1)); }
+      // Raise kbdNav only when the cursor actually moves — at a boundary the
+      // value is unchanged, the [focusIdx] effect won't run, and a stuck flag
+      // would fire a spurious scroll on the next mouse hover.
+      if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); setFocusIdx((i) => { const n = Math.min(i + 1, rows.length - 1); if (n !== i) kbdNav.current = true; return n; }); }
+      else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); setFocusIdx((i) => { const n = Math.max(0, i - 1); if (n !== i) kbdNav.current = true; return n; }); }
       else if (e.key === 'Enter') { const r = rows[focusIdx]; if (r) { if (r.kind === 'porfacturar') setFacturarQuote(r.quote); else setDrawerRow(r); } }
       else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); navigate('/accounting/facturacion/nueva'); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [loaded, drawerRow, facturarQuote, creditNote, printDoc, registerView, focusIdx, navigate]);
+  // Esc closes the Facturar drawer too (InvoiceDrawer owns its own Esc; this is
+  // the matching handler for the por-facturar drawer), unless a post is in flight.
+  useEffect(() => {
+    if (!facturarQuote) return undefined;
+    const h = (e) => { if (e.key === 'Escape' && posting !== facturarQuote.id) { setErr(''); setFacturarQuote(null); } };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [facturarQuote, posting]);
 
   // Column visibility (Shopify "edit columns") for the 607 table — persisted
   // per browser. The e-CF actions column stays a fixed trailing cell.
@@ -748,7 +782,7 @@ export default function Facturacion() {
       // the SAME e-NCF (the state machine never reassigns).
       if (assigned && settings?.ecfCertUploadedAt && cleanRnc(settings?.companyRnc)) {
         transmitPosting({
-          id, customerId: quote.customerId, ncf, rnc, ecfType,
+          id, customerId: quote.customerId, ncf, rnc, ecfType: ecfTypeForNcf,
           ecfExpiresAt: assigned?.expiresAt ?? null, postedAt,
           base: book.base, itbis: book.itbis, total: book.total,
           depositApplied: Math.min(book.deposit, book.total),
@@ -1009,8 +1043,9 @@ export default function Facturacion() {
             note={q607 ? <> · filtrado por “<span className="text-ink-700">{q607}</span>”</> : null}
           />
           {registerView.count === 0 ? (
-            <EmptyState icon={FileText} title={q607 ? 'Sin coincidencias' : 'Sin facturas'}
-              description={q607 ? 'Ninguna factura coincide con la búsqueda.' : 'Las facturas emitidas aparecen aquí. Crea una con “Nueva factura”, o factura una entrega desde “Por facturar”.'} />
+            <EmptyState icon={FileText}
+              title={q607 ? 'Sin coincidencias' : (EMPTY_BY_TAB[tab] || EMPTY_BY_TAB.todas).title}
+              description={q607 ? 'Ninguna factura coincide con la búsqueda.' : (EMPTY_BY_TAB[tab] || EMPTY_BY_TAB.todas).description} />
           ) : (
             <>
             <RowCards
@@ -1022,6 +1057,12 @@ export default function Facturacion() {
                 kv: [
                   ['Fecha', formatDate(r.date)],
                   ['Estado', (STATUS_PILL[r.status] || STATUS_PILL.open)[0]],
+                  ...(r.ecfStatus && r.status !== 'voided' ? [['e-CF', (
+                    <span className="inline-flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${ECF_DOT[r.ecfStatus] || 'bg-ink-300'} ${r.ecfStatus === 'pending' ? 'animate-pulse' : ''}`} aria-hidden />
+                      {ECF_LABEL[r.ecfStatus] || r.ecfStatus}
+                    </span>
+                  )]] : []),
                   ['Base', formatDop(r.creditNote ? -r.base : r.base)],
                   ['Balance', r.open > 0.01 ? formatDop(r.open) : '—'],
                 ],
@@ -1061,7 +1102,7 @@ export default function Facturacion() {
                         return (
                           <tr key={r.id} ref={focused ? focusedRowRef : null}
                             className={`cursor-pointer ${focused ? 'bg-brand-50' : ''}`}
-                            onMouseEnter={() => setFocusIdx(i)}
+                            onMouseMove={() => { if (focusIdx !== i) setFocusIdx(i); }}
                             onClick={() => pf ? setFacturarQuote(r.quote) : setDrawerRow(r)}>
                             {cols607.map((col) => (
                               <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>

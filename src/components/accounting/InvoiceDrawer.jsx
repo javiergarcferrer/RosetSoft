@@ -174,7 +174,8 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
                 </label>
               </div>
               <button type="button" onClick={submitCobro} disabled={saving} className="btn-primary w-full justify-center mt-2.5">
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownCircle size={15} />} Registrar cobro
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownCircle size={15} />}
+                {Number(amount) > 0 ? 'Registrar cobro' : `Cobrar saldo completo (${formatDop(balance)})`}
               </button>
               {err && <p className="text-xs text-rose-600 mt-2">{err}</p>}
             </div>

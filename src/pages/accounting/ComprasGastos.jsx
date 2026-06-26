@@ -259,12 +259,22 @@ export default function ComprasGastos() {
 
       {!loaded ? <ListLoading /> : tab === 'list' ? (
         list.count === 0 ? (
-          <EmptyState icon={Receipt} title="Sin movimientos en el período" description="Registra una compra o gasto con “Nuevo”." />
+          (listQuery.trim() || supplierFilter || nature !== 'all') ? (
+            <EmptyState icon={Receipt} title="Sin coincidencias" description="Ningún documento coincide con el filtro actual. Ajusta la búsqueda, el proveedor o el tipo." />
+          ) : (
+            <EmptyState icon={Receipt} title="Sin movimientos en el período" description="Registra una compra o gasto con “Nuevo”." />
+          )
         ) : (
           <>
           <ResultBar count={list.count} singular="documento" plural="documentos"
             total={list.count > 0 ? formatDop(list.totals.total) : null}
-            note={listQuery.trim() ? <> · filtrado por “{listQuery.trim()}”</> : null} />
+            note={(() => {
+              const parts = [];
+              if (listQuery.trim()) parts.push(`“${listQuery.trim()}”`);
+              if (supplierFilter) parts.push(suppliersById.get(supplierFilter)?.name || 'proveedor');
+              if (nature !== 'all') parts.push(nature === 'expediente' ? 'Expediente' : (NATURE_LABEL[nature] || nature));
+              return parts.length ? <> · filtrado por {parts.join(' · ')}</> : null;
+            })()} />
           <RowCards
             rows={list.rows.map((r) => ({
               key: r.id,
@@ -302,7 +312,7 @@ export default function ComprasGastos() {
                     {list.rows.map((r) => (
                       <tr key={r.id} tabIndex={0}
                         onClick={() => navigate(rowHref(r))}
-                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(rowHref(r)); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(rowHref(r)); } }}
                         className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
                         {listCols.cols.map((col) => <td key={col.key} className={col.tdClass || ''}>{col.cell({ r })}</td>)}
                       </tr>

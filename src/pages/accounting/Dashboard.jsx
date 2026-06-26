@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Receipt,
   BookOpen, Landmark, Ship, Boxes, Percent, Gauge,
@@ -242,6 +242,7 @@ function CycleArrow() {
  */
 export default function AccountingDashboard() {
   const { profileId, profiles, settings } = useApp();
+  const navigate = useNavigate();
   const scope = profileId || 'team';
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
@@ -883,7 +884,8 @@ export default function AccountingDashboard() {
                     {d.recent.map(({ entry, debit }) => {
                       const ctx = { entry, debit };
                       return (
-                        <tr key={entry.id} className="hover:bg-ink-50 transition-colors">
+                        <tr key={entry.id} onClick={() => navigate('/accounting/ledger?tab=diario')}
+                          className="hover:bg-ink-50 transition-colors cursor-pointer" title="Ver en el diario">
                           {recentCols.cols.map((col) => (
                             <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
                           ))}

@@ -12,6 +12,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import RowCards from '../../components/RowCards.jsx';
 import { syncShopify } from '../../lib/shopifySync.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatDop, formatDate } from '../../lib/format.js';
@@ -239,6 +240,62 @@ export default function ComprasGastoDetail() {
   }, [accountsQ.data]);
   const asientoLines = useMemo(() => jLinesQ.data.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)), [jLinesQ.data]);
 
+  // Mobile fallbacks for the read-only detail tables — the desktop tables
+  // horizontally-scroll a min-width grid, which pinches on a phone; below md
+  // each row reflows into a RowCards line (label→value), the same pattern the
+  // list pages and the line editor use. Pure projection of already-resolved data.
+  const lineCards = useMemo(() => {
+    const dd = detail;
+    if (!dd) return [];
+    if (dd.isLineBill) {
+      return dd.lines.map((l) => ({
+        key: l.id,
+        title: l.description || '—',
+        right: formatDop(l.base),
+        sub: <span><span className="font-mono text-xs text-ink-400 mr-1">{l.accountCode}</span>{l.accountName}</span>,
+        kv: [
+          ['Cant.', l.qty || '—'],
+          ['P. unit.', l.unitPrice > 0 ? formatDop(l.unitPrice) : '—'],
+          ...(l.discount > 0 ? [['Desc.', `−${formatDop(l.discount)}`]] : []),
+          ...(l.taxLabels?.length ? [['Impuestos', l.taxLabels.join(' · ')]] : []),
+        ],
+      }));
+    }
+    if (dd.lines.length > 0) {
+      return dd.lines.map((l) => {
+        const grossUnit = l.qty > 0 ? (l.cost + (l.discount || 0)) / l.qty : 0;
+        return {
+          key: l.id,
+          title: (<>{l.name}{l.reference && <span className="ml-1.5 font-mono text-xs text-ink-400">{l.reference}</span>}{!l.inInventory && <span className="ml-1.5 text-[11px] text-amber-700">sin artículo</span>}</>),
+          right: formatDop(l.cost),
+          kv: [
+            ['Cant.', l.qty || '—'],
+            ['Costo unit.', grossUnit > 0 ? formatDop(grossUnit) : '—'],
+            ...(l.discount > 0 ? [['Desc.', `−${formatDop(l.discount)}`]] : []),
+            ...(l.taxLabels?.length ? [['ITBIS', l.taxLabels.join(' · ')]] : []),
+          ],
+        };
+      });
+    }
+    return [{
+      key: 'single',
+      title: dd.description || dd.natureLabel,
+      right: formatDop(dd.base),
+      sub: <span><span className="font-mono text-xs text-ink-400 mr-1">{dd.accountCode}</span>{dd.accountName}</span>,
+      kv: [['Cant.', 1]],
+    }];
+  }, [detail]);
+
+  const asientoCards = useMemo(() => asientoLines.map((l) => ({
+    key: l.id,
+    title: (<><span className="font-mono text-xs text-ink-500">{l.accountCode}</span>{accountName(l.accountCode) && <span className="ml-1.5">{accountName(l.accountCode)}</span>}</>),
+    sub: (l.memo || l.ncf) ? <span>{l.memo || ''}{l.ncf ? <span className="ml-1.5 font-mono text-xs">{l.ncf}</span> : null}</span> : null,
+    kv: [
+      ['Débito', l.debit ? formatDop(l.debit) : '—'],
+      ['Crédito', l.credit ? formatDop(l.credit) : '—'],
+    ],
+  })), [asientoLines, accountName]);
+
   const [tab, setTab] = useState('lines'); // 'lines' | 'asiento' | 'dgii'
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState('');
@@ -303,15 +360,15 @@ export default function ComprasGastoDetail() {
         <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-2.5 border-b border-ink-100 bg-ink-50/40">
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => navigate(`/accounting/compras-gastos/${id}/editar`)}
-              className="btn-secondary">
+              className="btn-secondary" title="Editar" aria-label="Editar">
               <Pencil size={14} /> <span className="hidden sm:inline">Editar</span>
             </button>
             <button type="button" onClick={() => navigate(`/accounting/compras-gastos/nuevo?duplicate=${id}`)}
-              className="btn-secondary" title="Duplicar — registrar una factura similar">
+              className="btn-secondary" title="Duplicar — registrar una factura similar" aria-label="Duplicar">
               <Copy size={14} /> <span className="hidden sm:inline">Duplicar</span>
             </button>
             <button type="button" onClick={reverseDoc} disabled={deleting}
-              className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 disabled:opacity-50">
+              className="btn-secondary text-rose-600 hover:bg-rose-50 hover:border-rose-200 disabled:opacity-50" title="Eliminar" aria-label="Eliminar">
               {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} <span className="hidden sm:inline">Eliminar</span>
             </button>
           </div>
@@ -334,7 +391,7 @@ export default function ComprasGastoDetail() {
                 {d.natureLabel}{d.number != null ? ` #${d.number}` : ''}
               </h1>
             </div>
-            <span className={`shrink-0 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${NATURE_BADGE[d.nature]}`}>{d.natureLabel}</span>
+            <span className={`shrink-0 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${NATURE_BADGE[d.nature] || NATURE_BADGE.gasto}`}>{d.natureLabel}</span>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-x-10 gap-y-3">
@@ -377,7 +434,9 @@ export default function ComprasGastoDetail() {
 
         <div className="px-4 sm:px-6 pb-2 min-w-0">
           {tab === 'lines' && (
-            <div className="overflow-x-auto">
+            <>
+            <RowCards inCard rows={lineCards} />
+            <div className="hidden md:block overflow-x-auto">
               {d.isLineBill ? (
                 <table className="table min-w-[640px]">
                   <thead>
@@ -454,13 +513,17 @@ export default function ComprasGastoDetail() {
                 </table>
               )}
             </div>
+            </>
           )}
 
           {tab === 'asiento' && (
             asientoLines.length === 0 ? (
               <p className="text-sm text-ink-400 py-6 text-center">Sin asiento contable.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <RowCards inCard rows={asientoCards}
+                footer={[['Débito', formatDop(debitTotal(asientoLines))], ['Crédito', formatDop(creditTotal(asientoLines))]]} />
+              <div className="hidden md:block overflow-x-auto">
                 <table className="table min-w-[560px]">
                   <thead>
                     <tr><th>Cuenta</th><th>Detalle</th><th className="text-right whitespace-nowrap">Débito</th><th className="text-right whitespace-nowrap">Crédito</th></tr>
@@ -487,6 +550,7 @@ export default function ComprasGastoDetail() {
                   </tfoot>
                 </table>
               </div>
+              </>
             )
           )}
 

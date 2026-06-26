@@ -22,6 +22,7 @@ import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import {
   resolveJournal, resolveTrialBalance, resolveAccountLedger, resolveChartTree, sourceDocHref,
   postableAccounts, assertBalanced, buildJournalEntry, buildReversalEntry, debitTotal, creditTotal,
+  ACCOUNT_CLASS_NAMES,
 } from '../../core/accounting/index.js';
 
 /**
@@ -40,7 +41,9 @@ const SOURCE_LABEL = {
   adjustment: 'Ajuste',
 };
 
-function emptyLine() { return { accountCode: '', debit: '', credit: '' }; }
+// A stable id per line so React keys by identity, not array index — deleting a
+// middle line must not shift the controlled inputs/focus onto the wrong row.
+function emptyLine() { return { id: newId(), accountCode: '', debit: '', credit: '' }; }
 
 /**
  * Customizable desktop columns (Shopify "edit columns" pattern) for the Mayor
@@ -135,10 +138,22 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
-  const options = useMemo(
-    () => postableAccounts(accounts).sort((a, b) => a.code.localeCompare(b.code)),
-    [accounts],
-  );
+  // Postable accounts grouped by class (Activos / Pasivos / …) so a large DGII
+  // catálogo is navigable in the native picker via <optgroup>, instead of one
+  // flat 100-row list.
+  const optionGroups = useMemo(() => {
+    const sorted = postableAccounts(accounts).sort((a, b) => a.code.localeCompare(b.code));
+    const byClass = new Map();
+    for (const a of sorted) {
+      // Normalize a missing/invalid class into a "0" bucket so it groups
+      // predictably (sorts first, labelled "Otras") instead of an NaN sort.
+      const cls = Number.isFinite(a.class) ? a.class : 0;
+      if (!byClass.has(cls)) byClass.set(cls, []);
+      byClass.get(cls).push(a);
+    }
+    return [...byClass.entries()].sort((a, b) => a[0] - b[0])
+      .map(([cls, accts]) => ({ cls, label: ACCOUNT_CLASS_NAMES[cls] || (cls ? `Clase ${cls}` : 'Otras cuentas'), accts }));
+  }, [accounts]);
 
   const parsed = lines.map((l) => ({
     accountCode: l.accountCode,
@@ -190,20 +205,32 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
 
       <div className="space-y-2">
         {lines.map((l, i) => (
-          <div key={i} className="flex flex-wrap gap-2 items-center">
+          <div key={l.id} className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <select value={l.accountCode} onChange={(e) => setLine(i, { accountCode: e.target.value })}
-              className="input flex-1 min-w-0">
+              aria-label="Cuenta" className="input min-w-0 sm:flex-1">
               <option value="">— Cuenta —</option>
-              {options.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+              {optionGroups.map((g) => (
+                <optgroup key={g.cls} label={`${g.cls} · ${g.label}`}>
+                  {g.accts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                </optgroup>
+              ))}
             </select>
-            <input type="number" step="0.01" min="0" inputMode="decimal" value={l.debit} placeholder="Débito"
-              onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })}
-              className="input w-28 min-w-0 text-right tabular-nums" />
-            <input type="number" step="0.01" min="0" inputMode="decimal" value={l.credit} placeholder="Crédito"
-              onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
-              className="input w-28 min-w-0 text-right tabular-nums" />
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2">
+              <label className="block">
+                <span className="sm:hidden block text-[11px] text-ink-400 mb-0.5">Débito</span>
+                <input type="number" step="0.01" min="0" inputMode="decimal" value={l.debit} placeholder="Débito" aria-label="Débito"
+                  onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })}
+                  className="input w-full sm:w-28 min-w-0 text-right tabular-nums" />
+              </label>
+              <label className="block">
+                <span className="sm:hidden block text-[11px] text-ink-400 mb-0.5">Crédito</span>
+                <input type="number" step="0.01" min="0" inputMode="decimal" value={l.credit} placeholder="Crédito" aria-label="Crédito"
+                  onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
+                  className="input w-full sm:w-28 min-w-0 text-right tabular-nums" />
+              </label>
+            </div>
             <button type="button" onClick={() => setLines((arr) => arr.length > 2 ? arr.filter((_, idx) => idx !== i) : arr)}
-              className="btn-icon text-ink-400 hover:text-rose-600 hover:bg-rose-50" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={15} /></button>
+              className="btn-icon text-ink-400 hover:text-rose-600 hover:bg-rose-50 justify-self-end sm:self-auto" title="Eliminar línea" aria-label="Eliminar línea"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>
@@ -214,12 +241,17 @@ function NewEntryForm({ accounts, profileId, userId, onClose }) {
       </button>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 pt-3 border-t border-ink-100">
-        <div className="text-sm tabular-nums text-ink-600 min-w-0">
-          Débito <b>{formatDop(totDebit)}</b> · Crédito <b>{formatDop(totCredit)}</b>
-          {imbalance !== 0 && <span className="ml-2 text-rose-600">Descuadre {formatDop(imbalance)}</span>}
+        <div className="flex items-center flex-wrap gap-2 text-sm tabular-nums text-ink-600 min-w-0">
+          <span>Débito <b>{formatDop(totDebit)}</b> · Crédito <b>{formatDop(totCredit)}</b></span>
+          {imbalance === 0 && totDebit > 0
+            ? <span className="chip bg-emerald-100 text-emerald-700">Cuadrado ✓</span>
+            : imbalance !== 0
+              ? <span className="chip bg-rose-100 text-rose-700">Descuadre {formatDop(imbalance)}</span>
+              : null}
         </div>
         <button type="button" onClick={save} disabled={saving || imbalance !== 0 || totDebit === 0}
-          className="btn-primary self-start sm:self-auto">
+          className="btn-primary self-start sm:self-auto"
+          title={imbalance !== 0 ? 'Cuadra el débito con el crédito para registrar' : totDebit === 0 ? 'Agrega al menos una línea con monto' : 'Registrar asiento'}>
           {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Registrar asiento
         </button>
       </div>
@@ -240,14 +272,21 @@ export default function Ledger() {
   const [renameErr, setRenameErr] = useState('');
   // Deep-link: /accounting/ledger?cuenta=<code> opens the Mayor for that account
   // (account drill-down from the Balanza and the financial statements).
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   useEffect(() => {
     const c = params.get('cuenta');
     if (c) { setTab('mayor'); setMayorCode(c); }
     const t = params.get('tab');
     if (t === 'diario' || t === 'mayor' || t === 'balanza') setTab(t);
-    if (params.get('new')) setShowForm(true);
-  }, [params]);
+    if (params.get('new')) {
+      setShowForm(true);
+      // Consume the one-shot deep-link param so closing the form sticks (and a
+      // later re-render that re-reads params can't re-open it).
+      const next = new URLSearchParams(params);
+      next.delete('new');
+      setParams(next, { replace: true });
+    }
+  }, [params, setParams]);
 
   const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
   const entriesQ = useLiveQueryStatus(() => db.journalEntries.where('profileId').equals(scope).toArray(), [scope], []);
