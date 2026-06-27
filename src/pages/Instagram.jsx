@@ -175,8 +175,15 @@ export default function Instagram() {
     const measure = () => {
       const el = shellRef.current;
       if (!el) return;
-      const deck = deckRef.current;
-      if (deck) setDeckW(deck.clientWidth);
+      // Pin each board to the SHELL's content width, never the deck's. The
+      // shell has no horizontal padding, so its content box IS the deck's
+      // available width — but unlike the deck (a flex item that is ALSO an
+      // overflow-x-auto flex container, which a browser can momentarily size to
+      // its `basis-full` iOS-too-wide children), the shell is a plain
+      // overflow-hidden block whose clientWidth can never read wider than the
+      // viewport. Measuring the deck pinned every board a viewport too wide and
+      // the content (chart, post text, cards) hard-clipped at the screen edge.
+      setDeckW(el.clientWidth);
       const top = el.getBoundingClientRect().top;
       // Sum the bottom padding of every wrapper between the shell and the app
       // scroll container (<main>): the shell sits at the end of those padded
@@ -194,9 +201,15 @@ export default function Instagram() {
     measure();
     window.addEventListener('resize', measure);
     window.addEventListener('orientationchange', measure);
+    // A ResizeObserver catches the width changes the window events miss — the
+    // sidebar collapsing, the app chrome settling after first paint — so the
+    // boards re-pin to the real width instead of staying stuck at a stale one.
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(shellRef.current);
     return () => {
       window.removeEventListener('resize', measure);
       window.removeEventListener('orientationchange', measure);
+      ro.disconnect();
     };
   }, [linked, anyData]);
 

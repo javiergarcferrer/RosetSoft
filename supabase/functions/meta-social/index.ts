@@ -1010,11 +1010,16 @@ Deno.serve(async (req) => {
       // each row tagged with its account currency. One bad account → [] (skipped).
       orderedAccts.length && bizToken
         ? safe('campaigns', async () => {
+          // A representative ad's creative gives each campaign a VISUAL on the
+          // board. The nested `ads{creative{…}}` expansion can 400 on some
+          // accounts, so fall back to the plain (image-less) fields rather than
+          // let one account blank its whole campaign list.
+          const INS = 'insights.date_preset(last_28d){spend,impressions,clicks,actions}';
+          const WITH_THUMB = `id,name,status,effective_status,${INS},ads.limit(1){creative{thumbnail_url,image_url}}`;
+          const PLAIN = `id,name,status,effective_status,${INS}`;
           const lists = await Promise.all(orderedAccts.map((acc) =>
-            fb(`${acc.id}/campaigns`, bizToken, {
-              fields: 'id,name,status,effective_status,insights.date_preset(last_28d){spend,impressions,clicks,actions}',
-              limit: '100',
-            })
+            fb(`${acc.id}/campaigns`, bizToken, { fields: WITH_THUMB, limit: '100' })
+              .catch(() => fb(`${acc.id}/campaigns`, bizToken, { fields: PLAIN, limit: '100' }))
               .then((r) => (r?.data || []).map((c: Record<string, unknown>) => ({ ...c, currency: acc.currency || null })))
               .catch(() => [] as Record<string, unknown>[])));
           return { data: lists.flat() };

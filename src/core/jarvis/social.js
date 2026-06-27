@@ -172,6 +172,10 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       const impressions = num(ins.impressions);
       const results = resultType ? actionCount(ins, resultType[0]) : null;
       const status = c.effective_status || c.status || null;
+      // A representative ad's creative — the campaign's VISUAL on the board.
+      // `image_url` is full-res (best for the expanded peek), `thumbnail_url` a
+      // ~64px preview (enough for the row chip); either may be absent.
+      const creative = c.ads?.data?.[0]?.creative || null;
       return {
         id: c.id || null,
         name: c.name || c.campaign_name || '—',
@@ -183,9 +187,13 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
         currency: c.currency || null,
         spend,
         clicks,
+        impressions,
         results,
         ctrPct: impressions > 0 ? (clicks / impressions) * 100 : null,
         cpc: clicks > 0 ? spend / clicks : null,
+        costPerResult: results > 0 ? spend / results : null,
+        thumb: creative?.thumbnail_url || creative?.image_url || null,
+        image: creative?.image_url || creative?.thumbnail_url || null,
       };
     })
     .sort((a, b) => b.spend - a.spend);

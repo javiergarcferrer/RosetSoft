@@ -6,10 +6,28 @@
 // and a jump straight to the Business Suite ad summary. (Publicar — posting
 // content — lives on the Contenido section, not here.)
 import { useCallback, useMemo, useState } from 'react';
-import { Megaphone, ExternalLink } from 'lucide-react';
+import {
+  Megaphone, ExternalLink, ChevronDown, MousePointerClick, Target, Eye, Coins, Percent,
+} from 'lucide-react';
 import { supabase } from '../../db/supabaseClient.js';
+import ImageView from '../ImageView.tsx';
 
 const money = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const money2 = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const intFmt = (n) => Number(n || 0).toLocaleString('en-US');
+
+// One labelled figure in the expanded ad's analytics grid — null values are
+// filtered out by the caller, so a tile only renders when there's a real number.
+function MetricTile({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-lg bg-ink-50 px-2.5 py-2">
+      <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
+        <Icon size={12} /> {label}
+      </div>
+      <div className="mt-0.5 font-display text-base font-semibold tabular-nums text-ink-900">{value}</div>
+    </div>
+  );
+}
 const PAUSED = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED']);
 const bucketOf = (c) => {
   const s = String(c.status || '').toUpperCase();
@@ -23,6 +41,7 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
   const [tab, setTab] = useState('active');
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
+  const [openId, setOpenId] = useState(null); // the tapped ad, expanded to its visual + analytics
 
   const groups = useMemo(() => {
     const g = { active: [], paused: [], inactive: [] };
@@ -103,29 +122,74 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
                 {tab === 'active' ? 'Sin campañas activas.' : tab === 'paused' ? 'Sin campañas pausadas.' : 'Sin campañas inactivas.'}
               </div>
             ) : (
-              <div className="divide-y divide-ink-100">
+              <div className="space-y-1.5">
                 {rows.map((c) => {
                   const b = bucketOf(c);
                   const cur = c.currency || adCurrency; // each campaign bills in its own account's currency
+                  const open = openId === c.id;
+                  const dot = b === 'active' ? 'bg-emerald-500' : b === 'paused' ? 'bg-amber-400' : 'bg-ink-300';
+                  const metrics = [
+                    { key: 'spend', icon: Coins, label: 'Gasto', value: c.spend != null ? `${money(c.spend)}${cur ? ` ${cur}` : ''}` : null },
+                    { key: 'results', icon: Target, label: 'Resultados', value: c.results != null ? intFmt(c.results) : null },
+                    { key: 'cpr', icon: Coins, label: 'Costo/resultado', value: c.costPerResult != null ? `${money2(c.costPerResult)}${cur ? ` ${cur}` : ''}` : null },
+                    { key: 'clicks', icon: MousePointerClick, label: 'Clics', value: c.clicks != null ? intFmt(c.clicks) : null },
+                    { key: 'ctr', icon: Percent, label: 'CTR', value: c.ctrPct != null ? `${c.ctrPct.toFixed(2)}%` : null },
+                    { key: 'cpc', icon: Coins, label: 'CPC', value: c.cpc != null ? `${money2(c.cpc)}${cur ? ` ${cur}` : ''}` : null },
+                    { key: 'impr', icon: Eye, label: 'Impresiones', value: c.impressions != null ? intFmt(c.impressions) : null },
+                  ].filter((m) => m.value != null);
                   return (
-                    <div key={c.id} className="flex items-center gap-3 px-2 py-2.5 text-sm">
-                      <span
-                        className={`h-2 w-2 flex-none rounded-full ${b === 'active' ? 'bg-emerald-500' : b === 'paused' ? 'bg-amber-400' : 'bg-ink-300'}`}
-                        title={c.status || ''}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-ink-800">{c.name}</span>
-                      <span className="flex-none text-xs text-ink-400 tabular-nums">
-                        {c.spend != null ? money(c.spend) : '—'}{cur ? ` ${cur}` : ''}{c.results != null ? ` · ${c.results} res.` : ''}
-                      </span>
-                      {b !== 'inactive' && (
-                        <button
-                          type="button"
-                          disabled={busy === c.id || !c.id}
-                          onClick={() => toggle(c)}
-                          className={`flex-none rounded-full px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${b === 'active' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                        >
-                          {busy === c.id ? '…' : b === 'active' ? 'Pausar' : 'Reanudar'}
-                        </button>
+                    <div key={c.id} className="overflow-hidden rounded-xl border border-ink-100 bg-surface">
+                      {/* Tap the row to peek the ad's visual + full analytics. */}
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(open ? null : c.id)}
+                        aria-expanded={open}
+                        className="flex w-full items-center gap-3 px-2.5 py-2 text-left transition-colors hover:bg-ink-50"
+                      >
+                        <div className="relative h-12 w-12 flex-none overflow-hidden rounded-lg bg-ink-100">
+                          {c.thumb ? (
+                            <ImageView id={null} fallbackUrl={c.thumb} alt="" className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
+                          ) : (
+                            <span className="flex h-full w-full items-center justify-center text-ink-300"><Megaphone size={18} /></span>
+                          )}
+                          <span className={`absolute right-1 top-1 h-2 w-2 rounded-full ring-2 ring-surface ${dot}`} title={c.status || ''} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-ink-800">{c.name}</div>
+                          <div className="mt-0.5 truncate text-xs text-ink-400 tabular-nums">
+                            {c.spend != null ? `${money(c.spend)}${cur ? ` ${cur}` : ''}` : '—'}{c.results != null ? ` · ${intFmt(c.results)} res.` : ''}
+                          </div>
+                        </div>
+                        <ChevronDown size={16} className={`flex-none text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {open && (
+                        <div className="border-t border-ink-100 px-2.5 pb-2.5 pt-2.5">
+                          {c.image && (
+                            <div className="mb-2.5 overflow-hidden rounded-lg bg-ink-100">
+                              <ImageView id={null} fallbackUrl={c.image} alt={c.name} className="max-h-52 w-full object-cover" placeholderClassName="aspect-square w-full" />
+                            </div>
+                          )}
+                          {metrics.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                              {metrics.map((m) => <MetricTile key={m.key} icon={m.icon} label={m.label} value={m.value} />)}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-ink-400">Aún sin métricas reportadas para este anuncio.</div>
+                          )}
+                          <div className="mt-2.5 flex items-center justify-end gap-2">
+                            {b !== 'inactive' && (
+                              <button
+                                type="button"
+                                disabled={busy === c.id || !c.id}
+                                onClick={() => toggle(c)}
+                                className={`rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50 ${b === 'active' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                              >
+                                {busy === c.id ? '…' : b === 'active' ? 'Pausar' : 'Reanudar'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
                   );
