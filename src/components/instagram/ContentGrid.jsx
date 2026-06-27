@@ -194,7 +194,7 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [], pr
               <span className="flex items-center gap-2 font-medium"><Sparkles size={15} /> Rendimiento de la publicación</span>
               <button type="button" className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-400 hover:bg-ink-50 hover:text-ink-700" onClick={() => setSelected(null)} aria-label="Cerrar"><X size={18} /></button>
             </div>
-            <div className="grid gap-4 p-5 md:grid-cols-2 [padding-bottom:calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+            <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2 [padding-bottom:calc(1.25rem+env(safe-area-inset-bottom,0px))]">
               <div>
                 <div className="aspect-square w-full overflow-hidden rounded-lg bg-ink-100">
                   <ImageView id={null} fallbackUrl={selected.thumb} alt={selected.excerpt} className="h-full w-full object-cover" placeholderClassName="h-full w-full" />

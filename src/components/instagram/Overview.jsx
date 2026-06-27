@@ -67,7 +67,7 @@ function Overview({ st, sp, onGoToInteraccion, onGoToContenido }) {
         <Stat label="Toques al perfil · 28d" value={st?.kpis.profileTaps28 != null ? fmt(st.kpis.profileTaps28) : '—'} sub="enlaces y botones" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Reach trend + discovery split */}
         <div className="card card-pad lg:col-span-2">
           <div className="flex items-center justify-between gap-2">
