@@ -163,27 +163,16 @@ export default function Instagram() {
   // sticky topbar sits above us; JARVIS could hard-code 100dvh, we can't). ─
   const shellRef = useRef(null);
   const [shellH, setShellH] = useState(null);
-  // The deck's exact pixel width — each board is sized to THIS, not to a
-  // percentage flex-basis. iOS Safari resolves `flex-basis:100%` on shrink-0
-  // children of a horizontal scroll container against the SCROLLABLE width
-  // (N boards), so every board came out a viewport too wide and its content
-  // (post text, the chart, the Publicar button) was hard-clipped at the screen
-  // edge instead of fitting. An explicit px width pins each board to one screen.
-  const [deckW, setDeckW] = useState(null);
+  // Board WIDTH is now pure CSS (the deck is a grid whose every column is
+  // `auto-cols-[100%]`), so there's nothing to measure horizontally — only the
+  // vertical lock below. (We dropped the old measured-px width: it depended on
+  // a JS measurement landing right on iOS and didn't, which is what kept the
+  // right edge clipping.)
   useLayoutEffect(() => {
     if (!linked) return undefined;
     const measure = () => {
       const el = shellRef.current;
       if (!el) return;
-      // Pin each board to the SHELL's content width, never the deck's. The
-      // shell has no horizontal padding, so its content box IS the deck's
-      // available width — but unlike the deck (a flex item that is ALSO an
-      // overflow-x-auto flex container, which a browser can momentarily size to
-      // its `basis-full` iOS-too-wide children), the shell is a plain
-      // overflow-hidden block whose clientWidth can never read wider than the
-      // viewport. Measuring the deck pinned every board a viewport too wide and
-      // the content (chart, post text, cards) hard-clipped at the screen edge.
-      setDeckW(el.clientWidth);
       const top = el.getBoundingClientRect().top;
       // Sum the bottom padding of every wrapper between the shell and the app
       // scroll container (<main>): the shell sits at the end of those padded
@@ -201,9 +190,9 @@ export default function Instagram() {
     measure();
     window.addEventListener('resize', measure);
     window.addEventListener('orientationchange', measure);
-    // A ResizeObserver catches the width changes the window events miss — the
+    // A ResizeObserver catches the layout changes the window events miss — the
     // sidebar collapsing, the app chrome settling after first paint — so the
-    // boards re-pin to the real width instead of staying stuck at a stale one.
+    // height lock re-measures instead of staying stuck at a stale value.
     const ro = new ResizeObserver(() => measure());
     ro.observe(shellRef.current);
     return () => {
@@ -349,15 +338,21 @@ export default function Instagram() {
           // nothing leaks into the deck's horizontal scroll and knocks the snap
           // off-center, and HIDES its vertical scrollbar — the visible gutter
           // was reading as a grey line clipping the right edge of the boards.
+          // A GRID track deck, not a flex one: `grid-flow-col` + every column
+          // `auto-cols-[100%]` makes each board exactly ONE container-width.
+          // Grid resolves that 100% against the deck's DEFINITE inline size,
+          // unlike flex-basis:100%, which iOS Safari mis-resolves against the
+          // SCROLLABLE width (N boards) and blew every board a viewport too wide
+          // — the right-edge clip. `min-w-0` on deck + boards stops wide content
+          // (a long post title, the chart) from forcing a track past 100%.
           <div
             ref={deckRef}
-            className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [overscroll-behavior:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="grid auto-cols-[100%] grid-flow-col min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [overscroll-behavior:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {sections.map((sec) => (
               <section
                 key={sec.id}
-                className="min-w-0 h-full shrink-0 basis-full snap-start overflow-y-auto overflow-x-hidden overscroll-contain pb-4 [scroll-snap-stop:always] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                style={deckW ? { flexBasis: `${deckW}px`, width: `${deckW}px`, maxWidth: `${deckW}px` } : undefined}
+                className="h-full min-w-0 snap-start overflow-y-auto overflow-x-hidden overscroll-contain pb-4 [scroll-snap-stop:always] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 aria-label={sec.label}
               >
                 {renderBoard(sec)}
