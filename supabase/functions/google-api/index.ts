@@ -2,7 +2,9 @@
 //
 // The dealer connects a single Google account via OAuth 2.0 with offline access
 // (→ a refresh token). That one grant powers BOTH surfaces:
-//   • Gmail  — send quotes / files / mailing-list mail (with PDF attachments).
+//   • Gmail  — send quotes / files / mailing-list mail (with PDF attachments),
+//              and READ inbound mail (gmail.readonly) so the meta-receipts job
+//              can pull Meta Ads payment receipts from the inbox.
 //   • Drive  — a folder per importation, upload + list its documents, pick
 //              existing files into the app.
 // The OAuth client creds + refresh token live in the write-only
@@ -70,11 +72,16 @@ const DEFAULT_ROOT = 'RosetSoft';
 // My Drive; `supportsAllDrives` also lets create/copy/upload/delete target them.
 const ALL_DRIVES = 'includeItemsFromAllDrives=true&supportsAllDrives=true';
 
-// One consent covers both surfaces. gmail.send (send-only, no inbox read),
-// full drive (browse + create + upload — drive.file alone can't see files the
-// app didn't create, which "add from Drive" needs), and the account email.
+// One consent covers all surfaces. gmail.send (send quotes/files/mail),
+// gmail.readonly (read INBOUND mail — the `meta-receipts` job searches the
+// inbox for Meta Ads payment receipts to file as gastos with the receipt
+// attached), full drive (browse + create + upload — drive.file alone can't see
+// files the app didn't create, which "add from Drive" needs), and the account
+// email. Adding gmail.readonly is why a connected account must RE-CONNECT once
+// (Google forces re-consent for a newly-requested scope).
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/userinfo.email',
   'openid',

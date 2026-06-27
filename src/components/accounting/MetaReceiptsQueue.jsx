@@ -13,6 +13,7 @@ import {
 } from '../../core/accounting/index.js';
 
 const SOURCE_BADGE = {
+  email: { label: 'Recibo de Meta', cls: 'bg-emerald-50 text-emerald-700' },
   invoice: { label: 'Factura', cls: 'bg-emerald-50 text-emerald-700' },
   spend: { label: 'Gasto del ciclo', cls: 'bg-ink-100 text-ink-600' },
 };

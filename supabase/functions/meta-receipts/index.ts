@@ -6,12 +6,16 @@
 // tipo 02) with the receipt pre-attached. Human-in-the-loop by design: a foreign
 // charge is never silently booked.
 //
-// Billing figure ("billed amount per cycle"):
+// Billing figure ("billed amount per cycle"), best source first:
+//   • Gmail receipts (card / PayPal threshold billing) → when Google is
+//     connected WITH gmail.readonly, search the inbox for Meta's per-charge
+//     payment-receipt emails, sum the month's charges (exactly what hit the
+//     card) and keep the receipts themselves as the attached document. This is
+//     the only place the receipt PDF/HTML exists on threshold billing.
 //   • Net-30 / monthly-invoicing accounts → the real invoice (amount + PDF
 //     download link) via business_invoices, when reachable. Best-effort.
-//   • Everyone else (card / PayPal — no invoice PDF on the API) → the cycle's
-//     account-level spend, with a deep link to the billing hub so the dealer can
-//     grab the emailed receipt in one click.
+//   • Fallback (no Gmail, no invoice) → the cycle's account-level spend, with a
+//     deep link to the billing hub so the dealer can grab the receipt manually.
 //
 // Auth: invoked by the monthly pg_cron ({cron:true}, service-role bearer) and by
 // the in-app "Sincronizar" button ({sync:true}, an authenticated team user).
@@ -120,6 +124,167 @@ async function findInvoice(accountId: string, businessId: string | null, token: 
 const billingLink = (accountId: string) =>
   `https://business.facebook.com/billing_hub/accounts/details?asset_id=${bareAccount(accountId)}`;
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const DAY = 86400000;
+const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
+const gdate = (ms: number) => isoDay(new Date(ms)).replace(/-/g, '/'); // Gmail q wants YYYY/MM/DD
+
+// ── Google token (the SAME refresh token google-api stores; we just need
+// gmail.readonly granted on it) ─────────────────────────────────────────────
+async function resolveGoogleToken(admin: SupabaseClient): Promise<{ token: string; scopes: string }> {
+  const { data: g } = await admin.from('google_oauth_config')
+    .select('client_id, client_secret, access_token, refresh_token, token_expires_at, scopes')
+    .eq('profile_id', TEAM).maybeSingle();
+  if (!g?.refresh_token) return { token: '', scopes: '' };
+  const scopes = String(g.scopes || '');
+  const exp = g.token_expires_at ? Date.parse(g.token_expires_at) : 0;
+  if (g.access_token && exp && exp - Date.now() > 120_000) return { token: g.access_token, scopes };
+  if (!g.client_id || !g.client_secret) return { token: g.access_token || '', scopes };
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: g.client_id, client_secret: g.client_secret, grant_type: 'refresh_token', refresh_token: g.refresh_token }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d?.access_token) return { token: g.access_token || '', scopes };
+    const token = String(d.access_token);
+    await admin.from('google_oauth_config').update({
+      access_token: token,
+      token_expires_at: new Date(Date.now() + (Number(d.expires_in) || 3600) * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('profile_id', TEAM);
+    return { token, scopes };
+  } catch (_) {
+    return { token: g.access_token || '', scopes };
+  }
+}
+
+// ── Gmail read ──────────────────────────────────────────────────────────────
+function b64urlDecode(s: string): string {
+  try {
+    const bin = atob(String(s || '').replace(/-/g, '+').replace(/_/g, '/'));
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  } catch { return ''; }
+}
+async function gmailSearch(token: string, q: string): Promise<string[]> {
+  const url = new URL(`${GMAIL}/messages`);
+  url.searchParams.set('q', q);
+  url.searchParams.set('maxResults', '50');
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d?.error?.message || `Gmail ${r.status}`);
+  return ((d.messages || []) as Array<{ id: string }>).map((m) => m.id);
+}
+type GmailMsg = { subject: string; from: string; text: string; html: string; dateMs: number; messageId: string };
+function extractBodies(payload: Record<string, unknown> | undefined): { text: string; html: string } {
+  let text = '', html = '';
+  const walk = (p: Record<string, unknown> | undefined) => {
+    if (!p) return;
+    const mt = String(p.mimeType || '');
+    const data = (p.body as Record<string, unknown> | undefined)?.data as string | undefined;
+    if (data) {
+      if (mt === 'text/plain') text += b64urlDecode(data);
+      else if (mt === 'text/html') html += b64urlDecode(data);
+    }
+    for (const part of (p.parts as Array<Record<string, unknown>>) || []) walk(part);
+  };
+  walk(payload);
+  return { text, html };
+}
+async function gmailGet(token: string, id: string): Promise<GmailMsg> {
+  const r = await fetch(`${GMAIL}/messages/${id}?format=full`, { headers: { Authorization: `Bearer ${token}` } });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d?.error?.message || `Gmail ${r.status}`);
+  const headers = (d.payload?.headers || []) as Array<{ name: string; value: string }>;
+  const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value || '';
+  const { text, html } = extractBodies(d.payload);
+  return { subject: h('subject'), from: h('from'), dateMs: Number(d.internalDate) || 0, text, html, messageId: id };
+}
+
+// ── Meta receipt parser — BYTE-FOR-BYTE MIRROR of
+// src/lib/accounting/metaReceiptEmail.ts (the Deno↔Vite wall forbids importing
+// it). Canonical copy is pinned by tests/metaReceiptEmail.test.js; edit both. ─
+const _lc = (s: unknown) => String(s || '').toLowerCase();
+const _stripHtml = (h: unknown) => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+function _currencyOf(token: string): string {
+  const t = String(token || '').toUpperCase();
+  if (t === 'RD$' || t === 'DOP' || t === 'RD') return 'DOP';
+  if (t === 'US$' || t === 'USD' || t === '$') return 'USD';
+  return 'USD';
+}
+function _parseAmount(raw: string): number {
+  const n = Number(String(raw || '').replace(/,/g, ''));
+  return Number.isFinite(n) ? n : NaN;
+}
+function isMetaReceiptEmail(m: GmailMsg): boolean {
+  const from = _lc(m.from);
+  const fromMeta = /facebookmail\.com|facebook\.com|meta\.com|metaplatforms/.test(from);
+  const body = `${_lc(m.subject)} ${_lc(m.text) || _lc(_stripHtml(m.html))}`;
+  const aboutPayment = /(payment|receipt|amount billed|amount paid|you paid|recibo|pago|importe facturado|factura)/.test(body);
+  const aboutAds = /(ad|ads|anuncio|campaign|campaña|meta|facebook|instagram)/.test(body);
+  return fromMeta && aboutPayment && aboutAds;
+}
+const _AMOUNT_LABELS = [
+  'amount billed', 'amount paid', 'amount charged', 'you paid', 'total amount', 'total charged',
+  'importe facturado', 'importe pagado', 'monto pagado', 'monto facturado', 'total pagado', 'total',
+];
+const _MONEY = '(US\\$|RD\\$|\\$)\\s?([0-9][0-9.,]*)|([0-9][0-9.,]*)\\s?(USD|DOP|RD\\$)';
+function _extractAmount(body: string): { amount: number; currency: string } | null {
+  for (const label of _AMOUNT_LABELS) {
+    const re = new RegExp(`${label}[^0-9A-Za-z]{0,24}(?:${_MONEY})`, 'i');
+    const m = body.match(re);
+    if (m) {
+      const sym = m[1] || m[4] || '$';
+      const amt = _parseAmount(m[2] || m[3]);
+      if (amt > 0) return { amount: amt, currency: _currencyOf(sym) };
+    }
+  }
+  let best: { amount: number; currency: string } | null = null;
+  const re = new RegExp(_MONEY, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) {
+    const sym = m[1] || m[4] || '$';
+    const amt = _parseAmount(m[2] || m[3]);
+    if (amt > 0 && (!best || amt > best.amount)) best = { amount: amt, currency: _currencyOf(sym) };
+  }
+  return best;
+}
+const _REF_RE = /(?:reference number|payment reference|transaction id|transaction number|n[úu]mero de referencia|referencia)[:#\s]*([A-Z0-9][A-Z0-9-]{5,})/i;
+type ParsedReceipt = { amount: number; currency: string; chargedAt: number; receiptId: string };
+function parseMetaReceiptEmail(m: GmailMsg): ParsedReceipt | null {
+  if (!isMetaReceiptEmail(m)) return null;
+  const body = `${m.subject || ''}\n${m.text || _stripHtml(m.html)}`;
+  const found = _extractAmount(body);
+  if (!found || !(found.amount > 0)) return null;
+  const ref = body.match(_REF_RE)?.[1] || m.messageId || '';
+  return { amount: found.amount, currency: found.currency, chargedAt: Number(m.dateMs) || 0, receiptId: String(ref) };
+}
+function sumReceipts(parsed: Array<ParsedReceipt | null>) {
+  const list = parsed.filter((p): p is ParsedReceipt => !!p && p.amount > 0);
+  if (!list.length) return null;
+  const amount = round2(list.reduce((s, p) => s + p.amount, 0));
+  return { amount, currency: list[0].currency || 'USD', chargedAt: Math.max(...list.map((p) => p.chargedAt || 0)), count: list.length, receiptIds: list.map((p) => p.receiptId).filter(Boolean) };
+}
+
+// ── Receipt document: keep the month's receipt emails as one self-contained
+// HTML the dealer can open from the gasto. Uploaded to the public `documents`
+// bucket (the receipts are Meta→dealer mail, served off the Storage origin). ──
+const _esc = (s: unknown) => String(s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+function receiptBlock(em: GmailMsg, p: ParsedReceipt): string {
+  const head = `<div style="font:14px sans-serif;padding:8px 10px;background:#f3f3f3;border-bottom:1px solid #ddd"><b>Meta Ads</b> · ${p.currency} ${p.amount.toFixed(2)} · ${isoDay(new Date(p.chargedAt))} · ref ${_esc(p.receiptId)}</div>`;
+  const body = em.html ? em.html : `<pre style="white-space:pre-wrap;font:13px monospace;padding:10px">${_esc(em.text)}</pre>`;
+  return `<section style="margin:0 0 18px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden">${head}${body}</section>`;
+}
+async function uploadReceiptDoc(admin: SupabaseClient, accountId: string, period: string, blocks: string[]): Promise<string | null> {
+  if (!blocks.length) return null;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Meta Ads ${period}</title></head><body style="margin:16px;background:#fafafa">${blocks.join('')}</body></html>`;
+  const path = `comprobantes/meta-${bareAccount(accountId)}-${period}.html`;
+  const { error } = await admin.storage.from('documents')
+    .upload(path, new Blob([html], { type: 'text/html' }), { contentType: 'text/html', upsert: true });
+  if (error) { console.error('meta-receipts: receipt upload failed', error.message); return null; }
+  return admin.storage.from('documents').getPublicUrl(path).data.publicUrl;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
@@ -184,11 +349,72 @@ Deno.serve(async (req: Request) => {
     .select('id, status').in('id', ids);
   const lockedIds = new Set((locked || []).filter((r) => r.status !== 'pending').map((r) => r.id));
 
+  // The primary account — the consolidated payment method's receipts attach
+  // here (Meta's emailed receipts don't name an ad account; one card = one bill).
+  const primaryId = bareAccount(
+    cfg?.ad_account_id || (accounts.find((a) => (a as { account_status?: number }).account_status === 1) || accounts[0])?.id || '',
+  );
+
   const rows: Record<string, unknown>[] = [];
+  // Months whose charge was sourced from Gmail receipts — the spend pass skips
+  // them so the same money isn't booked twice (email figure is authoritative:
+  // it's exactly what hit the card, with the receipt document attached).
+  const coveredMonths = new Set<string>();
+
+  // ── Gmail receipt pass (only if Google is connected WITH gmail.readonly) ──
+  const { token: gToken, scopes: gScopes } = await resolveGoogleToken(admin);
+  const gmailReady = !!gToken && /gmail\.readonly/.test(gScopes);
+  let emailRows = 0;
+  if (gmailReady && primaryId) {
+    for (const m of months) {
+      const id = receiptId(primaryId, m.period);
+      if (lockedIds.has(id)) { coveredMonths.add(m.period); continue; }
+      const q = `from:(facebookmail.com OR facebook.com OR meta.com) (receipt OR payment OR recibo OR pago OR "amount billed" OR "importe facturado") after:${gdate(m.startMs)} before:${gdate(m.endMs + DAY)}`;
+      let msgIds: string[] = [];
+      try { msgIds = await gmailSearch(gToken, q); }
+      catch (e) { console.error('meta-receipts: gmail search failed', m.period, String((e as Error)?.message || e)); continue; }
+      const parsed: Array<ParsedReceipt | null> = [];
+      const blocks: string[] = [];
+      for (const mid of msgIds.slice(0, 50)) {
+        try {
+          const em = await gmailGet(gToken, mid);
+          const p = parseMetaReceiptEmail(em);
+          if (p) { parsed.push(p); blocks.push(receiptBlock(em, p)); }
+        } catch (_) { /* one bad message never sinks the month */ }
+      }
+      const sum = sumReceipts(parsed);
+      if (!sum) continue; // no receipts this month → leave it to the spend pass
+      coveredMonths.add(m.period);
+      const docUrl = (await uploadReceiptDoc(admin, primaryId, m.period, blocks)) || billingLink(primaryId);
+      const amountDop = sum.currency === 'DOP' ? sum.amount : (dopRate > 0 ? round2(sum.amount * dopRate) : null);
+      rows.push({
+        id,
+        profile_id: TEAM,
+        ad_account_id: primaryId,
+        period: m.period,
+        period_start_at: new Date(m.startMs).toISOString(),
+        period_end_at: new Date(m.endMs).toISOString(),
+        currency: sum.currency,
+        amount: sum.amount,
+        amount_dop: amountDop,
+        dop_rate: dopRate || null,
+        source: 'email',
+        invoice_url: docUrl,
+        invoice_number: sum.count > 1 ? `${sum.count} cargos` : (sum.receiptIds[0] || null),
+        status: 'pending',
+        raw: { period: m.period, source: 'email', charges: sum.count, receiptIds: sum.receiptIds },
+        updated_at: new Date().toISOString(),
+      });
+      emailRows++;
+    }
+  }
+
+  // ── Spend / invoice fallback pass (months Gmail didn't cover) ──
   for (const acc of accounts) {
     const currency = String(acc.currency || 'USD').toUpperCase();
     const businessId = acc.business?.id || null;
     for (const m of months) {
+      if (coveredMonths.has(m.period)) continue;
       const id = receiptId(acc.id, m.period);
       if (lockedIds.has(id)) continue;
 
@@ -239,5 +465,5 @@ Deno.serve(async (req: Request) => {
     created = rows.length;
   }
 
-  return json({ ok: true, accounts: accounts.length, synced: created, months: months.map((m) => m.period) });
+  return json({ ok: true, accounts: accounts.length, synced: created, fromEmail: emailRows, gmail: gmailReady, months: months.map((m) => m.period) });
 });
