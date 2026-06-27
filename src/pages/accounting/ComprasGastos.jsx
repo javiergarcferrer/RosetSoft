@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import MetaReceiptsQueue from '../../components/accounting/MetaReceiptsQueue.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import TabPills from '../../components/accounting/TabPills.jsx';
 import ResultBar from '../../components/accounting/ResultBar.jsx';
@@ -225,6 +226,8 @@ export default function ComprasGastos() {
         actions={<button type="button" onClick={() => navigate('/accounting/compras-gastos/nuevo')} className="btn-primary"><Plus size={15} /> Nuevo</button>} />
 
       <TabPills tabs={[{ key: 'list', label: 'Movimientos' }, { key: '606', label: '606' }]} active={tab} onChange={setTab} />
+
+      {tab === 'list' && <MetaReceiptsQueue />}
 
       <div className="flex flex-wrap items-start gap-2">
         <PeriodPicker from={from} to={to} onChange={({ from, to }) => { setFrom(from); setTo(to); }} />

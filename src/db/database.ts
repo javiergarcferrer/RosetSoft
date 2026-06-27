@@ -56,6 +56,7 @@ import type {
   ScheduledPost,
   IgEvent,
   IgMessage,
+  MetaReceipt,
   WaTemplateRejection,
   WaWebhookEvent,
 } from '../types/domain.ts';
@@ -145,6 +146,7 @@ const TABLES = {
   scheduledPosts:     { db: 'scheduled_posts',     pk: 'id' },
   igEvents:           { db: 'ig_events',           pk: 'id' },
   igMessages:         { db: 'ig_messages',         pk: 'id' },
+  metaReceipts:       { db: 'meta_receipts',       pk: 'id' },
   waTemplateRejections: { db: 'wa_template_rejections', pk: 'id' },
   waWebhookEvents:    { db: 'wa_webhook_events',    pk: 'id' },
   emailCampaigns:     { db: 'email_campaigns',      pk: 'id' },
@@ -211,6 +213,7 @@ export interface TableRowMap {
   scheduledPosts: ScheduledPost;
   igEvents: IgEvent;
   igMessages: IgMessage;
+  metaReceipts: MetaReceipt;
   waTemplateRejections: WaTemplateRejection;
   waWebhookEvents: WaWebhookEvent;
   emailCampaigns: EmailCampaign;

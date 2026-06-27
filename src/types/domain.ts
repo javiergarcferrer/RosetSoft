@@ -681,6 +681,35 @@ export interface Expense {
 }
 
 /**
+ * A Meta Ads billing record per closed cycle, pulled by the `meta-receipts`
+ * Edge Function and parked as a PENDING draft. The dealer reviews it in Compras
+ * y gastos and posts it → an `expenses` row (`expenseId`); the draft then flips
+ * to `posted`. `amount` is the account currency; `amountDop` the denormalized
+ * DOP display (the authoritative conversion is recomputed by the Model on post).
+ */
+export interface MetaReceipt {
+  id: string;
+  profileId: string;
+  adAccountId: string;
+  /** `YYYY-MM` billing cycle. */
+  period: string;
+  periodStartAt?: number;
+  periodEndAt?: number;
+  currency?: string;
+  amount?: number;
+  amountDop?: number | null;
+  dopRate?: number | null;
+  source?: 'invoice' | 'spend';
+  invoiceUrl?: string | null;
+  invoiceNumber?: string | null;
+  status: 'pending' | 'posted' | 'dismissed';
+  expenseId?: string | null;
+  raw?: unknown;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * A recognized sale (Facturación) — posted at delivery. Snapshots the booked
  * DOP figures + NCF and links to the asiento it generated. The 607 and the
  * ITBIS liquidation (IT-1) project off these. One per quote.

@@ -181,6 +181,14 @@ verify_jwt = false
 [functions.ig-publish-worker]
 verify_jwt = false
 
+# meta-receipts pulls Meta Ads billing per closed cycle into the meta_receipts
+# draft queue (reviewed + posted as gastos). pg_cron pings it monthly with the
+# service-role key; the in-app "Sincronizar" button calls it as an authenticated
+# user. It verifies the caller ITSELF (service-role bearer OR auth.getUser), so
+# the gateway check is off — same as meta-social.
+[functions.meta-receipts]
+verify_jwt = false
+
 # ── DGII e-CF RECEPTOR services (certification steps 8–11) ──────────────────
 # The three web services DGII validates to certify us as a RECEPTOR (the
 # inbound half of e-CF, the part ecf-send does NOT do). DGII / other emisores

@@ -39,6 +39,10 @@ export { resolveVendorProfile } from './vendorProfile.js';
 export { resolveExpensesList, resolve606, tipo606For, DGII_606_TIPO_LABEL } from './expenses.js';
 export { computeExpenseTaxes, buildExpenseEntry } from '../../lib/accounting/expense.js';
 
+// ── Meta Ads receipts → gasto drafts (the review queue + the Model draft)
+export { resolveMetaReceiptsQueue, findMetaSupplier } from './metaReceipts.js';
+export { metaReceiptDraft, billingPeriodLabel } from '../../lib/accounting/metaReceipts.js';
+
 // ── compras y gastos (unified pane): the merged + filterable list VM + natures
 export {
   resolvePurchasesExpenses, resolvePurchaseExpenseDetail, purchaseNature, NATURES, NATURE_LABEL,
