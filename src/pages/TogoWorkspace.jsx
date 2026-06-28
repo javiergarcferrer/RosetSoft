@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Inbox, Boxes, ExternalLink, Copy, Check } from 'lucide-react';
+import { Inbox, Boxes, ExternalLink, Copy, Check, X, ArrowRight, Maximize2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
@@ -85,24 +86,24 @@ export default function TogoWorkspace() {
 }
 
 /**
- * The Configurador tab is a LIVE PREVIEW of the public widget — the exact same
- * embed customers use on the dealer's site, in an <iframe>, inside a faux browser
- * shell so it reads as "this is what's out there on alcover.do". There is no
- * separate in-app configurator anymore: one widget, previewed here, embedded
- * there — so they can never drift. What a visitor builds here lands in
- * Solicitudes (a pending request) to promote into a quote.
+ * The Configurador tab previews the public LAUNCHER exactly as customers meet it
+ * on the dealer's site: an attractive "Configura tu Togo" card that opens the
+ * configurator in a FULLSCREEN modal. Same card + popup the embed snippet ships,
+ * so the in-app preview can never drift from what's deployed. What a visitor
+ * builds in the modal lands in Solicitudes (a pending request) to promote.
  */
 function TogoLivePreview() {
   const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(false);
   const url = togoEmbedUrl();
   const copy = async () => {
     try { await navigator.clipboard.writeText(togoEmbedSnippet()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
   };
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-ink-500">
-          Vista <b className="text-ink-700">en vivo</b> del configurador público — exactamente lo que ven tus clientes en tu web.
+          Así lo ven tus clientes en tu web: un <b className="text-ink-700">card</b> que abre el configurador a <b className="text-ink-700">pantalla completa</b>.
         </p>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={copy} className="btn-ghost text-xs">{copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />} {copied ? 'Copiado' : 'Copiar código'}</button>
@@ -110,27 +111,72 @@ function TogoLivePreview() {
         </div>
       </div>
 
-      {/* Browser-shell mockup so the embed reads as it would on the dealer's site. */}
-      <div className="rounded-xl border border-ink-200 overflow-hidden shadow-soft bg-white">
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-ink-100 bg-ink-50">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-          </span>
-          <span className="flex-1 mx-2 truncate rounded-md bg-surface border border-ink-200 px-3 py-1 text-[11px] text-ink-500 text-center">
-            alcover.do
-          </span>
-        </div>
-        <iframe
-          src={url}
-          title="Configurador Togo — vista en vivo"
-          className="w-full bg-white border-0 block h-[78vh] min-h-[560px]"
-          loading="lazy"
-          allow={TOGO_EMBED_ALLOW}
-          allowFullScreen
-        />
+      {/* The launch card, on a soft "page" backdrop so it reads as it would on
+          the dealer's site. Clicking it opens the fullscreen modal. */}
+      <div className="grid place-items-center rounded-2xl border border-ink-200 bg-ink-50/60 px-4 py-12 sm:py-16">
+        <TogoLaunchCard onOpen={() => setOpen(true)} />
       </div>
+
+      <TogoConfiguratorModal open={open} url={url} onClose={() => setOpen(false)} />
     </div>
+  );
+}
+
+/** The attractive "Configura tu Togo" launch card — the in-app twin of the
+ *  embed snippet's card. Clicking it opens the fullscreen configurator modal. */
+function TogoLaunchCard({ onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full max-w-lg flex items-center gap-4 text-left rounded-2xl border border-ink-200 bg-surface p-4 sm:p-5 shadow-soft hover:shadow-pop hover:-translate-y-0.5 active:translate-y-0 transition-all"
+    >
+      <span className="shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-ink-900 text-white grid place-items-center">
+        <TogoIcon size={44} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[10px] font-semibold tracking-[0.13em] text-ink-400 uppercase">Ligne Roset · Togo</span>
+        <span className="block font-display font-semibold text-lg sm:text-xl text-ink-900 leading-tight mt-0.5">Diseña tu Togo a tu medida</span>
+        <span className="block text-xs text-ink-500 mt-1 leading-relaxed">Arma tu sofá modular, pruébalo en distintas telas y recibe tu cotización al instante.</span>
+        <span className="inline-flex items-center gap-1.5 mt-2.5 text-sm font-semibold text-ink-900">
+          Configurar mi Togo <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** The fullscreen configurator modal — a portalled `fixed inset-0` overlay with a
+ *  slim close bar over the live embed iframe. Esc / the X close it; body scroll
+ *  locks while open. Mirrors the embed snippet's popup so in-app == on-site. */
+function TogoConfiguratorModal({ open, url, onClose }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [open, onClose]);
+  if (!open || typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex flex-col bg-surface animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-label="Configurador Togo">
+      <div className="flex items-center justify-between h-12 px-2.5 pl-4 border-b border-ink-200 bg-surface shrink-0">
+        <span className="inline-flex items-center gap-2 text-sm font-display font-semibold text-ink-800">
+          <Maximize2 size={14} className="text-brand-500" /> Configura tu Togo
+        </span>
+        <button type="button" onClick={onClose} className="btn-icon text-ink-500 hover:text-ink-800 hover:bg-ink-100" aria-label="Cerrar">
+          <X size={18} />
+        </button>
+      </div>
+      <iframe
+        src={url}
+        title="Configurador Togo"
+        className="flex-1 w-full border-0 block bg-surface"
+        allow={TOGO_EMBED_ALLOW}
+        allowFullScreen
+      />
+    </div>,
+    document.body,
   );
 }
