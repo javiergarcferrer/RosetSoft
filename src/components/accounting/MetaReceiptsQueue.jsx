@@ -56,8 +56,22 @@ export default function MetaReceiptsQueue() {
     receipts: receiptsQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, dopRate,
   }), [receiptsQ.data, suppliersQ.data, accountsQ.data, dopRate]);
 
-  // Hidden until there's a pending draft to review (the cron fills it silently).
-  if (!vm.count) return null;
+  // Empty queue → a slim, always-visible bar so the dealer can pull receipts on
+  // demand (the cron also fills it monthly). The full panel renders below once
+  // there's something to review.
+  if (!vm.count) {
+    return (
+      <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2">
+        <div className="text-sm text-ink-500 flex items-center gap-2 min-w-0">
+          <Megaphone size={15} className="text-ink-400 shrink-0" />
+          <span className="truncate">Recibos de Meta Ads — nada pendiente</span>
+        </div>
+        <button type="button" onClick={sync} disabled={syncing} className="btn-ghost whitespace-nowrap disabled:opacity-40">
+          {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
+        </button>
+      </div>
+    );
+  }
 
   async function sync() {
     setSyncing(true);
