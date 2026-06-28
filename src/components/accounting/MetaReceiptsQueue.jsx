@@ -12,10 +12,12 @@ import {
   resolveMetaReceiptsQueue, resolveAccountingConfig, buildExpenseEntry,
 } from '../../core/accounting/index.js';
 
+// Alpha backgrounds + a dark: text variant so the pill reads in BOTH themes
+// (flat emerald-50 glares on the dark canvas).
 const SOURCE_BADGE = {
-  email: { label: 'Recibo de Meta', cls: 'bg-emerald-50 text-emerald-700' },
-  invoice: { label: 'Factura', cls: 'bg-emerald-50 text-emerald-700' },
-  spend: { label: 'Gasto del ciclo', cls: 'bg-ink-100 text-ink-600' },
+  email: { label: 'Recibo', cls: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
+  invoice: { label: 'Factura', cls: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
+  spend: { label: 'Estimado', cls: 'bg-ink-500/10 text-ink-500' },
 };
 
 /** Pick a sensible default marketing/publicidad gasto account for the auto
@@ -61,12 +63,12 @@ export default function MetaReceiptsQueue() {
   // there's something to review.
   if (!vm.count) {
     return (
-      <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2">
+      <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-ink-100 bg-surface px-3.5 py-2">
         <div className="text-sm text-ink-500 flex items-center gap-2 min-w-0">
           <Megaphone size={15} className="text-ink-400 shrink-0" />
           <span className="truncate">Recibos de Meta Ads — nada pendiente</span>
         </div>
-        <button type="button" onClick={sync} disabled={syncing} className="btn-ghost whitespace-nowrap disabled:opacity-40">
+        <button type="button" onClick={sync} disabled={syncing} className="btn-ghost text-sm whitespace-nowrap disabled:opacity-40">
           {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
         </button>
       </div>
@@ -148,58 +150,60 @@ export default function MetaReceiptsQueue() {
   }
 
   return (
-    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 overflow-hidden">
-      <div className="px-3 py-2.5 flex items-center gap-2 border-b border-amber-200">
-        <Megaphone size={16} className="text-amber-600" />
+    <div className="card overflow-hidden mb-4">
+      <div className="px-3.5 py-2.5 flex items-center gap-2.5 border-b border-ink-100">
+        <Megaphone size={16} className="text-ink-400 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-ink-800">Recibos de Meta Ads por registrar</div>
-          <div className="text-xs text-ink-500">{vm.count} ciclo(s) · {formatDop(vm.totalDop)} — revísalos y regístralos como gasto</div>
+          <div className="font-display font-semibold text-ink-900 leading-tight">Recibos de Meta Ads</div>
+          <div className="text-xs text-ink-500 tabular-nums">{vm.count} por registrar · {formatDop(vm.totalDop)}</div>
         </div>
-        <button type="button" onClick={sync} disabled={syncing} className="btn-ghost whitespace-nowrap disabled:opacity-40">
+        <button type="button" onClick={sync} disabled={syncing} className="btn-ghost text-sm whitespace-nowrap disabled:opacity-40">
           {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
         </button>
       </div>
 
       {vm.rows.some((r) => r.needsSupplier) && (
-        <div className="px-3 py-2 bg-amber-100/70 text-sm text-ink-700 flex flex-wrap items-center gap-2">
-          <span>Falta el proveedor <b>Meta</b> (exterior) para poder registrar.</span>
-          <button type="button" onClick={createMetaSupplier} disabled={busy === 'supplier'} className="btn-primary disabled:opacity-40">
-            {busy === 'supplier' ? <Loader2 size={14} className="animate-spin" /> : null} Crear proveedor Meta
+        <div className="px-3.5 py-2.5 bg-surface-2 border-b border-ink-100 text-sm text-ink-600 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span>Falta el proveedor <b className="text-ink-800">Meta</b> (exterior) para poder registrar.</span>
+          <button type="button" onClick={createMetaSupplier} disabled={busy === 'supplier'} className="btn-primary text-sm ml-auto disabled:opacity-40">
+            {busy === 'supplier' ? <Loader2 size={14} className="animate-spin" /> : null} Crear proveedor
           </button>
         </div>
       )}
 
-      <ul className="divide-y divide-amber-200">
+      <ul className="divide-y divide-ink-100">
         {vm.rows.map((r) => {
           const badge = SOURCE_BADGE[r.source] || SOURCE_BADGE.spend;
           return (
-            <li key={r.id} className="px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <li key={r.id} className="px-3.5 py-3 flex items-center gap-3">
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-ink-800 capitalize">{r.periodLabel}</div>
-                <div className="text-xs text-ink-500 flex items-center gap-2 flex-wrap">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>{badge.label}</span>
-                  <span>cuenta {r.adAccountId}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-ink-900 capitalize truncate">{r.periodLabel}</span>
+                  <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>{badge.label}</span>
+                </div>
+                <div className="text-xs text-ink-400 mt-0.5 flex items-center gap-2.5 flex-wrap">
+                  <span className="truncate">Cuenta {r.adAccountId}</span>
                   {r.invoiceUrl && (
-                    <a href={r.invoiceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-amber-700 hover:underline">
-                      <FileText size={12} /> recibo <ExternalLink size={11} />
+                    <a href={r.invoiceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ink-500 hover:text-ink-800 transition-colors">
+                      <FileText size={12} /> recibo <ExternalLink size={10} />
                     </a>
                   )}
                 </div>
               </div>
-              <div className="text-right whitespace-nowrap">
-                <div className="tabular-nums font-semibold text-ink-800">{r.amountDop != null ? formatDop(r.amountDop) : '—'}</div>
+              <div className="text-right whitespace-nowrap shrink-0">
+                <div className="tabular-nums font-semibold text-ink-900">{r.amountDop != null ? formatDop(r.amountDop) : '—'}</div>
                 <div className="text-[11px] text-ink-400 tabular-nums">{r.currency} {r.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button" onClick={() => post(r)}
                   disabled={!r.draft || busy === r.id}
                   title={r.needsAccount ? 'Asigna una cuenta de gasto al proveedor Meta' : (r.error || 'Registrar gasto')}
-                  className="btn-primary disabled:opacity-40 whitespace-nowrap"
+                  className="btn-primary text-sm disabled:opacity-40 whitespace-nowrap"
                 >
                   {busy === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Registrar
                 </button>
-                <button type="button" onClick={() => dismiss(r)} className="btn-icon text-ink-400" aria-label="Descartar">
+                <button type="button" onClick={() => dismiss(r)} className="btn-icon-danger" aria-label="Descartar">
                   <X size={15} />
                 </button>
               </div>

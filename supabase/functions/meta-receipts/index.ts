@@ -24,6 +24,7 @@
 // the IG-Login token can't read ads. Tokens stay server-side.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { PDFDocument, StandardFonts, rgb } from 'https://esm.sh/pdf-lib@1.17.1';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -266,21 +267,54 @@ function sumReceipts(parsed: Array<ParsedReceipt | null>) {
   return { amount, currency: list[0].currency || 'USD', chargedAt: Math.max(...list.map((p) => p.chargedAt || 0)), count: list.length, receiptIds: list.map((p) => p.receiptId).filter(Boolean) };
 }
 
-// ── Receipt document: keep the month's receipt emails as one self-contained
-// HTML the dealer can open from the gasto. Uploaded to the public `documents`
-// bucket (the receipts are Meta→dealer mail, served off the Storage origin). ──
-const _esc = (s: unknown) => String(s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
-function receiptBlock(em: GmailMsg, p: ParsedReceipt): string {
-  const head = `<div style="font:14px sans-serif;padding:8px 10px;background:#f3f3f3;border-bottom:1px solid #ddd"><b>Meta Ads</b> · ${p.currency} ${p.amount.toFixed(2)} · ${isoDay(new Date(p.chargedAt))} · ref ${_esc(p.receiptId)}</div>`;
-  const body = em.html ? em.html : `<pre style="white-space:pre-wrap;font:13px monospace;padding:10px">${_esc(em.text)}</pre>`;
-  return `<section style="margin:0 0 18px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden">${head}${body}</section>`;
+// ── Receipt document — a clean PDF summary of the month's charges.
+// We can't host renderable HTML: Supabase serves public-bucket HTML as
+// text/plain + nosniff (anti-XSS), so a browser shows source, not the receipt.
+// PDF is served as application/pdf and renders inline, so the dealer opens a
+// real, legible document built from the parsed charges. ─────────────────────
+const fmt2 = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+async function buildReceiptPdf(period: string, accountId: string, parsed: ParsedReceipt[], dopRate: number): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const ink = rgb(0.11, 0.10, 0.09);
+  const muted = rgb(0.45, 0.43, 0.40);
+  const line = rgb(0.82, 0.80, 0.78);
+  let page = pdf.addPage([595, 842]); // A4
+  const top = 800;
+  let y = top;
+  const L = 56, R = 539;
+  page.drawText('Recibo - Meta Ads', { x: L, y, size: 20, font: bold, color: ink }); y -= 28;
+  page.drawText(`Periodo: ${period}`, { x: L, y, size: 11, font, color: muted }); y -= 15;
+  page.drawText(`Cuenta publicitaria: ${bareAccount(accountId)}`, { x: L, y, size: 11, font, color: muted }); y -= 26;
+
+  const cur = parsed[0]?.currency || 'USD';
+  const total = round2(parsed.reduce((s, p) => s + p.amount, 0));
+  const totalDop = cur === 'DOP' ? total : (dopRate > 0 ? round2(total * dopRate) : null);
+  page.drawText(`Total: ${cur} ${fmt2(total)}`, { x: L, y, size: 14, font: bold, color: ink });
+  if (totalDop != null) page.drawText(`RD$ ${fmt2(totalDop)}  (tasa ${dopRate})`, { x: L + 200, y, size: 10, font, color: muted });
+  y -= 30;
+
+  page.drawText('FECHA', { x: L, y, size: 9, font: bold, color: muted });
+  page.drawText('REFERENCIA', { x: L + 90, y, size: 9, font: bold, color: muted });
+  page.drawText('MONTO', { x: R - 90, y, size: 9, font: bold, color: muted });
+  y -= 6;
+  page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.7, color: line }); y -= 16;
+
+  for (const p of parsed.slice().sort((a, b) => a.chargedAt - b.chargedAt)) {
+    if (y < 70) { page = pdf.addPage([595, 842]); y = top; }
+    page.drawText(isoDay(new Date(p.chargedAt)), { x: L, y, size: 10, font, color: ink });
+    page.drawText(String(p.receiptId || '-').slice(0, 34), { x: L + 90, y, size: 10, font, color: ink });
+    page.drawText(`${p.currency} ${fmt2(p.amount)}`, { x: R - 90, y, size: 10, font, color: ink });
+    y -= 16;
+  }
+  page.drawText('Generado de los correos de recibo de Meta (un cargo por linea).', { x: L, y: 44, size: 8, font, color: muted });
+  return await pdf.save();
 }
-async function uploadReceiptDoc(admin: SupabaseClient, accountId: string, period: string, blocks: string[]): Promise<string | null> {
-  if (!blocks.length) return null;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Meta Ads ${period}</title></head><body style="margin:16px;background:#fafafa">${blocks.join('')}</body></html>`;
-  const path = `comprobantes/meta-${bareAccount(accountId)}-${period}.html`;
+async function uploadReceiptPdf(admin: SupabaseClient, accountId: string, period: string, bytes: Uint8Array): Promise<string | null> {
+  const path = `comprobantes/meta-${bareAccount(accountId)}-${period}.pdf`;
   const { error } = await admin.storage.from('documents')
-    .upload(path, new Blob([html], { type: 'text/html' }), { contentType: 'text/html', upsert: true });
+    .upload(path, new Blob([bytes], { type: 'application/pdf' }), { contentType: 'application/pdf', upsert: true });
   if (error) { console.error('meta-receipts: receipt upload failed', error.message); return null; }
   return admin.storage.from('documents').getPublicUrl(path).data.publicUrl;
 }
@@ -373,19 +407,22 @@ Deno.serve(async (req: Request) => {
       let msgIds: string[] = [];
       try { msgIds = await gmailSearch(gToken, q); }
       catch (e) { console.error('meta-receipts: gmail search failed', m.period, String((e as Error)?.message || e)); continue; }
-      const parsed: Array<ParsedReceipt | null> = [];
-      const blocks: string[] = [];
+      const parsed: ParsedReceipt[] = [];
       for (const mid of msgIds.slice(0, 50)) {
         try {
           const em = await gmailGet(gToken, mid);
           const p = parseMetaReceiptEmail(em);
-          if (p) { parsed.push(p); blocks.push(receiptBlock(em, p)); }
+          if (p) parsed.push(p);
         } catch (_) { /* one bad message never sinks the month */ }
       }
       const sum = sumReceipts(parsed);
       if (!sum) continue; // no receipts this month → leave it to the spend pass
       coveredMonths.add(m.period);
-      const docUrl = (await uploadReceiptDoc(admin, primaryId, m.period, blocks)) || billingLink(primaryId);
+      let docUrl = billingLink(primaryId);
+      try {
+        const bytes = await buildReceiptPdf(m.period, primaryId, parsed, dopRate);
+        docUrl = (await uploadReceiptPdf(admin, primaryId, m.period, bytes)) || docUrl;
+      } catch (e) { console.error('meta-receipts: pdf build failed', m.period, String((e as Error)?.message || e)); }
       const amountDop = sum.currency === 'DOP' ? sum.amount : (dopRate > 0 ? round2(sum.amount * dopRate) : null);
       rows.push({
         id,
