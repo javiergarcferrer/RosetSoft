@@ -218,17 +218,14 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
  *  otherwise sit scattered across the widgets below. */
 function CycleStage({ icon: Icon, tint, label, value, sub, to }) {
   return (
-    <Link to={to} className="shrink-0 grow snap-start basis-[8.5rem] min-w-[8.5rem] surface-subtle p-3 hover:shadow-xs active:scale-[0.99] transition-all">
+    <Link to={to} className="min-w-0 rounded-xl surface-subtle p-3 hover:shadow-xs active:scale-[0.99] transition-all">
       <span className={`icon-tile ${tint} mb-2`}><Icon size={14} /></span>
       <div className="eyebrow-xs text-ink-500 truncate">{label}</div>
-      <div className="stat-value text-base whitespace-nowrap">{value}</div>
+      {/* Fluid size so a millions-peso figure fits its cell at every width. */}
+      <div className="stat-value text-[clamp(0.8rem,3.4vw,1rem)] tabular-nums truncate">{value}</div>
       <div className="text-[11px] text-ink-400 truncate">{sub}</div>
     </Link>
   );
-}
-/** The → connecting two pipeline stages. */
-function CycleArrow() {
-  return <span aria-hidden className="self-center shrink-0 text-ink-300 text-lg select-none">→</span>;
 }
 
 /** The human label for one cockpit action (the VM returns structured data; the
@@ -417,13 +414,10 @@ export default function AccountingDashboard() {
               Pure synthesis of already-resolved VM data. */}
           <div className="card p-4 min-w-0">
             <CardHead title="Del contenedor a la venta" />
-            <div className="flex items-stretch gap-1.5 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 [&>*]:min-w-0">
               <CycleStage icon={Ship} tint="tint-sky" label="En tránsito" value={formatDop(importPanel.inTransit)} sub="en el agua" to="/accounting/importaciones" />
-              <CycleArrow />
               <CycleStage icon={Boxes} tint="tint-brand" label="Importado" value={formatDop(importPanel.landed)} sub={`destino · ${monthLabel}`} to="/accounting/importaciones" />
-              <CycleArrow />
               <CycleStage icon={Receipt} tint="tint-emerald" label="Ventas" value={formatDop(ventasKpi?.current || 0)} sub={`facturado · ${monthLabel}`} to="/accounting/facturacion" />
-              <CycleArrow />
               <CycleStage icon={ArrowDownCircle} tint="tint-ink" label="Por cobrar" value={formatDop(d.ar.unpaid)} sub="sin cobrar" to="/accounting/cuentas" />
             </div>
           </div>
@@ -433,7 +427,7 @@ export default function AccountingDashboard() {
           {/* Comparative KPI scorecards — the monitor layer: the period's
               headline figures, each against the previous period AND the same
               period last year. */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 min-w-0">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 min-w-0 [&>*]:min-w-0">
             {kpis.map((k) => (
               <div key={k.key} className="stat-card p-3.5 min-w-0">
                 <div className="eyebrow-xs text-ink-500 truncate mb-1.5">{k.label}</div>
@@ -456,7 +450,7 @@ export default function AccountingDashboard() {
             ))}
           </div>
           {/* Business-overview widgets — row 1: flujo · gastos · P&L. */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0 [&>*]:min-w-0">
             {/* Flujo de caja */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Flujo de caja" to="/accounting/ledger" action="Ver mayor →" />
@@ -529,7 +523,7 @@ export default function AccountingDashboard() {
           </div>
 
           {/* Row 2: cobros · ventas · bancos. */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-w-0 [&>*]:min-w-0">
             {/* Cuentas por cobrar */}
             <div className="card p-4 flex flex-col">
               <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
@@ -578,7 +572,7 @@ export default function AccountingDashboard() {
           </div>
 
           {/* Compact KPI strip. */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 min-w-0">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 min-w-0 [&>*]:min-w-0">
             <Kpi icon={Wallet} label="Efectivo y bancos" value={formatDop(d.cash)} to="/accounting/ledger" />
             <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
               sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
@@ -591,7 +585,7 @@ export default function AccountingDashboard() {
           <div className="section-rule"><span>Análisis del período</span></div>
 
           {/* Analysis layer — importaciones 360° + where spending moved. */}
-          <div className="grid lg:grid-cols-2 gap-4 min-w-0">
+          <div className="grid lg:grid-cols-2 gap-4 min-w-0 [&>*]:min-w-0">
             <div className="card p-4 min-w-0">
               <CardHead title="Importaciones" to="/accounting/importaciones" action="Ver expedientes →" />
               <div className="grid grid-cols-2 gap-3">
