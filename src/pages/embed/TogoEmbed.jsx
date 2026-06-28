@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sofa, RotateCw, Trash2, Plus, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, MoreHorizontal, Receipt } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, Receipt } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -120,10 +120,7 @@ export default function TogoEmbed() {
   const [view, setView] = useState('2d');        // '2d' plan editor | '3d' preview
   const [finishKey, setFinishKey] = useState('lino'); // material editor: surface finish
   const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
-  const [sheet, setSheet] = useState(null);      // mobile bottom sheet: 'pieces' | 'material' | null
-  const [moreOpen, setMoreOpen] = useState(false); // mobile toolbar "⋯ Opciones" popover
-  const [actionsOpen, setActionsOpen] = useState(false); // desktop toolbar "⋯ Más" popover
-  const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ palette
+  const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ hotbar
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const [lastAddedUid, setLastAddedUid] = useState(null); // the just-placed piece → spring-in pop
 
@@ -156,10 +153,6 @@ export default function TogoEmbed() {
       .catch((e) => { if (active) setCat({ status: 'error', data: null, error: e?.message || 'Error' }); });
     return () => { active = false; };
   }, []);
-
-  // The material editor only makes sense in 3D (the finish/weave re-skin the
-  // visualizer). Drop back to 2D → close its bottom sheet so it can't dangle.
-  useEffect(() => { if (view !== '3d') setSheet((s) => (s === 'material' ? null : s)); }, [view]);
 
   const data = cat.data;
   const rates = data?.rates || { USD: 1, DOP: 60 };
@@ -435,146 +428,63 @@ export default function TogoEmbed() {
     );
   }
 
-  // Shared building blocks — defined once, rendered in BOTH the desktop layout
-  // and the mobile bottom sheets / docks so screen never drifts from sheet.
-  const piecesList = (
-    <PiecesList models={models} onAdd={(id) => { addPiece(id); setSheet(null); }}
-      hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
-  );
+  // The 3D finish editor — floated over the scene only while in 3D.
   const materialEditor = (
     <MaterialEditor finishKey={finishKey} setFinishKey={setFinishKey} weave={weave} setWeave={setWeave} />
   );
-  const canvas = (
-    <CanvasArea
-      view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById} topDownById={topDownById}
-      selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
-      placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
-      hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
-      onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
-      quickStarts={quickStarts} onQuickStart={startFromTemplate}
-      lastAddedUid={lastAddedUid}
-    />
-  );
-  // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
-  const viewToggle = (
-    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden shrink-0 bg-surface">
-      <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 ${view === '2d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Square size={13} /> 2D</button>
-      <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-2.5 py-1 text-xs inline-flex items-center gap-1 border-l border-ink-200 ${view === '3d' ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}><Box size={13} /> 3D</button>
-    </div>
-  );
 
+  // The configurator is ONE full-bleed window into the build. The canvas fills
+  // the frame edge-to-edge; every tool floats over it as a glass HUD cluster —
+  // no header bar, no sidebar, no dropdown. Top corners hold view + tools; a
+  // single bottom "control deck" holds the piece hotbar, the contextual
+  // selected-piece controls, and the live estimate + quote CTA.
   return (
-    <div className="min-h-full bg-surface text-ink-900">
-      <div className="mx-auto w-full max-w-[1400px] px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-28 lg:pb-6">
-        <header className="mb-5 sm:mb-7">
-          <h1 className="font-display font-semibold text-xl sm:text-2xl tracking-tight leading-none">Togo</h1>
-          <p className="mt-1.5 text-xs text-ink-500 truncate">Configura tu sofá · {data.storeName}</p>
-        </header>
+    <div className="fixed inset-0 overflow-hidden bg-surface text-ink-900">
+      {/* The stage — a window into the Togo. */}
+      <CanvasArea
+        fill
+        view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById} topDownById={topDownById}
+        selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
+        placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
+        hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
+        onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
+        quickStarts={quickStarts} onQuickStart={startFromTemplate}
+        lastAddedUid={lastAddedUid}
+      />
 
-        {/* ─── DESKTOP (lg+): centered, balanced 3-zone layout ─── pieces rail ·
-            canvas hero · estimate dock. The whole thing is capped to the
-            max-width container above, so it never sprawls edge-to-edge. */}
-        <div className="hidden lg:grid lg:grid-cols-[17rem_minmax(0,1fr)] gap-5 items-start">
-          <aside className="card p-3 space-y-2.5 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-auto">
-            <h2 className="text-xs font-display font-semibold text-ink-700 uppercase tracking-[0.06em]">Piezas</h2>
-            {piecesList}
-          </aside>
-
-          <section className="space-y-5 min-w-0">
-            <div className="card p-3 sm:p-4 space-y-3">
-              {/* Toolbar — view toggle + the configuration-wide actions. */}
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {viewToggle}
-                  <span className="text-xs text-ink-500 truncate">{view === '3d' ? 'Arrastra para girar · rueda para acercar' : (vm.count ? 'Clic para seleccionar · arrastra para mover' : 'Toca una pieza para agregarla')}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => openMaterial('all')} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Aplicar una misma tela a todas las piezas"><Layers size={14} /> Tela a todas</button>
-                  <button type="button" onClick={() => setQuoteOpen(true)} disabled={!vm.count} className="btn-ghost text-xs disabled:opacity-40" title="Ver el resumen de tu cotización"><Receipt size={14} /> Resumen</button>
-                  <div className="relative">
-                    <button type="button" onClick={() => setActionsOpen((v) => !v)} disabled={!vm.count} aria-expanded={actionsOpen} className="btn-ghost text-xs disabled:opacity-40" title="Más opciones"><MoreHorizontal size={16} /></button>
-                    {actionsOpen && vm.count > 0 && (
-                      <>
-                        <div className="fixed inset-0 z-30" onClick={() => setActionsOpen(false)} aria-hidden />
-                        <div className="absolute right-0 top-full mt-1 z-40 w-56 rounded-xl border border-ink-200 bg-surface shadow-pop p-1.5 flex flex-col gap-0.5">
-                          <button type="button" onClick={() => { setActionsOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
-                          <button type="button" onClick={() => { setActionsOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Descargar plano (DXF)</button>
-                          <button type="button" onClick={() => { setActionsOpen(false); setPlaced([]); setSelectedUid(null); }} className="btn-ghost justify-start text-sm text-red-600"><Eraser size={15} /> Vaciar plano</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Selected-piece strip — name, fabric, price, size + per-piece actions. */}
-              {selected && selResolved && (
-                <SelectedStrip
-                  selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
-                  svgById={svgById} rates={rates}
-                  onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
-                  onRotate={rotateSel} onDelete={deleteSel}
-                />
-              )}
-
-              {/* Material editor strip — only meaningful in 3D (re-skins the visualizer). */}
-              {view === '3d' && materialEditor}
-
-              {canvas}
-            </div>
-          </section>
+      {/* ── Top-left: brand + 2D/3D toggle ── */}
+      <div className="absolute top-3 left-3 z-30 flex items-center gap-2">
+        <div className="hud-panel hidden sm:flex items-center gap-1.5 px-2.5 py-1.5">
+          <Sofa size={15} className="text-brand-500" aria-hidden />
+          <span className="font-display font-semibold text-sm leading-none">Togo</span>
         </div>
-
-        {/* ─── MOBILE (< lg): canvas is the hero; controls live in dynamic
-            menus (bottom sheets) + a sticky dock so nothing crowds the plan. ─── */}
-        <div className="lg:hidden space-y-3">
-          {/* Compact bar: view toggle + secondary actions folded behind ⋯. */}
-          <div className="flex items-center justify-between gap-2">
-            {viewToggle}
-            <div className="relative">
-              <button type="button" onClick={() => setMoreOpen((v) => !v)} disabled={!vm.count} aria-expanded={moreOpen} className="btn-ghost text-xs disabled:opacity-40" title="Más opciones">
-                <MoreHorizontal size={16} /> Opciones
-              </button>
-              {moreOpen && vm.count > 0 && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} aria-hidden />
-                  <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-ink-200 bg-surface shadow-pop p-1.5 flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                    <button type="button" onClick={() => { setMoreOpen(false); openMaterial('all'); }} className="btn-ghost justify-start text-sm"><Layers size={15} /> Tela a todas</button>
-                    <button type="button" onClick={() => { setMoreOpen(false); setArOpen(true); }} className="btn-ghost justify-start text-sm"><View size={15} /> Ver en tu espacio</button>
-                    <button type="button" onClick={() => { setMoreOpen(false); downloadDxf(); }} className="btn-ghost justify-start text-sm"><FileDown size={15} /> Plano (DXF)</button>
-                    <button type="button" onClick={() => { setMoreOpen(false); setQuoteOpen(true); }} className="btn-ghost justify-start text-sm"><Receipt size={15} /> Resumen</button>
-                    <button type="button" onClick={() => { setMoreOpen(false); setPlaced([]); setSelectedUid(null); }} className="btn-ghost justify-start text-sm text-red-600"><Eraser size={15} /> Vaciar</button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* The canvas — the hero. Sized large via CanvasArea's mobile heights. */}
-          {canvas}
-
-          {/* Add-piece + Material entries → open the bottom sheets. Material only
-              in 3D (the finish/weave editor has no effect on the 2D plan). */}
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setSheet('pieces')} className="btn-primary flex-1 justify-center text-sm">
-              <Plus size={16} /> Agregar pieza
-            </button>
-            {view === '3d' && (
-              <button type="button" onClick={() => setSheet('material')} className="btn-secondary text-sm shrink-0">
-                <Palette size={15} /> Material
-              </button>
-            )}
-          </div>
+        <div className="hud-panel inline-flex overflow-hidden">
+          <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-3 py-1.5 text-xs inline-flex items-center gap-1 transition ${view === '2d' ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100/60'}`}><Square size={13} /> 2D</button>
+          <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-3 py-1.5 text-xs inline-flex items-center gap-1 transition ${view === '3d' ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100/60'}`}><Box size={13} /> 3D</button>
         </div>
       </div>
 
-      {/* ─── Mobile sticky bottom dock — estimate + the single primary CTA;
-          a contextual selected-piece bar floats just ABOVE it when a piece is
-          picked. Both are mobile-only (lg:hidden); desktop uses its own dock. ─── */}
-      <div className="lg:hidden">
-        {selected && selResolved && (
-          <div className="fixed inset-x-0 bottom-[4.75rem] z-40 px-3 pb-2 pointer-events-none">
-            <div className="pointer-events-auto mx-auto max-w-[1400px]">
+      {/* ── Top-right: tools, each its own floating button (no dropdown) ── */}
+      {vm.count > 0 && (
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5">
+          <HudIcon title="Una tela para todas" onClick={() => openMaterial('all')}><Layers size={15} /></HudIcon>
+          <HudIcon title="Resumen de tu Togo" onClick={() => setQuoteOpen(true)}><Receipt size={15} /></HudIcon>
+          <HudIcon title="Ver en tu espacio" onClick={() => setArOpen(true)}><View size={15} /></HudIcon>
+          <HudIcon title="Descargar plano (DXF)" onClick={downloadDxf}><FileDown size={15} /></HudIcon>
+          <HudIcon title="Vaciar el plano" danger onClick={() => { buzz([4, 26, 7]); setPlaced([]); setSelectedUid(null); }}><Eraser size={15} /></HudIcon>
+        </div>
+      )}
+
+      {/* ── Bottom control deck — the build hotbar, the contextual selected-piece
+           controls, and the live estimate + quote CTA. The wrapper is
+           click-through (pointer-events-none); only the glass panels catch
+           input, so the canvas stays draggable in the gaps. ── */}
+      <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none">
+        <div className="mx-auto w-full max-w-5xl flex flex-col items-stretch gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+
+          {/* Contextual selected-piece controls (2D editing only). */}
+          {view === '2d' && selected && selResolved && (
+            <div className="pointer-events-auto self-center w-full max-w-lg togo-rise">
               <SelectedStrip
                 selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
                 svgById={svgById} rates={rates} compact
@@ -582,17 +492,28 @@ export default function TogoEmbed() {
                 onRotate={rotateSel} onDelete={deleteSel}
               />
             </div>
-          </div>
-        )}
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-surface/95 backdrop-blur px-3 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto max-w-[1400px] flex items-center justify-between gap-3">
+          )}
+
+          {/* The build tool: piece hotbar (2D) or the finish editor (3D). */}
+          {view === '2d' ? (
+            <PieceHotbar models={models} onAdd={addPiece} hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
+          ) : (
+            <div className="pointer-events-auto self-center max-w-full">{materialEditor}</div>
+          )}
+
+          {/* Live estimate + the single primary CTA. */}
+          <div className="hud-panel pointer-events-auto flex items-center justify-between gap-3 px-4 py-2.5">
             <div className="min-w-0">
-              <div className="text-[11px] text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
-              {pricedUsd > 0
-                ? <div className="text-xl font-display font-semibold tabular-nums tracking-tight leading-none mt-0.5">{formatMoney(Math.round(animatedUsd), 'USD', rates)}{pendingFabric > 0 && <span className="text-[11px] font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
-                : <div className="text-sm text-ink-500 leading-tight py-0.5">{vm.count ? 'Elige una tela' : '—'}</div>}
-              {vm.count > 0 && vm.overallCm.widthCm > 0 && (
-                <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
+              {vm.count === 0 ? (
+                <div className="text-sm text-ink-500">Agrega piezas para empezar tu Togo</div>
+              ) : (
+                <>
+                  <div className="text-[11px] text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}{pendingFabric > 0 && pricedUsd > 0 ? ` · ${pendingFabric} sin tela` : ''}</div>
+                  {pricedUsd > 0
+                    ? <div className="text-xl sm:text-2xl font-display font-semibold tabular-nums tracking-tight leading-none mt-0.5">{formatMoney(Math.round(animatedUsd), 'USD', rates)}</div>
+                    : <div className="text-sm text-ink-500 leading-tight py-0.5">Elige una tela para ver el precio</div>}
+                  {vm.overallCm.widthCm > 0 && <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>}
+                </>
               )}
             </div>
             <button type="button" onClick={() => { buzz(9); setStep('form'); }} disabled={!vm.count} className={`btn-primary text-sm disabled:opacity-50 shrink-0 ${quoteReady ? 'togo-ready' : ''}`}>
@@ -601,37 +522,6 @@ export default function TogoEmbed() {
           </div>
         </div>
       </div>
-
-      {/* ─── Desktop estimate / CTA dock — full container width, at the bottom
-          of the centered container. Sticky so it stays in reach as the canvas
-          grows. ─── */}
-      <div className="hidden lg:block">
-        <div className="mx-auto w-full max-w-[1400px] px-6 pb-6">
-          <div className="card p-5 flex flex-wrap items-end justify-between gap-3 sticky bottom-4">
-            <div>
-              <div className="text-xs text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
-              {pricedUsd > 0
-                ? <div className="text-3xl font-display font-semibold tabular-nums tracking-tight leading-none mt-1">{formatMoney(Math.round(animatedUsd), 'USD', rates)}{pendingFabric > 0 && <span className="text-sm font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
-                : <div className="text-base text-ink-500 mt-1">{vm.count ? 'Elige una tela para ver el estimado' : '—'}</div>}
-              {vm.count > 0 && vm.overallCm.widthCm > 0 && (
-                <div className="text-[11px] text-ink-500 tabular-nums mt-1.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
-              )}
-            </div>
-            <button type="button" onClick={() => { buzz(9); setStep('form'); }} disabled={!vm.count} className={`btn-primary text-sm disabled:opacity-50 ${quoteReady ? 'togo-ready' : ''}`}>
-              Solicitar cotización <ArrowRight size={15} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Mobile bottom sheets — Piezas (add) and Material (3D finish). ─── */}
-      <BottomSheet open={sheet === 'pieces'} onClose={() => setSheet(null)} title="Agregar pieza">
-        {piecesList}
-      </BottomSheet>
-      <BottomSheet open={sheet === 'material'} onClose={() => setSheet(null)} title="Material">
-        <p className="text-xs text-ink-500 mb-3">El acabado re-viste todas las piezas en el visualizador 3D. La tela y el color se eligen por pieza.</p>
-        {materialEditor}
-      </BottomSheet>
 
       <FabricModal
         open={matOpen}
@@ -656,36 +546,50 @@ export default function TogoEmbed() {
   );
 }
 
-/** Vertical list of Togo models (thumbnail · name · dims · price + add button).
- *  ONE list shared by the desktop pieces rail and the mobile "Agregar pieza"
- *  sheet, so they can never present a different catalog. */
-function PiecesList({ models, onAdd, hoveredPieceId, onHover }) {
+/** A floating glass tool button — the top-right HUD cluster. Icon-only with a
+ *  native tooltip; no dropdown, every action is one tap. */
+function HudIcon({ title, onClick, danger = false, children }) {
   return (
-    <ul className="space-y-2">
-      {models.map((m) => {
-        // Highlighted when its placed instance is hovered on the plan (and the
-        // reverse: hovering this row highlights its pieces on the plan).
-        const hot = hoveredPieceId != null && m.id === hoveredPieceId;
-        return (
-          <li key={m.id}>
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`hud-panel w-9 h-9 grid place-items-center transition active:scale-90 hover:bg-ink-100/60 ${danger ? 'text-red-600' : 'text-ink-700'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** The piece hotbar — a floating, horizontally-scrollable strip of Togo pieces,
+ *  like a game's build palette. Tap a tile and it springs onto the plan. The
+ *  tile rings when its placed instances are hovered on the plan (and vice-versa),
+ *  so the link between palette and canvas reads instantly. Replaces the old
+ *  sidebar list + "Agregar pieza" sheet: the build tool lives ON the canvas. */
+function PieceHotbar({ models, onAdd, hoveredPieceId, onHover }) {
+  return (
+    <div className="hud-panel pointer-events-auto self-center max-w-full overflow-x-auto no-scrollbar">
+      <div className="flex items-stretch gap-1.5 p-1.5">
+        {models.map((m) => {
+          const hot = hoveredPieceId != null && m.id === hoveredPieceId;
+          return (
             <button
+              key={m.id}
               type="button"
               onClick={() => onAdd(m.id)}
               onMouseEnter={() => onHover?.(m.id)}
               onMouseLeave={() => onHover?.(null)}
-              className={`w-full flex items-center gap-3 text-left rounded-xl border p-2.5 transition active:scale-[0.98] ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
+              title={`Agregar ${m.name}`}
+              className={`group shrink-0 w-[68px] rounded-lg border p-1.5 flex flex-col items-center gap-1 transition active:scale-95 ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
             >
-              <span className="shrink-0 w-14 h-14 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium truncate">{m.name}</span>
-                <span className="block text-[11px] text-ink-500 tabular-nums">{m.widthCm}×{m.depthCm} cm</span>
-              </span>
-              <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-50 text-brand-600"><Plus size={16} /></span>
+              <span className="w-11 h-11 grid place-items-center text-ink-700" dangerouslySetInnerHTML={{ __html: m.svg }} />
+              <span className="block w-full text-[10px] leading-none text-ink-600 text-center truncate">{m.name}</span>
             </button>
-          </li>
-        );
-      })}
-    </ul>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -771,10 +675,10 @@ function EmptyPlanStart({ quickStarts, onQuickStart }) {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-ink-400 mt-2.5">o agrega piezas una a una desde el panel.</p>
+            <p className="text-[11px] text-ink-400 mt-2.5">o agrega piezas una a una desde la barra de abajo.</p>
           </>
         ) : (
-          <p className="text-[11px] text-ink-400 mt-0.5">Toca una pieza del panel para agregarla.</p>
+          <p className="text-[11px] text-ink-400 mt-0.5">Toca una pieza en la barra de abajo para agregarla.</p>
         )}
       </div>
     </div>
@@ -784,16 +688,19 @@ function EmptyPlanStart({ quickStarts, onQuickStart }) {
 function CanvasArea({
   view, vm, scene3d, material, svgById, topDownById = {}, selectedUid, setSelectedUid, codeByUid, placed,
   onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
-  quickStarts = [], onQuickStart, lastAddedUid = null,
+  quickStarts = [], onQuickStart, lastAddedUid = null, fill = false,
 }) {
   const [hoveredUid, setHoveredUid] = useState(null);
+  // `fill` = fill the parent stage edge-to-edge (the full-bleed game window);
+  // otherwise the legacy fixed-height framed box.
+  const boxedH = 'h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]';
   if (view === '3d') {
-    return <TogoScene3D scene3d={scene3d} material={material} className="w-full h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px] rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40" />;
+    return <TogoScene3D scene3d={scene3d} material={material} className={fill ? 'w-full h-full overflow-hidden bg-ink-50/40' : `w-full ${boxedH} rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40`} />;
   }
   const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
   const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
   return (
-    <div className="relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]">
+    <div className={fill ? 'absolute inset-0 overflow-auto bg-ink-50/40 p-4 pt-16 pb-44 sm:px-8' : `relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}>
       {!vm.tiles.length && <EmptyPlanStart quickStarts={quickStarts} onQuickStart={onQuickStart} />}
       <div
         className="relative mx-auto"
@@ -971,38 +878,6 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
   );
 }
 
-/** Mobile bottom sheet — a `fixed inset-x-0 bottom-0 rounded-t-2xl` panel that
- *  slides up over a dimmed backdrop. Portaled to <body> (like Modal) so an
- *  ancestor `transform`/`opacity` can't re-base its `position: fixed` or tint
- *  it. Tap the backdrop or the X to dismiss; body scroll locks while open. Used
- *  for the Piezas and Material menus so the controls never crowd the canvas. */
-function BottomSheet({ open, onClose, title, children }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
-  }, [open, onClose]);
-  if (!open || typeof document === 'undefined') return null;
-  return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-150" onClick={onClose} aria-hidden />
-      <div className="relative w-full max-w-lg bg-surface shadow-pop border-x border-t border-ink-100/60 rounded-t-2xl max-h-[82vh] flex flex-col pb-[env(safe-area-inset-bottom)] animate-in slide-in-from-bottom-4 duration-200">
-        <div className="pt-3 pb-1 flex justify-center" aria-hidden>
-          <div className="w-10 h-[3px] rounded-full bg-ink-200" />
-        </div>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-ink-100">
-          <h2 className="font-display text-base font-semibold text-ink-900 leading-snug pr-3 min-w-0">{title}</h2>
-          <button onClick={onClose} className="btn-icon -mr-1.5 text-ink-400 hover:text-ink-600 hover:bg-ink-100" aria-label="Cerrar"><X size={18} aria-hidden /></button>
-        </div>
-        <div className="overflow-y-auto overscroll-contain px-4 py-4 flex-1 min-w-0">{children}</div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
 
 function nameFilterOf(keys) {
   return Array.isArray(keys) && keys.length ? new Set(keys) : undefined;

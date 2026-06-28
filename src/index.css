@@ -1310,6 +1310,22 @@ body.togo-rams .card { box-shadow: none; background-image: none; border-color: r
   .togo-pop, .togo-ready, .togo-rise, .togo-confetti > i { animation: none !important; opacity: 1; }
 }
 
+/* Floating glass HUD panel — the chrome of the "game window". Translucent +
+   blurred so the canvas reads THROUGH the controls, hairline-bordered, lifted.
+   Every tool cluster (view toggle, tool icons, piece hotbar, estimate deck) is
+   one of these, floating over the full-bleed canvas. */
+.hud-panel {
+  background: rgb(var(--surface) / 0.82);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgb(var(--ink-200) / 0.7);
+  border-radius: 0.85rem;
+  box-shadow: 0 8px 28px -10px rgb(var(--ink-900) / 0.22), 0 1px 0 0 rgb(255 255 255 / 0.5) inset;
+}
+/* The hotbar scrolls without a visible track (a game inventory strip). */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* ──────────────────────────────────────────────────────────────────────────
    Accounting density — a tighter Palantir / QuickBooks read for the whole
    /accounting surface. Scoped to `.acct-dense` (set in Layout when the path is
