@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Megaphone, Loader2, RefreshCw, FileText, Check, X, ExternalLink } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, assignSequenceNumber } from '../../db/database.js';
+import { db, newId, assignSequenceNumber, invalidate } from '../../db/database.js';
 import { supabase } from '../../db/supabaseClient.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useConfirm, useToast } from '../ConfirmProvider.jsx';
@@ -79,6 +79,10 @@ export default function MetaReceiptsQueue() {
       const { data, error } = await supabase.functions.invoke('meta-receipts', { body: { sync: true } });
       if (error) throw error;
       if (data && data.ok === false) throw new Error(data.error || 'No se pudo sincronizar');
+      // The function writes the rows server-side (service role), which doesn't
+      // trip the app's invalidation bus — refresh the live queries so the new
+      // drafts appear without a page reload.
+      invalidate();
       if (data?.configured === false) toast(data.error || 'Meta sin conectar', { tone: 'error' });
       else toast(`Sincronizado · ${data?.synced ?? 0} ciclo(s)`, { tone: 'success' });
     } catch (e) {
