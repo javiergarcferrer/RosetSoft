@@ -175,37 +175,36 @@ export default function MetaReceiptsQueue() {
         {vm.rows.map((r) => {
           const badge = SOURCE_BADGE[r.source] || SOURCE_BADGE.spend;
           return (
-            <li key={r.id} className="px-3.5 py-3 flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-ink-900 capitalize truncate">{r.periodLabel}</span>
-                  <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>{badge.label}</span>
-                </div>
-                <div className="text-xs text-ink-400 mt-0.5 flex items-center gap-2.5 flex-wrap">
-                  <span className="truncate">Cuenta {r.adAccountId}</span>
-                  {r.invoiceUrl && (
-                    <a href={r.invoiceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ink-500 hover:text-ink-800 transition-colors">
-                      <FileText size={12} /> recibo <ExternalLink size={10} />
-                    </a>
-                  )}
-                </div>
+            <li key={r.id} className="px-3.5 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-medium text-ink-900 capitalize">{r.periodLabel}</span>
+                <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>{badge.label}</span>
+                {r.invoiceUrl && (
+                  <a href={r.invoiceUrl} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink-800 transition-colors">
+                    <FileText size={12} /> recibo <ExternalLink size={10} />
+                  </a>
+                )}
               </div>
-              <div className="text-right whitespace-nowrap shrink-0">
-                <div className="tabular-nums font-semibold text-ink-900">{r.amountDop != null ? formatDop(r.amountDop) : '—'}</div>
-                <div className="text-[11px] text-ink-400 tabular-nums">{r.currency} {r.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button" onClick={() => post(r)}
-                  disabled={!r.draft || busy === r.id}
-                  title={r.needsAccount ? 'Asigna una cuenta de gasto al proveedor Meta' : (r.error || 'Registrar gasto')}
-                  className="btn-primary text-sm disabled:opacity-40 whitespace-nowrap"
-                >
-                  {busy === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Registrar
-                </button>
-                <button type="button" onClick={() => dismiss(r)} className="btn-icon-danger" aria-label="Descartar">
-                  <X size={15} />
-                </button>
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="tabular-nums font-semibold text-lg text-ink-900 leading-none">{r.amountDop != null ? formatDop(r.amountDop) : '—'}</div>
+                  <div className="text-[11px] text-ink-400 tabular-nums mt-1 truncate">
+                    {r.currency} {r.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · cuenta {r.adAccountId}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button" onClick={() => post(r)}
+                    disabled={!r.draft || busy === r.id}
+                    title={r.needsSupplier ? 'Crea el proveedor Meta' : (r.needsAccount ? 'Asigna una cuenta de gasto al proveedor Meta' : (r.error || 'Registrar gasto'))}
+                    className="btn-primary text-sm disabled:opacity-40 whitespace-nowrap"
+                  >
+                    {busy === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Registrar
+                  </button>
+                  <button type="button" onClick={() => dismiss(r)} className="btn-icon-danger" aria-label="Descartar">
+                    <X size={15} />
+                  </button>
+                </div>
               </div>
             </li>
           );
