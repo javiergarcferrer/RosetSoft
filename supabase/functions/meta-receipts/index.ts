@@ -316,6 +316,10 @@ async function uploadReceiptPdf(admin: SupabaseClient, accountId: string, period
   const { error } = await admin.storage.from('documents')
     .upload(path, new Blob([bytes], { type: 'application/pdf' }), { contentType: 'application/pdf', upsert: true });
   if (error) { console.error('meta-receipts: receipt upload failed', error.message); return null; }
+  // Clean up the superseded .html doc from the first (pre-PDF) sync — Storage
+  // forbids deleting these via SQL, so the function does it with the service role.
+  admin.storage.from('documents').remove([`comprobantes/meta-${bareAccount(accountId)}-${period}.html`])
+    .then(({ error: rmErr }) => { if (rmErr) console.error('meta-receipts: old html cleanup failed', rmErr.message); });
   return admin.storage.from('documents').getPublicUrl(path).data.publicUrl;
 }
 
@@ -377,11 +381,18 @@ Deno.serve(async (req: Request) => {
   }
   if (!accounts.length) return json({ ok: true, created: 0, updated: 0, accounts: 0 });
 
-  // Periods already posted/dismissed must never be overwritten by a re-sync.
+  // Periods already posted/dismissed must never be overwritten by a re-sync —
+  // but a POSTED month whose receipt doc is still the old non-PDF link gets its
+  // attachment self-healed to the regenerated PDF (see the email pass).
   const ids = accounts.flatMap((a) => months.map((m) => receiptId(a.id, m.period)));
   const { data: locked } = await admin.from('meta_receipts')
-    .select('id, status').in('id', ids);
-  const lockedIds = new Set((locked || []).filter((r) => r.status !== 'pending').map((r) => r.id));
+    .select('id, status, expense_id, invoice_url').in('id', ids);
+  type LockedRow = { id: string; status: string; expense_id: string | null; invoice_url: string | null };
+  const lockedById = new Map<string, LockedRow>(
+    ((locked || []) as LockedRow[]).filter((r) => r.status !== 'pending').map((r) => [r.id, r]),
+  );
+  const lockedIds = new Set(lockedById.keys());
+  const isPdfUrl = (u: string | null | undefined) => /\.pdf(\?|$)/i.test(String(u || ''));
 
   // The primary account — the consolidated payment method's receipts attach
   // here (Meta's emailed receipts don't name an ad account; one card = one bill).
@@ -402,7 +413,12 @@ Deno.serve(async (req: Request) => {
   if (gmailReady && primaryId) {
     for (const m of months) {
       const id = receiptId(primaryId, m.period);
-      if (lockedIds.has(id)) { coveredMonths.add(m.period); continue; }
+      const lr = lockedById.get(id);
+      // Finalized as a PDF already, or dismissed → leave it (and keep the spend
+      // pass off this month). Only a posted month still on the old non-PDF doc
+      // falls through to be regenerated + repaired below.
+      if (lr && (isPdfUrl(lr.invoice_url) || lr.status === 'dismissed')) { coveredMonths.add(m.period); continue; }
+
       const q = `from:(facebookmail.com OR facebook.com OR meta.com) (receipt OR payment OR recibo OR pago OR "amount billed" OR "importe facturado") after:${gdate(m.startMs)} before:${gdate(m.endMs + DAY)}`;
       let msgIds: string[] = [];
       try { msgIds = await gmailSearch(gToken, q); }
@@ -423,6 +439,20 @@ Deno.serve(async (req: Request) => {
         const bytes = await buildReceiptPdf(m.period, primaryId, parsed, dopRate);
         docUrl = (await uploadReceiptPdf(admin, primaryId, m.period, bytes)) || docUrl;
       } catch (e) { console.error('meta-receipts: pdf build failed', m.period, String((e as Error)?.message || e)); }
+      const invoiceNumber = sum.count > 1 ? `${sum.count} cargos` : (sum.receiptIds[0] || null);
+      const isPdf = isPdfUrl(docUrl);
+
+      // Self-heal a POSTED month stuck on the old non-PDF doc: point its receipt
+      // row AND the gasto it created at the freshly-generated PDF — no re-register.
+      if (lr && lr.status === 'posted') {
+        await admin.from('meta_receipts').update({ invoice_url: docUrl, source: 'email', invoice_number: invoiceNumber, updated_at: new Date().toISOString() }).eq('id', id);
+        if (lr.expense_id && isPdf) {
+          await admin.from('expenses').update({ attachment_url: docUrl, attachment_type: 'application/pdf', attachment_name: `Meta Ads ${m.period}.pdf` }).eq('id', lr.expense_id);
+        }
+        emailRows++;
+        continue;
+      }
+
       const amountDop = sum.currency === 'DOP' ? sum.amount : (dopRate > 0 ? round2(sum.amount * dopRate) : null);
       rows.push({
         id,
@@ -437,7 +467,7 @@ Deno.serve(async (req: Request) => {
         dop_rate: dopRate || null,
         source: 'email',
         invoice_url: docUrl,
-        invoice_number: sum.count > 1 ? `${sum.count} cargos` : (sum.receiptIds[0] || null),
+        invoice_number: invoiceNumber,
         status: 'pending',
         raw: { period: m.period, source: 'email', charges: sum.count, receiptIds: sum.receiptIds },
         updated_at: new Date().toISOString(),

@@ -183,7 +183,7 @@ function DocExtras({ doc, table }) {
       </div>
 
       {/* Preview */}
-      <div className="rounded-lg border border-ink-200 bg-ink-50 overflow-hidden h-56 flex items-center justify-center">
+      <div className={`rounded-lg border border-ink-200 bg-ink-50 overflow-hidden flex items-center justify-center ${kind === 'pdf' ? 'h-[28rem]' : 'h-56'}`}>
         {kind === 'image' ? (
           <a href={url} target="_blank" rel="noreferrer" className="block w-full h-full" title="Abrir en grande">
             <img src={url} alt={doc.attachmentName || 'Comprobante'} className="w-full h-full object-contain" />

@@ -119,6 +119,10 @@ export interface MetaReceiptDraftArgs {
  */
 export function metaReceiptDraft({ record, supplierId, accountCode, dopRate, description }: MetaReceiptDraftArgs) {
   const base = metaAmountToDop(record.amount, record.currency, dopRate);
+  const url = record.invoiceUrl || null;
+  // A generated receipt PDF embeds inline in the gasto; a billing-hub fallback
+  // stays an external link. Type drives the detail view's preview vs. link card.
+  const isPdf = /\.pdf(\?|$)/i.test(url || '');
   return {
     supplierId: supplierId || null,
     accountCode: accountCode || null,
@@ -138,10 +142,10 @@ export function metaReceiptDraft({ record, supplierId, accountCode, dopRate, des
     paymentMethod: 'card' as const,
     // DGII 606 casilla 3: trabajos, suministros y servicios.
     tipo606: '02',
-    attachmentUrl: record.invoiceUrl || null,
-    attachmentName: record.invoiceNumber
-      ? `Meta ${record.invoiceNumber}`
-      : `Meta Ads ${billingPeriod(record.periodStartAt)}`,
-    attachmentType: 'link',
+    attachmentUrl: url,
+    attachmentName: isPdf
+      ? `Meta Ads ${billingPeriod(record.periodStartAt)}.pdf`
+      : (record.invoiceNumber ? `Meta ${record.invoiceNumber}` : `Meta Ads ${billingPeriod(record.periodStartAt)}`),
+    attachmentType: isPdf ? 'application/pdf' : 'link',
   };
 }
