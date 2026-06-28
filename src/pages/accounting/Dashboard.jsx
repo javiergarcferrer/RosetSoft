@@ -467,9 +467,9 @@ export default function AccountingDashboard() {
                   data={d.monthsSeries.map((m) => ({ label: m.label, a: m.cashIn, b: m.cashOut }))}
                   colors={[C.in, C.out]} format={formatDop}
                 />
-                <div className="flex items-center justify-between gap-2">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                   <Legend items={[{ label: 'Entradas', color: C.in }, { label: 'Salidas', color: C.out }]} />
-                  <span className="mt-3 text-xs whitespace-nowrap shrink-0">
+                  <span className="text-xs whitespace-nowrap">
                     <span className="text-ink-400">Neto 6m </span>
                     <span className={`tabular-nums font-medium ${cashNet >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{cashNet >= 0 ? '+' : ''}{formatDop(cashNet)}</span>
                   </span>
