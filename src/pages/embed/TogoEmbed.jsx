@@ -21,6 +21,43 @@ import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
 
+// A touch of "game juice": a haptic tap on key actions. Guarded — a no-op where
+// the device/browser doesn't support vibration (desktop, iOS Safari), so it only
+// ever *adds* feel, never errors. Patterns are deliberately tiny (ms).
+const buzz = (pattern) => { try { navigator.vibrate?.(pattern); } catch { /* unsupported */ } };
+
+// Smoothly tween a displayed number toward its target (easeOutCubic) — the live
+// estimate ticks up like a score instead of snapping. Interruptible: a new target
+// mid-flight re-tweens from wherever it currently is, so rapid edits stay fluid.
+// Pure UI sugar over the already-derived total; the real number is unchanged.
+function useCountUp(target) {
+  const [display, setDisplay] = useState(target);
+  const fromRef = useRef(target);
+  useEffect(() => {
+    const from = fromRef.current;
+    const to = target;
+    if (from === to) { setDisplay(to); return undefined; }
+    let raf = 0; let start = null;
+    const dur = 520;
+    const step = (t) => {
+      if (start == null) start = t;
+      const p = Math.min(1, (t - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const cur = from + (to - from) * eased;
+      fromRef.current = cur; setDisplay(cur);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else { fromRef.current = to; setDisplay(to); }
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return display;
+}
+
+// The Done-screen celebration palette — the ONE place the monochrome Rams skin
+// earns colour, because a sent request is the reward moment.
+const CONFETTI_COLORS = ['#e2725b', '#2f6f6b', '#d9a441', '#3b5f8a', '#b8553f', '#6c8c5a'];
+
 // Make a plan SVG fill its footprint tile. Every plan SVG's viewBox IS its own cm
 // footprint (mesh-derived or DWG) and the tile is sized to that same footprint, so
 // the fill is a clean uniform scale — no distortion. width/height 100% pins the
@@ -88,6 +125,14 @@ export default function TogoEmbed() {
   const [actionsOpen, setActionsOpen] = useState(false); // desktop toolbar "⋯ Más" popover
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ palette
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
+  const [lastAddedUid, setLastAddedUid] = useState(null); // the just-placed piece → spring-in pop
+
+  // Mark a freshly-placed piece so its tile plays the spring-in pop once, then
+  // clears (so a later unrelated re-render doesn't replay it).
+  const flashAdded = useCallback((uid) => {
+    setLastAddedUid(uid);
+    setTimeout(() => setLastAddedUid((u) => (u === uid ? null : u)), 480);
+  }, []);
 
   // Dieter Rams skin: while the configurator is mounted, flag <body> so the
   // monochrome variable remap (index.css) reaches the portalled modals too.
@@ -227,6 +272,10 @@ export default function TogoEmbed() {
     [placed],
   );
   const pendingFabric = useMemo(() => placed.filter((p) => !p.material).length, [placed]);
+  // The estimate ticks up like a score; the CTA "breathes" once there's a real,
+  // priced quote to send (a piece down AND a fabric chosen).
+  const animatedUsd = useCountUp(pricedUsd);
+  const quoteReady = vm.count > 0 && pricedUsd > 0;
 
   const addPiece = useCallback((modelId) => {
     const r = resolvedById[modelId]; if (!r) return;
@@ -239,7 +288,8 @@ export default function TogoEmbed() {
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setPlaced((prev) => [...prev, { uid, pieceId: modelId, x: c.x, y: c.y, rot: 0 }]);
     setSelectedUid(uid);
-  }, [resolvedById, placed]);
+    flashAdded(uid); buzz(11);
+  }, [resolvedById, placed, flashAdded]);
 
   // One-tap quick-start sets (resolved against the available models) — drop a whole
   // arrangement and auto-pack it, so a customer goes from blank to a real layout in
@@ -256,11 +306,13 @@ export default function TogoEmbed() {
       }
       return compactPlaced(next, resolvedById);
     });
+    buzz([8, 20, 12]);
   }, [resolvedById]);
 
   // uid-parameterized so the on-plan hover controls can rotate/delete ANY piece
   // (not just the selected one) without a round-trip to the toolbar.
   const rotatePiece = useCallback((uid) => {
+    buzz(7);
     setPlaced((prev) => prev.map((p) => {
       if (p.uid !== uid) return p;
       const rot = (p.rot + 90) % 360; const fp = footprintOf(resolvedById[p.pieceId], rot);
@@ -268,6 +320,7 @@ export default function TogoEmbed() {
     }));
   }, [resolvedById]);
   const deletePiece = useCallback((uid) => {
+    buzz([4, 26, 7]);
     setPlaced((prev) => prev.filter((p) => p.uid !== uid));
     setSelectedUid((s) => (s === uid ? null : s));
   }, []);
@@ -277,6 +330,7 @@ export default function TogoEmbed() {
   // Material pick for the selected piece → reprice by grade + stamp swatch/subtype.
   const onPickMaterial = useCallback((pick) => {
     if (!selected) return;
+    buzz(9);
     const p = selectedFamily ? productForGrade(selectedFamily, pick.grade) : null;
     setPlaced((prev) => prev.map((row) => (row.uid === selected.uid ? {
       ...row,
@@ -291,6 +345,7 @@ export default function TogoEmbed() {
 
   // Apply ONE fabric to EVERY piece, repricing each by its OWN bound model.
   const applyFabricToAll = useCallback((pick) => {
+    buzz([7, 18, 11]);
     setPlaced((prev) => prev.map((row) => {
       const fam = families.get(resolvedById[row.pieceId]?.root);
       const p = fam ? productForGrade(fam, pick.grade) : null;
@@ -397,6 +452,7 @@ export default function TogoEmbed() {
       hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
       onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
       quickStarts={quickStarts} onQuickStart={startFromTemplate}
+      lastAddedUid={lastAddedUid}
     />
   );
   // 2D⇄3D segmented toggle — reused in both the desktop strip and the mobile bar.
@@ -533,13 +589,13 @@ export default function TogoEmbed() {
             <div className="min-w-0">
               <div className="text-[11px] text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
               {pricedUsd > 0
-                ? <div className="text-xl font-display font-semibold tabular-nums tracking-tight leading-none mt-0.5">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-[11px] font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
+                ? <div className="text-xl font-display font-semibold tabular-nums tracking-tight leading-none mt-0.5">{formatMoney(Math.round(animatedUsd), 'USD', rates)}{pendingFabric > 0 && <span className="text-[11px] font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
                 : <div className="text-sm text-ink-500 leading-tight py-0.5">{vm.count ? 'Elige una tela' : '—'}</div>}
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
                 <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
             </div>
-            <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50 shrink-0">
+            <button type="button" onClick={() => { buzz(9); setStep('form'); }} disabled={!vm.count} className={`btn-primary text-sm disabled:opacity-50 shrink-0 ${quoteReady ? 'togo-ready' : ''}`}>
               Cotizar <ArrowRight size={15} />
             </button>
           </div>
@@ -555,13 +611,13 @@ export default function TogoEmbed() {
             <div>
               <div className="text-xs text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</div>
               {pricedUsd > 0
-                ? <div className="text-3xl font-display font-semibold tabular-nums tracking-tight leading-none mt-1">{formatMoney(pricedUsd, 'USD', rates)}{pendingFabric > 0 && <span className="text-sm font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
+                ? <div className="text-3xl font-display font-semibold tabular-nums tracking-tight leading-none mt-1">{formatMoney(Math.round(animatedUsd), 'USD', rates)}{pendingFabric > 0 && <span className="text-sm font-normal text-ink-400"> · {pendingFabric} sin tela</span>}</div>
                 : <div className="text-base text-ink-500 mt-1">{vm.count ? 'Elige una tela para ver el estimado' : '—'}</div>}
               {vm.count > 0 && vm.overallCm.widthCm > 0 && (
                 <div className="text-[11px] text-ink-500 tabular-nums mt-1.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>
               )}
             </div>
-            <button type="button" onClick={() => setStep('form')} disabled={!vm.count} className="btn-primary text-sm disabled:opacity-50">
+            <button type="button" onClick={() => { buzz(9); setStep('form'); }} disabled={!vm.count} className={`btn-primary text-sm disabled:opacity-50 ${quoteReady ? 'togo-ready' : ''}`}>
               Solicitar cotización <ArrowRight size={15} />
             </button>
           </div>
@@ -617,7 +673,7 @@ function PiecesList({ models, onAdd, hoveredPieceId, onHover }) {
               onClick={() => onAdd(m.id)}
               onMouseEnter={() => onHover?.(m.id)}
               onMouseLeave={() => onHover?.(null)}
-              className={`w-full flex items-center gap-3 text-left rounded-xl border p-2.5 transition-colors ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
+              className={`w-full flex items-center gap-3 text-left rounded-xl border p-2.5 transition active:scale-[0.98] ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
             >
               <span className="shrink-0 w-14 h-14 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: m.svg }} />
               <span className="min-w-0 flex-1">
@@ -701,7 +757,7 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
 function EmptyPlanStart({ quickStarts, onQuickStart }) {
   return (
     <div className="absolute inset-0 z-10 grid place-items-center p-4 pointer-events-none">
-      <div className="pointer-events-auto text-center max-w-sm rounded-2xl bg-surface/85 backdrop-blur-sm border border-ink-200 px-5 py-4 shadow-pop">
+      <div className="togo-rise pointer-events-auto text-center max-w-sm rounded-2xl bg-surface/85 backdrop-blur-sm border border-ink-200 px-5 py-4 shadow-pop">
         <div className="w-10 h-10 mx-auto rounded-full bg-brand-50 text-brand-600 grid place-items-center"><Sofa size={20} /></div>
         <p className="mt-2 text-sm font-display font-semibold text-ink-800">Empieza tu diseño</p>
         {quickStarts.length > 0 ? (
@@ -710,7 +766,7 @@ function EmptyPlanStart({ quickStarts, onQuickStart }) {
             <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
               {quickStarts.map((q) => (
                 <button key={q.id} type="button" onClick={() => onQuickStart?.(q.pieceIds)}
-                  className="text-xs rounded-full border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-100 px-3 py-1.5 font-medium transition-colors">
+                  className="text-xs rounded-full border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-100 active:scale-95 px-3 py-1.5 font-medium transition">
                   {q.label}
                 </button>
               ))}
@@ -728,7 +784,7 @@ function EmptyPlanStart({ quickStarts, onQuickStart }) {
 function CanvasArea({
   view, vm, scene3d, material, svgById, topDownById = {}, selectedUid, setSelectedUid, codeByUid, placed,
   onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
-  quickStarts = [], onQuickStart,
+  quickStarts = [], onQuickStart, lastAddedUid = null,
 }) {
   const [hoveredUid, setHoveredUid] = useState(null);
   if (view === '3d') {
@@ -774,7 +830,7 @@ function CanvasArea({
               onPointerUp={onTileUp}
               onMouseEnter={() => enter(t)}
               onMouseLeave={leave}
-              className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10'].join(' ')}
+              className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10', t.uid === lastAddedUid ? 'togo-pop' : ''].join(' ')}
               style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
             >
               <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : linked ? 'ring-2 ring-brand-300 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
@@ -782,10 +838,10 @@ function CanvasArea({
                 // Realistic top-down render of the mesh, sized to its true footprint
                 // (with a small shadow margin), centred + rotated to the placement.
                 <img src={td.dataUrl} alt="" draggable={false}
-                  className="absolute top-1/2 left-1/2 max-w-none pointer-events-none select-none"
+                  className="absolute top-1/2 left-1/2 max-w-none pointer-events-none select-none transition-transform duration-300 ease-out"
                   style={{ width: tdW, height: tdH, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} />
               ) : (
-                <div className="absolute top-1/2 left-1/2 text-ink-800" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
+                <div className="absolute top-1/2 left-1/2 text-ink-800 transition-transform duration-300 ease-out" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
               )}
               <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
                 {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
@@ -992,6 +1048,7 @@ function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
     setBusy(true); setError(null);
     try {
       await submitTogoRequest({ contact: { name: form.name, phone: form.phone, email: form.email }, items, estimateUsd, note: form.note });
+      buzz([12, 40, 16, 40, 22]); // a little celebratory rumble on send
       onDone();
     } catch (err) {
       setError(err?.message || 'No se pudo enviar. Intenta de nuevo.');
@@ -1001,7 +1058,7 @@ function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
 
   return (
     <div className="min-h-full bg-surface text-ink-900 p-4 grid place-items-center">
-      <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-ink-200 bg-surface p-5 space-y-3.5">
+      <form onSubmit={submit} className="togo-rise w-full max-w-md rounded-2xl border border-ink-200 bg-surface p-5 space-y-3.5">
         <button type="button" onClick={onBack} className="btn-ghost text-xs text-ink-500"><ArrowLeft size={14} /> Volver al diseño</button>
         <div>
           <h2 className="font-display font-semibold text-lg">Solicita tu cotización</h2>
@@ -1035,15 +1092,44 @@ function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
   );
 }
 
+/** The reward screen. A confetti burst + a spring-in check make "request sent"
+ *  feel like clearing a level, not submitting a form. */
 function DoneScreen({ storeName, onReset }) {
   return (
-    <div className="min-h-full bg-surface text-ink-900 p-6 grid place-items-center">
-      <div className="text-center max-w-sm space-y-3">
-        <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center justify-center"><Check size={26} /></div>
-        <h2 className="font-display font-semibold text-lg">¡Solicitud enviada!</h2>
+    <div className="relative min-h-full overflow-hidden bg-surface text-ink-900 p-6 grid place-items-center">
+      <Confetti />
+      <div className="togo-rise relative z-10 text-center max-w-sm space-y-3">
+        <div className="togo-pop w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center justify-center"><Check size={30} /></div>
+        <h2 className="font-display font-semibold text-xl">¡Solicitud enviada!</h2>
         <p className="text-sm text-ink-500">{storeName} recibió tu diseño y te contactará pronto con el precio final y la disponibilidad.</p>
         <button type="button" onClick={onReset} className="btn-ghost text-sm">Diseñar otro</button>
       </div>
+    </div>
+  );
+}
+
+/** A pure-CSS confetti burst — each bit reads its own randomized trajectory from
+ *  inline custom properties (no animation library, no canvas). Memoized so it's
+ *  cut once per mount; honors reduced-motion via the .togo-confetti CSS guard. */
+function Confetti({ count = 28 }) {
+  const bits = useMemo(() => Array.from({ length: count }, (_, i) => ({
+    left: Math.round((i / count) * 100 + (Math.random() * 6 - 3)),
+    w: 6 + Math.round(Math.random() * 6),
+    h: 9 + Math.round(Math.random() * 8),
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    dx: `${Math.round(Math.random() * 160 - 80)}px`,
+    rot: `${Math.round(Math.random() * 900 - 360)}deg`,
+    dur: `${(2.2 + Math.random() * 1.7).toFixed(2)}s`,
+    delay: `${(Math.random() * 0.5).toFixed(2)}s`,
+  })), [count]);
+  return (
+    <div className="togo-confetti absolute inset-0 pointer-events-none" aria-hidden>
+      {bits.map((b, i) => (
+        <i key={i} style={{
+          left: `${b.left}%`, width: b.w, height: b.h, background: b.color,
+          '--dx': b.dx, '--rot': b.rot, '--dur': b.dur, '--delay': b.delay,
+        }} />
+      ))}
     </div>
   );
 }

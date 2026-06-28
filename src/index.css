@@ -1264,6 +1264,52 @@ body.togo-rams {
 }
 body.togo-rams .card { box-shadow: none; background-image: none; border-color: rgb(var(--ink-200) / 0.65); }
 
+/* ── "Game feel" motion layer ─────────────────────────────────────────────────
+   The Rams skin keeps the chrome quiet; this layer makes the configurator feel
+   ALIVE — a toy you play with, not a form you fill in. Pieces spring in when
+   placed, rotate with a visible swing, the live estimate ticks like a score, the
+   "request a quote" CTA breathes once a real quote is ready, and the finished
+   screen bursts confetti. All pure CSS, all collapsed under reduced-motion. */
+
+/* A piece dropped onto the plan springs up from nothing (overshoot easing). */
+@keyframes togo-pop {
+  0%   { transform: scale(0.55); opacity: 0; }
+  55%  { transform: scale(1.07); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.togo-pop { animation: togo-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* The CTA "breathes" once the design carries a real, priced quote — a calm
+   quest-objective-ready cue that pulls the eye to the next step. */
+@keyframes togo-ready {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--brand-500) / 0); }
+  50%      { box-shadow: 0 0 0 6px rgb(var(--brand-500) / 0.16); }
+}
+.togo-ready { animation: togo-ready 1.9s ease-in-out infinite; }
+
+/* Step screens (form / done / empty-start card) rise into place. */
+@keyframes togo-rise {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.togo-rise { animation: togo-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* The reward: a confetti burst on a sent request. Each bit reads its own
+   trajectory from CSS custom properties stamped inline (per-bit randomness). */
+@keyframes togo-confetti {
+  0%   { transform: translate3d(0, -14vh, 0) rotate(0deg);                 opacity: 1; }
+  100% { transform: translate3d(var(--dx, 0), 102vh, 0) rotate(var(--rot, 540deg)); opacity: 0; }
+}
+.togo-confetti > i {
+  position: absolute; top: 0; display: block; border-radius: 2px;
+  animation: togo-confetti var(--dur, 2.6s) cubic-bezier(0.2, 0.6, 0.35, 1) var(--delay, 0s) forwards;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .togo-pop, .togo-ready, .togo-rise, .togo-confetti > i { animation: none !important; opacity: 1; }
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
    Accounting density — a tighter Palantir / QuickBooks read for the whole
    /accounting surface. Scoped to `.acct-dense` (set in Layout when the path is
