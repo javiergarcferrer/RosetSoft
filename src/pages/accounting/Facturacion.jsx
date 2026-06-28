@@ -1052,19 +1052,19 @@ export default function Facturacion() {
       )}
 
       {loaded && depositPending.count > 0 && (
-        <div className="card card-pad mb-4 border-amber-200 bg-amber-50/40">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4 mb-4">
           <div className="flex items-center gap-2 mb-2.5">
-            <HandCoins size={16} className="text-amber-600" aria-hidden />
+            <HandCoins size={16} className="text-amber-600 dark:text-amber-400" aria-hidden />
             <h3 className="font-display text-sm font-bold text-ink-900">Depósitos por confirmar</h3>
-            <span className="rounded-full bg-amber-100 text-amber-700 text-xs font-semibold px-2 py-0.5 tabular-nums">{depositPending.count}</span>
+            <span className="rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 text-xs font-semibold px-2 py-0.5 tabular-nums">{depositPending.count}</span>
           </div>
           <p className="text-xs text-ink-500 mb-3 leading-relaxed">
-            Estas cotizaciones marcaron <strong>depósito recibido</strong>, pero el cobro aún no está en
+            Estas cotizaciones marcaron <strong className="text-ink-700">depósito recibido</strong>, pero el cobro aún no está en
             la contabilidad. Registra el cobro real para confirmarlo — el monto lo defines aquí.
           </p>
           <div className="space-y-1.5">
             {depositPending.rows.map((r) => (
-              <div key={r.quoteId} className="flex items-center gap-3 rounded-lg border border-amber-100 bg-surface px-3 py-2">
+              <div key={r.quoteId} className="flex items-center gap-3 rounded-lg border border-ink-100 bg-surface px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-ink-900 truncate">{r.customer?.name || 'Cliente'}</div>
                   <div className="text-xs text-ink-400 tabular-nums">

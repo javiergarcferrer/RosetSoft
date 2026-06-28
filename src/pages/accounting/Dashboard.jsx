@@ -218,7 +218,7 @@ function Kpi({ icon: Icon, label, value, tone, sub, to }) {
  *  otherwise sit scattered across the widgets below. */
 function CycleStage({ icon: Icon, tint, label, value, sub, to }) {
   return (
-    <Link to={to} className="flex-1 min-w-[7.5rem] surface-subtle p-3 hover:shadow-xs active:scale-[0.99] transition-all">
+    <Link to={to} className="shrink-0 grow snap-start basis-[8.5rem] min-w-[8.5rem] surface-subtle p-3 hover:shadow-xs active:scale-[0.99] transition-all">
       <span className={`icon-tile ${tint} mb-2`}><Icon size={14} /></span>
       <div className="eyebrow-xs text-ink-500 truncate">{label}</div>
       <div className="stat-value text-base whitespace-nowrap">{value}</div>
@@ -417,7 +417,7 @@ export default function AccountingDashboard() {
               Pure synthesis of already-resolved VM data. */}
           <div className="card p-4 min-w-0">
             <CardHead title="Del contenedor a la venta" />
-            <div className="flex items-stretch gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-stretch gap-1.5 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <CycleStage icon={Ship} tint="tint-sky" label="En tránsito" value={formatDop(importPanel.inTransit)} sub="en el agua" to="/accounting/importaciones" />
               <CycleArrow />
               <CycleStage icon={Boxes} tint="tint-brand" label="Importado" value={formatDop(importPanel.landed)} sub={`destino · ${monthLabel}`} to="/accounting/importaciones" />
