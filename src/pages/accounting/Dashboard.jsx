@@ -485,10 +485,12 @@ export default function AccountingDashboard() {
                   </Donut>
                   <ul className="flex-1 min-w-0 space-y-1.5">
                     {d.expenseDonut.segments.map((s, i) => (
-                      <li key={s.code} className="flex items-center gap-2 text-xs min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT[i % DONUT.length] }} />
-                        <span className="truncate text-ink-600 flex-1 min-w-0">{s.name}</span>
-                        <span className="tabular-nums font-medium text-ink-700 shrink-0">{formatDop(s.amount)}</span>
+                      <li key={s.code}>
+                        <Link to={`/accounting/ledger?cuenta=${s.code}`} className="flex items-center gap-2 text-xs min-w-0 rounded-md -mx-1 px-1 py-0.5 hover:bg-ink-50/60 transition-colors" title="Ver el mayor de esta cuenta">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT[i % DONUT.length] }} />
+                          <span className="truncate text-ink-600 flex-1 min-w-0">{s.name}</span>
+                          <span className="tabular-nums font-medium text-ink-700 shrink-0">{formatDop(s.amount)}</span>
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -556,10 +558,12 @@ export default function AccountingDashboard() {
               ) : (
                 <ul className="space-y-2 min-w-0">
                   {d.bankAccounts.slice(0, 5).map((b) => (
-                    <li key={b.code} className="flex items-center gap-2.5 py-1 rounded-lg hover:bg-ink-50/60 transition-colors -mx-1 px-1 min-w-0">
-                      <span className="w-8 h-8 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0"><Landmark size={14} /></span>
-                      <span className="flex-1 min-w-0 truncate text-sm text-ink-700">{b.name}</span>
-                      <span className="tabular-nums font-medium text-sm text-ink-900 shrink-0">{formatDop(b.balance)}</span>
+                    <li key={b.code}>
+                      <Link to={`/accounting/ledger?cuenta=${b.code}`} className="flex items-center gap-2.5 py-1 rounded-lg hover:bg-ink-50/60 transition-colors -mx-1 px-1 min-w-0" title="Ver el mayor de esta cuenta">
+                        <span className="w-8 h-8 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0"><Landmark size={14} /></span>
+                        <span className="flex-1 min-w-0 truncate text-sm text-ink-700">{b.name}</span>
+                        <span className="tabular-nums font-medium text-sm text-ink-900 shrink-0">{formatDop(b.balance)}</span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -629,7 +633,7 @@ export default function AccountingDashboard() {
                       const shown = expComp.slice(0, 7);
                       const max = Math.max(...shown.flatMap((x) => [x.current, x.previous]));
                       return shown.map((r) => (
-                        <div key={r.code} className="min-w-0" title={`${r.name}: ${formatDop(r.current)} · ${period.prev.label} ${formatDop(r.previous)}`}>
+                        <Link key={r.code} to={`/accounting/ledger?cuenta=${r.code}`} className="block min-w-0 rounded-md -mx-1 px-1 py-0.5 hover:bg-ink-50/60 transition-colors" title={`${r.name}: ${formatDop(r.current)} · ${period.prev.label} ${formatDop(r.previous)} — ver el mayor`}>
                           <div className="flex items-baseline justify-between gap-2 text-sm mb-1 min-w-0">
                             <span className="truncate text-ink-700 min-w-0">{r.name}</span>
                             <span className="shrink-0 inline-flex items-baseline gap-2">
@@ -638,7 +642,7 @@ export default function AccountingDashboard() {
                             </span>
                           </div>
                           <BulletBar value={r.current} marker={r.previous} max={max} color={C.sales} />
-                        </div>
+                        </Link>
                       ));
                     })()}
                   </div>
@@ -825,9 +829,11 @@ export default function AccountingDashboard() {
               ) : (
                 <ul className="divide-y divide-ink-100">
                   {d.cxcTop.map((r) => (
-                    <li key={r.partyId} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors min-w-0">
-                      <span className="truncate text-ink-700 min-w-0">{r.party?.name || '—'}</span>
-                      <span className="tabular-nums font-semibold text-ink-900 shrink-0">{formatDop(r.balance)}</span>
+                    <li key={r.partyId}>
+                      <Link to="/accounting/cuentas" className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors min-w-0" title="Ver en cuentas por cobrar">
+                        <span className="truncate text-ink-700 min-w-0">{r.party?.name || '—'}</span>
+                        <span className="tabular-nums font-semibold text-ink-900 shrink-0">{formatDop(r.balance)}</span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -843,9 +849,11 @@ export default function AccountingDashboard() {
               ) : (
                 <ul className="divide-y divide-ink-100">
                   {d.cxpTop.map((r) => (
-                    <li key={r.partyId} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors min-w-0">
-                      <span className="truncate text-ink-700 min-w-0">{r.party?.name || '—'}</span>
-                      <span className="tabular-nums font-semibold text-ink-900 shrink-0">{formatDop(r.balance)}</span>
+                    <li key={r.partyId}>
+                      <Link to="/accounting/cuentas" className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-ink-50/60 px-4 transition-colors min-w-0" title="Ver en cuentas por pagar">
+                        <span className="truncate text-ink-700 min-w-0">{r.party?.name || '—'}</span>
+                        <span className="tabular-nums font-semibold text-ink-900 shrink-0">{formatDop(r.balance)}</span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
