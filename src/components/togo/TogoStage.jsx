@@ -206,7 +206,7 @@ export default function TogoStage({
 
   // ── Mount: renderer / scene / camera / controls / stage, pointer editing. ──
   useEffect(() => {
-    let alive = true; let ro = null; let raf = 0;
+    let alive = true; let ro = null; let raf = 0; let l_cleanupResize = null;
     (async () => {
       let mods;
       try {
@@ -225,12 +225,18 @@ export default function TogoStage({
       let renderer;
       try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
       catch { if (alive) setFailed(true); return; }
-      renderer.setSize(w, h);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(w, h, false);
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.NeutralToneMapping;
-      renderer.domElement.style.cssText = 'display:block;outline:none;touch-action:none';
+      // The canvas ALWAYS fills its container via CSS (width/height:100%); the
+      // drawing buffer is reconciled to that displayed size every frame by
+      // syncSize() below. This is the robust "resizeRendererToDisplaySize"
+      // pattern — it self-corrects no matter what changed the size (rotation,
+      // iOS URL-bar show/hide, a missed ResizeObserver tick) so the viewport can
+      // never drift off-centre or out of aspect.
+      renderer.domElement.style.cssText = 'display:block;outline:none;touch-action:none;width:100%;height:100%';
       mount.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
@@ -240,7 +246,31 @@ export default function TogoStage({
       controls.enablePan = false;
       controls.maxPolarAngle = Math.PI * 0.495;
 
-      const renderNow = () => { renderer.render(scene, camera); };
+      // Reconcile the drawing buffer + camera aspect to the canvas's CURRENT
+      // displayed size, and re-frame so the layout stays centred for the new
+      // aspect. Returns true if anything changed. Called at the top of every
+      // render so a stale size is fixed before it's ever shown.
+      const _sz = new THREE.Vector2();
+      const syncSize = () => {
+        const l = api.current; if (!l) return false;
+        const cw = renderer.domElement.clientWidth || mount.clientWidth;
+        const ch = renderer.domElement.clientHeight || mount.clientHeight;
+        if (!cw || !ch) return false;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        renderer.getSize(_sz);
+        if (Math.round(_sz.x) === cw && Math.round(_sz.y) === ch && renderer.getPixelRatio() === dpr) return false;
+        renderer.setPixelRatio(dpr);
+        renderer.setSize(cw, ch, false);              // buffer only — CSS stays 100%
+        camera.aspect = cw / ch;
+        camera.updateProjectionMatrix();
+        if (!l.drag && !l.tween) {
+          const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
+          placeCamera(l, pose, stateRef.current.mode);
+        }
+        return true;
+      };
+
+      const renderNow = () => { syncSize(); renderer.render(scene, camera); };
       let scheduled = false;
       const requestRender = () => { if (scheduled || !alive) return; scheduled = true; raf = requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); }); };
       controls.addEventListener('change', requestRender);
@@ -327,23 +357,28 @@ export default function TogoStage({
         window.removeEventListener('pointerup', onUp);
       };
 
-      ro = new ResizeObserver(() => {
-        const W = mount.clientWidth, H = mount.clientHeight; if (!W || !H) return;
-        renderer.setSize(W, H); camera.aspect = W / H; camera.updateProjectionMatrix();
-        // Re-frame for the new aspect (orientation change / first real layout) so
-        // the layout never ends up over-zoomed, unless the user is mid-drag.
-        const l = api.current;
-        if (l && !l.drag && !l.tween) {
-          const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
-          placeCamera(l, pose, stateRef.current.mode);
-        }
-        requestRender();
-      });
+      // Every signal that the displayed size MIGHT have changed just asks for a
+      // render; renderNow → syncSize does the actual reconcile + recentre. We
+      // listen broadly (ResizeObserver on the container, window resize/orientation,
+      // and the iOS visualViewport which fires when the URL bar shows/hides) so no
+      // device-specific quirk can leave the canvas stale.
+      ro = new ResizeObserver(() => requestRender());
       ro.observe(mount);
+      const onWin = () => requestRender();
+      window.addEventListener('resize', onWin);
+      window.addEventListener('orientationchange', onWin);
+      window.visualViewport?.addEventListener('resize', onWin);
+      window.visualViewport?.addEventListener('scroll', onWin);
+      l_cleanupResize = () => {
+        window.removeEventListener('resize', onWin);
+        window.removeEventListener('orientationchange', onWin);
+        window.visualViewport?.removeEventListener('resize', onWin);
+        window.visualViewport?.removeEventListener('scroll', onWin);
+      };
     })();
 
     return () => {
-      alive = false; cancelAnimationFrame(raf); ro?.disconnect();
+      alive = false; cancelAnimationFrame(raf); ro?.disconnect(); l_cleanupResize?.();
       const l = api.current; api.current = null;
       if (l) {
         l.cleanupPointer?.();
