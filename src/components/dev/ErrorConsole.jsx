@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bug, Trash2, Copy, Check, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import Modal from '../Modal.jsx';
+import DevTodos from './DevTodos.jsx';
 import { getErrors, subscribe, clearErrors } from '../../lib/errorLog.js';
 
 const TYPE_BADGE = {
@@ -88,6 +89,7 @@ export default function ErrorConsole() {
   const { isAdmin } = useApp();
   const [list, setList] = useState(getErrors);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('errores');
 
   useEffect(() => subscribe(setList), []);
 
@@ -110,23 +112,37 @@ export default function ErrorConsole() {
         )}
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Consola de errores" size="lg" flushBody>
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-ink-100 shrink-0">
-          <span className="text-xs text-ink-400 tabular-nums">{count} {count === 1 ? 'error' : 'errores'}</span>
-          <button type="button" onClick={() => count && clearErrors()} disabled={!count} className="btn-ghost text-xs ml-auto disabled:opacity-40">
-            <Trash2 size={14} /> Limpiar
-          </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Consola de desarrollo" size="lg" flushBody>
+        <div className="flex items-center gap-1 px-3 pt-1 shrink-0 border-b border-ink-100">
+          {[['errores', `Errores${count ? ` (${count})` : ''}`], ['pendientes', 'Pendientes']].map(([key, label]) => (
+            <button
+              key={key} type="button" onClick={() => setTab(key)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? 'border-ink-900 text-ink-900' : 'border-transparent text-ink-500 hover:text-ink-800'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        {count === 0 ? (
+
+        {tab === 'pendientes' ? (
+          <DevTodos />
+        ) : count === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center text-ink-400 p-8">
             <Bug size={26} className="mb-2 opacity-50" />
             <div className="text-sm">Sin errores registrados.</div>
             <div className="text-xs mt-1">Lo que falle aparecerá aquí con su respuesta completa.</div>
           </div>
         ) : (
-          <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-            {list.map((e) => <Row key={e.id} e={e} />)}
-          </ul>
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex items-center px-4 py-1.5 border-b border-ink-100 shrink-0">
+              <button type="button" onClick={() => clearErrors()} className="btn-ghost text-xs ml-auto">
+                <Trash2 size={14} /> Limpiar
+              </button>
+            </div>
+            <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+              {list.map((e) => <Row key={e.id} e={e} />)}
+            </ul>
+          </div>
         )}
       </Modal>
     </>

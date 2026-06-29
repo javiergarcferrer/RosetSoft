@@ -710,6 +710,21 @@ export interface MetaReceipt {
 }
 
 /**
+ * A shared dev backlog item — the owner types it in the admin bug console; the
+ * developer reads + checks it off. Persisted (not localStorage) so it's visible
+ * to both sides.
+ */
+export interface DevTodo {
+  id: string;
+  profileId: string;
+  text: string;
+  done: boolean;
+  doneAt?: number | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * A recognized sale (Facturación) — posted at delivery. Snapshots the booked
  * DOP figures + NCF and links to the asiento it generated. The 607 and the
  * ITBIS liquidation (IT-1) project off these. One per quote.
