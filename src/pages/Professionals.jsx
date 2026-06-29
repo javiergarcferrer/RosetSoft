@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
+import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ListLoading from '../components/ListLoading.jsx';
 import ListSearchHeader from '../components/search/ListSearchHeader.jsx';
@@ -139,6 +140,7 @@ const PROFESSIONAL_COLS_STORAGE_KEY = 'rs.professionals.cols.v1';
  */
 export default function Professionals() {
   const { profileId, isAdmin } = useApp();
+  const [creating, setCreating] = useState(null);
   // useLiveQueryStatus → gate the "Sin profesionales" empty state on
   // the first fetch having completed, so a user navigating into this
   // page doesn't see the false empty state flicker before their real
@@ -276,18 +278,6 @@ export default function Professionals() {
     }
   }
 
-  function focusNewRow() {
-    // Two new-row name inputs exist (desktop sheet / mobile card); focus the
-    // one that's actually laid out.
-    const els = document.querySelectorAll('[data-newrow-name]');
-    for (const el of els) {
-      if (el.offsetParent !== null) {
-        el.scrollIntoView({ block: 'center' });
-        el.focus();
-        return;
-      }
-    }
-  }
 
   const noMatches = loaded && pros.length > 0 && rows.length === 0;
 
@@ -311,7 +301,7 @@ export default function Professionals() {
                 <Megaphone size={14} /> Difusión
               </Link>
             )}
-            <button onClick={focusNewRow} className="btn-brand">
+            <button onClick={() => setCreating({})} className="btn-brand">
               <Plus size={14} /> Agregar profesional
             </button>
           </div>
@@ -427,6 +417,8 @@ export default function Professionals() {
           </div>
         </>
       )}
+
+      <ProfessionalModal professional={creating} onClose={() => setCreating(null)} profileId={profileId} />
     </>
   );
 }
