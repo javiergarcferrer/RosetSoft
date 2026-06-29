@@ -15,12 +15,7 @@ import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
 } from '../../core/quote/index.js';
-import { TOGO_PIECES } from '../../assets/togo/pieces.js';
 import togoHeroSvg from '../../assets/togo/togo_gb.svg?raw';
-import togoWireA from '../../assets/togo/togo_a.svg?raw';
-import togoWireChauf from '../../assets/togo/togo_chauf.svg?raw';
-import togoWireMc from '../../assets/togo/togo_mc.svg?raw';
-import togoWireLounge from '../../assets/togo/togo_lounge.svg?raw';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
@@ -29,40 +24,6 @@ import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
 
-// The clean "beautiful" Togo line wireframes (the real plan silhouettes), keyed
-// by canonical piece id. Used as each MODEL'S image in the palette + start screen
-// — far cleaner than the dealer's stored thumbnails. togo_gb is the hero import.
-const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge };
-const WIRE_BY_FOOTPRINT = new Map(TOGO_PIECES.map((p) => [`${p.widthCm}x${p.depthCm}`, p.id]));
-// Map each REAL dealer model to its wireframe by NAME — the truest signal (the
-// dealer's measured footprints don't match the canonical ones, and `togo_a` is
-// actually the diagonal CORNER plan, not an armchair). Order = most specific
-// first (Medium/Large before generic "Sofa"). Falls through to footprint/keyword.
-const WIRE_NAME_ALIAS = [
-  [/corner|angle|esquin|rincon/, 'a'],            // togo_a = the diagonal corner plan
-  [/medium|large|grand|3\s*plaz/, 'mc'],
-  [/lounge|meridi|chaise/, 'lounge'],
-  [/love|biplaza|2\s*plaz/, 'gb'],
-  [/ottoman|pouf|puff|repos|tabur/, 'chauf'],     // armless seat → the fireside plan
-  [/fireside|chauff|chofesa|sin\s*brazo/, 'chauf'],
-  [/sofa|settee|canap/, 'gb'],
-  [/armchair|sillon|fauteuil|butaca/, 'a'],
-];
-
-// The wireframe that best fits a catalog model: a distinctive shape NAME wins
-// first, then exact footprint, then a catalog keyword; else null (caller falls
-// back to the model's own svg). Crisp via non-scaling strokes.
-function wireframeFor(model) {
-  if (!model) return null;
-  const name = String(model.name || '').toLowerCase();
-  let id = WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
-  if (!id) {
-    const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;
-    id = WIRE_BY_FOOTPRINT.get(fp)
-      || TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id;
-  }
-  return (id && TOGO_WIRES[id]) || null;
-}
 
 // A touch of "game juice": a haptic tap on key actions. Guarded — a no-op where
 // the device/browser doesn't support vibration (desktop, iOS Safari), so it only
@@ -225,10 +186,12 @@ export default function TogoEmbed() {
     () => Object.fromEntries(models.map((m) => [m.id, meshPlans[m.id]?.svg || m.svg])),
     [models, meshPlans],
   );
-  // Each model's catalogue IMAGE (palette, start screen, summary) — the clean
-  // Togo wireframe where one fits the footprint/name, else the stored thumbnail.
+  // Each model's catalogue IMAGE (palette, start screen, summary) = its OWN stored
+  // plan svg — a clean line silhouette at the model's true footprint, accurate per
+  // piece (the Corner's diagonal, the Loveseat's smaller square, …). Crisped at
+  // thumbnail size by the non-scaling-stroke CSS at each render site.
   const thumbById = useMemo(
-    () => Object.fromEntries(models.map((m) => [m.id, wireframeFor(m) || m.svg])),
+    () => Object.fromEntries(models.map((m) => [m.id, m.svg])),
     [models],
   );
 
