@@ -316,15 +316,15 @@ export default function TogoEmbed() {
     const r = resolvedById[modelId]; if (!r) return;
     const fp = footprintOf(r, 0);
     const others = placed.map((p) => { const f = footprintOf(resolvedById[p.pieceId], p.rot); return { x: p.x, y: p.y, w: f.w, h: f.h }; });
-    // Drop the new piece FLUSH against the right edge of the current arrangement,
-    // top-aligned — so a sectional builds out as a connected row that touches,
-    // never a piece stacked on top of another (the strong edge-snap then keeps
-    // it locked). First piece lands at a comfortable default.
+    // Drop the new piece FLUSH against the RIGHTMOST piece, top-aligned to THAT
+    // piece — so a sectional builds out as a connected row that always touches,
+    // never floats (aligning to the global top could leave it clear of every
+    // neighbour in an L-shape) and never stacks. The strong edge-snap then keeps
+    // it locked, and the user can drag to rearrange. First piece → default spot.
     let x = 40, y = 40;
     if (others.length) {
-      let maxX = -Infinity, minY = Infinity;
-      for (const o of others) { maxX = Math.max(maxX, o.x + o.w); minY = Math.min(minY, o.y); }
-      x = maxX; y = minY;
+      const right = others.reduce((a, o) => (o.x + o.w > a.x + a.w ? o : a));
+      x = right.x + right.w; y = right.y;
     }
     const start = clampToPlan(x, y, fp.w, fp.h);
     const snapped = snapPlacement({ x: start.x, y: start.y, w: fp.w, h: fp.h }, others);

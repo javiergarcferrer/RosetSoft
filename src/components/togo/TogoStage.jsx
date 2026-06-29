@@ -360,7 +360,7 @@ export default function TogoStage({
         const bb = l.scene3d?.bounds;
         const cw = renderer.domElement.clientWidth, ch = renderer.domElement.clientHeight;
         let rect = null;
-        if (bb && stateRef.current.mode === '2d' && !l.tween) {
+        if (bb && stateRef.current.mode === '2d' && !l.tween && !l.drag) {
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           for (const x of [bb.minX, bb.maxX]) for (const z of [bb.minZ, bb.maxZ]) {
             _v.set(x, 0, z).project(camera);
