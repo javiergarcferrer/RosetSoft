@@ -9,7 +9,10 @@ dist
 # Local files
 /pricelist_extract.txt
 /uploads
-.claude/
+# Ignore local Claude config but TRACK committed skills so they travel with the
+# repo (web/cron sessions clone fresh and need them present).
+.claude/*
+!.claude/skills/
 
 # Dev-only PDF render harness (renders a sample quote to /tmp for eyeballing)
 /tools/render-sample.mjs
