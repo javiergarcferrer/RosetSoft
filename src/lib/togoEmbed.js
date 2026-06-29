@@ -7,10 +7,18 @@ const VITE_ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {};
 const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
 
-/** The embeddable widget URL (HashRouter, so `/#/embed/togo`). */
+/** The embeddable widget URL (HashRouter, so `/#/embed/togo`). Shows the launch
+ *  card first (the embed route gates itself behind it). */
 export function togoEmbedUrl() {
   const origin = typeof location !== 'undefined' ? location.origin : '';
   return `${origin}/#/embed/togo`;
+}
+
+/** Same widget, flagged as ALREADY inside a fullscreen container (a host-page
+ *  overlay or the in-app modal) → it skips its own launch card and drops straight
+ *  into the configurator, so there's never a card-inside-a-card. */
+export function togoEmbedModalUrl() {
+  return `${togoEmbedUrl()}?ctx=modal`;
 }
 
 // The device-capability grants the in-widget "Ver en tu espacio" (WebAR) needs
@@ -27,7 +35,7 @@ export const TOGO_EMBED_ALLOW = 'xr-spatial-tracking; camera; gyroscope; acceler
  * full experience. Keeps the same `allow` grants so in-widget AR still works.
  */
 export function togoEmbedSnippet() {
-  const url = togoEmbedUrl();
+  const url = togoEmbedModalUrl();   // the popup iframe is already fullscreen → skip the inner card
   const allow = TOGO_EMBED_ALLOW;
   return `<!-- Togo configurator (Ligne Roset) — launch card + fullscreen popup -->
 <div data-togo-launcher>

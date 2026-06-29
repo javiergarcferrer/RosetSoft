@@ -5,7 +5,7 @@ import { Inbox, Boxes, ExternalLink, Copy, Check, X, ArrowRight, Maximize2 } fro
 import { useApp } from '../context/AppContext.jsx';
 import { useLiveQuery } from '../db/hooks.js';
 import { db } from '../db/database.js';
-import { togoEmbedUrl, togoEmbedSnippet, TOGO_EMBED_ALLOW } from '../lib/togoEmbed.js';
+import { togoEmbedUrl, togoEmbedModalUrl, togoEmbedSnippet, TOGO_EMBED_ALLOW } from '../lib/togoEmbed.js';
 import TogoIcon from '../lib/icons/TogoIcon.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import TogoRequests from './TogoRequests.jsx';
@@ -117,7 +117,7 @@ function TogoLivePreview() {
         <TogoLaunchCard onOpen={() => setOpen(true)} />
       </div>
 
-      <TogoConfiguratorModal open={open} url={url} onClose={() => setOpen(false)} />
+      <TogoConfiguratorModal open={open} url={togoEmbedModalUrl()} onClose={() => setOpen(false)} />
     </div>
   );
 }

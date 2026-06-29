@@ -92,6 +92,29 @@ const FINISHES = [
  * light, so it sits cleanly inside any page.
  */
 
+// True when the widget is loaded inside a host fullscreen container (the embed
+// snippet's popup overlay or the in-app modal pass `?ctx=modal`) — it then skips
+// its own launch card and shows the configurator directly (no card-in-a-card).
+function isModalContext() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const h = window.location.hash || '';
+    const qi = h.indexOf('?');
+    return qi >= 0 && new URLSearchParams(h.slice(qi + 1)).get('ctx') === 'modal';
+  } catch { return false; }
+}
+
+// Best-effort true fullscreen on launch — escapes a fixed-height host iframe on
+// desktop. A no-op where blocked (iOS Safari ignores element fullscreen); there
+// the host-overlay popup already provides the fullscreen frame.
+function goFullscreen() {
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) { const p = req.call(el); if (p && p.catch) p.catch(() => {}); }
+  } catch { /* ignore */ }
+}
+
 // material + color → the { grade, fabric, code } shape a placement carries. Mirrors
 // SwatchPicker.toPick; `code` lets us render the LR swatch (swatchUrl) with no DB.
 function toPick(material, color) {
@@ -123,6 +146,8 @@ export default function TogoEmbed() {
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ hotbar
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const [lastAddedUid, setLastAddedUid] = useState(null); // the just-placed piece → spring-in pop
+  const [launched, setLaunched] = useState(isModalContext); // false → show the launch card first
+  const start = useCallback(() => { buzz(12); goFullscreen(); setLaunched(true); }, []);
 
   // Mark a freshly-placed piece so its tile plays the spring-in pop once, then
   // clears (so a later unrelated re-render doesn't replay it).
@@ -396,6 +421,11 @@ export default function TogoEmbed() {
     });
   }, [placed, resolvedById]);
   const onTileUp = useCallback((e) => { dragRef.current = null; e.currentTarget.releasePointerCapture?.(e.pointerId); }, []);
+
+  // The launch card — what the embed shows FIRST (the catalog keeps loading behind
+  // it). Clicking it opens the configurator fullscreen. Skipped in modal context
+  // (a host overlay already framed it fullscreen).
+  if (!launched) return <EmbedLaunchCard storeName={data?.storeName} onStart={start} />;
 
   if (cat.status === 'loading') {
     return <Centered><Loader2 size={20} className="animate-spin text-ink-400" /></Centered>;
@@ -724,10 +754,14 @@ function CanvasArea({
           const linked = !sel && hoveredPieceId != null && t.pieceId === hoveredPieceId;
           const code = codeByUid[t.uid];
           const td = topDownById[t.pieceId];
-          // The render is framed to the mesh's true footprint; size the image to that
-          // (fw×fd at SCALE), so it fills the tile with no letterbox and no stretch.
-          const tdW = td?.wCm ? td.wCm * SCALE * td.margin : t.innerWPx * (td?.margin || 1);
-          const tdH = td?.hCm ? td.hCm * SCALE * td.margin : t.innerHPx * (td?.margin || 1);
+          // Size the realistic render to the placement FOOTPRINT (× the shadow
+          // margin baked into the PNG), exactly like the silhouette fallback — so
+          // the model fills its stated W×D box. Sizing to the render's own measured
+          // extent (td.wCm/hCm) left the model floating with a white strip below
+          // when the rescaled 3D box came out smaller than the catalogue footprint.
+          const tdMargin = td?.margin || 1;
+          const tdW = t.innerWPx * tdMargin;
+          const tdH = t.innerHPx * tdMargin;
           const showControls = t.uid === hoveredUid || sel;
           return (
             <div
@@ -908,6 +942,31 @@ function FabricModal({ open, onClose, onSelect, materials, family, nameFilter, c
 
 function Centered({ children }) {
   return <div className="min-h-full bg-surface grid place-items-center p-6">{children}</div>;
+}
+
+/** The embed's first screen: an attractive "Diseña tu Togo" card. Tapping it
+ *  launches the configurator fullscreen. This is what every surface that loads
+ *  the embed route shows first — so the card can't be missed, whether the widget
+ *  is opened directly, via a legacy iframe paste, or anywhere else. */
+function EmbedLaunchCard({ storeName, onStart }) {
+  return (
+    <div className="fixed inset-0 grid place-items-center bg-surface text-ink-900 p-5">
+      <button
+        type="button"
+        onClick={onStart}
+        className="group togo-rise w-full max-w-md flex flex-col items-center text-center rounded-3xl border border-ink-200 bg-surface p-7 sm:p-9 shadow-soft hover:shadow-pop hover:-translate-y-0.5 active:translate-y-0 transition-all"
+      >
+        <span className="w-24 h-24 rounded-2xl bg-ink-900 text-white grid place-items-center"><Sofa size={48} aria-hidden /></span>
+        <span className="block text-[10px] font-semibold tracking-[0.14em] text-ink-400 uppercase mt-5">Ligne Roset · Togo</span>
+        <span className="block font-display font-semibold text-2xl text-ink-900 leading-tight mt-1.5">Diseña tu Togo a tu medida</span>
+        <span className="block text-sm text-ink-500 mt-2 max-w-xs">Arma tu sofá modular, pruébalo en distintas telas y recibe tu cotización al instante.</span>
+        <span className="inline-flex items-center gap-2 mt-6 rounded-full bg-ink-900 text-white px-5 py-2.5 text-sm font-semibold">
+          Empezar a diseñar <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+        </span>
+        {storeName && <span className="block text-[11px] text-ink-400 mt-3">{storeName}</span>}
+      </button>
+    </div>
+  );
 }
 
 function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
