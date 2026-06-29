@@ -20,6 +20,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 // deno-lint-ignore no-explicit-any
 import * as dgii from 'npm:dgii-ecf';
+// Same major as dgii-ecf's own dep, so the .p12 parses identically.
+import forge from 'npm:node-forge@1.3.1';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,6 +38,34 @@ function b64ToBytes(b64: string): Uint8Array {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+/**
+ * Pick the END-ENTITY (leaf) certificate out of the .p12 bundle.
+ *
+ * dgii-ecf's P12Reader.getCertificateFromP12 blindly takes certBag[0]. A real
+ * DGII certificate ships as a BUNDLE — the personal signing cert PLUS its CA
+ * chain — and the bags aren't ordered leaf-first, so the library can embed a
+ * CA cert in the seed's XAdES signature. DGII then rejects ValidarSemilla with
+ * "Tipo de certificado no admitido" (the embedded cert isn't an end-entity
+ * persona cert). Re-select the leaf: the cert whose public modulus matches our
+ * private key (bulletproof); fall back to the first non-CA cert. Returns null
+ * when there's nothing better than the library's pick (single-cert .p12).
+ */
+function leafCertPem(p12Base64: string, password: string): string | null {
+  try {
+    const der = forge.util.decode64(p12Base64);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(der), false, password);
+    const certs = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [])
+      .map((b: any) => b.cert).filter(Boolean);
+    if (certs.length <= 1) return null; // nothing to disambiguate
+    const keyBag = (p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || [])[0];
+    const keyN = keyBag?.key?.n;
+    const isCa = (c: any) => { const bc = c.getExtension && c.getExtension('basicConstraints'); return !!(bc && bc.cA); };
+    const byKey = keyN ? certs.find((c: any) => c.publicKey?.n && c.publicKey.n.toString(16) === keyN.toString(16)) : null;
+    const leaf = byKey || certs.find((c: any) => !isCa(c)) || certs[0];
+    return forge.pki.certificateToPem(leaf);
+  } catch { return null; } // any parse hiccup → keep the library's pick
 }
 
 /** First 6 chars of the XML's SignatureValue — the DGII "código de seguridad"
@@ -181,6 +211,11 @@ Deno.serve(async (req: Request) => {
 
     const reader = new (dgii as any).P12Reader(cred.password);
     const certs = reader.getKeyFromFile(p12Path);
+    // P12Reader grabs certBag[0], which in a bundled .p12 can be the CA — DGII
+    // then rejects ValidarSemilla with "Tipo de certificado no admitido".
+    // Override with the real end-entity cert so the seed's signature carries it.
+    const leaf = leafCertPem(cred.p12_base64, cred.password);
+    if (leaf) certs.cert = leaf;
 
     const environment = ENV_MAP[envKey] ?? ENV_MAP.cert;
     const ecf = new (dgii as any).ECF(certs, environment);
