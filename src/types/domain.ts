@@ -264,6 +264,8 @@ export interface Settings {
   googleEmail?: string;
   /** Last time the Gmail inbox pulled new mail (google-api `gmailSync`). */
   gmailSyncedAt?: number | null;
+  /** Plain-text signature seeded into the Gmail inbox reply composer. */
+  gmailSignature?: string;
   /** OAuth client id — NON-secret mirror so the card shows it's configured and
    *  pre-fills the field. The client SECRET stays in google_oauth_config. */
   googleClientId?: string;

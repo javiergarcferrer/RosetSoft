@@ -11,10 +11,24 @@
 // either core.
 
 import { db, invalidate } from '../db/database.js';
-import { syncGmail, gmailAttachment } from './google.js';
+import { syncGmail, gmailReply, gmailAttachment } from './google.js';
 
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
+
+/**
+ * Send a reply into a thread, then pull it back so it appears in the reading
+ * pane. `messageId`/`threadId` come from the message being replied to; `text`
+ * is the composed body (signature already folded in by the View). The sync is
+ * best-effort — the send already succeeded — and we invalidate either way so
+ * the next poll/refresh reconciles.
+ */
+export async function sendGmailReply({ to, cc, subject, text, html, fromName, messageId, threadId }) {
+  const res = await gmailReply({ to, cc, subject, text, html, fromName, messageId, threadId });
+  try { await syncGmail(); } catch { /* the reply is sent; the inbox catches up on next sync */ }
+  invalidate();
+  return res;
+}
 
 /** Can this MIME type be previewed inline (image or PDF)? Everything else downloads. */
 export function isPreviewable(mimeType) {

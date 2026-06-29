@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import {
   classifyBrand, isInvoiceEmail, parseInvoiceAmount,
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices,
+  resolveReplyDraft, replySubject,
   GMAIL_BRAND_OTHER,
 } from '../src/core/crm/views/gmailInbox.js';
 
@@ -105,6 +106,40 @@ test('resolveGmailThread returns one thread oldest-first', () => {
   const t = resolveGmailThread(messages, { threadId: 'A' });
   assert.deepEqual(t.items.map((m) => m.id), ['a1', 'a2']);
   assert.equal(t.subject, 'asunto');
+});
+
+// ── replySubject / resolveReplyDraft ────────────────────────────────────────
+test('replySubject adds Re: once and never stacks it', () => {
+  assert.equal(replySubject('Cotización'), 'Re: Cotización');
+  assert.equal(replySubject('Re: Cotización'), 'Re: Cotización');
+  assert.equal(replySubject('RE: algo'), 'RE: algo');
+  assert.equal(replySubject(''), 'Re: (sin asunto)');
+});
+
+test('resolveReplyDraft answers the latest inbound sender, threaded on the last message', () => {
+  const items = [
+    msg({ id: 'i1', threadId: 'T', direction: 'in', fromEmail: 'cliente@correo.com', subject: 'Pedido' }),
+    msg({ id: 'o1', threadId: 'T', direction: 'out', fromEmail: 'us@alcover.do', toEmail: 'cliente@correo.com' }),
+  ];
+  const d = resolveReplyDraft({ items, threadId: 'T', subject: 'Pedido' }, { selfEmail: 'us@alcover.do' });
+  assert.equal(d.to, 'cliente@correo.com');
+  assert.equal(d.subject, 'Re: Pedido');
+  assert.equal(d.inReplyToId, 'o1');   // chains onto the latest message
+  assert.equal(d.threadId, 'T');
+});
+
+test('resolveReplyDraft never addresses the reply back to ourselves', () => {
+  // An all-outbound thread: the fallback counterpart is the recipient, not us.
+  const items = [
+    msg({ id: 'o1', threadId: 'T', direction: 'out', fromEmail: 'us@alcover.do', toEmail: 'cliente@correo.com', subject: 'Hola' }),
+  ];
+  const d = resolveReplyDraft({ items, threadId: 'T', subject: 'Hola' }, { selfEmail: 'us@alcover.do' });
+  assert.equal(d.to, 'cliente@correo.com');
+});
+
+test('resolveReplyDraft returns null for an empty thread', () => {
+  assert.equal(resolveReplyDraft({ items: [] }, {}), null);
+  assert.equal(resolveReplyDraft(null, {}), null);
 });
 
 // ── resolveGmailInvoices ────────────────────────────────────────────────────

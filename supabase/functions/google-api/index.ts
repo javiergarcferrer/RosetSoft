@@ -116,6 +116,22 @@ type Body = {
     fromName?: string;
     attachments?: Attachment[];
   };
+  // A reply nests into an existing thread: `threadId` makes Gmail file it under
+  // the conversation, and the server pulls the original's Message-ID/References
+  // (`messageId` = the message being replied to) to set the In-Reply-To /
+  // References headers every other mail client threads by.
+  gmailReply?: {
+    messageId?: string;
+    threadId?: string;
+    to?: string | string[];
+    cc?: string | string[];
+    bcc?: string | string[];
+    subject?: string;
+    html?: string;
+    text?: string;
+    fromName?: string;
+    attachments?: Attachment[];
+  };
   gmailSync?: { query?: string; maxResults?: number };
   gmailAttachment?: { messageId?: string; attachmentId?: string };
   driveEnsureRoot?: { name?: string };
@@ -227,6 +243,7 @@ async function allowedLoginOrigins(admin: Admin): Promise<Set<string>> {
 function buildRawMessage(opts: {
   to: string; cc: string; bcc: string; from: string; subject: string;
   html?: string; text?: string; attachments: Attachment[];
+  inReplyTo?: string; references?: string;
 }): string {
   const { to, cc, bcc, from, subject } = opts;
   const boundary = `rs_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -237,6 +254,9 @@ function buildRawMessage(opts: {
   if (cc) headers.push(`Cc: ${cc}`);
   if (bcc) headers.push(`Bcc: ${bcc}`);
   headers.push(`Subject: ${encHeader(subject)}`);
+  // Reply threading: clients chain a conversation by these two headers.
+  if (opts.inReplyTo) headers.push(`In-Reply-To: ${opts.inReplyTo}`);
+  if (opts.references) headers.push(`References: ${opts.references}`);
   headers.push('MIME-Version: 1.0');
 
   const text = opts.text ?? (opts.html ? opts.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '');
@@ -724,6 +744,50 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return json({ ok: false, error: d?.error?.message || `Gmail ${r.status}` }, 502);
+      return json({ ok: true, id: d.id, threadId: d.threadId });
+    }
+
+    // ── Gmail reply ───────────────────────────────────────────────────────────
+    // Reply INTO an existing thread. We pass Gmail's `threadId` so it nests on
+    // our side, and pull the original message's RFC822 Message-ID + References
+    // (a cheap metadata fetch — the sync stores only Gmail's internal id) to set
+    // In-Reply-To / References, the headers every other client threads by.
+    if (body.gmailReply) {
+      const g = body.gmailReply;
+      const to = asList(g.to);
+      if (!to) return json({ ok: false, error: 'Falta el destinatario' }, 400);
+      const { data: s } = await admin.from('settings').select('google_email').eq('profile_id', TEAM).maybeSingle();
+      const fromAddr = s?.google_email || '';
+      const from = g.fromName && fromAddr ? `${encHeader(g.fromName)} <${fromAddr}>` : fromAddr;
+
+      let inReplyTo = '';
+      let references = '';
+      if (g.messageId) {
+        try {
+          const mr = await fetch(
+            `${GMAIL}/messages/${g.messageId}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          const md = await mr.json().catch(() => ({}));
+          const hs = ((md.payload?.headers || []) as Array<{ name: string; value: string }>);
+          const get = (n: string) => hs.find((x) => x.name.toLowerCase() === n)?.value || '';
+          inReplyTo = get('message-id');
+          references = [get('references'), inReplyTo].filter(Boolean).join(' ').trim();
+        } catch { /* best-effort threading — the send still goes out */ }
+      }
+
+      const raw = buildRawMessage({
+        to, cc: asList(g.cc), bcc: asList(g.bcc), from,
+        subject: String(g.subject || ''), html: g.html, text: g.text,
+        attachments: g.attachments || [], inReplyTo, references,
+      });
+      const r = await fetch(`${GMAIL}/messages/send`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(g.threadId ? { raw, threadId: g.threadId } : { raw }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return json({ ok: false, error: d?.error?.message || `Gmail ${r.status}` }, 502);

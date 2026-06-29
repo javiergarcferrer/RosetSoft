@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
   X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
+  Reply, Send, PenLine,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -12,10 +13,11 @@ import { useLiveQueryStatus } from '../db/hooks.ts';
 import {
   GMAIL_BRAND_TABS, GMAIL_BRAND_OTHER,
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices, parseInvoiceAmount,
+  resolveReplyDraft,
 } from '../core/crm/index.js';
 import {
   syncGmail, markGmailThreadRead, setGmailThreadBrand, gmailWebUrl, expenseDeepLink,
-  loadGmailAttachment, isPreviewable,
+  loadGmailAttachment, isPreviewable, sendGmailReply,
 } from '../lib/gmail.js';
 
 /**
@@ -250,6 +252,9 @@ export default function Gmail() {
               onReassign={reassignBrand}
               onPreview={openPreview}
               onBack={() => setSelectedThreadId(null)}
+              selfEmail={settings?.googleEmail || ''}
+              signature={settings?.gmailSignature || ''}
+              fromName={settings?.companyName || ''}
             />
           </div>
         </div>
@@ -325,7 +330,7 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   );
 }
 
-function ReadingPane({ thread, onReassign, onPreview, onBack }) {
+function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signature, fromName }) {
   if (!thread) {
     return (
       <div className="hidden md:flex flex-1 items-center justify-center text-sm text-ink-400">
@@ -375,6 +380,155 @@ function ReadingPane({ thread, onReassign, onPreview, onBack }) {
         {thread.items.map((m) => (
           <MessageBubble key={m.id} message={m} onPreview={onPreview} />
         ))}
+      </div>
+      <ReplyComposer
+        key={thread.threadId}
+        thread={thread}
+        selfEmail={selfEmail}
+        signature={signature}
+        fromName={fromName}
+      />
+    </div>
+  );
+}
+
+/**
+ * The Gmail-style reply bar pinned to the bottom of the reading pane. Collapsed
+ * it's a single "Responder" pill; expanded it's a compact composer (To / Asunto
+ * / body) with a send action bar. The body is seeded from the dealer's saved
+ * signature (Integraciones → Gmail) and "Insertar firma" re-adds it; the reply
+ * threads into the conversation server-side (gmailReply). Keyed by threadId in
+ * the parent so it resets when you switch mails.
+ */
+function ReplyComposer({ thread, selfEmail, signature, fromName }) {
+  const draft = useMemo(() => resolveReplyDraft(thread, { selfEmail }), [thread, selfEmail]);
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+  const bodyRef = useRef(null);
+
+  const seededBody = signature ? `\n\n--\n${signature}` : '';
+
+  const startReply = () => {
+    setTo(draft?.to || '');
+    setSubject(draft?.subject || '');
+    setBody(seededBody);
+    setError('');
+    setSent(false);
+    setOpen(true);
+    // Land the cursor at the very top, above the signature, ready to type.
+    requestAnimationFrame(() => {
+      const el = bodyRef.current;
+      if (el) { el.focus(); try { el.setSelectionRange(0, 0); } catch { /* noop */ } }
+    });
+  };
+
+  const insertSignature = () => {
+    if (!signature) return;
+    setBody((b) => `${b.replace(/\s+$/, '')}\n\n--\n${signature}`);
+    bodyRef.current?.focus();
+  };
+
+  const send = async () => {
+    if (!to.trim()) { setError('Falta el destinatario.'); return; }
+    setSending(true);
+    setError('');
+    try {
+      await sendGmailReply({
+        to: to.trim(),
+        subject: subject.trim(),
+        text: body,
+        fromName,
+        messageId: draft?.inReplyToId,
+        threadId: draft?.threadId,
+      });
+      setSent(true);
+      setOpen(false);
+    } catch (e) {
+      setError(e?.message || 'No se pudo enviar la respuesta.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="shrink-0 border-t border-ink-100 px-3 py-2.5 md:px-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={startReply}
+          className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-surface px-4 py-2 text-sm font-medium text-ink-700 hover:bg-ink-50"
+        >
+          <Reply size={15} /> Responder
+        </button>
+        {sent && <span className="text-xs font-medium text-emerald-600">Respuesta enviada ✓</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="shrink-0 border-t border-ink-100 bg-surface px-3 py-3 md:px-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-xs font-medium text-ink-400">Para</span>
+        <input
+          type="email"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          placeholder="destinatario@correo.com"
+          className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-xs font-medium text-ink-400">Asunto</span>
+        <input
+          type="text"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300"
+        />
+      </div>
+      <textarea
+        ref={bodyRef}
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={5}
+        placeholder="Escribe tu respuesta…"
+        className="w-full resize-none rounded-lg border border-ink-200 bg-surface px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-ink-300"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {/* Gmail-style action bar: primary Send + signature insert + cancel. */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={send}
+          disabled={sending}
+          className="inline-flex items-center gap-2 rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-700 disabled:opacity-50"
+        >
+          {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+          Enviar
+        </button>
+        {signature && (
+          <button
+            type="button"
+            onClick={insertSignature}
+            title="Insertar firma"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-2 text-xs font-medium text-ink-600 hover:bg-ink-50"
+          >
+            <PenLine size={14} /> <span className="hidden sm:inline">Firma</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="ml-auto inline-flex items-center justify-center rounded-lg border border-ink-200 bg-surface p-2 text-ink-500 hover:bg-ink-50"
+          aria-label="Descartar"
+        >
+          <X size={16} />
+        </button>
       </div>
     </div>
   );

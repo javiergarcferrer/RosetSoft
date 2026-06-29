@@ -81,6 +81,22 @@ export async function sendGmail({ to, cc, bcc, subject, html, text, fromName, at
 }
 
 /**
+ * Reply into an existing Gmail thread. `messageId` is the message being replied
+ * to (the server reads its Message-ID/References for threading) and `threadId`
+ * is Gmail's thread key, so the reply nests in the conversation on both sides.
+ */
+export async function gmailReply({ messageId, threadId, to, cc, bcc, subject, html, text, fromName, attachments = [], attachmentBlobs = [] }) {
+  const encoded = await Promise.all(
+    (attachmentBlobs || []).map(async ({ filename, blob }) => ({
+      filename,
+      mimeType: blob?.type || 'application/octet-stream',
+      base64: await blobToBase64(blob),
+    })),
+  );
+  return invokeGoogle({ gmailReply: { messageId, threadId, to, cc, bcc, subject, html, text, fromName, attachments: [...attachments, ...encoded] } });
+}
+
+/**
  * Pull recent inbox + sent mail into gmail_messages (server-side, service role)
  * so the Gmail inbox can read it. Returns { scanned, synced }. `query` overrides
  * the default Gmail search; `maxResults` caps the scan (server clamps to 250).

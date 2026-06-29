@@ -30,6 +30,8 @@ export {
   resolveGmailThreads,
   resolveGmailThread,
   resolveGmailInvoices,
+  resolveReplyDraft,
+  replySubject,
 } from './views/gmailInbox.js';
 export {
   VAR_SOURCES,

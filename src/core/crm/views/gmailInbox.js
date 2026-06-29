@@ -208,6 +208,50 @@ export function resolveGmailThread(messages, { threadId } = {}) {
   return { items, threadId: threadId || null, subject: subject || '(sin asunto)', lastInboundAt: lastInboundAt || null };
 }
 
+/** A reply subject — "Re: …" once, never stacking a second prefix. */
+export function replySubject(subject) {
+  const s = String(subject || '').trim();
+  if (!s) return 'Re: (sin asunto)';
+  return /^re:/i.test(s) ? s : `Re: ${s}`;
+}
+
+/**
+ * The seed for a reply composer over a thread.
+ *
+ *   resolveReplyDraft(thread, { selfEmail })
+ *     → { to, subject, inReplyToId, threadId } | null
+ *
+ * `to` is the counterpart — the latest INBOUND sender (so we answer whoever
+ * wrote last), falling back to the last message's other party when the thread is
+ * all outbound. `inReplyToId` is the message the reply chains onto (the latest),
+ * and `threadId` nests it in the conversation. `selfEmail` (the connected
+ * account) is excluded so we never address a reply back to ourselves.
+ */
+export function resolveReplyDraft(thread, { selfEmail = '' } = {}) {
+  const items = thread?.items || [];
+  if (!items.length) return null;
+  const self = String(selfEmail || '').toLowerCase();
+  const last = items[items.length - 1];
+
+  let to = '';
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const m = items[i];
+    const from = String(m.fromEmail || '').toLowerCase();
+    if (m.direction === 'in' && from && from !== self) { to = m.fromEmail; break; }
+  }
+  if (!to) {
+    const fallback = last.direction === 'out' ? last.toEmail : last.fromEmail;
+    if (String(fallback || '').toLowerCase() !== self) to = fallback || '';
+  }
+
+  return {
+    to: to || '',
+    subject: replySubject(thread.subject || last.subject),
+    inReplyToId: last.id,
+    threadId: thread.threadId || last.threadId || null,
+  };
+}
+
 /**
  * The Facturas tab — every invoice-like message, newest first, decorated with
  * its brand and a best-effort amount. `brand` (optional) narrows to one bucket.
