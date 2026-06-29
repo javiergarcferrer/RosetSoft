@@ -6,6 +6,9 @@ import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
+import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { buildTogoGroup, disposeGroup } from '../../components/togo/togoSceneBuilder.js';
+import { loadTogoModels } from '../../components/togo/togoModelLoader.js';
 import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
 import { useMeshPlans, useTopDownTiles } from '../../components/togo/useMeshPlans.js';
 import { togoQuickStarts } from '../../lib/togo/quickStarts.js';
@@ -136,6 +139,8 @@ export default function TogoEmbed() {
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ hotbar
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const [lastAddedUid, setLastAddedUid] = useState(null); // the just-placed piece → spring-in pop
+  const [dlOpen, setDlOpen] = useState(false);   // the download format chooser
+  const [objBusy, setObjBusy] = useState(false); // building the 3D OBJ (loads three on demand)
   // false → show the launch card; the card opens the configurator in a NEW TAB
   // (?ctx=modal → straight to the build), so it always gets the full screen.
   const launched = isModalContext();
@@ -385,6 +390,32 @@ export default function TogoEmbed() {
     downloadText(filename, dxf);
   }, [placed, resolvedById, svgById, data?.storeName]);
 
+  // Download the assembled sofa as a 3D OBJ — the same scene the 3D view builds
+  // (real FBX meshes where wired, else procedural), exported via three's
+  // OBJExporter. Geometry in cm, true-to-size; opens in Blender/3ds Max/SketchUp/
+  // AutoCAD and re-exports to FBX. three + the exporter load on demand (only when
+  // a visitor actually downloads), so the configurator pays nothing for it.
+  const downloadObj = useCallback(async () => {
+    if (!placed.length || objBusy) return;
+    setObjBusy(true);
+    try {
+      const [THREE, rbg, objx] = await Promise.all([
+        safeDynamicImport(() => import('three')),
+        safeDynamicImport(() => import('three/examples/jsm/geometries/RoundedBoxGeometry.js')),
+        safeDynamicImport(() => import('three/examples/jsm/exporters/OBJExporter.js')),
+      ]);
+      const { cache, modelFor } = await loadTogoModels(scene3d);
+      const group = buildTogoGroup({ THREE, RoundedBoxGeometry: rbg.RoundedBoxGeometry }, scene3d, { modelFor });
+      group.updateMatrixWorld(true);
+      const obj = new objx.OBJExporter().parse(group);
+      disposeGroup(group);
+      cache.forEach((m) => disposeGroup(m.object || m)); // free the source meshes
+      downloadText(`${(data?.storeName || 'Togo').replace(/\s+/g, '-')}-togo.obj`, obj);
+      setDlOpen(false);
+    } catch { /* export unavailable on this device */ }
+    setObjBusy(false);
+  }, [placed, scene3d, data?.storeName, objBusy]);
+
   const openMaterial = useCallback((mode) => {
     if (mode === 'one' && !selectedUid) return;
     if (mode === 'all' && !placed.length) return;
@@ -491,7 +522,7 @@ export default function TogoEmbed() {
           <HudIcon title="Una tela para todas" onClick={() => openMaterial('all')}><Layers size={15} /></HudIcon>
           <HudIcon title="Resumen de tu Togo" onClick={() => setQuoteOpen(true)}><Receipt size={15} /></HudIcon>
           <HudIcon title="Ver en tu espacio" onClick={() => setArOpen(true)}><View size={15} /></HudIcon>
-          <HudIcon title="Descargar plano (DXF)" onClick={downloadDxf}><FileDown size={15} /></HudIcon>
+          <HudIcon title="Descargar (DXF / OBJ)" onClick={() => setDlOpen(true)}><FileDown size={15} /></HudIcon>
           <HudIcon title="Vaciar el plano" danger onClick={() => { buzz([4, 26, 7]); setPlaced([]); setSelectedUid(null); }}><Eraser size={15} /></HudIcon>
         </div>
       )}
@@ -556,6 +587,11 @@ export default function TogoEmbed() {
       />
 
       <TogoArViewer open={arOpen} onClose={() => setArOpen(false)} scene3d={scene3d} material={material} storeName={data.storeName} />
+
+      <DownloadSheet
+        open={dlOpen} onClose={() => setDlOpen(false)}
+        onDxf={() => { downloadDxf(); setDlOpen(false); }} onObj={downloadObj} objBusy={objBusy}
+      />
 
       <QuoteSheet
         open={quoteOpen} onClose={() => setQuoteOpen(false)}
@@ -906,6 +942,35 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
 
 function nameFilterOf(keys) {
   return Array.isArray(keys) && keys.length ? new Set(keys) : undefined;
+}
+
+/** The download chooser — pick the format: the 2D plan (DXF, for CAD) or the 3D
+ *  model (OBJ, for Blender/3ds Max/SketchUp, re-exportable to FBX). Two clear
+ *  options, no cramped dropdown. */
+function DownloadSheet({ open, onClose, onDxf, onObj, objBusy }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Descargar tu Togo" size="sm">
+      {open && (
+        <div className="space-y-2.5">
+          <button type="button" onClick={onDxf} className="w-full flex items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50 active:bg-ink-100 transition">
+            <span className="shrink-0 w-10 h-10 rounded-lg bg-ink-900 text-white grid place-items-center"><FileDown size={18} /></span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-ink-900">Plano 2D · DXF</span>
+              <span className="block text-[11px] text-ink-500">Para AutoCAD y planos arquitectónicos · cm, escala 1:1.</span>
+            </span>
+          </button>
+          <button type="button" onClick={onObj} disabled={objBusy} className="w-full flex items-center gap-3 rounded-xl border border-ink-200 p-3 text-left hover:bg-ink-50 active:bg-ink-100 transition disabled:opacity-60">
+            <span className="shrink-0 w-10 h-10 rounded-lg bg-ink-900 text-white grid place-items-center"><Box size={18} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-ink-900">Modelo 3D · OBJ</span>
+              <span className="block text-[11px] text-ink-500">El sofá armado para Blender, 3ds Max, SketchUp… (re-exporta a FBX).</span>
+            </span>
+            {objBusy && <Loader2 size={16} className="animate-spin text-ink-400 shrink-0" />}
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
 }
 
 /** The fabric picker — the SAME MaterialColorPicker the internal editor uses,
