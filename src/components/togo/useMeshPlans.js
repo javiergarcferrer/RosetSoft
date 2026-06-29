@@ -45,7 +45,7 @@ export function useMeshPlans(entries) {
 export function useTopDownTiles(entries) {
   const [imgs, setImgs] = useState({});
   const key = (entries || [])
-    .map((e) => `${e?.id}:${e?.url || ''}:${e?.upAxis || 'y'}:${Math.round(e?.widthCm || 0)}x${Math.round(e?.depthCm || 0)}`)
+    .map((e) => `${e?.id}:${e?.url || ''}:${e?.upAxis || 'y'}:${Math.round(e?.widthCm || 0)}x${Math.round(e?.depthCm || 0)}:${e?.fabricCode || ''}`)
     .join('|');
   useEffect(() => {
     let alive = true;

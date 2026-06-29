@@ -256,15 +256,27 @@ export default function TogoEmbed() {
     return o;
   }, [models, meshPlans]);
 
-  // Realistic top-down renders (the FBX shot from above with shadows) for the tiles
-  // of the pieces actually on the plan — sized from the mesh-measured footprint.
+  // Realistic top-down renders (the FBX shot from above) for the tiles on the
+  // plan — the SAME 3D mesh + dominant-colour fabric the 3D view uses, so the 2D
+  // plan IS a top view of the 3D and reflects material changes live. Keyed per
+  // (model + fabric) so two pieces in different fabrics get their own render;
+  // sized from the mesh-measured footprint.
+  const modelById = useMemo(() => new Map(models.map((m) => [m.id, m])), [models]);
   const topDownEntries = useMemo(() => {
-    const used = new Set(placed.map((p) => p.pieceId));
-    return models.filter((m) => m.mesh?.url && used.has(m.id)).map((m) => ({
-      id: m.id, url: m.mesh.url, upAxis: m.mesh.upAxis, rotateY: m.mesh.rotateY, scale: m.mesh.scale,
-      widthCm: resolvedById[m.id]?.widthCm, depthCm: resolvedById[m.id]?.depthCm,
-    }));
-  }, [models, placed, resolvedById]);
+    const seen = new Map();
+    for (const p of placed) {
+      const m = modelById.get(p.pieceId);
+      if (!m?.mesh?.url) continue;
+      const code = p.material?.code || '';
+      const id = `${m.id}|${code}`;
+      if (seen.has(id)) continue;
+      seen.set(id, {
+        id, url: m.mesh.url, upAxis: m.mesh.upAxis, rotateY: m.mesh.rotateY, scale: m.mesh.scale,
+        widthCm: resolvedById[m.id]?.widthCm, depthCm: resolvedById[m.id]?.depthCm, fabricCode: code || null,
+      });
+    }
+    return [...seen.values()];
+  }, [placed, modelById, resolvedById]);
   const topDownById = useTopDownTiles(topDownEntries);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
@@ -780,7 +792,7 @@ function CanvasArea({
           // its instances) rings every placed instance, and vice-versa.
           const linked = !sel && hoveredPieceId != null && t.pieceId === hoveredPieceId;
           const code = codeByUid[t.uid];
-          const td = topDownById[t.pieceId];
+          const td = topDownById[`${t.pieceId}|${code || ''}`];
           // Size the realistic render to the placement FOOTPRINT (× the shadow
           // margin baked into the PNG), exactly like the silhouette fallback — so
           // the model fills its stated W×D box. Sizing to the render's own measured

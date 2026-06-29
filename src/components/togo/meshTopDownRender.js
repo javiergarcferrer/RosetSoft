@@ -11,11 +11,29 @@
  * Renders are serialized on the one renderer and cached per mesh+footprint.
  */
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { loadMeshObject } from '../../lib/togo/meshPlanCache.js';
-import { buildTogoGroup, makeQuiltNormalMap, disposeGroup } from './togoSceneBuilder.js';
+import { buildTogoGroup, makeQuiltNormalMap, disposeGroup, sampleSwatchColor } from './togoSceneBuilder.js';
 
 const MARGIN = 1.14;     // frame a little wider than the footprint, to fit the shadow
 const PX_PER_CM = 5;     // render resolution
+
+// The DOMINANT colour of a fabric swatch (cached per code), sampled exactly like
+// the 3D view so the 2D plan tile reads in the SAME upholstery. CORS-safe via the
+// swatch-proxy. Resolves to a packed 0xRRGGBB int or null (→ neutral default).
+const _colorCache = new Map();
+function swatchColor(THREE, code) {
+  if (!code) return Promise.resolve(null);
+  if (_colorCache.has(code)) return _colorCache.get(code);
+  const url = swatchProxyUrl(code) || swatchUrl(code);
+  const p = url
+    ? new THREE.TextureLoader().loadAsync(url)
+        .then((tex) => { const c = sampleSwatchColor(tex.image); tex.dispose?.(); return c; })
+        .catch(() => null)
+    : Promise.resolve(null);
+  _colorCache.set(code, p);
+  return p;
+}
 
 let _rig = null;
 let _failed = false;
@@ -69,6 +87,8 @@ async function render(piece) {
   const { THREE, deps, renderer, quilt } = r;
   let object;
   try { ({ obj: object } = await loadMeshObject(piece.url)); } catch { return null; }
+  // The chosen fabric's dominant colour, so the 2D tile matches the 3D view.
+  const color = await swatchColor(THREE, piece.fabricCode);
 
   const W = Math.max(8, piece.widthCm), D = Math.max(8, piece.depthCm);
   const radius = Math.max(60, Math.hypot(W, D) / 2);
@@ -83,7 +103,7 @@ async function render(piece) {
   };
   const group = buildTogoGroup(deps, scene3d, {
     normalMap: quilt,
-    colorFor: () => null,    // neutral upholstery — the fabric is shown via the swatch chip
+    colorFor: () => color,   // the chosen fabric (dominant colour) — matches the 3D view
     modelFor: () => ({ object, desc: { upAxis: piece.upAxis, rotateY: piece.rotateY, scale: piece.scale } }),
   });
   scene.add(group);
@@ -119,7 +139,7 @@ let chain = Promise.resolve();  // one render at a time on the single renderer
 /** Cached top-down render for a piece (neutral upholstery), keyed by mesh+footprint. */
 export function renderMeshTopDown(piece) {
   if (!piece?.url || !(piece.widthCm > 0) || !(piece.depthCm > 0)) return Promise.resolve(null);
-  const key = `${piece.url}|${piece.upAxis || 'y'}|${Math.round(piece.widthCm)}x${Math.round(piece.depthCm)}`;
+  const key = `${piece.url}|${piece.upAxis || 'y'}|${Math.round(piece.widthCm)}x${Math.round(piece.depthCm)}|${piece.fabricCode || ''}`;
   if (cache.has(key)) return cache.get(key);
   const p = (chain = chain.then(() => render(piece).catch(() => null)));
   p.then((v) => { if (!v) cache.delete(key); });   // let a transient failure retry
