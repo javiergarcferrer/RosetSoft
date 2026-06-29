@@ -264,8 +264,11 @@ export interface Settings {
   googleEmail?: string;
   /** Last time the Gmail inbox pulled new mail (google-api `gmailSync`). */
   gmailSyncedAt?: number | null;
-  /** Plain-text signature seeded into the Gmail inbox reply composer. */
+  /** Plain-text signatures seeded into the Gmail inbox reply composer — the
+   *  dealer picks Spanish or English per reply. `gmailSignature` is the
+   *  Spanish/default; `gmailSignatureEn` is the English variant. */
   gmailSignature?: string;
+  gmailSignatureEn?: string;
   /** OAuth client id — NON-secret mirror so the card shows it's configured and
    *  pre-fills the field. The client SECRET stays in google_oauth_config. */
   googleClientId?: string;

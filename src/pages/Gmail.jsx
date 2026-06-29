@@ -253,7 +253,8 @@ export default function Gmail() {
               onPreview={openPreview}
               onBack={() => setSelectedThreadId(null)}
               selfEmail={settings?.googleEmail || ''}
-              signature={settings?.gmailSignature || ''}
+              signatureEs={settings?.gmailSignature || ''}
+              signatureEn={settings?.gmailSignatureEn || ''}
               fromName={settings?.companyName || ''}
             />
           </div>
@@ -330,7 +331,7 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   );
 }
 
-function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signature, fromName }) {
+function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signatureEs, signatureEn, fromName }) {
   if (!thread) {
     return (
       <div className="hidden md:flex flex-1 items-center justify-center text-sm text-ink-400">
@@ -385,7 +386,8 @@ function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signatu
         key={thread.threadId}
         thread={thread}
         selfEmail={selfEmail}
-        signature={signature}
+        signatureEs={signatureEs}
+        signatureEn={signatureEn}
         fromName={fromName}
       />
     </div>
@@ -396,27 +398,47 @@ function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signatu
  * The Gmail-style reply bar pinned to the bottom of the reading pane. Collapsed
  * it's a single "Responder" pill; expanded it's a compact composer (To / Asunto
  * / body) with a send action bar. The body is seeded from the dealer's saved
- * signature (Integraciones → Gmail) and "Insertar firma" re-adds it; the reply
- * threads into the conversation server-side (gmailReply). Keyed by threadId in
- * the parent so it resets when you switch mails.
+ * signature; when both a Spanish and an English signature exist a selector lets
+ * them switch the appended block per reply. The reply threads into the
+ * conversation server-side (gmailReply). Keyed by threadId in the parent so it
+ * resets when you switch mails.
  */
-function ReplyComposer({ thread, selfEmail, signature, fromName }) {
+function ReplyComposer({ thread, selfEmail, signatureEs, signatureEn, fromName }) {
   const draft = useMemo(() => resolveReplyDraft(thread, { selfEmail }), [thread, selfEmail]);
+  // The configured signatures, in selector order; 'none' is always available.
+  const sigOptions = useMemo(() => {
+    const opts = [];
+    if (signatureEs?.trim()) opts.push({ lang: 'es', label: 'Español', text: signatureEs });
+    if (signatureEn?.trim()) opts.push({ lang: 'en', label: 'English', text: signatureEn });
+    opts.push({ lang: 'none', label: 'Sin firma', text: '' });
+    return opts;
+  }, [signatureEs, signatureEn]);
+  const sigBlockFor = (lang) => {
+    const t = sigOptions.find((o) => o.lang === lang)?.text || '';
+    return t ? `\n\n--\n${t}` : '';
+  };
+
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [sigLang, setSigLang] = useState(sigOptions[0].lang);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const bodyRef = useRef(null);
-
-  const seededBody = signature ? `\n\n--\n${signature}` : '';
+  // The signature block currently appended to the body, so switching languages
+  // (or editing the body) can strip the old one before adding the new.
+  const appliedBlock = useRef('');
 
   const startReply = () => {
+    const lang = sigOptions[0].lang;
+    const block = sigBlockFor(lang);
+    appliedBlock.current = block;
     setTo(draft?.to || '');
     setSubject(draft?.subject || '');
-    setBody(seededBody);
+    setSigLang(lang);
+    setBody(block);
     setError('');
     setSent(false);
     setOpen(true);
@@ -427,9 +449,17 @@ function ReplyComposer({ thread, selfEmail, signature, fromName }) {
     });
   };
 
-  const insertSignature = () => {
-    if (!signature) return;
-    setBody((b) => `${b.replace(/\s+$/, '')}\n\n--\n${signature}`);
+  // Swap the appended signature for the chosen language's, preserving whatever
+  // the dealer typed above it.
+  const chooseSignature = (lang) => {
+    setBody((b) => {
+      const prev = appliedBlock.current;
+      const base = prev && b.endsWith(prev) ? b.slice(0, b.length - prev.length) : b;
+      const block = sigBlockFor(lang);
+      appliedBlock.current = block;
+      return base + block;
+    });
+    setSigLang(lang);
     bodyRef.current?.focus();
   };
 
@@ -511,15 +541,22 @@ function ReplyComposer({ thread, selfEmail, signature, fromName }) {
           {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
           Enviar
         </button>
-        {signature && (
-          <button
-            type="button"
-            onClick={insertSignature}
-            title="Insertar firma"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-2.5 py-2 text-xs font-medium text-ink-600 hover:bg-ink-50"
-          >
-            <PenLine size={14} /> <span className="hidden sm:inline">Firma</span>
-          </button>
+        {/* Signature picker — only when there's more than one option besides
+            "Sin firma" (one signature needs no chooser, it's already seeded). */}
+        {sigOptions.length > 2 && (
+          <label className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface pl-2.5 pr-1.5 py-1.5 text-xs font-medium text-ink-600">
+            <PenLine size={14} className="shrink-0 text-ink-400" />
+            <select
+              value={sigLang}
+              onChange={(e) => chooseSignature(e.target.value)}
+              className="bg-transparent text-xs text-ink-700 focus:outline-none"
+              aria-label="Firma"
+            >
+              {sigOptions.map((o) => (
+                <option key={o.lang} value={o.lang}>{o.label}</option>
+              ))}
+            </select>
+          </label>
         )}
         <button
           type="button"

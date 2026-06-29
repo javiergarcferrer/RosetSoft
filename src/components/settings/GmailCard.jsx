@@ -37,30 +37,35 @@ export default function GmailCard() {
   const [loginDomain, setLoginDomain] = useState(settings?.googleLoginDomain || '');
   const [domainState, setDomainState] = useState('idle'); // idle | saving | saved
   const fallbackDomain = (email.split('@')[1] || '').toLowerCase();
-  // Reply signature — plain text seeded into the inbox reply composer.
+  // Reply signatures — plain text seeded into the inbox reply composer. The
+  // dealer keeps a Spanish and an English one and picks per reply.
   const [signature, setSignature] = useState(settings?.gmailSignature || '');
-  const [sigState, setSigState] = useState('idle'); // idle | saving | saved
+  const [signatureEn, setSignatureEn] = useState(settings?.gmailSignatureEn || '');
+  const [sigState, setSigState] = useState('idle'); // idle | saving | saved | importing
 
   useEffect(() => { setClientId(settings?.googleClientId || ''); }, [settings?.googleClientId]);
   useEffect(() => { setLoginDomain(settings?.googleLoginDomain || ''); }, [settings?.googleLoginDomain]);
   useEffect(() => { setSignature(settings?.gmailSignature || ''); }, [settings?.gmailSignature]);
+  useEffect(() => { setSignatureEn(settings?.gmailSignatureEn || ''); }, [settings?.gmailSignatureEn]);
 
   const saveSignature = useCallback(async () => {
     setSigState('saving');
     setMsg(null);
     try {
-      await saveSettings?.({ gmailSignature: signature });
+      await saveSettings?.({ gmailSignature: signature, gmailSignatureEn: signatureEn });
       setSigState('saved');
       setTimeout(() => setSigState((s) => (s === 'saved' ? 'idle' : s)), 2000);
     } catch (e) {
       setSigState('idle');
       setMsg({ ok: false, text: userMessageFor(e) });
     }
-  }, [signature, saveSettings]);
+  }, [signature, signatureEn, saveSettings]);
 
   // Import the signature configured in the connected Gmail account (flattened to
-  // plain text) and save it. A missing-scope error tells the user to reconnect.
-  const importSignature = useCallback(async () => {
+  // plain text) into one language slot and save it. Gmail's API only exposes the
+  // ONE default signature, so the dealer imports it into whichever slot, then
+  // edits/translates the other. A missing-scope error tells them to reconnect.
+  const importSignature = useCallback(async (lang) => {
     setSigState('importing');
     setMsg(null);
     try {
@@ -70,8 +75,9 @@ export default function GmailCard() {
         setMsg({ ok: false, text: 'Tu cuenta de Gmail no tiene una firma configurada.' });
         return;
       }
-      setSignature(text);
-      await saveSettings?.({ gmailSignature: text });
+      const patch = lang === 'en' ? { gmailSignatureEn: text } : { gmailSignature: text };
+      if (lang === 'en') setSignatureEn(text); else setSignature(text);
+      await saveSettings?.(patch);
       setSigState('saved');
       setMsg({ ok: true, text: 'Firma importada de Gmail ✓' });
       setTimeout(() => setSigState((s) => (s === 'saved' ? 'idle' : s)), 2000);
@@ -213,28 +219,49 @@ export default function GmailCard() {
           )}
         </div>
 
-        {/* Reply signature — seeded into the Gmail inbox reply composer. */}
+        {/* Reply signatures — seeded into the Gmail inbox reply composer; the
+            dealer keeps one per language and picks when replying. */}
         {connected && (
           <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
-            <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Firma de respuestas</div>
+            <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Firmas de respuestas</div>
             <p className="text-xs text-ink-500 mb-2">
-              Se agrega automáticamente al redactar una respuesta desde la bandeja de Gmail. Tráela de tu
-              cuenta de Gmail o escríbela aquí (texto simple); déjala vacía para no incluir firma.
+              Al responder desde la bandeja eliges cuál usar. Tráelas de tu cuenta de Gmail (solo trae la
+              firma predeterminada — luego ajusta la otra) o escríbelas aquí; deja una vacía para no ofrecerla.
             </p>
-            <textarea
-              className="input w-full min-h-[88px] resize-y font-mono text-xs leading-relaxed"
-              placeholder={'Juan Pérez\nALCOVER · Ligne Roset\n+1 809 000 0000'}
-              value={signature}
-              onChange={(e) => setSignature(e.target.value)}
-            />
-            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-              <button type="button" className="btn-ghost min-h-[44px]" onClick={importSignature} disabled={sigState === 'importing'}>
-                {sigState === 'importing' ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
-                Traer de Gmail
-              </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-ink-600">Español</span>
+                  <button type="button" className="inline-flex items-center gap-1 text-[11px] text-brand-700 hover:underline disabled:opacity-50" onClick={() => importSignature('es')} disabled={sigState === 'importing'}>
+                    <Download size={11} /> Traer de Gmail
+                  </button>
+                </div>
+                <textarea
+                  className="input w-full min-h-[88px] resize-y font-mono text-xs leading-relaxed"
+                  placeholder={'Juan Pérez\nALCOVER · Ligne Roset\n+1 809 000 0000'}
+                  value={signature}
+                  onChange={(e) => setSignature(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-ink-600">English</span>
+                  <button type="button" className="inline-flex items-center gap-1 text-[11px] text-brand-700 hover:underline disabled:opacity-50" onClick={() => importSignature('en')} disabled={sigState === 'importing'}>
+                    <Download size={11} /> Import from Gmail
+                  </button>
+                </div>
+                <textarea
+                  className="input w-full min-h-[88px] resize-y font-mono text-xs leading-relaxed"
+                  placeholder={'Juan Pérez\nALCOVER · Ligne Roset\n+1 809 000 0000'}
+                  value={signatureEn}
+                  onChange={(e) => setSignatureEn(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-2 flex justify-end">
               <button type="button" className="btn-ghost min-h-[44px]" onClick={saveSignature} disabled={sigState === 'saving'}>
                 {sigState === 'saving' ? <RefreshCw size={14} className="animate-spin" /> : sigState === 'saved' ? <Check size={14} /> : null}
-                {sigState === 'saved' ? 'Guardada' : 'Guardar firma'}
+                {sigState === 'saved' ? 'Guardadas' : 'Guardar firmas'}
               </button>
             </div>
           </div>
