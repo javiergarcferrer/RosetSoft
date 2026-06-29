@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
+  X, Download, Image as ImageIcon, File as FileIcon,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -14,6 +15,7 @@ import {
 } from '../core/crm/index.js';
 import {
   syncGmail, markGmailThreadRead, setGmailThreadBrand, gmailWebUrl, expenseDeepLink,
+  loadGmailAttachment, isPreviewable,
 } from '../lib/gmail.js';
 
 /**
@@ -61,6 +63,9 @@ export default function Gmail() {
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
+  // The attachment open in the preview lightbox: { messageId, attachment } | null.
+  const [preview, setPreview] = useState(null);
+  const openPreview = useCallback((messageId, attachment) => setPreview({ messageId, attachment }), []);
 
   const runSync = useCallback(async () => {
     if (!connected) return;
@@ -206,12 +211,20 @@ export default function Gmail() {
           <Loader2 size={16} className="animate-spin" /> Cargando…
         </div>
       ) : tab === INVOICES_TAB ? (
-        <InvoiceList invoices={invoices} />
+        <InvoiceList invoices={invoices} onPreview={openPreview} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
           <ThreadList threads={tabThreads} selectedId={selectedThreadId} onOpen={openThread} brandTab={tab} />
-          <ReadingPane thread={selectedThread} onReassign={reassignBrand} />
+          <ReadingPane thread={selectedThread} onReassign={reassignBrand} onPreview={openPreview} />
         </div>
+      )}
+
+      {preview && (
+        <AttachmentModal
+          messageId={preview.messageId}
+          attachment={preview.attachment}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );
@@ -275,7 +288,7 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   );
 }
 
-function ReadingPane({ thread, onReassign }) {
+function ReadingPane({ thread, onReassign, onPreview }) {
   if (!thread) {
     return (
       <div className="hidden lg:flex items-center justify-center rounded-xl border border-dashed border-ink-200 bg-ink-50/40 text-sm text-ink-400 min-h-[40vh]">
@@ -314,14 +327,14 @@ function ReadingPane({ thread, onReassign }) {
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {thread.items.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble key={m.id} message={m} onPreview={onPreview} />
         ))}
       </div>
     </div>
   );
 }
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, onPreview }) {
   const out = message.direction === 'out';
   return (
     <div className={`rounded-lg border px-3 py-2.5 ${out ? 'border-ink-100 bg-ink-50/60 ml-6' : 'border-ink-100 bg-surface mr-6'}`}>
@@ -331,15 +344,21 @@ function MessageBubble({ message }) {
         </span>
         <span className="text-[0.65rem] text-ink-400 shrink-0">{fmtDate(message.receivedAt || message.createdAt)}</span>
       </div>
-      <p className="text-sm text-ink-700 whitespace-pre-wrap break-words">
-        {(message.bodyText || message.snippet || '').slice(0, 8000)}
-      </p>
+      {message.bodyHtml ? (
+        <HtmlBody html={message.bodyHtml} />
+      ) : (
+        <p className="text-sm text-ink-700 whitespace-pre-wrap break-words">
+          {(message.bodyText || message.snippet || '').slice(0, 8000)}
+        </p>
+      )}
       {(message.attachments || []).length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {message.attachments.map((a, i) => (
-            <span key={`${a.attachmentId || a.filename}-${i}`} className="inline-flex items-center gap-1 rounded bg-ink-100 px-2 py-1 text-[0.7rem] text-ink-600">
-              <Paperclip size={11} /> {a.filename || 'archivo'}
-            </span>
+            <AttachmentChip
+              key={`${a.attachmentId || a.filename}-${i}`}
+              attachment={a}
+              onClick={() => onPreview?.(message.id, a)}
+            />
           ))}
         </div>
       )}
@@ -347,7 +366,165 @@ function MessageBubble({ message }) {
   );
 }
 
-function InvoiceList({ invoices }) {
+/**
+ * An email's HTML body, isolated in a sandboxed iframe — NO allow-scripts, so the
+ * email's own markup/CSS renders but nothing it carries can execute or reach the
+ * app. `allow-same-origin` is granted only so we can measure the content and
+ * auto-size the frame; `allow-popups` lets its links open in a new tab.
+ */
+function HtmlBody({ html }) {
+  const ref = useRef(null);
+  const [height, setHeight] = useState(120);
+  const srcDoc = useMemo(() => (
+    `<!doctype html><html><head><meta charset="utf-8"><base target="_blank">`
+    + `<style>html,body{margin:0;padding:0}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;`
+    + `font-size:14px;line-height:1.5;color:#1a1a1a;word-break:break-word;overflow-wrap:anywhere}`
+    + `img{max-width:100%;height:auto}table{max-width:100%}a{color:#1d4ed8}</style></head>`
+    + `<body>${html}</body></html>`
+  ), [html]);
+  const onLoad = () => {
+    try {
+      const doc = ref.current?.contentDocument;
+      const h = doc ? Math.max(doc.documentElement?.scrollHeight || 0, doc.body?.scrollHeight || 0) : 0;
+      if (h) setHeight(Math.min(h + 8, 1400));
+    } catch { /* cross-origin guard — keep the default height */ }
+  };
+  return (
+    <iframe
+      ref={ref}
+      title="Correo"
+      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      srcDoc={srcDoc}
+      onLoad={onLoad}
+      className="w-full rounded bg-white"
+      style={{ height, border: 0 }}
+    />
+  );
+}
+
+function AttachmentChip({ attachment, onClick }) {
+  const a = attachment || {};
+  const isImg = String(a.mimeType || '').toLowerCase().startsWith('image/');
+  const Icon = isImg ? ImageIcon : (isPreviewable(a.mimeType) ? FileText : FileIcon);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={isPreviewable(a.mimeType) ? 'Previsualizar' : 'Descargar'}
+      className="inline-flex items-center gap-1.5 rounded border border-ink-200 bg-ink-50 px-2 py-1 text-[0.7rem] text-ink-700 hover:bg-ink-100 transition max-w-[14rem]"
+    >
+      <Icon size={12} className="shrink-0 text-ink-500" />
+      <span className="truncate">{a.filename || 'archivo'}</span>
+    </button>
+  );
+}
+
+/**
+ * The attachment lightbox. Fetches the bytes on demand (lib/gmail
+ * loadGmailAttachment → an object URL), previews images and PDFs inline, and
+ * offers a download for everything. The object URL is revoked on close so the
+ * blob is freed.
+ */
+function AttachmentModal({ messageId, attachment, onClose }) {
+  const [state, setState] = useState({ loading: true, error: '', url: '' });
+  const a = attachment || {};
+  const mime = String(a.mimeType || '').toLowerCase();
+  const isImg = mime.startsWith('image/');
+  const isPdf = mime === 'application/pdf';
+
+  useEffect(() => {
+    let url = '';
+    let alive = true;
+    setState({ loading: true, error: '', url: '' });
+    loadGmailAttachment(messageId, a)
+      .then((res) => {
+        url = res.url;
+        if (alive) setState({ loading: false, error: '', url });
+        else URL.revokeObjectURL(url);
+      })
+      .catch((e) => {
+        if (alive) setState({ loading: false, error: e?.message || 'No se pudo abrir el archivo.', url: '' });
+      });
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messageId, a.attachmentId]);
+
+  // Close on Escape.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-xl bg-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-ink-100 px-4 py-3">
+          <span className="flex items-center gap-2 truncate text-sm font-medium text-ink-800">
+            <Paperclip size={14} className="shrink-0 text-ink-400" />
+            <span className="truncate">{a.filename || 'archivo'}</span>
+          </span>
+          <div className="flex items-center gap-2">
+            {state.url && (
+              <a
+                href={state.url}
+                download={a.filename || 'archivo'}
+                className="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+              >
+                <Download size={13} /> Descargar
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center justify-center rounded-lg border border-ink-200 bg-surface p-1.5 text-ink-600 hover:bg-ink-50"
+              aria-label="Cerrar"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto bg-ink-50/40 p-4">
+          {state.loading ? (
+            <div className="flex items-center justify-center gap-2 py-20 text-sm text-ink-400">
+              <Loader2 size={16} className="animate-spin" /> Cargando adjunto…
+            </div>
+          ) : state.error ? (
+            <div className="py-20 text-center text-sm text-red-600">{state.error}</div>
+          ) : isImg ? (
+            <img src={state.url} alt={a.filename || 'adjunto'} className="mx-auto max-h-[72vh] max-w-full rounded object-contain" />
+          ) : isPdf ? (
+            <iframe title={a.filename || 'PDF'} src={state.url} className="h-[72vh] w-full rounded bg-white" />
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-ink-500">
+              <FileIcon size={40} className="text-ink-300" />
+              <p>Este tipo de archivo no se puede previsualizar.</p>
+              <a
+                href={state.url}
+                download={a.filename || 'archivo'}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-ink-900 px-3 py-2 text-xs font-medium text-white hover:bg-ink-700"
+              >
+                <Download size={14} /> Descargar archivo
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceList({ invoices, onPreview }) {
   if (!invoices.length) {
     return (
       <div className="rounded-xl border border-ink-100 bg-surface">
@@ -384,7 +561,16 @@ function InvoiceList({ invoices }) {
                 <td className="px-4 py-2.5 text-ink-700 truncate max-w-[12rem]">{m.fromName || m.fromEmail}</td>
                 <td className="px-4 py-2.5 text-ink-700 truncate max-w-[16rem]">
                   <span className="inline-flex items-center gap-1.5">
-                    {m.hasAttachment && <Paperclip size={12} className="text-ink-400" />}
+                    {(m.attachments || []).length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => onPreview?.(m.id, m.attachments[0])}
+                        title="Previsualizar adjunto"
+                        className="text-ink-400 hover:text-ink-700"
+                      >
+                        <Paperclip size={12} />
+                      </button>
+                    ) : (m.hasAttachment && <Paperclip size={12} className="text-ink-400" />)}
                     {m.subject || '(sin asunto)'}
                   </span>
                 </td>

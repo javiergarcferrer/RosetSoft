@@ -89,6 +89,15 @@ export async function syncGmail({ query, maxResults } = {}) {
   return invokeGoogle({ gmailSync: { query, maxResults } });
 }
 
+/**
+ * Fetch one attachment's bytes on demand (the sync stores only metadata).
+ * Returns { base64, size }; the caller turns the base64 into a Blob for preview
+ * or download. `messageId` is the Gmail message id (gmail_messages.id).
+ */
+export async function gmailAttachment({ messageId, attachmentId } = {}) {
+  return invokeGoogle({ gmailAttachment: { messageId, attachmentId } });
+}
+
 // ── Drive ─────────────────────────────────────────────────────────────────
 
 /** Find (or create) the single workspace root folder; returns { id, url }. */

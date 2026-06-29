@@ -39,6 +39,8 @@
 //   { status:true }                      → quick "is the token alive" probe.
 //   { gmailSend:{to,cc,bcc,subject,html,text,fromName,attachments[]} }
 //                                        → send one email (attachments base64).
+//   { gmailAttachment:{messageId,attachmentId} } → fetch one attachment's bytes
+//                                        (base64) for preview/download.
 //   { driveEnsureRoot:{name?} }          → find/create the workspace root folder.
 //   { driveCreateFolder:{name,parentId?} } → create a subfolder, return id+link.
 //   { driveUpload:{folderId,filename,mimeType,base64} } → upload one file.
@@ -115,6 +117,7 @@ type Body = {
     attachments?: Attachment[];
   };
   gmailSync?: { query?: string; maxResults?: number };
+  gmailAttachment?: { messageId?: string; attachmentId?: string };
   driveEnsureRoot?: { name?: string };
   driveCreateFolder?: { name?: string; parentId?: string };
   driveUpload?: { folderId?: string; filename?: string; mimeType?: string; base64?: string };
@@ -152,6 +155,13 @@ const asList = (v?: string | string[]): string =>
   (Array.isArray(v) ? v : v ? [v] : []).map((s) => String(s).trim()).filter(Boolean).join(', ');
 /** base64 string → fixed 76-char lines (MIME base64 attachment bodies). */
 const wrap76 = (b64: string): string => b64.replace(/(.{76})/g, '$1\r\n');
+/** Gmail's base64url (attachment data) → standard, padded base64 the browser can decode. */
+const b64UrlToStd = (s: string): string => {
+  let v = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+  const pad = v.length % 4;
+  if (pad) v += '='.repeat(4 - pad);
+  return v;
+};
 
 // ── login state: HMAC-signed, stateless ────────────────────────────────────
 function b64UrlToBytes(s: string): Uint8Array {
@@ -755,6 +765,23 @@ Deno.serve(async (req) => {
       }
       await admin.from('settings').update({ gmail_synced_at: new Date().toISOString() }).eq('profile_id', TEAM);
       return json({ ok: true, scanned: ids.length, synced: toUpsert.length });
+    }
+
+    // ── Gmail attachment fetch (preview/download) ─────────────────────────────
+    // The sync stores only attachment METADATA (filename/mime/size/attachmentId);
+    // the bytes are fetched on demand here so the inbox can preview/download a
+    // file without bloating gmail_messages. Gmail returns base64url — we hand the
+    // browser standard, padded base64 it can turn into a Blob.
+    if (body.gmailAttachment) {
+      const messageId = String(body.gmailAttachment.messageId || '').trim();
+      const attachmentId = String(body.gmailAttachment.attachmentId || '').trim();
+      if (!messageId || !attachmentId) return json({ ok: false, error: 'Falta el adjunto' }, 400);
+      const r = await fetch(`${GMAIL}/messages/${messageId}/attachments/${attachmentId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return json({ ok: false, error: d?.error?.message || `Gmail ${r.status}` }, 502);
+      return json({ ok: true, base64: b64UrlToStd(String(d.data || '')), size: Number(d.size) || 0 });
     }
 
     // ── Drive: ensure root ───────────────────────────────────────────────────

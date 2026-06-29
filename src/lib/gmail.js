@@ -11,10 +11,39 @@
 // either core.
 
 import { db, invalidate } from '../db/database.js';
-import { syncGmail } from './google.js';
+import { syncGmail, gmailAttachment } from './google.js';
 
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
+
+/** Can this MIME type be previewed inline (image or PDF)? Everything else downloads. */
+export function isPreviewable(mimeType) {
+  const t = String(mimeType || '').toLowerCase();
+  return t.startsWith('image/') || t === 'application/pdf';
+}
+
+/** A standard-base64 string → Blob of the given type (browser-side, no fetch). */
+function base64ToBlob(base64, mimeType) {
+  const bin = atob(String(base64 || ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mimeType || 'application/octet-stream' });
+}
+
+/**
+ * Load one attachment's bytes (on demand) and hand back a Blob + an object URL
+ * the View can drop into an <img>/<iframe> or a download link. The caller owns
+ * the URL and must URL.revokeObjectURL it when the preview closes.
+ *
+ *   loadGmailAttachment(messageId, { attachmentId, mimeType, filename })
+ *     → { blob, url, mimeType, filename }
+ */
+export async function loadGmailAttachment(messageId, attachment) {
+  const att = attachment || {};
+  const { base64 } = await gmailAttachment({ messageId, attachmentId: att.attachmentId });
+  const blob = base64ToBlob(base64, att.mimeType);
+  return { blob, url: URL.createObjectURL(blob), mimeType: att.mimeType || blob.type, filename: att.filename || 'archivo' };
+}
 
 /** Open a message/thread in Gmail's web UI (new tab). */
 export function gmailWebUrl(message) {
