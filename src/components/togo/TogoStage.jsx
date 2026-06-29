@@ -9,6 +9,37 @@ import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampl
 const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 const norm360 = (d) => (((d % 360) + 360) % 360);
 const PLAN_W = 760, PLAN_H = 540;
+const CONTOUR_INK = 0x726a5d, CONTOUR_SEL = 0xb08d57;   // neutral vs brand-gold
+
+/**
+ * A flat rounded-rectangle OUTLINE ring lying on the floor, sized to a piece's
+ * footprint — the modern "2D contour" that traces each piece's shape under the
+ * top-down camera. Built as a filled SHAPE with a same-shape HOLE (a frame), so
+ * its thickness is exact (WebGL line width is unreliable). Rounded to match the
+ * Togo's soft corners. Returned mesh sits flush at the footprint centre.
+ */
+function buildFootprintRing(THREE, w, d, { thickness = 2.4, color = CONTOUR_INK, opacity = 0.9 } = {}) {
+  const rr = (W, H, r) => {
+    const s = new THREE.Shape();
+    const x = -W / 2, y = -H / 2, k = Math.max(0, Math.min(r, W / 2, H / 2));
+    s.moveTo(x + k, y);
+    s.lineTo(x + W - k, y); s.quadraticCurveTo(x + W, y, x + W, y + k);
+    s.lineTo(x + W, y + H - k); s.quadraticCurveTo(x + W, y + H, x + W - k, y + H);
+    s.lineTo(x + k, y + H); s.quadraticCurveTo(x, y + H, x, y + H - k);
+    s.lineTo(x, y + k); s.quadraticCurveTo(x, y, x + k, y);
+    return s;
+  };
+  const r = Math.min(w, d) * 0.2;
+  const outer = rr(w, d, r);
+  outer.holes.push(rr(Math.max(1, w - 2 * thickness), Math.max(1, d - 2 * thickness), Math.max(0, r - thickness)));
+  const geo = new THREE.ShapeGeometry(outer);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;   // flat on the floor (Shape is XY → XZ)
+  mesh.position.y = 1.2;
+  mesh.renderOrder = 2;
+  return mesh;
+}
 
 /**
  * THE configurator stage — ONE three.js scene for BOTH "2D" and "3D". The 2D plan
@@ -28,15 +59,15 @@ const PLAN_W = 760, PLAN_H = 540;
  */
 export default function TogoStage({
   placed = [], resolvedById = {}, mode = '2d', material, selectedUid = null,
-  onSelect, onMove, onSelectedScreenPos, className = '',
+  onSelect, onMove, onSelectedScreenPos, onPlanBounds, className = '',
 }) {
   const mountRef = useRef(null);
   const api = useRef(null);
   const [failed, setFailed] = useState(false);
 
   // Latest props the imperative three loop reads without re-subscribing.
-  const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos });
-  stateRef.current = { placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos };
+  const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds });
+  stateRef.current = { placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds };
 
   // placed + resolved → absolute-world pieces (NOT recentred): plan-x→world-x,
   // plan-y→world-z 1:1, so dragging one piece never shifts the others.
@@ -62,6 +93,8 @@ export default function TogoStage({
       center: has ? { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 } : { x: PLAN_W / 2, z: PLAN_H / 2 },
       // Bounding-sphere radius of the layout (rotation-invariant for framing).
       radius: has ? Math.max(45, Math.hypot(maxX - minX, maxZ - minZ) / 2) : 150,
+      // Plan footprint AABB (world = plan coords) for the on-plan dimension lines.
+      bounds: has ? { minX, maxX, minZ, maxZ } : null,
     };
   }, []);
 
@@ -157,6 +190,13 @@ export default function TogoStage({
         pad.userData.uid = uid;
         pad.userData.pad = true;
         pg.add(pad);
+        // The 2D contour outline tracing this piece's footprint (top-down only).
+        const ring = buildFootprintRing(THREE, w, d);
+        ring.userData.uid = uid;
+        ring.userData.contour = true;
+        ring.visible = stateRef.current.mode === '2d';
+        pg.userData.contour = ring;
+        pg.add(ring);
       }
     });
     l.group = group;
@@ -180,12 +220,22 @@ export default function TogoStage({
     l.group.children.forEach((pg) => {
       const on = sel != null && pg.userData.uid === sel;
       pg.traverse((o) => {
+        if (o.userData?.contour) return;   // the ring keeps its own colour
         const m = o.material; if (!m || !m.emissive || seen.has(m)) return; seen.add(m);
         m.emissive.setHex(on ? 0x3a342b : 0x000000);
         m.emissiveIntensity = on ? 0.5 : 0;
       });
+      // The 2D contour goes brand-gold + bolder when its piece is selected.
+      const ring = pg.userData?.contour;
+      if (ring?.material) { ring.material.color.setHex(on ? CONTOUR_SEL : CONTOUR_INK); ring.material.opacity = on ? 1 : 0.85; }
     });
     l.requestRender();
+  }
+
+  // Show the 2D contour rings only under the top-down camera.
+  function setContourMode(l, mode) {
+    if (!l?.group) return;
+    l.group.children.forEach((pg) => { const r = pg.userData?.contour; if (r) r.visible = mode === '2d'; });
   }
 
   // Re-skin (finish change) without rebuilding geometry.
@@ -301,7 +351,29 @@ export default function TogoStage({
         }
       };
 
-      const renderNow = () => { syncSize(); renderer.render(scene, camera); reportSelPos(); };
+      // Report the whole layout's footprint as a screen-space rect (2D only) so
+      // the parent can draw on-plan dimension lines around it.
+      let _lastB = '';
+      const reportPlanBounds = () => {
+        const cb = stateRef.current.onPlanBounds; if (!cb) return;
+        const l = api.current; if (!l) return;
+        const bb = l.scene3d?.bounds;
+        const cw = renderer.domElement.clientWidth, ch = renderer.domElement.clientHeight;
+        let rect = null;
+        if (bb && stateRef.current.mode === '2d' && !l.tween) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const x of [bb.minX, bb.maxX]) for (const z of [bb.minZ, bb.maxZ]) {
+            _v.set(x, 0, z).project(camera);
+            const sx = (_v.x * 0.5 + 0.5) * cw, sy = (-_v.y * 0.5 + 0.5) * ch;
+            if (sx < minX) minX = sx; if (sx > maxX) maxX = sx; if (sy < minY) minY = sy; if (sy > maxY) maxY = sy;
+          }
+          rect = { x: Math.round(minX), y: Math.round(minY), w: Math.round(maxX - minX), h: Math.round(maxY - minY) };
+        }
+        const key = rect ? `${rect.x},${rect.y},${rect.w},${rect.h}` : '';
+        if (key !== _lastB) { _lastB = key; cb(rect); }
+      };
+
+      const renderNow = () => { syncSize(); renderer.render(scene, camera); reportSelPos(); reportPlanBounds(); };
       let scheduled = false;
       const requestRender = () => { if (scheduled || !alive) return; scheduled = true; raf = requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); }); };
       controls.addEventListener('change', requestRender);
@@ -438,6 +510,7 @@ export default function TogoStage({
   // flip orbit-rotate (locked top-down in 2D, free orbit in 3D).
   useEffect(() => {
     const l = api.current; if (!l) return;
+    setContourMode(l, mode);              // contours show in 2D, hide in 3D
     const { camera, controls } = l;
     const to = poseFor(mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
     const from = { px: camera.position.x, py: camera.position.y, pz: camera.position.z, tx: controls.target.x, ty: controls.target.y, tz: controls.target.z };

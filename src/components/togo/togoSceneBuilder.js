@@ -172,7 +172,7 @@ export function sampleSwatchColor(image) {
  * export's own origin/scale/up-axis don't matter and the piece lands EXACTLY where
  * the 2D plan shows it.
  */
-function placeRealModel(THREE, object, material, desc, pieceGroup) {
+function placeRealModel(THREE, object, material, desc, pieceGroup, footprint) {
   const clone = object.clone(true);
   clone.traverse((o) => {
     if (o.isMesh) {
@@ -199,8 +199,25 @@ function placeRealModel(THREE, object, material, desc, pieceGroup) {
   const wrap = new THREE.Group();
   wrap.add(clone);
   const size0 = new THREE.Box3().setFromObject(clone).getSize(new THREE.Vector3());
-  wrap.scale.setScalar(Number(desc?.scale) > 0 ? Number(desc.scale) : autoUnitScale(size0.y));
+  const base = Number(desc?.scale) > 0 ? Number(desc.scale) : autoUnitScale(size0.y);
+  wrap.scale.setScalar(base);
   wrap.updateMatrixWorld(true);
+
+  // FILL THE FOOTPRINT. The modelled Togo sits a couple % INSIDE its catalogue
+  // footprint, so two pieces snapped flush (footprint edges touching) still showed
+  // a visible gap between the cushions — "the white space". Stretch the wrap in X
+  // and Z just enough that the mesh's footprint EXACTLY matches widthCm × depthCm,
+  // so flush pieces actually touch. The correction is tiny (~1.0–1.05) and per-axis
+  // ratios are near-equal, so it doesn't visibly distort; clamped so a grossly
+  // wrong mesh is never warped. Height (Y) is untouched (stays the true ~72 cm).
+  const sz = new THREE.Box3().setFromObject(wrap).getSize(new THREE.Vector3());
+  const w = Number(footprint?.widthCm) || 0, d = Number(footprint?.depthCm) || 0;
+  if (w > 0 && d > 0 && sz.x > 1e-3 && sz.z > 1e-3) {
+    const clamp = (r) => Math.max(0.85, Math.min(1.18, r));
+    wrap.scale.x = base * clamp(w / sz.x);
+    wrap.scale.z = base * clamp(d / sz.z);
+    wrap.updateMatrixWorld(true);
+  }
 
   // Recentre on the footprint and sit it on the floor — the export's own origin and
   // up-axis stop mattering, and the piece lands where the 2D plan shows it.
@@ -232,7 +249,7 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
     const material = makeFabricMaterial(THREE, null, { ...opts, color: colorFor(piece.fabricCode) ?? opts.color });
     const real = modelFor(piece);
     if (real && real.object) {
-      placeRealModel(THREE, real.object, material, real.desc, pieceGroup);
+      placeRealModel(THREE, real.object, material, real.desc, pieceGroup, { widthCm: piece.widthCm, depthCm: piece.depthCm });
     } else {
       for (const part of togoParts(piece.widthCm, piece.depthCm, piece.form)) {
         let mesh;

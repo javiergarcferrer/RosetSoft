@@ -23,7 +23,9 @@ export const PLAN_W_CM = 760;
 export const PLAN_H_CM = 540;
 export const PX_PER_CM = 1;
 export const SNAP_GRID_CM = 2;   // free-ish fine grid every drag lands on
-export const EDGE_SNAP_CM = 8;   // flush-to-neighbour threshold
+export const EDGE_SNAP_CM = 26;  // flush-to-neighbour threshold — generous so
+                                 // pieces LOCK together as you drag near (a
+                                 // sectional should click flush, not float)
 
 const norm360 = (deg) => (((deg % 360) + 360) % 360);
 

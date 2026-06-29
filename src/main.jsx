@@ -60,12 +60,25 @@ try {
   /* unsupported — no-op */
 }
 
+// Clean public URL for the Togo configurator: soft.alcover.do/configurator (no
+// hash). The catch-all rewrite serves index.html there; the embed has no router
+// dependencies (it reads window.location only), so we mount it directly at that
+// path and the URL stays clean. Every other path runs the normal hash-routed app.
+const TogoEmbedStandalone = React.lazy(() => import('./pages/embed/TogoEmbed.jsx'));
+const isConfiguratorPath = /^\/configurator\/?$/.test(window.location.pathname || '');
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <HashRouter>
-        <App />
-      </HashRouter>
+      {isConfiguratorPath ? (
+        <React.Suspense fallback={null}>
+          <TogoEmbedStandalone />
+        </React.Suspense>
+      ) : (
+        <HashRouter>
+          <App />
+        </HashRouter>
+      )}
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -132,6 +132,9 @@ const FINISHES = [
 function isModalContext() {
   if (typeof window === 'undefined') return false;
   try {
+    // ctx=modal can ride the hash (#/embed/togo?ctx=modal) OR the real query
+    // (/configurator?ctx=modal, the clean-path entry).
+    if (new URLSearchParams(window.location.search || '').get('ctx') === 'modal') return true;
     const h = window.location.hash || '';
     const qi = h.indexOf('?');
     return qi >= 0 && new URLSearchParams(h.slice(qi + 1)).get('ctx') === 'modal';
@@ -312,9 +315,18 @@ export default function TogoEmbed() {
   const addPiece = useCallback((modelId) => {
     const r = resolvedById[modelId]; if (!r) return;
     const fp = footprintOf(r, 0);
-    const baseN = 40 + (placed.length % 6) * 26;
-    const start = clampToPlan(baseN, baseN, fp.w, fp.h);
     const others = placed.map((p) => { const f = footprintOf(resolvedById[p.pieceId], p.rot); return { x: p.x, y: p.y, w: f.w, h: f.h }; });
+    // Drop the new piece FLUSH against the right edge of the current arrangement,
+    // top-aligned — so a sectional builds out as a connected row that touches,
+    // never a piece stacked on top of another (the strong edge-snap then keeps
+    // it locked). First piece lands at a comfortable default.
+    let x = 40, y = 40;
+    if (others.length) {
+      let maxX = -Infinity, minY = Infinity;
+      for (const o of others) { maxX = Math.max(maxX, o.x + o.w); minY = Math.min(minY, o.y); }
+      x = maxX; y = minY;
+    }
+    const start = clampToPlan(x, y, fp.w, fp.h);
     const snapped = snapPlacement({ x: start.x, y: start.y, w: fp.w, h: fp.h }, others);
     const c = clampToPlan(snapped.x, snapped.y, fp.w, fp.h);
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -483,6 +495,7 @@ export default function TogoEmbed() {
         view={view} placed={placed} resolvedById={resolvedById} material={material}
         selectedUid={selectedUid} onSelect={setSelectedUid} onMove={movePiece} onRotate={rotateSel}
         models={models} onAddPiece={addPiece} thumbById={thumbById} renderThumbById={renderThumbById}
+        overallCm={vm.overallCm}
       />
 
       {/* ── Top-left: brand + 2D/3D toggle ── */}
@@ -729,20 +742,52 @@ function EmptyPlanStart({ models = [], thumbById = {}, renderThumbById = {}, onA
   );
 }
 
+/** On-plan dimension lines — width bracket above the layout, depth bracket to its
+ *  left, each a hairline with end ticks + a cm pill. Drawn from the layout's
+ *  screen-space footprint rect (reported by TogoStage). 2D only. */
+function PlanDimensions({ rect, overallCm }) {
+  const pad = 18, tick = 5;
+  let top = rect.y - pad; if (top < 14) top = rect.y + rect.h + pad;  // flip below if no room above
+  let left = rect.x - pad; if (left < 14) left = rect.x + rect.w + pad;
+  const x2 = rect.x + rect.w, y2 = rect.y + rect.h;
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[5] text-ink-400">
+      <svg className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }} fill="none" stroke="currentColor" strokeWidth="1">
+        {/* width */}
+        <line x1={rect.x} y1={top} x2={x2} y2={top} />
+        <line x1={rect.x} y1={top - tick} x2={rect.x} y2={top + tick} />
+        <line x1={x2} y1={top - tick} x2={x2} y2={top + tick} />
+        {/* depth */}
+        <line x1={left} y1={rect.y} x2={left} y2={y2} />
+        <line x1={left - tick} y1={rect.y} x2={left + tick} y2={rect.y} />
+        <line x1={left - tick} y1={y2} x2={left + tick} y2={y2} />
+      </svg>
+      <span className="absolute -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-full bg-surface/95 border border-ink-200 text-[10px] font-medium tabular-nums text-ink-600 shadow-sm"
+        style={{ left: `${rect.x + rect.w / 2}px`, top: `${top}px` }}>{overallCm.widthCm} cm</span>
+      <span className="absolute -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-full bg-surface/95 border border-ink-200 text-[10px] font-medium tabular-nums text-ink-600 shadow-sm"
+        style={{ left: `${left}px`, top: `${rect.y + rect.h / 2}px` }}>{overallCm.depthCm} cm</span>
+    </div>
+  );
+}
+
 function CanvasArea({
   view, placed, resolvedById, material, selectedUid, onSelect, onMove, onRotate,
-  models = [], onAddPiece, thumbById = {}, renderThumbById = {}, fill = false,
+  models = [], onAddPiece, thumbById = {}, renderThumbById = {}, overallCm, fill = false,
 }) {
   const boxedH = 'h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]';
   const [selPos, setSelPos] = useState(null);
+  const [planRect, setPlanRect] = useState(null);
   const showRotate = view === '2d' && selectedUid != null && selPos;
+  const showDims = view === '2d' && planRect && overallCm?.widthCm > 0;
   return (
     <div className={fill ? 'absolute inset-0 overflow-hidden bg-ink-50/40' : `relative overflow-hidden rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}>
       <TogoStage
         mode={view} placed={placed} resolvedById={resolvedById} material={material}
-        selectedUid={selectedUid} onSelect={onSelect} onMove={onMove} onSelectedScreenPos={setSelPos}
+        selectedUid={selectedUid} onSelect={onSelect} onMove={onMove}
+        onSelectedScreenPos={setSelPos} onPlanBounds={setPlanRect}
         className="absolute inset-0"
       />
+      {showDims && <PlanDimensions rect={planRect} overallCm={overallCm} />}
       {/* Rotate control floating just beneath the tapped piece. */}
       {showRotate && (
         <button

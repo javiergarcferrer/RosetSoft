@@ -28,7 +28,11 @@ const KEY = 'rs.theme';
 const VALUES = new Set(['light', 'dark', 'system']);
 
 /** The customer-facing, always-light routes (HashRouter paths). */
-export function isPublicRoute(hash = (typeof location !== 'undefined' ? location.hash : '')) {
+export function isPublicRoute(
+  hash = (typeof location !== 'undefined' ? location.hash : ''),
+  pathname = (typeof location !== 'undefined' ? location.pathname : ''),
+) {
+  if (/^\/configurator\/?$/.test(pathname || '')) return true;   // clean configurator URL
   return hash.indexOf('#/q/') === 0
     || hash.indexOf('#/contrato/') === 0
     || hash.indexOf('#/tienda') === 0
