@@ -11,12 +11,16 @@ import { buildTogoGroup, disposeGroup } from '../../components/togo/togoSceneBui
 import { loadTogoModels } from '../../components/togo/togoModelLoader.js';
 import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
 import { useMeshPlans, useTopDownTiles } from '../../components/togo/useMeshPlans.js';
-import { togoQuickStarts } from '../../lib/togo/quickStarts.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
-  resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced, compactPlaced,
+  resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
 } from '../../core/quote/index.js';
+import { TOGO_PIECES } from '../../assets/togo/pieces.js';
 import togoHeroSvg from '../../assets/togo/togo_gb.svg?raw';
+import togoWireA from '../../assets/togo/togo_a.svg?raw';
+import togoWireChauf from '../../assets/togo/togo_chauf.svg?raw';
+import togoWireMc from '../../assets/togo/togo_mc.svg?raw';
+import togoWireLounge from '../../assets/togo/togo_lounge.svg?raw';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
@@ -24,6 +28,25 @@ import TogoScene3D from '../../components/togo/TogoScene3D.jsx';
 import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
+
+// The clean "beautiful" Togo line wireframes (the real plan silhouettes), keyed
+// by canonical piece id. Used as each MODEL'S image in the palette + start screen
+// — far cleaner than the dealer's stored thumbnails. togo_gb is the hero import.
+const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge };
+const WIRE_BY_FOOTPRINT = new Map(TOGO_PIECES.map((p) => [`${p.widthCm}x${p.depthCm}`, p.id]));
+
+// The wireframe that best fits a catalog model — by exact footprint first (the
+// shape), then by a name keyword, else null (caller falls back to the model's
+// own svg). Renders thin → callers crisp it with non-scaling strokes.
+function wireframeFor(model) {
+  if (!model) return null;
+  let id = WIRE_BY_FOOTPRINT.get(`${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`);
+  if (!id) {
+    const name = String(model.name || '').toLowerCase();
+    id = TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id;
+  }
+  return (id && TOGO_WIRES[id]) || null;
+}
 
 // A touch of "game juice": a haptic tap on key actions. Guarded — a no-op where
 // the device/browser doesn't support vibration (desktop, iOS Safari), so it only
@@ -204,6 +227,12 @@ export default function TogoEmbed() {
     () => Object.fromEntries(models.map((m) => [m.id, meshPlans[m.id]?.svg || m.svg])),
     [models, meshPlans],
   );
+  // Each model's catalogue IMAGE (palette, start screen, summary) — the clean
+  // Togo wireframe where one fits the footprint/name, else the stored thumbnail.
+  const thumbById = useMemo(
+    () => Object.fromEntries(models.map((m) => [m.id, wireframeFor(m) || m.svg])),
+    [models],
+  );
 
   // Per-model family (grades + retail prices) so a fabric pick reprices exactly
   // like the internal configurator (productForGrade), keyed by family root.
@@ -316,24 +345,6 @@ export default function TogoEmbed() {
     setSelectedUid(uid);
     flashAdded(uid); buzz(11);
   }, [resolvedById, placed, flashAdded]);
-
-  // One-tap quick-start sets (resolved against the available models) — drop a whole
-  // arrangement and auto-pack it, so a customer goes from blank to a real layout in
-  // a single tap. compactPlaced lays the pieces out edge-to-edge.
-  const quickStarts = useMemo(() => togoQuickStarts(models), [models]);
-  const startFromTemplate = useCallback((pieceIds) => {
-    if (!pieceIds?.length) return;
-    setSelectedUid(null);
-    setPlaced((prev) => {
-      const next = [...prev];
-      for (const pid of pieceIds) {
-        if (!resolvedById[pid]) continue;
-        next.push({ uid: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, pieceId: pid, x: 0, y: 0, rot: 0 });
-      }
-      return compactPlaced(next, resolvedById);
-    });
-    buzz([8, 20, 12]);
-  }, [resolvedById]);
 
   // uid-parameterized so the on-plan hover controls can rotate/delete ANY piece
   // (not just the selected one) without a round-trip to the toolbar.
@@ -512,7 +523,7 @@ export default function TogoEmbed() {
         placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
         hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
         onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
-        quickStarts={quickStarts} onQuickStart={startFromTemplate}
+        models={models} onAddPiece={addPiece} thumbById={thumbById}
         lastAddedUid={lastAddedUid}
       />
 
@@ -551,7 +562,7 @@ export default function TogoEmbed() {
             <div className="pointer-events-auto self-center w-full max-w-lg togo-rise">
               <SelectedStrip
                 selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
-                svgById={svgById} rates={rates} compact
+                thumbById={thumbById} rates={rates} compact
                 onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
                 onRotate={rotateSel} onDelete={deleteSel}
               />
@@ -560,7 +571,7 @@ export default function TogoEmbed() {
 
           {/* The build tool: piece hotbar (2D) or the finish editor (3D). */}
           {view === '2d' ? (
-            <PieceHotbar models={models} onAdd={addPiece} hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
+            <PieceHotbar models={models} thumbById={thumbById} onAdd={addPiece} hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
           ) : (
             <div className="pointer-events-auto self-center max-w-full">{materialEditor}</div>
           )}
@@ -607,7 +618,7 @@ export default function TogoEmbed() {
 
       <QuoteSheet
         open={quoteOpen} onClose={() => setQuoteOpen(false)}
-        placed={placed} resolvedById={resolvedById} svgById={svgById} rates={rates}
+        placed={placed} resolvedById={resolvedById} thumbById={thumbById} rates={rates}
         subtotalUsd={pricedUsd} pending={pendingFabric} overallCm={vm.overallCm}
         onRequest={() => { setQuoteOpen(false); setStep('form'); }}
       />
@@ -636,7 +647,7 @@ function HudIcon({ title, onClick, danger = false, children }) {
  *  tile rings when its placed instances are hovered on the plan (and vice-versa),
  *  so the link between palette and canvas reads instantly. Replaces the old
  *  sidebar list + "Agregar pieza" sheet: the build tool lives ON the canvas. */
-function PieceHotbar({ models, onAdd, hoveredPieceId, onHover }) {
+function PieceHotbar({ models, thumbById = {}, onAdd, hoveredPieceId, onHover }) {
   return (
     <div className="hud-panel pointer-events-auto self-center max-w-full overflow-x-auto no-scrollbar">
       <div className="flex items-stretch gap-1.5 p-1.5">
@@ -652,7 +663,7 @@ function PieceHotbar({ models, onAdd, hoveredPieceId, onHover }) {
               title={`Agregar ${m.name}`}
               className={`group shrink-0 w-[68px] rounded-lg border p-1.5 flex flex-col items-center gap-1 transition active:scale-95 ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
             >
-              <span className="w-11 h-11 grid place-items-center text-ink-700" dangerouslySetInnerHTML={{ __html: m.svg }} />
+              <span className="w-12 h-11 block text-ink-700 [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]" dangerouslySetInnerHTML={{ __html: thumbById[m.id] || m.svg }} />
               <span className="block w-full text-[10px] leading-none text-ink-600 text-center truncate">{m.name}</span>
             </button>
           );
@@ -687,10 +698,10 @@ function MaterialEditor({ finishKey, setFinishKey, weave, setWeave }) {
 /** Selected-piece strip — thumbnail, label, fabric swatch, price, dims + the
  *  per-piece actions (Tela / clear-fabric / rotate / delete). `compact` packs
  *  it onto one floating row for the mobile contextual bar. */
-function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, onPickFabric, onClearFabric, onRotate, onDelete, compact = false }) {
+function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, rates, onPickFabric, onClearFabric, onRotate, onDelete, compact = false }) {
   return (
     <div className={`flex items-center gap-3 rounded-xl border border-brand-200 ${compact ? 'bg-surface shadow-pop' : 'bg-brand-50/50'} px-3 py-2`}>
-      <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[selected.pieceId] }} />
+      <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]" dangerouslySetInnerHTML={{ __html: thumbById[selected.pieceId] || '' }} />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-medium truncate">{selResolved.label}</div>
         <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
@@ -724,31 +735,32 @@ function SelectedStrip({ selected, selResolved, selectedFamily, svgById, rates, 
  *  plan is a FIXED cm-sized canvas at SCALE px/cm (the drag math divides pointer
  *  deltas by SCALE) — it is NEVER rescaled; on small screens it lives in an
  *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
-// Empty-plan starter overlay — the fast path from blank to a real layout: one tap
-// drops a whole arrangement (resolved from the catalogue), or the visitor adds
-// pieces from the palette. Floats over the plan grid and only while it's empty.
-function EmptyPlanStart({ quickStarts, onQuickStart }) {
+// Empty-plan starter overlay — a welcoming grid of the AVAILABLE MODELS (each its
+// clean Togo wireframe); tap one to drop it onto the plan. Floats over the grid,
+// only while the plan is empty.
+function EmptyPlanStart({ models = [], thumbById = {}, onAddPiece }) {
   return (
     <div className="absolute inset-0 z-10 grid place-items-center p-4 pointer-events-none">
-      <div className="togo-rise pointer-events-auto text-center max-w-sm rounded-2xl bg-surface/85 backdrop-blur-sm border border-ink-200 px-5 py-4 shadow-pop">
-        <div className="w-10 h-10 mx-auto rounded-full bg-brand-50 text-brand-600 grid place-items-center"><Sofa size={20} /></div>
-        <p className="mt-2 text-sm font-display font-semibold text-ink-800">Empieza tu diseño</p>
-        {quickStarts.length > 0 ? (
-          <>
-            <p className="text-[11px] text-ink-500 mt-0.5">Toca una combinación para armarla al instante:</p>
-            <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
-              {quickStarts.map((q) => (
-                <button key={q.id} type="button" onClick={() => onQuickStart?.(q.pieceIds)}
-                  className="text-xs rounded-full border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-100 active:scale-95 px-3 py-1.5 font-medium transition">
-                  {q.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-ink-400 mt-2.5">o agrega piezas una a una desde la barra de abajo.</p>
-          </>
-        ) : (
-          <p className="text-[11px] text-ink-400 mt-0.5">Toca una pieza en la barra de abajo para agregarla.</p>
-        )}
+      <div className="togo-rise pointer-events-auto text-center w-full max-w-md rounded-2xl bg-surface/90 backdrop-blur-sm border border-ink-200 px-5 py-5 shadow-pop">
+        <p className="text-sm font-display font-semibold text-ink-800">Empieza tu diseño</p>
+        <p className="text-[11px] text-ink-500 mt-0.5">Toca un modelo para agregarlo:</p>
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {models.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onAddPiece?.(m.id)}
+              className="rounded-xl border border-ink-100 hover:border-brand-300 hover:bg-brand-50/50 active:scale-95 p-2 flex flex-col items-center gap-1.5 transition"
+            >
+              <span
+                className="w-full h-16 block text-ink-700 [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]"
+                dangerouslySetInnerHTML={{ __html: thumbById[m.id] || m.svg }}
+              />
+              <span className="block w-full text-[11px] leading-tight text-ink-700 text-center line-clamp-2">{m.name}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-ink-400 mt-3">o agrégalos desde la barra de abajo.</p>
       </div>
     </div>
   );
@@ -757,7 +769,7 @@ function EmptyPlanStart({ quickStarts, onQuickStart }) {
 function CanvasArea({
   view, vm, scene3d, material, svgById, topDownById = {}, selectedUid, setSelectedUid, codeByUid, placed,
   onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
-  quickStarts = [], onQuickStart, lastAddedUid = null, fill = false,
+  models = [], onAddPiece, thumbById = {}, lastAddedUid = null, fill = false,
 }) {
   const [hoveredUid, setHoveredUid] = useState(null);
   // `fill` = fill the parent stage edge-to-edge (the full-bleed game window);
@@ -770,7 +782,7 @@ function CanvasArea({
   const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
   return (
     <div className={fill ? 'absolute inset-0 overflow-auto bg-ink-50/40 p-4 pt-16 pb-44 sm:px-8' : `relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}>
-      {!vm.tiles.length && <EmptyPlanStart quickStarts={quickStarts} onQuickStart={onQuickStart} />}
+      {!vm.tiles.length && <EmptyPlanStart models={models} thumbById={thumbById} onAddPiece={onAddPiece} />}
       <div
         className="relative mx-auto"
         style={{
@@ -884,7 +896,7 @@ function PlanDimensions({ tiles }) {
  *  a swatch to see it big), unit price, the assembled size, the running total,
  *  and the "request a quote" CTA. Read-only over `placed` (the same data the
  *  lead submission and the estimate dock use). */
-function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
+function QuoteSheet({ open, onClose, placed, resolvedById, thumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
   const [preview, setPreview] = useState(null); // hovered swatch → big centered preview
   useEffect(() => { if (!open) setPreview(null); }, [open]);
   const rows = placed.map((p) => {
@@ -901,7 +913,7 @@ function QuoteSheet({ open, onClose, placed, resolvedById, svgById, rates, subto
             <ul className="divide-y divide-ink-100 -my-1">
               {rows.map((row) => (
                 <li key={row.uid} className="flex items-center gap-3 py-2.5">
-                  <span className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center" dangerouslySetInnerHTML={{ __html: svgById[row.pieceId] || '' }} />
+                  <span className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]" dangerouslySetInnerHTML={{ __html: thumbById[row.pieceId] || '' }} />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{row.label}</div>
                     <div className="text-[11px] text-ink-500 tabular-nums">{row.w}×{row.d} cm</div>
