@@ -238,6 +238,23 @@
     -moz-appearance: textfield;
   }
 
+  /* iOS Safari treats `input[type="date"]` as a replaced element with an
+     intrinsic content width, so it ignores `width:100%` + `min-width:0` and
+     overflows its container (the dense expediente/factura forms push past the
+     card edge on a phone). Reset the native appearance so the field obeys our
+     box model like every other `.input`; the calendar-picker indicator is kept
+     so tapping still opens the native date wheel. Same "make native inputs
+     respect our layout on mobile" intent as the number-spinner reset above. */
+  input[type="date"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    min-width: 0;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
   /* ===========================================================
      Native interactive elements, themed to the design system.
      Generic on purpose — any component can reach for a bare
