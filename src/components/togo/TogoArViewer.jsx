@@ -4,6 +4,8 @@ import Modal from '../Modal.jsx';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { buildArGroup, exportGlbBlob, loadFabricTextures } from './togoGlbExport.js';
+import { loadTogoModels } from './togoModelLoader.js';
+import { disposeGroup as disposeModel } from './togoSceneBuilder.js';
 
 const DEFAULT_FINISH = { sheen: 0.6, sheenRoughness: 0.55, roughness: 0.82, repeat: 3, normalScale: 1.0 };
 
@@ -49,17 +51,25 @@ export default function TogoArViewer({ open, onClose, scene3d, material, storeNa
         ]);
         if (!alive) return;
 
-        // Bake the chosen swatches + finish into the GLB so AR shows real fabric.
+        // Bake the chosen swatches + finish into the GLB so AR shows real fabric,
+        // AND load the REAL Togo meshes (FBX/GLB/…) for the placed pieces — the
+        // same models the inline 3D view uses — so AR places the actual product,
+        // not the procedural stand-in. A piece with no real model falls back to
+        // procedural geometry inside buildTogoGroup.
         const codes = (sd.pieces || []).map((p) => p.fabricCode).filter(Boolean);
-        const textures = await loadFabricTextures(THREE, codes, (c) => swatchProxyUrl(c) || swatchUrl(c));
-        if (!alive) return;
+        const [textures, { cache: modelCache, modelFor }] = await Promise.all([
+          loadFabricTextures(THREE, codes, (c) => swatchProxyUrl(c) || swatchUrl(c)),
+          loadTogoModels(sd),
+        ]);
+        if (!alive) { modelCache.forEach((m) => disposeModel(m.object || m)); return; }
 
         const built = buildArGroup({ THREE, RoundedBoxGeometry }, sd, {
-          ...DEFAULT_FINISH, ...(finishRef.current || {}), textures,
+          ...DEFAULT_FINISH, ...(finishRef.current || {}), textures, modelFor,
         });
         disposeGroup = built.dispose;
         const blob = await exportGlbBlob({ GLTFExporter }, built.root);
         built.dispose();                 // GLB is self-contained — free the scene now
+        modelCache.forEach((m) => disposeModel(m.object || m)); // free the source meshes
         disposeGroup = null;
         if (!alive) return;
         objectUrl = URL.createObjectURL(blob);

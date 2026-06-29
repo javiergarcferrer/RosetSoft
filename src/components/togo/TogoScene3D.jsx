@@ -1,25 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
-import { glbForPiece } from '../../assets/togo/togoModels3d.js';
+import { loadTogoModels } from './togoModelLoader.js';
 import { buildTogoGroup, setupTogoStage, sceneRadius, disposeGroup, makeQuiltNormalMap, sampleSwatchColor } from './togoSceneBuilder.js';
-
-// Pick the three.js loader for a model URL by extension, loaded on demand (so a
-// scene with no real models pulls in no loader at all). pCon exports OBJ/FBX/
-// 3DS/DAE; GLB/glTF for anything authored web-side.
-const extOf = (url) => String(url || '').split('?')[0].split('.').pop().toLowerCase();
-async function loaderFor(ext) {
-  switch (ext) {
-    case 'glb': case 'gltf': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/GLTFLoader.js')); return new m.GLTFLoader(); }
-    case 'obj': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/OBJLoader.js')); return new m.OBJLoader(); }
-    case 'fbx': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/FBXLoader.js')); return new m.FBXLoader(); }
-    case 'dae': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/ColladaLoader.js')); return new m.ColladaLoader(); }
-    case '3ds': { const m = await safeDynamicImport(() => import('three/examples/jsm/loaders/TDSLoader.js')); return new m.TDSLoader(); }
-    default: return null;
-  }
-}
-// glTF/Collada return a wrapper with `.scene`; OBJ/FBX/3DS return the Object3D.
-const normalizeLoaded = (ext, res) => ((ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res);
 
 // The default fabric finish (the material editor overrides these live) — a
 // moderate velvet sheen lobe over matte cloth (see makeFabricMaterial).
@@ -60,14 +43,10 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
     const sd = sceneRef.current || { pieces: [], overallCm: { widthCm: 0, depthCm: 0 } };
     // Preload the distinct fabric swatches as textures (CORS via swatch-proxy)…
     const codes = [...new Set((sd.pieces || []).map((p) => p.fabricCode).filter(Boolean))];
-    // …and any REAL Togo models for the pieces in play (none → procedural). A
-    // dealer-uploaded mesh (piece.mesh, from Storage) wins over the static
-    // manifest; deduped by URL so two pieces sharing a model load it once.
-    const descFor = (p) => ((p.mesh && p.mesh.url) ? p.mesh : glbForPiece(p));
-    const descByUrl = new Map();
-    for (const p of (sd.pieces || [])) { const d = descFor(p); if (d?.url) descByUrl.set(d.url, d); }
-    await Promise.all([
-      ...codes.map(async (code) => {
+    // …and any REAL Togo models for the pieces in play (none → procedural), via
+    // the SHARED loader so the AR export shows the exact same meshes.
+    const [, loaded] = await Promise.all([
+      Promise.all(codes.map(async (code) => {
         if (l.texCache.has(code)) return;
         const url = swatchProxyUrl(code) || swatchUrl(code);
         if (!url) return;
@@ -79,17 +58,8 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
           const c = sampleSwatchColor(tex.image);
           if (c != null) l.colorCache.set(code, c);
         } catch { /* 404 / CORS-tainted → default colour */ }
-      }),
-      ...[...descByUrl.values()].map(async (desc) => {
-        if (l.modelCache.has(desc.url)) return;
-        const ext = extOf(desc.url);
-        try {
-          const loader = await loaderFor(ext);
-          if (!loader) return;
-          const object = normalizeLoaded(ext, await loader.loadAsync(desc.url));
-          if (object) l.modelCache.set(desc.url, { object, desc });
-        } catch { /* missing/unreadable → procedural */ }
-      }),
+      })),
+      loadTogoModels(sd, l.modelCache),
     ]);
     if (!api.current) return; // unmounted while awaiting
     if (l.group) { l.scene.remove(l.group); disposeGroup(l.group); }
@@ -98,7 +68,7 @@ export default function TogoScene3D({ scene3d, material, autoRotate = true, clas
       ...(finishRef.current || {}),
       normalMap: l.quilt,
       colorFor: (c) => (l.colorCache.has(c) ? l.colorCache.get(c) : null),
-      modelFor: (piece) => { const d = descFor(piece); return d ? (l.modelCache.get(d.url) || null) : null; },
+      modelFor: loaded.modelFor,
     });
     l.scene.add(l.group);
     // Frame the camera once the first pieces appear; keep the viewpoint after.
