@@ -15,7 +15,12 @@ import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
 } from '../../core/quote/index.js';
+import { TOGO_PIECES } from '../../assets/togo/pieces.js';
 import togoHeroSvg from '../../assets/togo/togo_gb.svg?raw';
+import togoWireA from '../../assets/togo/togo_a.svg?raw';
+import togoWireChauf from '../../assets/togo/togo_chauf.svg?raw';
+import togoWireMc from '../../assets/togo/togo_mc.svg?raw';
+import togoWireLounge from '../../assets/togo/togo_lounge.svg?raw';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
@@ -23,6 +28,37 @@ import TogoStage from '../../components/togo/TogoStage.jsx';
 import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
+
+// The clean bundled Togo line wireframes, keyed by piece id. Used as each model's
+// palette image where one fits; pieces with no good bundled match (Loveseat,
+// Ottoman) fall through to their OWN stored plan svg (togo_pb / togo_p). togo_gb
+// is the hero import reused here.
+const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge };
+const WIRE_BY_FOOTPRINT = new Map(TOGO_PIECES.map((p) => [`${p.widthCm}x${p.depthCm}`, p.id]));
+// Map a real dealer model to a bundled wireframe by NAME (most specific first;
+// `togo_a` is the diagonal CORNER plan). Loveseat/Ottoman are intentionally
+// ABSENT → wireframeFor returns null → caller uses the model's own svg.
+const WIRE_NAME_ALIAS = [
+  [/corner|angle|esquin|rincon/, 'a'],
+  [/medium|large|grand|3\s*plaz/, 'mc'],
+  [/lounge|meridi|chaise/, 'lounge'],
+  [/fireside|chauff|chofesa|sin\s*brazo/, 'chauf'],
+  [/sofa|settee|canap/, 'gb'],
+  [/armchair|sillon|fauteuil|butaca/, 'a'],
+];
+
+function wireframeFor(model) {
+  if (!model) return null;
+  const name = String(model.name || '').toLowerCase();
+  if (/love|ottoman|pouf|puff/.test(name)) return null;   // use their own plan svg
+  let id = WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
+  if (!id) {
+    const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;
+    id = WIRE_BY_FOOTPRINT.get(fp)
+      || TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id;
+  }
+  return (id && TOGO_WIRES[id]) || null;
+}
 
 
 // A touch of "game juice": a haptic tap on key actions. Guarded — a no-op where
@@ -186,12 +222,11 @@ export default function TogoEmbed() {
     () => Object.fromEntries(models.map((m) => [m.id, meshPlans[m.id]?.svg || m.svg])),
     [models, meshPlans],
   );
-  // Each model's catalogue IMAGE (palette, start screen, summary) = its OWN stored
-  // plan svg — a clean line silhouette at the model's true footprint, accurate per
-  // piece (the Corner's diagonal, the Loveseat's smaller square, …). Crisped at
-  // thumbnail size by the non-scaling-stroke CSS at each render site.
+  // Each model's catalogue IMAGE (palette, start screen, summary): the bundled
+  // wireframe where one fits, else the model's own stored plan svg (Loveseat
+  // togo_pb, Ottoman togo_p). Crisped at thumbnail size by non-scaling strokes.
   const thumbById = useMemo(
-    () => Object.fromEntries(models.map((m) => [m.id, m.svg])),
+    () => Object.fromEntries(models.map((m) => [m.id, wireframeFor(m) || m.svg])),
     [models],
   );
 
