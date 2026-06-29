@@ -788,12 +788,12 @@ function CanvasArea({
   // otherwise the legacy fixed-height framed box.
   const boxedH = 'h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]';
   if (view === '3d') {
-    return <TogoScene3D scene3d={scene3d} material={material} className={fill ? 'w-full h-full overflow-hidden bg-ink-50/40' : `w-full ${boxedH} rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40`} />;
+    return <TogoScene3D scene3d={scene3d} material={material} className={`togo-enter-3d ${fill ? 'w-full h-full overflow-hidden bg-ink-50/40' : `w-full ${boxedH} rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40`}`} />;
   }
   const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
   const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
   return (
-    <div className={fill ? 'absolute inset-0 overflow-auto bg-ink-50/40 p-4 pt-16 pb-44 sm:px-8' : `relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}>
+    <div className={`togo-enter-2d ${fill ? 'absolute inset-0 overflow-auto bg-ink-50/40 p-4 pt-16 pb-44 sm:px-8' : `relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}`}>
       {!vm.tiles.length && <EmptyPlanStart models={models} thumbById={thumbById} onAddPiece={onAddPiece} />}
       <div
         className="relative mx-auto"

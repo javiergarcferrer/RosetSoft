@@ -1306,8 +1306,23 @@ body.togo-rams .card { box-shadow: none; background-image: none; border-color: r
   will-change: transform, opacity;
 }
 
+/* 2D ⇄ 3D flow — the incoming view pans/tilts into position so the two don't hard
+   cut. Going to 3D it rises out of the flat plan into the perspective angle; going
+   back to 2D it settles flat. Transform clears to none at rest → crisp WebGL. */
+@keyframes togo-enter-3d {
+  from { opacity: 0; transform: perspective(1200px) translateY(7%) rotateX(13deg) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes togo-enter-2d {
+  from { opacity: 0; transform: translateY(-4%) scale(1.015); }
+  to   { opacity: 1; transform: none; }
+}
+.togo-enter-3d { animation: togo-enter-3d 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: center bottom; }
+.togo-enter-2d { animation: togo-enter-2d 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .togo-pop, .togo-ready, .togo-rise, .togo-confetti > i { animation: none !important; opacity: 1; }
+  .togo-pop, .togo-ready, .togo-rise, .togo-confetti > i,
+  .togo-enter-3d, .togo-enter-2d { animation: none !important; opacity: 1; }
 }
 
 /* Floating glass HUD panel — the chrome of the "game window". Translucent +
