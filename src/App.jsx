@@ -21,6 +21,7 @@ import Orders from './pages/Orders.jsx';
 import OrderDetail from './pages/OrderDetail.jsx';
 import Comisiones from './pages/Comisiones.jsx';
 import Chats from './pages/Chats.jsx';
+import Gmail from './pages/Gmail.jsx';
 import Difusion from './pages/Difusion.jsx';
 import Instagram from './pages/Instagram.jsx';
 import PublicStore from './pages/PublicStore.jsx';
@@ -262,6 +263,7 @@ function ProtectedApp() {
           <Route element={<Layout />}>
             <Route index element={<RoleHome />} />
             <Route path="chats" element={<Chats />} />
+            <Route path="gmail" element={<Gmail />} />
             <Route path="chats/difusion" element={<Difusion />} />
             <Route path="marketing" element={<Instagram />} />
             <Route path="instagram-studio" element={<Instagram />} />

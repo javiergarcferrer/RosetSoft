@@ -12,7 +12,7 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  Landmark, Plug, HardDrive,
+  Landmark, Plug, HardDrive, Mail,
 } from 'lucide-react';
 import TogoIcon from './icons/TogoIcon.jsx';
 import WhatsAppIcon from './icons/WhatsAppIcon.jsx';
@@ -57,6 +57,7 @@ const CHANNELS_GROUP = {
   items: [
     { to: '/chats', label: 'WhatsApp', icon: WhatsAppIcon },
     { to: '/marketing', label: 'Instagram', icon: InstagramIcon, match: ['/marketing', '/instagram-studio'] },
+    { to: '/gmail', label: 'Gmail', icon: Mail },
   ],
 };
 

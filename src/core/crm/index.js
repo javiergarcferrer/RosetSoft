@@ -20,6 +20,18 @@ export {
   resolveIgThread,
 } from './views/igInbox.js';
 export {
+  GMAIL_BRAND_OTHER,
+  GMAIL_BRAND_TABS,
+  DEFAULT_GMAIL_BRAND_RULES,
+  senderDomain,
+  classifyBrand,
+  isInvoiceEmail,
+  parseInvoiceAmount,
+  resolveGmailThreads,
+  resolveGmailThread,
+  resolveGmailInvoices,
+} from './views/gmailInbox.js';
+export {
   VAR_SOURCES,
   resolveBroadcastAudience,
   resolveEmailAudience,

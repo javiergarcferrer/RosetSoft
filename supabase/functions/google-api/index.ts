@@ -114,6 +114,7 @@ type Body = {
     fromName?: string;
     attachments?: Attachment[];
   };
+  gmailSync?: { query?: string; maxResults?: number };
   driveEnsureRoot?: { name?: string };
   driveCreateFolder?: { name?: string; parentId?: string };
   driveUpload?: { folderId?: string; filename?: string; mimeType?: string; base64?: string };
@@ -334,6 +335,105 @@ async function ensureRoot(admin: Admin, token: string, name = DEFAULT_ROOT): Pro
   }
   await admin.from('settings').update({ google_drive_root_folder_id: id }).eq('profile_id', TEAM);
   return { id, url };
+}
+
+// ── Gmail read (inbox sync) ─────────────────────────────────────────────────
+// Mirrors the read path the meta-receipts job uses: list ids → fetch each full
+// message → extract headers + bodies + attachment metadata. The classification
+// (brand) + invoice detection are pure DERIVATIONS done client-side in the
+// ViewModel, so this only stores the raw email fields.
+function b64urlDecode(s: string): string {
+  try {
+    const bin = atob(String(s || '').replace(/-/g, '+').replace(/_/g, '/'));
+    return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  } catch { return ''; }
+}
+
+type GmailPart = {
+  mimeType?: string;
+  filename?: string;
+  body?: { data?: string; size?: number; attachmentId?: string };
+  parts?: GmailPart[];
+};
+
+/** Walk the MIME tree collecting the text/html bodies + any attachment parts. */
+function extractGmailContent(payload: GmailPart | undefined): {
+  text: string; html: string; attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }>;
+} {
+  let text = '', html = '';
+  const attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> = [];
+  const walk = (p: GmailPart | undefined) => {
+    if (!p) return;
+    const mt = String(p.mimeType || '');
+    const data = p.body?.data;
+    const attId = p.body?.attachmentId;
+    if (p.filename && attId) {
+      attachments.push({ filename: p.filename, mimeType: mt || 'application/octet-stream', size: Number(p.body?.size) || 0, attachmentId: attId });
+    } else if (data) {
+      if (mt === 'text/plain') text += b64urlDecode(data);
+      else if (mt === 'text/html') html += b64urlDecode(data);
+    }
+    for (const part of p.parts || []) walk(part);
+  };
+  walk(payload);
+  return { text, html, attachments };
+}
+
+/** Split an RFC 5322 `From`/`To` header into a display name + bare address. */
+function parseAddress(raw: string): { name: string; email: string } {
+  const s = String(raw || '').trim();
+  const m = s.match(/^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/);
+  if (m) return { name: (m[1] || '').trim().replace(/^"|"$/g, ''), email: (m[2] || '').trim().toLowerCase() };
+  return { name: '', email: s.toLowerCase() };
+}
+
+async function gmailListIds(token: string, query: string, maxResults: number): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken = '';
+  while (ids.length < maxResults) {
+    const url = new URL(`${GMAIL}/messages`);
+    if (query) url.searchParams.set('q', query);
+    url.searchParams.set('maxResults', String(Math.min(100, maxResults - ids.length)));
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d?.error?.message || `Gmail ${r.status}`);
+    for (const m of (d.messages || []) as Array<{ id: string }>) ids.push(m.id);
+    pageToken = d.nextPageToken || '';
+    if (!pageToken) break;
+  }
+  return ids.slice(0, maxResults);
+}
+
+async function gmailGetMessage(token: string, id: string): Promise<Record<string, unknown>> {
+  const r = await fetch(`${GMAIL}/messages/${id}?format=full`, { headers: { Authorization: `Bearer ${token}` } });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d?.error?.message || `Gmail ${r.status}`);
+  const headers = ((d.payload?.headers || []) as Array<{ name: string; value: string }>);
+  const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value || '';
+  const { text, html, attachments } = extractGmailContent(d.payload as GmailPart);
+  const labelIds = (d.labelIds || []) as string[];
+  const from = parseAddress(h('from'));
+  const to = parseAddress(h('to'));
+  return {
+    id: d.id,
+    profile_id: TEAM,
+    thread_id: d.threadId || d.id,
+    direction: labelIds.includes('SENT') ? 'out' : 'in',
+    from_email: from.email,
+    from_name: from.name,
+    to_email: to.email,
+    subject: h('subject'),
+    snippet: String(d.snippet || ''),
+    body_text: text.slice(0, 100_000),
+    body_html: html.slice(0, 400_000),
+    label_ids: labelIds,
+    has_attachment: attachments.length > 0,
+    attachment_count: attachments.length,
+    attachments,
+    is_read: !labelIds.includes('UNREAD'),
+    received_at: d.internalDate ? new Date(Number(d.internalDate)).toISOString() : null,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -618,6 +718,43 @@ Deno.serve(async (req) => {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return json({ ok: false, error: d?.error?.message || `Gmail ${r.status}` }, 502);
       return json({ ok: true, id: d.id, threadId: d.threadId });
+    }
+
+    // ── Gmail sync ────────────────────────────────────────────────────────────
+    // List recent messages, fetch the ones we don't have yet, and upsert them
+    // into gmail_messages. Already-stored ids are skipped (the message body is
+    // immutable), keeping each sync to only the new mail. The inbox reads the
+    // table; brand/invoice classification happens client-side.
+    if (body.gmailSync) {
+      const maxResults = Math.min(Math.max(Number(body.gmailSync.maxResults) || 120, 1), 250);
+      // Default: recent inbox + our replies, so a thread shows both sides.
+      const query = String(body.gmailSync.query || '(in:inbox OR in:sent) newer_than:180d');
+      let ids: string[];
+      try { ids = await gmailListIds(token, query, maxResults); }
+      catch (e) { return json({ ok: false, error: String((e as Error)?.message || e).slice(0, 200) }, 502); }
+
+      // Skip ids already mirrored (immutable bodies) — only fetch+store new mail.
+      const known = new Set<string>();
+      if (ids.length) {
+        const { data: rows } = await admin.from('gmail_messages').select('id').in('id', ids);
+        for (const r2 of (rows || []) as Array<{ id: string }>) known.add(r2.id);
+      }
+      const fresh = ids.filter((id) => !known.has(id));
+
+      const toUpsert: Record<string, unknown>[] = [];
+      for (const id of fresh) {
+        try { toUpsert.push(await gmailGetMessage(token, id)); }
+        catch (_) { /* one bad message never sinks the sync */ }
+      }
+      if (toUpsert.length) {
+        // Chunk to keep each PostgREST payload bounded.
+        for (let i = 0; i < toUpsert.length; i += 200) {
+          const { error } = await admin.from('gmail_messages').upsert(toUpsert.slice(i, i + 200), { onConflict: 'id' });
+          if (error) return json({ ok: false, error: error.message }, 502);
+        }
+      }
+      await admin.from('settings').update({ gmail_synced_at: new Date().toISOString() }).eq('profile_id', TEAM);
+      return json({ ok: true, scanned: ids.length, synced: toUpsert.length });
     }
 
     // ── Drive: ensure root ───────────────────────────────────────────────────
