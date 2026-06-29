@@ -6,13 +6,14 @@ import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
-import { fetchTogoCatalog, submitTogoRequest } from '../../lib/togoEmbed.js';
+import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
 import { useMeshPlans, useTopDownTiles } from '../../components/togo/useMeshPlans.js';
 import { togoQuickStarts } from '../../lib/togo/quickStarts.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced, compactPlaced,
 } from '../../core/quote/index.js';
+import togoHeroSvg from '../../assets/togo/togo_gb.svg?raw';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
@@ -104,17 +105,6 @@ function isModalContext() {
   } catch { return false; }
 }
 
-// Best-effort true fullscreen on launch — escapes a fixed-height host iframe on
-// desktop. A no-op where blocked (iOS Safari ignores element fullscreen); there
-// the host-overlay popup already provides the fullscreen frame.
-function goFullscreen() {
-  try {
-    const el = document.documentElement;
-    const req = el.requestFullscreen || el.webkitRequestFullscreen;
-    if (req) { const p = req.call(el); if (p && p.catch) p.catch(() => {}); }
-  } catch { /* ignore */ }
-}
-
 // material + color → the { grade, fabric, code } shape a placement carries. Mirrors
 // SwatchPicker.toPick; `code` lets us render the LR swatch (swatchUrl) with no DB.
 function toPick(material, color) {
@@ -146,8 +136,9 @@ export default function TogoEmbed() {
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ hotbar
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const [lastAddedUid, setLastAddedUid] = useState(null); // the just-placed piece → spring-in pop
-  const [launched, setLaunched] = useState(isModalContext); // false → show the launch card first
-  const start = useCallback(() => { buzz(12); goFullscreen(); setLaunched(true); }, []);
+  // false → show the launch card; the card opens the configurator in a NEW TAB
+  // (?ctx=modal → straight to the build), so it always gets the full screen.
+  const launched = isModalContext();
 
   // Mark a freshly-placed piece so its tile plays the spring-in pop once, then
   // clears (so a later unrelated re-render doesn't replay it).
@@ -422,10 +413,10 @@ export default function TogoEmbed() {
   }, [placed, resolvedById]);
   const onTileUp = useCallback((e) => { dragRef.current = null; e.currentTarget.releasePointerCapture?.(e.pointerId); }, []);
 
-  // The launch card — what the embed shows FIRST (the catalog keeps loading behind
-  // it). Clicking it opens the configurator fullscreen. Skipped in modal context
-  // (a host overlay already framed it fullscreen).
-  if (!launched) return <EmbedLaunchCard storeName={data?.storeName} onStart={start} />;
+  // The launch card — what the embed shows FIRST. Tapping it opens the
+  // configurator in a NEW TAB (full screen, no iframe limits). Skipped when this
+  // IS that new tab (?ctx=modal) — then we render the configurator directly.
+  if (!launched) return <EmbedLaunchCard storeName={data?.storeName} href={togoEmbedModalUrl()} />;
 
   if (cat.status === 'loading') {
     return <Centered><Loader2 size={20} className="animate-spin text-ink-400" /></Centered>;
@@ -944,28 +935,36 @@ function Centered({ children }) {
   return <div className="min-h-full bg-surface grid place-items-center p-6">{children}</div>;
 }
 
-/** The embed's first screen: an attractive "Diseña tu Togo" card. Tapping it
- *  launches the configurator fullscreen. This is what every surface that loads
- *  the embed route shows first — so the card can't be missed, whether the widget
- *  is opened directly, via a legacy iframe paste, or anywhere else. */
-function EmbedLaunchCard({ storeName, onStart }) {
+/** The embed's first screen: a full-bleed brand hero — a REAL Togo (the top-down
+ *  plan silhouette, channels and all), the "Togo Configurator" wordmark in
+ *  Rauschen, an eyebrow in Söhne and the tagline in Lausanne. Edge-to-edge on the
+ *  warm canvas so it fills the frame (no sea of white). Tapping it opens the
+ *  configurator in a NEW TAB (`?ctx=modal` → straight to the build, full screen).
+ *  Shown by every surface that loads the embed route. */
+function EmbedLaunchCard({ storeName, href }) {
   return (
-    <div className="fixed inset-0 grid place-items-center bg-surface text-ink-900 p-5">
-      <button
-        type="button"
-        onClick={onStart}
-        className="group togo-rise w-full max-w-md flex flex-col items-center text-center rounded-3xl border border-ink-200 bg-surface p-7 sm:p-9 shadow-soft hover:shadow-pop hover:-translate-y-0.5 active:translate-y-0 transition-all"
-      >
-        <span className="w-24 h-24 rounded-2xl bg-ink-900 text-white grid place-items-center"><Sofa size={48} aria-hidden /></span>
-        <span className="block text-[10px] font-semibold tracking-[0.14em] text-ink-400 uppercase mt-5">Ligne Roset · Togo</span>
-        <span className="block font-display font-semibold text-2xl text-ink-900 leading-tight mt-1.5">Diseña tu Togo a tu medida</span>
-        <span className="block text-sm text-ink-500 mt-2 max-w-xs">Arma tu sofá modular, pruébalo en distintas telas y recibe tu cotización al instante.</span>
-        <span className="inline-flex items-center gap-2 mt-6 rounded-full bg-ink-900 text-white px-5 py-2.5 text-sm font-semibold">
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener"
+      onClick={() => buzz(12)}
+      className="group fixed inset-0 flex flex-col items-center justify-center text-center bg-[#f4f1ec] text-ink-900 px-6 py-8 no-underline"
+    >
+      <span className="togo-rise flex flex-col items-center w-full max-w-sm">
+        <span className="eyebrow text-ink-400">Ligne Roset</span>
+        <span
+          className="block w-full max-w-[17rem] text-ink-800 mt-3 [&>svg]:w-full [&>svg]:h-auto"
+          aria-hidden
+          dangerouslySetInnerHTML={{ __html: togoHeroSvg }}
+        />
+        <span className="block font-wordmark text-[1.85rem] sm:text-4xl leading-none tracking-tight mt-5">Togo Configurator</span>
+        <span className="block font-sans text-sm text-ink-500 mt-3 max-w-xs leading-relaxed">Arma tu sofá modular, pruébalo en distintas telas y recibe tu cotización al instante.</span>
+        <span className="inline-flex items-center gap-2 mt-7 rounded-full bg-ink-900 text-white px-6 py-3 text-sm group-hover:bg-ink-800 group-active:scale-[0.98] transition">
           Empezar a diseñar <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
         </span>
-        {storeName && <span className="block text-[11px] text-ink-400 mt-3">{storeName}</span>}
-      </button>
-    </div>
+        {storeName && <span className="block font-sans text-[11px] tracking-[0.16em] uppercase text-ink-400 mt-5">{storeName}</span>}
+      </span>
+    </a>
   );
 }
 
