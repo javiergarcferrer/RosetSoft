@@ -34,28 +34,31 @@ const SCALE = PX_PER_CM;
 // — far cleaner than the dealer's stored thumbnails. togo_gb is the hero import.
 const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge };
 const WIRE_BY_FOOTPRINT = new Map(TOGO_PIECES.map((p) => [`${p.widthCm}x${p.depthCm}`, p.id]));
-// Dealer pieces with no canonical wireframe of their own → the closest-shaped one.
-const WIRE_FOOTPRINT_ALIAS = new Map([
-  ['131x102', 'gb'],   // Loveseat → the 2-seat sofa silhouette
-  ['87x80', 'a'],      // Ottoman → the armchair body
-]);
+// Map each REAL dealer model to its wireframe by NAME — the truest signal (the
+// dealer's measured footprints don't match the canonical ones, and `togo_a` is
+// actually the diagonal CORNER plan, not an armchair). Order = most specific
+// first (Medium/Large before generic "Sofa"). Falls through to footprint/keyword.
 const WIRE_NAME_ALIAS = [
+  [/corner|angle|esquin|rincon/, 'a'],            // togo_a = the diagonal corner plan
+  [/medium|large|grand|3\s*plaz/, 'mc'],
+  [/lounge|meridi|chaise/, 'lounge'],
   [/love|biplaza|2\s*plaz/, 'gb'],
-  [/ottoman|pouf|puff|repos|tabur/, 'a'],
-  [/corner|angle|esquina|rincon/, 'lounge'],
+  [/ottoman|pouf|puff|repos|tabur/, 'chauf'],     // armless seat → the fireside plan
+  [/fireside|chauff|chofesa|sin\s*brazo/, 'chauf'],
+  [/sofa|settee|canap/, 'gb'],
+  [/armchair|sillon|fauteuil|butaca/, 'a'],
 ];
 
-// The wireframe that best fits a catalog model. A distinctive shape NAME wins
-// first (a Corner and an Armchair are both 102×102 — only the name tells them
-// apart), then exact footprint, then an alias / catalog keyword; else null
-// (caller falls back to the model's own svg). Crisp via non-scaling strokes.
+// The wireframe that best fits a catalog model: a distinctive shape NAME wins
+// first, then exact footprint, then a catalog keyword; else null (caller falls
+// back to the model's own svg). Crisp via non-scaling strokes.
 function wireframeFor(model) {
   if (!model) return null;
   const name = String(model.name || '').toLowerCase();
   let id = WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
   if (!id) {
     const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;
-    id = WIRE_BY_FOOTPRINT.get(fp) || WIRE_FOOTPRINT_ALIAS.get(fp)
+    id = WIRE_BY_FOOTPRINT.get(fp)
       || TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id;
   }
   return (id && TOGO_WIRES[id]) || null;
