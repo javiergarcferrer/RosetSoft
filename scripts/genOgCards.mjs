@@ -13,9 +13,9 @@
 //    design-tool re-export silently flips to progressive.
 //
 // Run: node scripts/genOgCards.mjs
-// Output: public/og-<type>-v1.jpg  (1200x630, baseline, < 600 KB)
+// Output: public/og-<type>-v<N>.jpg  (1200x630, baseline, < 600 KB)
 //
-// Bump the version suffix (…-v2) when you re-render: WhatsApp caches the card
+// Bump the version suffix (…-vN) when you re-render: WhatsApp caches the card
 // per image URL for weeks, so a fix only lands under a NEW filename — and the
 // launcher page + ogImage.test.js must point at the same new name.
 
@@ -35,15 +35,20 @@ const CHROME =
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
 const b64 = (p) => readFileSync(p).toString('base64');
-const HEAVY = b64(join(FONTS, 'Lausanne-700.woff2'));
-const MID = b64(join(FONTS, 'Lausanne-500.woff2'));
+// The ALCOVER brand type system, used exactly as everywhere else in the app:
+//   headers  → Söhne (Halbfett)
+//   body     → Lausanne
+//   ALCOVER  → Rauschen  (the wordmark is ALWAYS set in Rauschen)
+const SOHNE = b64(join(FONTS, 'Sohne-Halbfett.woff2'));
+const LAUSANNE = b64(join(FONTS, 'Lausanne-500.woff2'));
+const RAUSCHEN = b64(join(FONTS, 'RauschenB-Semibold.woff2'));
 
 // One card per shareable link KIND. The quote/propuesta card (og-card-v2.jpg)
 // predates this set and is intentionally NOT regenerated here — it is pinned by
 // the Meta link cache and the WhatsApp template button base; leave it be.
 const CARDS = [
   {
-    file: 'og-contrato-v2.jpg',
+    file: 'og-contrato-v3.jpg',
     accent: '#19A06B', // emerald — agreement / money
     glow: 'rgba(25,160,107,0.30)',
     head: 'Su plan de pago,',
@@ -51,7 +56,7 @@ const CARDS = [
     sub: 'Revíselo y fírmelo en línea.',
   },
   {
-    file: 'og-togo-v2.jpg',
+    file: 'og-togo-v3.jpg',
     accent: '#C76B29', // ALCOVER terracotta (current brand)
     glow: 'rgba(199,107,41,0.34)',
     head: 'Diseñe su Togo',
@@ -59,7 +64,7 @@ const CARDS = [
     sub: 'Combine módulos y telas en vivo.',
   },
   {
-    file: 'og-tienda-v2.jpg',
+    file: 'og-tienda-v3.jpg',
     accent: '#5B5BD6', // indigo
     glow: 'rgba(91,91,214,0.32)',
     head: 'La colección ALCOVER,',
@@ -67,7 +72,7 @@ const CARDS = [
     sub: 'Explore la tienda en línea.',
   },
   {
-    file: 'og-cuenta-v2.jpg',
+    file: 'og-cuenta-v3.jpg',
     accent: '#2F6BF0', // blue
     glow: 'rgba(47,107,240,0.30)',
     head: 'Su estado de cuenta,',
@@ -77,37 +82,42 @@ const CARDS = [
 ];
 
 const html = (c) => `<!doctype html><html><head><meta charset="utf-8"><style>
-@font-face{font-family:Lausanne;font-weight:700;src:url(data:font/woff2;base64,${HEAVY}) format('woff2')}
-@font-face{font-family:Lausanne;font-weight:500;src:url(data:font/woff2;base64,${MID}) format('woff2')}
+@font-face{font-family:Sohne;src:url(data:font/woff2;base64,${SOHNE}) format('woff2')}
+@font-face{font-family:Lausanne;src:url(data:font/woff2;base64,${LAUSANNE}) format('woff2')}
+@font-face{font-family:Rauschen;src:url(data:font/woff2;base64,${RAUSCHEN}) format('woff2')}
 *{margin:0;padding:0;box-sizing:border-box}
 /* Paint the dark base on html/body too: a JPEG has no alpha, so any region the
-   card doesn't cover would otherwise flush to BLACK and read as a hard strip
-   (it clipped the wordmark in the first cut). position:fixed + inset:0 pins the
-   card to the exact 1200x630 viewport so it always fills, edge to edge. */
+   card doesn't cover would otherwise flush to BLACK and read as a hard strip.
+   A full-bleed gradient (top to bottom) means there is NEVER a flat black band —
+   the bottom is part of the same wash as the top. position:fixed + inset:0 pins
+   the card to the exact 1200x630 viewport so it always fills, edge to edge. */
 html,body{width:1200px;height:630px;background:#100f0d}
-.card{position:fixed;inset:0;overflow:hidden;
-  background:#100f0d;font-family:Lausanne,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.glow{position:absolute;inset:0;
-  background:radial-gradient(900px 520px at 88% 12%, ${c.glow}, transparent 60%),
-             radial-gradient(700px 700px at 8% 108%, rgba(255,255,255,0.05), transparent 60%);}
-.grain{position:absolute;inset:0;opacity:0.05;
-  background-image:linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px);background-size:100% 3px}
-.body{position:absolute;left:96px;top:150px;right:80px}
-.rule{position:absolute;left:96px;top:150px;width:6px;height:210px;border-radius:3px;background:${c.accent}}
-.head{margin-left:36px;font-weight:700;font-size:78px;line-height:1.04;letter-spacing:-1.5px;color:#fbfaf8}
-.line{margin-left:36px;font-weight:700;font-size:78px;line-height:1.04;letter-spacing:-1.5px;color:${c.accent}}
-.sub{margin-left:36px;margin-top:30px;display:flex;align-items:center;gap:18px;
-  font-weight:500;font-size:31px;letter-spacing:-0.2px;color:#cfccc4}
-.dot{width:15px;height:15px;border-radius:50%;background:${c.accent};flex:none}
-.mark{position:absolute;left:96px;bottom:78px;font-weight:700;font-size:60px;
-  letter-spacing:3px;color:#fbfaf8}
+.card{position:fixed;inset:0;overflow:hidden;display:flex;flex-direction:column;
+  justify-content:space-between;padding:84px 96px 72px;
+  background:linear-gradient(157deg,#0c0b09 0%,#15120e 58%,#0f0e0c 100%);
+  font-family:Lausanne,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.glow{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(840px 520px at 87% 4%, ${c.glow}, transparent 62%)}
+/* Headline block at the top; the wordmark is the OTHER flex child, so
+   justify-content:space-between pins ALCOVER hard to the bottom padding edge. */
+.top{position:relative;display:flex;gap:34px}
+.rule{width:6px;border-radius:3px;background:${c.accent};flex:none}
+.head{font-family:Sohne,system-ui,sans-serif;font-size:74px;line-height:1.06;letter-spacing:-1.6px;color:#fbfaf8}
+.line{font-family:Sohne,system-ui,sans-serif;font-size:74px;line-height:1.06;letter-spacing:-1.6px;color:${c.accent}}
+.sub{display:flex;align-items:center;gap:16px;margin-top:32px;
+  font-family:Lausanne,system-ui,sans-serif;font-size:30px;letter-spacing:-0.2px;color:#cbc8c0}
+.dot{width:14px;height:14px;border-radius:50%;background:${c.accent};flex:none}
+.mark{position:relative;font-family:Rauschen,system-ui,sans-serif;font-size:64px;
+  letter-spacing:0.5px;line-height:1;color:#fbfaf8}
 </style></head><body><div class="card">
-  <div class="glow"></div><div class="grain"></div>
-  <div class="rule"></div>
-  <div class="body">
-    <div class="head">${c.head}</div>
-    <div class="line">${c.line}</div>
-    <div class="sub"><span class="dot"></span><span>${c.sub}</span></div>
+  <div class="glow"></div>
+  <div class="top">
+    <div class="rule"></div>
+    <div>
+      <div class="head">${c.head}</div>
+      <div class="line">${c.line}</div>
+      <div class="sub"><span class="dot"></span><span>${c.sub}</span></div>
+    </div>
   </div>
   <div class="mark">ALCOVER</div>
 </div></body></html>`;
