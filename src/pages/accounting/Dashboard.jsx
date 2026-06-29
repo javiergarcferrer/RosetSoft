@@ -588,10 +588,11 @@ export default function AccountingDashboard() {
           <div className="grid lg:grid-cols-2 gap-4 min-w-0 [&>*]:min-w-0">
             <div className="card p-4 min-w-0">
               <CardHead title="Importaciones" to="/accounting/importaciones" action="Ver expedientes →" />
+              {/* En tránsito / Importado already lead the "Del contenedor a la
+                  venta" funnel above — this card carries only the import-specific
+                  figures (no duplication). */}
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { tint: 'tint-sky', icon: Ship, label: 'En tránsito', value: formatDop(importPanel.inTransit), sub: 'mercancía en el agua' },
-                  { tint: 'tint-brand', icon: Boxes, label: `Importado · ${monthLabel}`, value: formatDop(importPanel.landed), delta: true },
                   { tint: 'tint-emerald', icon: Percent, label: 'ITBIS aduanal', value: formatDop(importPanel.itbisAduanal), sub: 'crédito fiscal del período' },
                   { tint: 'tint-ink', icon: Gauge, label: 'Factor de costo', value: importPanel.landedFactor != null ? `× ${importPanel.landedFactor.toFixed(2)}` : '—', sub: `${importPanel.expedientesCount} expediente${importPanel.expedientesCount === 1 ? '' : 's'} · destino ÷ CIF` },
                 ].map((it) => (
