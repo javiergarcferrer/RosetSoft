@@ -21,6 +21,7 @@ import togoWireA from '../../assets/togo/togo_a.svg?raw';
 import togoWireChauf from '../../assets/togo/togo_chauf.svg?raw';
 import togoWireMc from '../../assets/togo/togo_mc.svg?raw';
 import togoWireLounge from '../../assets/togo/togo_lounge.svg?raw';
+import togoWirePb from '../../assets/togo/togo_pb.svg?raw';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
@@ -33,15 +34,17 @@ const SCALE = PX_PER_CM;
 // palette image where one fits; pieces with no good bundled match (Loveseat,
 // Ottoman) fall through to their OWN stored plan svg (togo_pb / togo_p). togo_gb
 // is the hero import reused here.
-const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge };
+// `togo_pb` = the Loveseat plan with its baked-in "Togo_pb" label STRIPPED.
+const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge, pb: togoWirePb };
 const WIRE_BY_FOOTPRINT = new Map(TOGO_PIECES.map((p) => [`${p.widthCm}x${p.depthCm}`, p.id]));
-// Map a real dealer model to a bundled wireframe by NAME (most specific first;
-// `togo_a` is the diagonal CORNER plan). Loveseat/Ottoman are intentionally
-// ABSENT → wireframeFor returns null → caller uses the model's own svg.
+// Map a real dealer model to a wireframe by NAME (most specific first; `togo_a`
+// is the diagonal CORNER plan, `togo_pb` the clean Loveseat). Ottoman is absent
+// → wireframeFor returns null → caller uses the model's own svg (togo_p).
 const WIRE_NAME_ALIAS = [
   [/corner|angle|esquin|rincon/, 'a'],
   [/medium|large|grand|3\s*plaz/, 'mc'],
   [/lounge|meridi|chaise/, 'lounge'],
+  [/love|biplaza/, 'pb'],
   [/fireside|chauff|chofesa|sin\s*brazo/, 'chauf'],
   [/sofa|settee|canap/, 'gb'],
   [/armchair|sillon|fauteuil|butaca/, 'a'],
@@ -50,7 +53,7 @@ const WIRE_NAME_ALIAS = [
 function wireframeFor(model) {
   if (!model) return null;
   const name = String(model.name || '').toLowerCase();
-  if (/love|ottoman|pouf|puff/.test(name)) return null;   // use their own plan svg
+  if (/ottoman|pouf|puff|repos|tabur/.test(name)) return null;   // use its own plan svg
   let id = WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
   if (!id) {
     const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;

@@ -60,18 +60,24 @@ export default function TogoStage({
     return {
       pieces,
       center: has ? { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 } : { x: PLAN_W / 2, z: PLAN_H / 2 },
-      radius: has ? Math.max(110, Math.hypot(maxX - minX, maxZ - minZ) / 2) : 170,
+      // Bounding-sphere radius of the layout (rotation-invariant for framing).
+      radius: has ? Math.max(45, Math.hypot(maxX - minX, maxZ - minZ) / 2) : 150,
     };
   }, []);
 
-  // The camera pose for a mode, around the layout centre.
-  const poseFor = useCallback((m, center, radius) => (
-    m === '2d'
-      // Straight-down (the +0.001 z-offset avoids the look-straight-down gimbal),
-      // high enough that the whole layout fits with margin on any aspect.
-      ? { px: center.x, py: radius * 3.8, pz: center.z + 0.001, tx: center.x, ty: 0, tz: center.z }
-      : { px: center.x + radius * 0.85, py: radius * 1.15, pz: center.z + radius * 2.0, tx: center.x, ty: radius * 0.12, tz: center.z }
-  ), []);
+  // The camera pose for a mode. Distance is derived from the FOV *and the canvas
+  // aspect* so the layout fits with margin even on a tall portrait phone (where
+  // the horizontal field of view is the tight one — the cause of the over-zoom).
+  const poseFor = useCallback((m, center, radius, aspect) => {
+    const halfFov = (33 * Math.PI / 180) / 2;
+    const fit = Math.max(0.4, Math.min(1, aspect || 1));     // the tighter axis
+    const dist = (radius * 1.35) / (Math.tan(halfFov) * fit);
+    return m === '2d'
+      // Near-straight-down (a hair of offset avoids the look-down gimbal).
+      ? { px: center.x, py: dist, pz: center.z + dist * 0.0006, tx: center.x, ty: 0, tz: center.z }
+      // Same fit distance, from a low front-quarter angle.
+      : { px: center.x + dist * 0.32, py: dist * 0.46, pz: center.z + dist * 0.83, tx: center.x, ty: radius * 0.15, tz: center.z };
+  }, []);
 
   // ── Rebuild the furniture group (swatch colours + real meshes), tag each piece
   // group with its uid for raycasting, and apply the selection highlight. Does NOT
@@ -112,7 +118,7 @@ export default function TogoStage({
     // commit), and never mid-drag, so arranging stays stable.
     if (scene.pieces.length !== l.framedCount && !l.drag) {
       l.framedCount = scene.pieces.length;
-      const pose = poseFor(stateRef.current.mode, scene.center, scene.radius);
+      const pose = poseFor(stateRef.current.mode, scene.center, scene.radius, l.camera.aspect);
       l.camera.position.set(pose.px, pose.py, pose.pz);
       l.controls.target.set(pose.tx, pose.ty, pose.tz);
       l.controls.update();
@@ -208,7 +214,7 @@ export default function TogoStage({
       // Place the camera at the current mode's pose immediately (no intro tween on
       // first paint — the toggle tweens thereafter).
       const l = api.current;
-      const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius);
+      const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
       camera.position.set(pose.px, pose.py, pose.pz);
       controls.target.set(pose.tx, pose.ty, pose.tz);
       controls.enableRotate = stateRef.current.mode === '3d';
@@ -277,7 +283,20 @@ export default function TogoStage({
         window.removeEventListener('pointerup', onUp);
       };
 
-      ro = new ResizeObserver(() => { const W = mount.clientWidth, H = mount.clientHeight; if (W && H) { renderer.setSize(W, H); camera.aspect = W / H; camera.updateProjectionMatrix(); requestRender(); } });
+      ro = new ResizeObserver(() => {
+        const W = mount.clientWidth, H = mount.clientHeight; if (!W || !H) return;
+        renderer.setSize(W, H); camera.aspect = W / H; camera.updateProjectionMatrix();
+        // Re-frame for the new aspect (orientation change / first real layout) so
+        // the layout never ends up over-zoomed, unless the user is mid-drag.
+        const l = api.current;
+        if (l && !l.drag) {
+          const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
+          camera.position.set(pose.px, pose.py, pose.pz);
+          controls.target.set(pose.tx, pose.ty, pose.tz);
+          controls.update();
+        }
+        requestRender();
+      });
       ro.observe(mount);
     })();
 
@@ -312,7 +331,7 @@ export default function TogoStage({
   useEffect(() => {
     const l = api.current; if (!l) return;
     const { camera, controls } = l;
-    const to = poseFor(mode, l.scene3d.center, l.scene3d.radius);
+    const to = poseFor(mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
     const from = { px: camera.position.x, py: camera.position.y, pz: camera.position.z, tx: controls.target.x, ty: controls.target.y, tz: controls.target.z };
     controls.enableRotate = false;        // lock during the tween
     if (l.tween) cancelAnimationFrame(l.tween);
