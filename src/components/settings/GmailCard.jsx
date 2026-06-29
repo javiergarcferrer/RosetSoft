@@ -7,12 +7,13 @@
 // with ?google=connected. Tokens never touch the browser. This single grant
 // also powers the Google Drive card.
 import { useCallback, useEffect, useState } from 'react';
-import { Mail, RefreshCw, Check, Copy, ExternalLink } from 'lucide-react';
+import { Mail, RefreshCw, Check, Copy, ExternalLink, Download } from 'lucide-react';
 import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { supabase, SUPABASE_URL } from '../../db/supabaseClient.js';
 import { saveGoogleConfig, connectGoogle, disconnectGoogle, saveGoogleLoginDomain } from '../../lib/google.js';
+import { pullGmailSignature } from '../../lib/gmail.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
 // The OAuth redirect URI the admin must register in the Google Cloud OAuth
@@ -56,6 +57,29 @@ export default function GmailCard() {
       setMsg({ ok: false, text: userMessageFor(e) });
     }
   }, [signature, saveSettings]);
+
+  // Import the signature configured in the connected Gmail account (flattened to
+  // plain text) and save it. A missing-scope error tells the user to reconnect.
+  const importSignature = useCallback(async () => {
+    setSigState('importing');
+    setMsg(null);
+    try {
+      const { text } = await pullGmailSignature();
+      if (!text.trim()) {
+        setSigState('idle');
+        setMsg({ ok: false, text: 'Tu cuenta de Gmail no tiene una firma configurada.' });
+        return;
+      }
+      setSignature(text);
+      await saveSettings?.({ gmailSignature: text });
+      setSigState('saved');
+      setMsg({ ok: true, text: 'Firma importada de Gmail ✓' });
+      setTimeout(() => setSigState((s) => (s === 'saved' ? 'idle' : s)), 2000);
+    } catch (e) {
+      setSigState('idle');
+      setMsg({ ok: false, text: userMessageFor(e) });
+    }
+  }, [saveSettings]);
 
   const saveLoginDomain = useCallback(async () => {
     setDomainState('saving');
@@ -194,8 +218,8 @@ export default function GmailCard() {
           <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
             <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Firma de respuestas</div>
             <p className="text-xs text-ink-500 mb-2">
-              Se agrega automáticamente al redactar una respuesta desde la bandeja de Gmail. Texto simple
-              (nombre, cargo, teléfono…); déjalo vacío para no incluir firma.
+              Se agrega automáticamente al redactar una respuesta desde la bandeja de Gmail. Tráela de tu
+              cuenta de Gmail o escríbela aquí (texto simple); déjala vacía para no incluir firma.
             </p>
             <textarea
               className="input w-full min-h-[88px] resize-y font-mono text-xs leading-relaxed"
@@ -203,7 +227,11 @@ export default function GmailCard() {
               value={signature}
               onChange={(e) => setSignature(e.target.value)}
             />
-            <div className="mt-2 flex justify-end">
+            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+              <button type="button" className="btn-ghost min-h-[44px]" onClick={importSignature} disabled={sigState === 'importing'}>
+                {sigState === 'importing' ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                Traer de Gmail
+              </button>
               <button type="button" className="btn-ghost min-h-[44px]" onClick={saveSignature} disabled={sigState === 'saving'}>
                 {sigState === 'saving' ? <RefreshCw size={14} className="animate-spin" /> : sigState === 'saved' ? <Check size={14} /> : null}
                 {sigState === 'saved' ? 'Guardada' : 'Guardar firma'}

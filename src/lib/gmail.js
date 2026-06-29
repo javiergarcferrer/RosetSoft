@@ -11,10 +11,50 @@
 // either core.
 
 import { db, invalidate } from '../db/database.js';
-import { syncGmail, gmailReply, gmailAttachment } from './google.js';
+import { syncGmail, gmailReply, gmailAttachment, fetchGmailSignature } from './google.js';
 
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
+
+/**
+ * Flatten a Gmail signature's HTML into the plain text the composer uses —
+ * line/block boundaries (<br>, <p>, <div>, list/table rows…) become newlines,
+ * everything else is stripped and entities decoded. Gmail stores signatures as
+ * rich HTML; our reply body is plain text, so we import the readable text.
+ */
+export function gmailSignatureToText(html) {
+  const s = String(html || '');
+  if (!s.trim()) return '';
+  if (typeof DOMParser === 'undefined') {
+    // Non-DOM env (tests/SSR): a crude but safe strip.
+    return s
+      .replace(/<br\s*\/?>(?=)/gi, '\n')
+      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  // DOMParser does NOT load remote resources (images) for text extraction.
+  const doc = new DOMParser().parseFromString(s, 'text/html');
+  doc.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+  doc.querySelectorAll('p, div, tr, li, h1, h2, h3, h4, h5, h6').forEach((el) => el.append('\n'));
+  return (doc.body?.textContent || '')
+    .replace(/ /g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Import the connected account's Gmail signature as plain text for the composer.
+ * Returns { text, signature (raw HTML), sendAsEmail }. Surfaces the server's
+ * needsReconnect flag via the thrown error when the scope is missing.
+ */
+export async function pullGmailSignature() {
+  const res = await fetchGmailSignature();
+  return { ...res, text: gmailSignatureToText(res?.signature || '') };
+}
 
 /**
  * Send a reply into a thread, then pull it back so it appears in the reading
