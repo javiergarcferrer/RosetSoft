@@ -27,43 +27,19 @@ export function togoEmbedModalUrl() {
 export const TOGO_EMBED_ALLOW = 'xr-spatial-tracking; camera; gyroscope; accelerometer; magnetometer; fullscreen';
 
 /**
- * The snippet the dealer pastes into their website: a self-contained, zero-JS
- * launch CARD — a REAL Togo silhouette, the "Togo Configurator" wordmark in
- * Rauschen, eyebrow in Söhne, body in Lausanne (all served from our origin). It's
- * an anchor that opens the configurator in a NEW TAB (full screen, no iframe
- * limits). Scoped `tgc-` styles; nothing else on the page is touched.
+ * The snippet the dealer pastes into their website: a SELF-SIZING iframe of the
+ * launch card (the card — real Togo silhouette, "Togo Configurator" in Rauschen,
+ * brand type — lives in the route, our origin, so it's always on-brand). The card
+ * reports its natural height and the tiny script shrink-wraps the iframe to it →
+ * zero dead space. Tapping the card opens the configurator in a NEW TAB.
  */
 export function togoEmbedSnippet() {
-  const url = togoEmbedModalUrl();   // opens straight into the build (skips the inner card)
-  const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `<!-- Togo configurator (Ligne Roset) — launch card → opens in a new tab -->
-<div data-togo-launcher>
-  <a class="tgc-card" href="${url}" target="_blank" rel="noopener">
-    <span class="tgc-eyebrow">Ligne Roset</span>
-    <img class="tgc-hero" src="${origin}/togo-hero.svg" alt="Togo" loading="lazy" />
-    <span class="tgc-title">Togo Configurator</span>
-    <span class="tgc-sub">Arma tu sofá modular, pruébalo en distintas telas y recibe tu cotización al instante.</span>
-    <span class="tgc-cta">Empezar a diseñar <span class="tgc-arrow">&#8594;</span></span>
-  </a>
+  const cardUrl = togoEmbedUrl();   // the launch card (it opens the configurator in a new tab itself)
+  return `<!-- Togo configurator (Ligne Roset) — self-sizing launch card -->
+<div data-togo-embed style="width:100%;max-width:480px;margin:0 auto">
+  <iframe src="${cardUrl}" title="Togo Configurator" scrolling="no" style="width:100%;border:0;display:block;height:520px;overflow:hidden;color-scheme:light"></iframe>
 </div>
-<style>
-@font-face{font-family:'Rauschen B';src:url('${origin}/fonts/RauschenB-Semibold.woff2') format('woff2');font-weight:600;font-display:swap}
-@font-face{font-family:'TgcSohne';src:url('${origin}/fonts/Sohne-Halbfett.woff2') format('woff2');font-weight:400 700;font-display:swap}
-@font-face{font-family:'TgcLausanne';src:url('${origin}/fonts/Lausanne-400.woff2') format('woff2');font-weight:400;font-display:swap}
-@font-face{font-family:'TgcLausanne';src:url('${origin}/fonts/Lausanne-600.woff2') format('woff2');font-weight:600;font-display:swap}
-[data-togo-launcher]{display:flex;justify-content:center}
-.tgc-card{box-sizing:border-box;cursor:pointer;text-decoration:none;display:flex;flex-direction:column;align-items:center;text-align:center;width:100%;max-width:380px;padding:26px 26px 22px;border-radius:22px;background:#f4f1ec;border:1px solid #e7e3dc;box-shadow:0 18px 42px -22px rgba(28,26,23,.5);font-family:'TgcLausanne',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;transition:transform .18s ease,box-shadow .18s ease}
-.tgc-card:hover{transform:translateY(-2px);box-shadow:0 26px 52px -22px rgba(28,26,23,.55)}
-.tgc-card:active{transform:translateY(0)}
-.tgc-eyebrow{font-family:'TgcSohne',sans-serif;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#a39c91;font-weight:600}
-.tgc-hero{width:100%;max-width:240px;height:auto;display:block;margin:14px 0 2px}
-.tgc-title{font-family:'Rauschen B','TgcSohne',serif;font-weight:600;font-size:30px;line-height:1;color:#1c1a17;margin-top:8px}
-.tgc-sub{font-size:12.5px;color:#6c665d;line-height:1.45;margin-top:10px;max-width:260px}
-.tgc-cta{margin-top:18px;display:inline-flex;align-items:center;gap:8px;background:#1c1a17;color:#faf9f7;border-radius:999px;padding:11px 20px;font-size:13px}
-.tgc-arrow{transition:transform .18s ease}
-.tgc-card:hover .tgc-arrow{transform:translateX(4px)}
-@media (max-width:480px){.tgc-card{padding:22px 20px 20px}.tgc-hero{max-width:210px}.tgc-title{font-size:26px}}
-</style>`;
+<script>(function(){var B=document.querySelectorAll('[data-togo-embed]');var box=B[B.length-1];if(!box||box.getAttribute('data-ready'))return;box.setAttribute('data-ready','1');var ifr=box.querySelector('iframe');window.addEventListener('message',function(e){var d=e.data;if(d&&d.type==='togo-embed-height'&&d.height>0&&ifr&&e.source===ifr.contentWindow){ifr.style.height=d.height+'px'}})})();</script>`;
 }
 
 function endpoint() {
