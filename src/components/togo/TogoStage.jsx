@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
-import { inferTogoForm } from '../../lib/togo/togoModel.js';
+import { inferTogoForm, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
 import { footprintOf, snapPlacement, clampToPlan, resolvePlacement } from '../../core/quote/index.js';
 import { loadTogoModels } from './togoModelLoader.js';
 import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampleSwatchColor } from './togoSceneBuilder.js';
@@ -71,13 +71,19 @@ export default function TogoStage({
   const poseFor = useCallback((m, center, radius, aspect) => {
     const halfFov = (33 * Math.PI / 180) / 2;
     const fit = Math.max(0.4, Math.min(1, aspect || 1));     // the tighter axis
-    const dist = (radius * 1.18) / (Math.tan(halfFov) * fit); // ~18% margin — fills the view, never clips
+    // The distance that fits the FOOTPRINT (floor level) with ~22% margin.
+    const fitDist = (radius * 1.22) / (Math.tan(halfFov) * fit);
     return m === '2d'
-      // DEAD straight-down. The top-down basis is supplied by camera.up=(0,0,-1)
-      // (see UP_2D) — NOT a positional nudge, which would tilt/rotate the plan.
-      ? { px: center.x, py: dist, pz: center.z, tx: center.x, ty: 0, tz: center.z }
-      // Same fit distance, from a low front-quarter angle.
-      : { px: center.x + dist * 0.32, py: dist * 0.46, pz: center.z + dist * 0.83, tx: center.x, ty: radius * 0.15, tz: center.z };
+      // DEAD straight-down. The top-down basis is supplied by camera.up=(0,0,-1).
+      // CRITICAL: add the furniture HEIGHT to the camera height. A Togo is ~72 cm
+      // tall, and from straight above its cushion TOPS sit that much closer to the
+      // lens — perspective magnifies them, so framing the floor footprint alone
+      // let the tops blow past the frame on a short (landscape) viewport where the
+      // camera is already close. Lifting the camera by the height makes the TOP
+      // surface the thing that fits the margin, so nothing clips in any aspect.
+      ? { px: center.x, py: fitDist + TOGO_HEIGHT_CM, pz: center.z, tx: center.x, ty: 0, tz: center.z }
+      // Low front-quarter angle. Pull back by the height too so a tall stack frames.
+      : { px: center.x + fitDist * 0.32, py: fitDist * 0.46 + TOGO_HEIGHT_CM * 0.5, pz: center.z + fitDist * 0.83, tx: center.x, ty: radius * 0.15, tz: center.z };
   }, []);
 
   // Place the camera at a pose for a mode. In 2D we drive the camera DIRECTLY
