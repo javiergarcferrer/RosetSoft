@@ -68,6 +68,27 @@ function leafCertPem(p12Base64: string, password: string): string | null {
   } catch { return null; } // any parse hiccup → keep the library's pick
 }
 
+/**
+ * Non-secret identity of every cert in the .p12 — issuer (the provider/CA),
+ * subject CN, the RNC/Cédula carried in serialNumber, CA flag and validity.
+ * Surfaced ONLY when the DGII rejects the certificate, so the dealer (and we)
+ * can see exactly which cert was presented without exposing the private key.
+ */
+function certReport(p12Base64: string, password: string): string {
+  try {
+    const der = forge.util.decode64(p12Base64);
+    const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(der), false, password);
+    const certs = (p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [])
+      .map((b: any) => b.cert).filter(Boolean);
+    const attr = (list: any[], k: string) => list.find((a: any) => a.shortName === k || a.name === k)?.value || '';
+    const isCa = (c: any) => { const bc = c.getExtension && c.getExtension('basicConstraints'); return !!(bc && bc.cA); };
+    const day = (d: Date) => { try { return d.toISOString().slice(0, 10); } catch { return '?'; } };
+    const lines = certs.map((c: any, i: number) =>
+      `#${i} subj="${attr(c.subject.attributes, 'CN')}" rnc=${attr(c.subject.attributes, 'serialNumber')} issuer="${attr(c.issuer.attributes, 'CN')}" ca=${isCa(c)} ${day(c.validity.notBefore)}..${day(c.validity.notAfter)}`);
+    return `certs=${certs.length} · ${lines.join(' | ')}`;
+  } catch (e) { return `certReport failed: ${e}`; }
+}
+
 /** First 6 chars of the XML's SignatureValue — the DGII "código de seguridad"
  *  printed on the invoice and carried in the consulta-timbre QR. */
 function securityCodeFrom(signedXml: string): string {
@@ -299,8 +320,14 @@ Deno.serve(async (req: Request) => {
     const msg = e?.message || String(e);
     // Combine the thrown-error walk with the wire-level tap and de-dupe the
     // crumbs — whichever the library left intact, the DGII reason surfaces.
-    const detail = [...new Set([describeError(e), lastHttpError].filter(Boolean).join(' · ').split(' · '))]
+    let detail = [...new Set([describeError(e), lastHttpError].filter(Boolean).join(' · ').split(' · '))]
       .filter(Boolean).join(' · ');
+    // When the DGII refuses the certificate, append which environment we hit
+    // and the cert's identity — that's what tells apart a wrong-env hit from a
+    // genuinely non-admitted cert. Only on cert/auth errors, never otherwise.
+    if (/certificado|semilla|autenticac/i.test(detail) && cred?.p12_base64) {
+      detail += ` · env=${envKey} · [${certReport(cred.p12_base64, cred.password)}]`;
+    }
     // Server-side breadcrumb for `get_logs` — curated crumbs only (no headers),
     // so the next failed envío is diagnosable from the function logs too.
     console.error('ecf-send failure', JSON.stringify({ op, eNcf, ecfType, envKey, msg, detail }));
