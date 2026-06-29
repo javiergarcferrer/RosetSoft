@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es-DO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Link-preview launcher for the ACCOUNT-STATEMENT (estado de cuenta) link.
+         See public/p/contrato.html for the full rationale: a per-link static head
+         with its own og:image, the crawler reads the card, the inline script
+         forwards a human into the SPA route `#/cuenta/<token>`. Absolute prod
+         og:image (public/ skips %VITE_PUBLIC_ORIGIN%); baseline jpeg, version-
+         bumped filename, no og:url — all pinned by tests/ogImage.test.js. -->
+    <title>Su estado de cuenta · ALCOVER</title>
+    <meta name="description" content="Saldos, cargos y pagos en un lugar." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ALCOVER" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:title" content="Su estado de cuenta · ALCOVER" />
+    <meta property="og:description" content="Saldos, cargos y pagos en un lugar." />
+    <meta property="og:image" content="https://www.alcover.do/og-cuenta-v1.jpg" />
+    <meta property="og:image:secure_url" content="https://www.alcover.do/og-cuenta-v1.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ALCOVER — Su estado de cuenta, al día." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Su estado de cuenta · ALCOVER" />
+    <meta name="twitter:description" content="Saldos, cargos y pagos en un lugar." />
+    <meta name="twitter:image" content="https://www.alcover.do/og-cuenta-v1.jpg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      (function () {
+        try {
+          var d = new URLSearchParams(location.search).get('d') || '';
+          location.replace('/#/cuenta/' + d);
+        } catch (e) {
+          location.replace('/#/cuenta/');
+        }
+      })();
+    </script>
+  </head>
+  <body style="margin:0;background:#100f0d;color:#cfccc4;font-family:system-ui,sans-serif">
+    <noscript><p style="padding:24px">Abra su estado de cuenta en
+      <a href="/#/cuenta/" style="color:#2F6BF0">alcover.do</a>.</p></noscript>
+  </body>
+</html>

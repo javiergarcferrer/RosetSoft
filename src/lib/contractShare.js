@@ -14,17 +14,26 @@ const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
 
 /**
- * The shareable contract URL. HashRouter, so `/#/contrato/<token>`. An optional
- * `slug` reads like the matching document, mirroring shareLinkUrl; the token
- * stays the real key (the route ignores the slug).
+ * The shareable contract URL. It points at the static link-preview LAUNCHER
+ * `/p/contrato.html` (not the bare `#/contrato/<token>`) so the payment-plan
+ * link gets its OWN WhatsApp/iMessage card: the app is a hash-routed SPA, so a
+ * crawler only ever reads the head of the real path it fetches — a `#/…` link
+ * collapses onto index.html's single (quote) card. The launcher carries the
+ * contract og:image and forwards a human into the SPA (see public/p/contrato.html).
+ *
+ * The `slug/token` suffix rides in `?d=` (the launcher appends it to
+ * `#/contrato/`). Each segment is encodeURIComponent'd, so the only raw `/` is
+ * the join — query-safe, and it round-trips through URLSearchParams untouched.
+ * An optional `slug` reads like the matching document; the token stays the real
+ * key (the route ignores the slug).
  */
 export function contractLinkUrl(token, slug) {
   if (!token) return '';
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  const path = slug
+  const suffix = slug
     ? `${encodeURIComponent(slug)}/${encodeURIComponent(token)}`
     : encodeURIComponent(token);
-  return `${origin}/#/contrato/${path}`;
+  return `${origin}/p/contrato.html?d=${suffix}`;
 }
 
 function endpoint(token) {

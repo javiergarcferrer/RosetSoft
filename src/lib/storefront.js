@@ -9,10 +9,16 @@ const VITE_ENV =
 const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
 
-/** The public storefront URL. HashRouter, so `/#/tienda` — shareable as-is. */
+/**
+ * The shareable storefront URL. It points at the static link-preview LAUNCHER
+ * `/p/tienda.html` (not the bare `#/tienda`) so the Tienda link gets its OWN
+ * WhatsApp/iMessage card instead of the generic quote one (see
+ * public/p/tienda.html for the hash-routed-SPA rationale). The launcher forwards
+ * straight to `#/tienda`.
+ */
 export function storeLinkUrl() {
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `${origin}/#/tienda`;
+  return `${origin}/p/tienda.html`;
 }
 
 // The function endpoint, with the public anon key as a query param (not a

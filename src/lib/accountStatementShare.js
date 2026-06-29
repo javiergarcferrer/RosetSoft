@@ -10,11 +10,17 @@ const VITE_ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {};
 const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
 
-/** The shareable statement URL. HashRouter, so `/#/cuenta/<token>`. */
+/**
+ * The shareable statement URL. It points at the static link-preview LAUNCHER
+ * `/p/cuenta.html` (not the bare `#/cuenta/<token>`) so the estado-de-cuenta
+ * link gets its OWN WhatsApp/iMessage card instead of the generic quote one
+ * (see public/p/cuenta.html for the hash-routed-SPA rationale). The token rides
+ * in `?d=`; the launcher appends it to `#/cuenta/`.
+ */
 export function statementLinkUrl(token) {
   if (!token) return '';
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `${origin}/#/cuenta/${encodeURIComponent(token)}`;
+  return `${origin}/p/cuenta.html?d=${encodeURIComponent(token)}`;
 }
 
 function endpoint(token) {

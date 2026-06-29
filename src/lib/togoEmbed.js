@@ -14,6 +14,21 @@ export function togoEmbedUrl() {
   return `${origin}/#/embed/togo`;
 }
 
+/**
+ * The shareable configurator URL (for WhatsApp / social, NOT for the iframe).
+ * It points at the static link-preview LAUNCHER `/p/togo.html` so the
+ * configurator link gets its OWN card instead of the generic quote one (the app
+ * is a hash-routed SPA — see public/p/togo.html). The launcher forwards straight
+ * to `/configurator` (the clean public URL). The iframe embed (togoEmbedSnippet)
+ * keeps the DIRECT
+ * `togoEmbedUrl` — an iframe must not bounce through a redirect, and it needs
+ * the height-reporting launch card, not a preview shim.
+ */
+export function togoShareUrl() {
+  const origin = typeof location !== 'undefined' ? location.origin : '';
+  return `${origin}/p/togo.html`;
+}
+
 /** Same widget, flagged as ALREADY inside a fullscreen container (a host-page
  *  overlay or the in-app modal) → it skips its own launch card and drops straight
  *  into the configurator, so there's never a card-inside-a-card. */

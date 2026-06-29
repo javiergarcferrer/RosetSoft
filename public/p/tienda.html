@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es-DO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Link-preview launcher for the STOREFRONT (Tienda) link. See
+         public/p/contrato.html for the full rationale. No token, so the script
+         forwards straight to `#/tienda`. Absolute prod og:image (public/ skips
+         %VITE_PUBLIC_ORIGIN%); baseline jpeg, version-bumped filename, no
+         og:url — pinned by tests/ogImage.test.js. -->
+    <title>Tienda ALCOVER</title>
+    <meta name="description" content="Explore la colección, disponible ahora." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ALCOVER" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:title" content="Tienda ALCOVER" />
+    <meta property="og:description" content="Explore la colección, disponible ahora." />
+    <meta property="og:image" content="https://www.alcover.do/og-tienda-v1.jpg" />
+    <meta property="og:image:secure_url" content="https://www.alcover.do/og-tienda-v1.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ALCOVER — La colección, disponible ahora." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Tienda ALCOVER" />
+    <meta name="twitter:description" content="Explore la colección, disponible ahora." />
+    <meta name="twitter:image" content="https://www.alcover.do/og-tienda-v1.jpg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      (function () {
+        try { location.replace('/#/tienda'); }
+        catch (e) { location.href = '/#/tienda'; }
+      })();
+    </script>
+  </head>
+  <body style="margin:0;background:#100f0d;color:#cfccc4;font-family:system-ui,sans-serif">
+    <noscript><p style="padding:24px">Abra la tienda en
+      <a href="/#/tienda" style="color:#5B5BD6">alcover.do</a>.</p></noscript>
+  </body>
+</html>

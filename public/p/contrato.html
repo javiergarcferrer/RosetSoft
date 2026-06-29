@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es-DO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Link-preview launcher for the PAYMENT-PLAN / contract link.
+
+         The app is a hash-routed SPA, so a crawler (WhatsApp / iMessage /
+         Facebook) only ever reads the static head of the real path it fetches —
+         everything after `#` is stripped, which is why every shared `#/…` link
+         used to collapse onto index.html's single (quote) card. This launcher
+         gives the contract link its OWN card: the dealer hands out
+         `/p/contrato.html?d=<slug/token>`, the crawler reads the og:image below,
+         and the inline script forwards a real (JS-capable) visitor into the SPA
+         route `#/contrato/<slug/token>`. Crawlers don't run JS, so they keep the
+         card; humans get redirected.
+
+         og:image is an ABSOLUTE production URL (WhatsApp rejects relative ones).
+         Files under public/ are copied verbatim — they do NOT pass through Vite's
+         %VITE_PUBLIC_ORIGIN% substitution — so the production origin is inlined
+         here on purpose. The redirect itself uses an origin-relative path, so it
+         still works on preview deploys. The image MUST stay a BASELINE jpeg and
+         the filename is version-bumped on every re-render (WhatsApp caches the
+         card per image URL for weeks); tests/ogImage.test.js pins both. There is
+         deliberately NO og:url tag — Meta keys its cached link object by the
+         canonical, and one stale canonical swallows every link. -->
+    <title>Su plan de pago · ALCOVER</title>
+    <meta name="description" content="Revíselo y fírmelo en línea, desde su teléfono." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ALCOVER" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:title" content="Su plan de pago · ALCOVER" />
+    <meta property="og:description" content="Revíselo y fírmelo en línea, desde su teléfono." />
+    <meta property="og:image" content="https://www.alcover.do/og-contrato-v1.jpg" />
+    <meta property="og:image:secure_url" content="https://www.alcover.do/og-contrato-v1.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ALCOVER — Su plan de pago, claro y firmable." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Su plan de pago · ALCOVER" />
+    <meta name="twitter:description" content="Revíselo y fírmelo en línea, desde su teléfono." />
+    <meta name="twitter:image" content="https://www.alcover.do/og-contrato-v1.jpg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Forward a human into the SPA. `?d=` carries the `slug/token` suffix the
+      // dealer appended; an empty/missing one still lands on the route shell.
+      (function () {
+        try {
+          var d = new URLSearchParams(location.search).get('d') || '';
+          location.replace('/#/contrato/' + d);
+        } catch (e) {
+          location.replace('/#/contrato/');
+        }
+      })();
+    </script>
+  </head>
+  <body style="margin:0;background:#100f0d;color:#cfccc4;font-family:system-ui,sans-serif">
+    <noscript><p style="padding:24px">Abra su plan de pago en
+      <a href="/#/contrato/" style="color:#19A06B">alcover.do</a>.</p></noscript>
+  </body>
+</html>

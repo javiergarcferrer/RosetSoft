@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es-DO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Link-preview launcher for the TOGO CONFIGURATOR link. See
+         public/p/contrato.html for the full rationale. This link carries no
+         token, so the script forwards straight to `/configurator` — the clean
+         public configurator URL (main.jsx mounts the embed there directly; the
+         legacy `#/embed/togo` hash route still resolves too). The crawler needs
+         this launcher because `/configurator` is itself served by index.html, so
+         a raw share of it would show the generic quote card. Absolute prod
+         og:image (public/ skips %VITE_PUBLIC_ORIGIN%); baseline jpeg,
+         version-bumped filename, no og:url — pinned by tests/ogImage.test.js. -->
+    <title>Diseñe su Togo · ALCOVER</title>
+    <meta name="description" content="Combine módulos y telas y véalo en vivo." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ALCOVER" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:title" content="Diseñe su Togo · ALCOVER" />
+    <meta property="og:description" content="Combine módulos y telas y véalo en vivo." />
+    <meta property="og:image" content="https://www.alcover.do/og-togo-v1.jpg" />
+    <meta property="og:image:secure_url" content="https://www.alcover.do/og-togo-v1.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ALCOVER — Diseñe su Togo a su medida." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Diseñe su Togo · ALCOVER" />
+    <meta name="twitter:description" content="Combine módulos y telas y véalo en vivo." />
+    <meta name="twitter:image" content="https://www.alcover.do/og-togo-v1.jpg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      (function () {
+        try { location.replace('/configurator'); }
+        catch (e) { location.href = '/configurator'; }
+      })();
+    </script>
+  </head>
+  <body style="margin:0;background:#100f0d;color:#cfccc4;font-family:system-ui,sans-serif">
+    <noscript><p style="padding:24px">Abra el configurador en
+      <a href="/configurator" style="color:#C76B29">alcover.do</a>.</p></noscript>
+  </body>
+</html>
