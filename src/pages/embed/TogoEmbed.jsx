@@ -1007,34 +1007,35 @@ function Centered({ children }) {
  *  configurator in a NEW TAB (`?ctx=modal` → straight to the build, full screen).
  *  Shown by every surface that loads the embed route. */
 function EmbedLaunchCard({ storeName, href }) {
-  const ref = useRef(null);
-  // Top-level (direct visit / the new tab) → fill the screen as a hero. Inside a
-  // host iframe → render at NATURAL height and report it to the parent so the
-  // iframe shrink-wraps the card — no dead space above/below.
-  const [topLevel] = useState(() => { try { return window.self === window.top; } catch { return true; } });
+  const innerRef = useRef(null);
+  // The card fills its frame (warm, centered) so there's never a WHITE band. When
+  // inside a host iframe it ALSO reports its CONTENT height so the self-sizing
+  // snippet shrink-wraps the iframe to exactly the card — no dead space at all.
+  // (Measuring the inner block, padding included, makes that fixed-point stable.)
   useEffect(() => {
-    if (topLevel) return undefined;
-    const el = ref.current;
+    const el = innerRef.current;
     if (!el) return undefined;
+    let inIframe = false;
+    try { inIframe = window.self !== window.top; } catch { inIframe = true; }
+    if (!inIframe) return undefined;
     const post = () => {
-      try { window.parent?.postMessage({ type: 'togo-embed-height', height: Math.ceil(el.offsetHeight) }, '*'); } catch { /* no parent listener */ }
+      try { window.parent?.postMessage({ type: 'togo-embed-height', height: Math.ceil(el.offsetHeight) }, '*'); } catch { /* no listener */ }
     };
     post();
     const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(post) : null;
     ro?.observe(el);
     const t = setTimeout(post, 400);   // re-post once fonts/SVG settle
     return () => { ro?.disconnect(); clearTimeout(t); };
-  }, [topLevel]);
+  }, []);
   return (
     <a
-      ref={ref}
       href={href}
       target="_blank"
       rel="noopener"
       onClick={() => buzz(12)}
-      className={`group no-underline text-center bg-[#f4f1ec] text-ink-900 px-6 ${topLevel ? 'fixed inset-0 flex flex-col items-center justify-center py-8' : 'block py-9'}`}
+      className="group no-underline text-center bg-[#f4f1ec] text-ink-900 px-6 min-h-screen flex flex-col items-center justify-center"
     >
-      <span className="togo-rise flex flex-col items-center w-full max-w-sm mx-auto">
+      <span ref={innerRef} className="togo-rise flex flex-col items-center w-full max-w-sm mx-auto py-10">
         <span className="eyebrow text-ink-400">Ligne Roset</span>
         <span
           className="block w-full max-w-[17rem] text-ink-800 mt-3 [&>svg]:w-full [&>svg]:h-auto"
@@ -1046,7 +1047,7 @@ function EmbedLaunchCard({ storeName, href }) {
         <span className="inline-flex items-center gap-2 mt-7 rounded-full bg-ink-900 text-white px-6 py-3 text-sm group-hover:bg-ink-800 group-active:scale-[0.98] transition">
           Empezar a diseñar <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
         </span>
-        {storeName && <span className="block font-sans text-[11px] tracking-[0.16em] uppercase text-ink-400 mt-5">{storeName}</span>}
+        {storeName && <span className="block font-wordmark text-lg text-ink-400 mt-5 leading-none">{storeName}</span>}
       </span>
     </a>
   );
