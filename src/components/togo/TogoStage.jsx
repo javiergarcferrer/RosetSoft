@@ -73,10 +73,33 @@ export default function TogoStage({
     const fit = Math.max(0.4, Math.min(1, aspect || 1));     // the tighter axis
     const dist = (radius * 1.35) / (Math.tan(halfFov) * fit);
     return m === '2d'
-      // Near-straight-down (a hair of offset avoids the look-down gimbal).
-      ? { px: center.x, py: dist, pz: center.z + dist * 0.0006, tx: center.x, ty: 0, tz: center.z }
+      // DEAD straight-down. The top-down basis is supplied by camera.up=(0,0,-1)
+      // (see UP_2D) — NOT a positional nudge, which would tilt/rotate the plan.
+      ? { px: center.x, py: dist, pz: center.z, tx: center.x, ty: 0, tz: center.z }
       // Same fit distance, from a low front-quarter angle.
       : { px: center.x + dist * 0.32, py: dist * 0.46, pz: center.z + dist * 0.83, tx: center.x, ty: radius * 0.15, tz: center.z };
+  }, []);
+
+  // Place the camera at a pose for a mode. In 2D we drive the camera DIRECTLY
+  // (top-down `up`, lookAt, OrbitControls OFF) so it's a rock-solid plan view with
+  // no polar-singularity wobble; in 3D OrbitControls owns it. This is the single
+  // path every framing call goes through (mount, rebuild, resize, tween-end).
+  const placeCamera = useCallback((l, pose, m) => {
+    const { camera, controls } = l;
+    if (m === '2d') {
+      camera.up.set(0, 0, -1);                 // world -z is "up" on the plan
+      camera.position.set(pose.px, pose.py, pose.pz);
+      controls.target.set(pose.tx, pose.ty, pose.tz);
+      controls.enabled = false;                // 2D = no orbit/zoom; drag does the editing
+      camera.lookAt(pose.tx, pose.ty, pose.tz);
+    } else {
+      camera.up.set(0, 1, 0);
+      camera.position.set(pose.px, pose.py, pose.pz);
+      controls.target.set(pose.tx, pose.ty, pose.tz);
+      controls.enabled = true;
+      controls.enableRotate = true;
+      controls.update();
+    }
   }, []);
 
   // ── Rebuild the furniture group (swatch colours + real meshes), tag each piece
@@ -116,15 +139,13 @@ export default function TogoStage({
     // Frame the camera on the layout when the piece COUNT changes (add/remove) —
     // so a new piece is always in view — but NOT on a position-only change (a drag
     // commit), and never mid-drag, so arranging stays stable.
-    if (scene.pieces.length !== l.framedCount && !l.drag) {
+    if (scene.pieces.length !== l.framedCount && !l.drag && !l.tween) {
       l.framedCount = scene.pieces.length;
       const pose = poseFor(stateRef.current.mode, scene.center, scene.radius, l.camera.aspect);
-      l.camera.position.set(pose.px, pose.py, pose.pz);
-      l.controls.target.set(pose.tx, pose.ty, pose.tz);
-      l.controls.update();
+      placeCamera(l, pose, stateRef.current.mode);
     }
     l.requestRender();
-  }, [buildScene, poseFor]);
+  }, [buildScene, poseFor, placeCamera]);
 
   // Subtle warm emissive on the selected piece (reads in both camera modes).
   function applyHighlight(l, sel) {
@@ -215,10 +236,7 @@ export default function TogoStage({
       // first paint — the toggle tweens thereafter).
       const l = api.current;
       const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
-      camera.position.set(pose.px, pose.py, pose.pz);
-      controls.target.set(pose.tx, pose.ty, pose.tz);
-      controls.enableRotate = stateRef.current.mode === '3d';
-      controls.update();
+      placeCamera(l, pose, stateRef.current.mode);
       requestRender();
 
       // ── Pointer editing (2D only): tap = select, drag = move on the floor. ──
@@ -270,7 +288,7 @@ export default function TogoStage({
       const onUp = (e) => {
         if (!l.drag) return;
         const d = l.drag; l.drag = null;
-        controls.enabled = true;
+        controls.enabled = stateRef.current.mode === '3d';   // stays off in 2D
         renderer.domElement.releasePointerCapture?.(e.pointerId);
         if (d.moved && d.next) stateRef.current.onMove?.(d.uid, d.next.x, d.next.y);
       };
@@ -289,11 +307,9 @@ export default function TogoStage({
         // Re-frame for the new aspect (orientation change / first real layout) so
         // the layout never ends up over-zoomed, unless the user is mid-drag.
         const l = api.current;
-        if (l && !l.drag) {
+        if (l && !l.drag && !l.tween) {
           const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
-          camera.position.set(pose.px, pose.py, pose.pz);
-          controls.target.set(pose.tx, pose.ty, pose.tz);
-          controls.update();
+          placeCamera(l, pose, stateRef.current.mode);
         }
         requestRender();
       });
@@ -333,7 +349,11 @@ export default function TogoStage({
     const { camera, controls } = l;
     const to = poseFor(mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
     const from = { px: camera.position.x, py: camera.position.y, pz: camera.position.z, tx: controls.target.x, ty: controls.target.y, tz: controls.target.z };
-    controls.enableRotate = false;        // lock during the tween
+    // Tween the camera UP too: top-down plan up=(0,0,-1) ↔ perspective up=(0,1,0),
+    // so the basis rotates smoothly with the move instead of popping at the ends.
+    const uFrom = { x: camera.up.x, y: camera.up.y, z: camera.up.z };
+    const uTo = mode === '2d' ? { x: 0, y: 0, z: -1 } : { x: 0, y: 1, z: 0 };
+    controls.enabled = false;             // we drive the camera by hand mid-tween
     if (l.tween) cancelAnimationFrame(l.tween);
     let t0 = null; const dur = 700;
     const step = (ts) => {
@@ -342,11 +362,15 @@ export default function TogoStage({
       const p = Math.min(1, (ts - t0) / dur);
       const e = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;   // easeInOutQuad
       camera.position.set(from.px + (to.px - from.px) * e, from.py + (to.py - from.py) * e, from.pz + (to.pz - from.pz) * e);
-      controls.target.set(from.tx + (to.tx - from.tx) * e, from.ty + (to.ty - from.ty) * e, from.tz + (to.tz - from.tz) * e);
-      controls.update();
+      const ux = uFrom.x + (uTo.x - uFrom.x) * e, uy = uFrom.y + (uTo.y - uFrom.y) * e, uz = uFrom.z + (uTo.z - uFrom.z) * e;
+      const ul = Math.hypot(ux, uy, uz) || 1;
+      camera.up.set(ux / ul, uy / ul, uz / ul);
+      const tx = from.tx + (to.tx - from.tx) * e, ty = from.ty + (to.ty - from.ty) * e, tz = from.tz + (to.tz - from.tz) * e;
+      controls.target.set(tx, ty, tz);
+      camera.lookAt(tx, ty, tz);
       l.renderer.render(l.scene, camera);
       if (p < 1) { l.tween = requestAnimationFrame(step); }
-      else { l.tween = null; controls.enableRotate = mode === '3d'; }
+      else { l.tween = null; placeCamera(l, to, mode); l.requestRender(); }   // snap to the exact end pose + restore controls
     };
     l.tween = requestAnimationFrame(step);
     // eslint-disable-next-line react-hooks/exhaustive-deps
