@@ -7,6 +7,20 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { startVersionWatcher } from './lib/liveReload.js';
 import { installVirtualKeyboardWatcher } from './lib/useVirtualKeyboard.js';
 import { initTheme } from './lib/theme.js';
+import { captureError } from './lib/errorLog.js';
+
+// Catch what the handled-error funnel (userMessageFor) doesn't see: uncaught
+// sync errors and rejected promises. Feeds the admin-only error console.
+window.addEventListener('error', (e) => {
+  if (e?.message && /ResizeObserver loop|Script error\.?$/i.test(e.message)) return; // benign noise
+  captureError(e?.error || e?.message, {
+    type: 'window',
+    source: e?.filename ? `${e.filename}:${e.lineno || ''}` : '',
+  });
+});
+window.addEventListener('unhandledrejection', (e) => {
+  captureError(e?.reason ?? 'Unhandled rejection', { type: 'promise' });
+});
 
 // Re-affirm the theme the inline boot script already painted, and start
 // following the OS while the dealer is on "system" (see lib/theme).

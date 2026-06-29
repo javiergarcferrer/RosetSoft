@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { captureError } from '../lib/errorLog.js';
 
 /**
  * Last-resort guard against a React tree that throws during render. Without
@@ -19,6 +20,7 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary]', error, info?.componentStack);
+    captureError(error, { type: 'render', source: 'ErrorBoundary', response: info?.componentStack });
   }
 
   render() {

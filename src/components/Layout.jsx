@@ -11,6 +11,7 @@ import AccountingSubnav from './AccountingSubnav.jsx';
 import AccountingBreadcrumbs from './accounting/Breadcrumbs.jsx';
 import QuickCreate from './QuickCreate.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
+import ErrorConsole from './dev/ErrorConsole.jsx';
 import { useScrollRestoration } from '../context/NavMemory.jsx';
 import { navForRole } from '../lib/access.js';
 import { useKeyboardShortcut, shortcutLabel } from '../lib/useKeyboardShortcut.js';
@@ -444,6 +445,7 @@ function MainContent() {
           <Outlet key={location.pathname} />
         </Suspense>
       </div>
+      <ErrorConsole />
     </div>
   );
 }

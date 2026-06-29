@@ -4,6 +4,7 @@
  * can't classify, so we never hide diagnostic information — we just put a
  * friendlier label on top of it for the common cases.
  */
+import { captureError } from './errorLog.js';
 
 /** Subset of the fields we look at across Supabase / fetch / generic errors. */
 interface ErrorLike {
@@ -13,6 +14,9 @@ interface ErrorLike {
 }
 
 export function userMessageFor(err: unknown): string {
+  // Record the RAW error (with its Response context) for the admin error
+  // console — this is the funnel every handled-error toast passes through.
+  captureError(err, { type: 'handled' });
   if (!err) return 'Error desconocido.';
   const e = err as ErrorLike;
   const code = e.code || e.status || '';
