@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
-  X, Download, Image as ImageIcon, File as FileIcon,
+  X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -63,9 +63,14 @@ export default function Gmail() {
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
-  // The attachment open in the preview lightbox: { messageId, attachment } | null.
+  // The attachment lightbox: { messageId, attachments, index } | null. We carry
+  // the whole message's attachment list (+ the opened index) so the lightbox can
+  // page prev/next without closing — quick attachment navigation on a phone.
   const [preview, setPreview] = useState(null);
-  const openPreview = useCallback((messageId, attachment) => setPreview({ messageId, attachment }), []);
+  const openPreview = useCallback(
+    (messageId, attachments, index = 0) => setPreview({ messageId, attachments, index }),
+    [],
+  );
 
   const runSync = useCallback(async () => {
     if (!connected) return;
@@ -161,68 +166,100 @@ export default function Gmail() {
     );
   }
 
+  const threadOpen = !!selectedThreadId && tab !== INVOICES_TAB;
+
   return (
-    <div>
-      <PageHeader
-        title="Gmail"
-        subtitle={settings?.googleEmail ? `Bandeja de ${settings.googleEmail}` : 'Bandeja de entrada por marca'}
-        actions={actions}
-      />
+    // Viewport-locked column (mirrors the WhatsApp inbox): a flex column the
+    // exact height of the area under the topbar, so the PAGE never shell-scrolls
+    // — only the thread list / reading pane scroll, inside their panes. This is
+    // what makes the phone experience no-scroll: tap a brand tab, scan the list,
+    // open a mail and read it, all without the page itself moving. Negative
+    // margins cancel the shared content-wrapper padding for an edge-to-edge pane;
+    // desktop fills the content area the same way (100dvh − the md py-6 gutter).
+    <div className="flex flex-col kb-inbox-pane max-md:h-[calc(var(--rs-vvh,100dvh)-55px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] max-md:-mt-4 max-md:-mb-[calc(1.5rem+env(safe-area-inset-bottom))] md:h-[calc(100dvh-3rem)]">
+      {/* List-level chrome — header, tabs, search. On a phone an OPEN mail takes
+          the screen over (ReadingPane carries its own Back), so this steps aside;
+          desktop keeps it always-on above the split pane. */}
+      <div className={threadOpen ? 'hidden md:block' : undefined}>
+        <PageHeader
+          title="Gmail"
+          subtitle={settings?.googleEmail ? `Bandeja de ${settings.googleEmail}` : 'Bandeja de entrada por marca'}
+          actions={actions}
+        />
 
-      {syncError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{syncError}</div>
-      )}
+        {syncError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{syncError}</div>
+        )}
 
-      {/* Tabs: brands + Facturas */}
-      <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-ink-100">
-        {GMAIL_BRAND_TABS.map((t) => (
+        {/* Tabs: brands + Facturas. Horizontally scrollable on a narrow phone so
+            the row never wraps and steals a second line of vertical space. */}
+        <div className="mb-4 flex items-center gap-1 border-b border-ink-100 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {GMAIL_BRAND_TABS.map((t) => (
+            <TabButton
+              key={t.id}
+              active={tab === t.id}
+              onClick={() => { setTab(t.id); setSelectedThreadId(null); }}
+              label={t.label}
+              badge={counts[t.id]?.unread || 0}
+              count={counts[t.id]?.threads || 0}
+            />
+          ))}
           <TabButton
-            key={t.id}
-            active={tab === t.id}
-            onClick={() => { setTab(t.id); setSelectedThreadId(null); }}
-            label={t.label}
-            badge={counts[t.id]?.unread || 0}
-            count={counts[t.id]?.threads || 0}
+            active={tab === INVOICES_TAB}
+            onClick={() => { setTab(INVOICES_TAB); setSelectedThreadId(null); }}
+            label="Facturas"
+            icon={FileText}
+            count={invoiceCount}
           />
-        ))}
-        <TabButton
-          active={tab === INVOICES_TAB}
-          onClick={() => { setTab(INVOICES_TAB); setSelectedThreadId(null); }}
-          label="Facturas"
-          icon={FileText}
-          count={invoiceCount}
-        />
-      </div>
+        </div>
 
-      {/* Search */}
-      <div className="mb-4 relative max-w-sm">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-        <input
-          type="search"
-          value={needle}
-          onChange={(e) => setNeedle(e.target.value)}
-          placeholder="Buscar correo…"
-          className="w-full rounded-lg border border-ink-200 bg-surface pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300"
-        />
+        {/* Search */}
+        <div className="mb-4 relative md:max-w-sm">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            type="search"
+            value={needle}
+            onChange={(e) => setNeedle(e.target.value)}
+            placeholder="Buscar correo…"
+            className="w-full rounded-lg border border-ink-200 bg-surface pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300"
+          />
+        </div>
       </div>
 
       {!loaded ? (
-        <div className="flex items-center gap-2 text-sm text-ink-400 py-10 justify-center">
+        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-ink-400">
           <Loader2 size={16} className="animate-spin" /> Cargando…
         </div>
       ) : tab === INVOICES_TAB ? (
-        <InvoiceList invoices={invoices} onPreview={openPreview} />
+        // The Facturas table fills the rest and scrolls inside its own box
+        // (edge-to-edge on a phone) so the page shell stays put.
+        <div className="flex-1 min-h-0 overflow-auto max-md:-mx-4">
+          <InvoiceList invoices={invoices} onPreview={openPreview} />
+        </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
-          <ThreadList threads={tabThreads} selectedId={selectedThreadId} onOpen={openThread} brandTab={tab} />
-          <ReadingPane thread={selectedThread} onReassign={reassignBrand} onPreview={openPreview} />
+        // Master-detail card: list + reading pane side by side on desktop; on a
+        // phone it's one-at-a-time (list full width, then the open mail full
+        // screen). flex-1/min-h-0 lets the inner panes own the scroll.
+        <div className="flex-1 min-h-0 flex overflow-hidden border-ink-100 bg-surface md:rounded-xl md:border max-md:-mx-4">
+          <div className={`${threadOpen ? 'hidden md:flex' : 'flex'} w-full md:w-[22rem] shrink-0 flex-col md:border-r border-ink-100`}>
+            <ThreadList threads={tabThreads} selectedId={selectedThreadId} onOpen={openThread} brandTab={tab} />
+          </div>
+          <div className={`${threadOpen ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col`}>
+            <ReadingPane
+              thread={selectedThread}
+              onReassign={reassignBrand}
+              onPreview={openPreview}
+              onBack={() => setSelectedThreadId(null)}
+            />
+          </div>
         </div>
       )}
 
       {preview && (
         <AttachmentModal
           messageId={preview.messageId}
-          attachment={preview.attachment}
+          attachments={preview.attachments}
+          index={preview.index}
           onClose={() => setPreview(null)}
         />
       )}
@@ -235,7 +272,7 @@ function TabButton({ active, onClick, label, badge = 0, count = 0, icon: Icon })
     <button
       type="button"
       onClick={onClick}
-      className={`relative inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
+      className={`relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
         active ? 'border-ink-900 text-ink-900' : 'border-transparent text-ink-500 hover:text-ink-800'
       }`}
     >
@@ -250,13 +287,13 @@ function TabButton({ active, onClick, label, badge = 0, count = 0, icon: Icon })
 function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   if (!threads.length) {
     return (
-      <div className="rounded-xl border border-ink-100 bg-surface">
+      <div className="flex-1 overflow-y-auto">
         <EmptyState icon={Inbox} title="Sin correos" description={`No hay correos en ${brandLabel(brandTab)}.`} />
       </div>
     );
   }
   return (
-    <ul className="rounded-xl border border-ink-100 bg-surface divide-y divide-ink-100 overflow-hidden max-h-[70vh] overflow-y-auto">
+    <ul className="flex-1 divide-y divide-ink-100 overflow-y-auto overscroll-contain">
       {threads.map((t) => (
         <li key={t.threadId}>
           <button
@@ -288,19 +325,28 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   );
 }
 
-function ReadingPane({ thread, onReassign, onPreview }) {
+function ReadingPane({ thread, onReassign, onPreview, onBack }) {
   if (!thread) {
     return (
-      <div className="hidden lg:flex items-center justify-center rounded-xl border border-dashed border-ink-200 bg-ink-50/40 text-sm text-ink-400 min-h-[40vh]">
+      <div className="hidden md:flex flex-1 items-center justify-center text-sm text-ink-400">
         Selecciona un correo para leerlo.
       </div>
     );
   }
   const last = thread.items[thread.items.length - 1] || null;
   return (
-    <div className="rounded-xl border border-ink-100 bg-surface flex flex-col max-h-[70vh]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-4 py-3">
-        <h2 className="font-display text-base font-semibold text-ink-900 truncate">{thread.subject}</h2>
+    <div className="flex flex-1 min-h-0 flex-col bg-surface">
+      <div className="flex items-center gap-2 border-b border-ink-100 px-3 py-2.5 md:px-4 md:py-3">
+        {/* Back to the list — phone only; desktop keeps the split pane. */}
+        <button
+          type="button"
+          onClick={onBack}
+          className="md:hidden -ml-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-600 hover:bg-ink-50"
+          aria-label="Volver a la lista"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <h2 className="min-w-0 flex-1 font-display text-base font-semibold text-ink-900 truncate">{thread.subject}</h2>
         <div className="flex items-center gap-2">
           <select
             value={(last?.brand) || ''}
@@ -357,7 +403,7 @@ function MessageBubble({ message, onPreview }) {
             <AttachmentChip
               key={`${a.attachmentId || a.filename}-${i}`}
               attachment={a}
-              onClick={() => onPreview?.(message.id, a)}
+              onClick={() => onPreview?.(message.id, message.attachments, i)}
             />
           ))}
         </div>
@@ -424,13 +470,22 @@ function AttachmentChip({ attachment, onClick }) {
  * loadGmailAttachment → an object URL), previews images and PDFs inline, and
  * offers a download for everything. The object URL is revoked on close so the
  * blob is freed.
+ *
+ * It receives the WHOLE message's attachment list plus the opened index, so the
+ * dealer can page through every attachment (◂ ▸ / arrow keys) without closing —
+ * the quick attachment navigation the phone experience is built around. On a
+ * phone it goes full-screen (edge-to-edge) so a PDF/photo gets the whole window.
  */
-function AttachmentModal({ messageId, attachment, onClose }) {
+function AttachmentModal({ messageId, attachments, index, onClose }) {
+  const list = Array.isArray(attachments) ? attachments : [];
+  const [i, setI] = useState(() => Math.min(Math.max(index || 0, 0), Math.max(list.length - 1, 0)));
   const [state, setState] = useState({ loading: true, error: '', url: '' });
-  const a = attachment || {};
+  const a = list[i] || {};
   const mime = String(a.mimeType || '').toLowerCase();
   const isImg = mime.startsWith('image/');
   const isPdf = mime === 'application/pdf';
+  const count = list.length;
+  const go = useCallback((step) => setI((cur) => Math.min(Math.max(cur + step, 0), count - 1)), [count]);
 
   useEffect(() => {
     let url = '';
@@ -450,38 +505,65 @@ function AttachmentModal({ messageId, attachment, onClose }) {
       if (url) URL.revokeObjectURL(url);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messageId, a.attachmentId]);
+  }, [messageId, a.attachmentId, i]);
 
-  // Close on Escape.
+  // Escape closes; ←/→ page between this message's attachments.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, go]);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 md:p-4"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-xl bg-surface shadow-2xl"
+        className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-surface shadow-2xl md:h-auto md:max-h-[90vh] md:rounded-xl pt-[env(safe-area-inset-top)] md:pt-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-ink-100 px-4 py-3">
-          <span className="flex items-center gap-2 truncate text-sm font-medium text-ink-800">
+          <span className="flex min-w-0 items-center gap-2 truncate text-sm font-medium text-ink-800">
             <Paperclip size={14} className="shrink-0 text-ink-400" />
             <span className="truncate">{a.filename || 'archivo'}</span>
+            {count > 1 && <span className="shrink-0 text-xs font-normal text-ink-400 tabular-nums">{i + 1}/{count}</span>}
           </span>
           <div className="flex items-center gap-2">
+            {count > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => go(-1)}
+                  disabled={i === 0}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ink-200 bg-surface text-ink-600 hover:bg-ink-50 disabled:opacity-40"
+                  aria-label="Adjunto anterior"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => go(1)}
+                  disabled={i >= count - 1}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ink-200 bg-surface text-ink-600 hover:bg-ink-50 disabled:opacity-40"
+                  aria-label="Adjunto siguiente"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
             {state.url && (
               <a
                 href={state.url}
                 download={a.filename || 'archivo'}
                 className="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
               >
-                <Download size={13} /> Descargar
+                <Download size={13} /> <span className="hidden sm:inline">Descargar</span>
               </a>
             )}
             <button
@@ -494,19 +576,19 @@ function AttachmentModal({ messageId, attachment, onClose }) {
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-auto bg-ink-50/40 p-4">
+        <div className="flex-1 min-h-0 overflow-auto bg-ink-50/40 p-2 md:p-4">
           {state.loading ? (
-            <div className="flex items-center justify-center gap-2 py-20 text-sm text-ink-400">
+            <div className="flex h-full items-center justify-center gap-2 text-sm text-ink-400">
               <Loader2 size={16} className="animate-spin" /> Cargando adjunto…
             </div>
           ) : state.error ? (
             <div className="py-20 text-center text-sm text-red-600">{state.error}</div>
           ) : isImg ? (
-            <img src={state.url} alt={a.filename || 'adjunto'} className="mx-auto max-h-[72vh] max-w-full rounded object-contain" />
+            <img src={state.url} alt={a.filename || 'adjunto'} className="mx-auto max-h-full max-w-full rounded object-contain" />
           ) : isPdf ? (
-            <iframe title={a.filename || 'PDF'} src={state.url} className="h-[72vh] w-full rounded bg-white" />
+            <iframe title={a.filename || 'PDF'} src={state.url} className="h-full min-h-[60vh] w-full rounded bg-white" />
           ) : (
-            <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-ink-500">
+            <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center text-sm text-ink-500">
               <FileIcon size={40} className="text-ink-300" />
               <p>Este tipo de archivo no se puede previsualizar.</p>
               <a
@@ -564,7 +646,7 @@ function InvoiceList({ invoices, onPreview }) {
                     {(m.attachments || []).length > 0 ? (
                       <button
                         type="button"
-                        onClick={() => onPreview?.(m.id, m.attachments[0])}
+                        onClick={() => onPreview?.(m.id, m.attachments, 0)}
                         title="Previsualizar adjunto"
                         className="text-ink-400 hover:text-ink-700"
                       >
