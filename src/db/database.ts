@@ -47,6 +47,7 @@ import type {
   Employee,
   PayrollRun,
   WaMessage,
+  GmailMessage,
   WaCampaign,
   EmailCampaign,
   WaConversationState,
@@ -139,6 +140,7 @@ const TABLES = {
   employees:          { db: 'employees',           pk: 'id' },
   payrollRuns:        { db: 'payroll_runs',        pk: 'id' },
   waMessages:         { db: 'wa_messages',         pk: 'id' },
+  gmailMessages:      { db: 'gmail_messages',      pk: 'id' },
   waCampaigns:        { db: 'wa_campaigns',        pk: 'id' },
   waConversationState:{ db: 'wa_conversation_state', pk: 'id' },
   waGroups:           { db: 'wa_groups',           pk: 'id' },
@@ -207,6 +209,7 @@ export interface TableRowMap {
   employees: Employee;
   payrollRuns: PayrollRun;
   waMessages: WaMessage;
+  gmailMessages: GmailMessage;
   waCampaigns: WaCampaign;
   waConversationState: WaConversationState;
   waGroups: WaGroup;

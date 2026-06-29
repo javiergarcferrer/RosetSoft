@@ -262,6 +262,8 @@ export interface Settings {
   googleConnectedAt?: number | null;
   /** The connected account's email (display). */
   googleEmail?: string;
+  /** Last time the Gmail inbox pulled new mail (google-api `gmailSync`). */
+  gmailSyncedAt?: number | null;
   /** OAuth client id — NON-secret mirror so the card shows it's configured and
    *  pre-fills the field. The client SECRET stays in google_oauth_config. */
   googleClientId?: string;
@@ -357,6 +359,43 @@ export interface WaMessage {
   pricingBillable?: boolean | null;
   readAt?: number | null;
   statusAt?: number | null;
+  createdAt?: number;
+}
+
+/**
+ * One Gmail message mirrored into the back-office inbox. Written by the
+ * `google-api` Edge Function's `gmailSync` action (service role) off the
+ * connected account's `gmail.readonly` grant; the React inbox reads this table.
+ * `id` IS Gmail's own message id (a re-sync upserts). Brand classification
+ * (Ligne Roset / LifestyleGarden / Otros) and invoice detection are pure
+ * derivations in core/crm/views/gmailInbox.js — `brand` here is only the
+ * MANUAL override the dealer sets to re-file a thread (null ⇒ auto-classify).
+ */
+export interface GmailMessage {
+  id: string;
+  profileId: string;
+  /** Gmail threadId — the inbox groups messages by this. */
+  threadId: string;
+  direction: 'in' | 'out';
+  fromEmail?: string;
+  fromName?: string;
+  toEmail?: string;
+  subject?: string;
+  snippet?: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  /** Manual brand override (a products.brand id, or 'otros'); null ⇒ classify. */
+  brand?: string | null;
+  /** Gmail label ids (INBOX, SENT, UNREAD, …). */
+  labelIds?: string[] | null;
+  hasAttachment?: boolean;
+  attachmentCount?: number;
+  attachments?: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> | null;
+  customerId?: string | null;
+  isRead?: boolean;
+  /** Gmail internalDate (ms↔ISO auto-coerced — ends in `At`). */
+  receivedAt?: number | null;
+  payload?: unknown;
   createdAt?: number;
 }
 

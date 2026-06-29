@@ -1,0 +1,121 @@
+/**
+ * Tests for src/core/crm/views/gmailInbox.js — the Gmail inbox VM.
+ *
+ * Pins the two derivations the feature is built on: BRAND classification
+ * (sender-domain rules + manual override) and INVOICE detection, plus the
+ * thread grouping / unread / brand-of-thread roll-up the inbox list renders.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  classifyBrand, isInvoiceEmail, parseInvoiceAmount,
+  resolveGmailThreads, resolveGmailThread, resolveGmailInvoices,
+  GMAIL_BRAND_OTHER,
+} from '../src/core/crm/views/gmailInbox.js';
+
+const NOW = Date.parse('2026-06-10T12:00:00Z');
+const MIN = 60_000;
+const msg = (o) => ({ id: 'm', profileId: 'team', threadId: 't', direction: 'in', isRead: false, ...o });
+
+// ── classifyBrand ───────────────────────────────────────────────────────────
+test('classifyBrand matches sender domain to a brand', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'ventas@ligne-roset.com' })), 'ligne-roset');
+  assert.equal(classifyBrand(msg({ fromEmail: 'orders@lifestylegarden.do' })), 'lifestylegarden');
+});
+
+test('classifyBrand falls back to otros for an unknown sender', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'someone@randomdomain.com' })), GMAIL_BRAND_OTHER);
+});
+
+test('classifyBrand: a manual override always wins over the rules', () => {
+  // Sender would classify as ligne-roset, but the override re-files it.
+  assert.equal(classifyBrand(msg({ fromEmail: 'ventas@ligne-roset.com', brand: 'lifestylegarden' })), 'lifestylegarden');
+});
+
+// ── isInvoiceEmail ──────────────────────────────────────────────────────────
+test('isInvoiceEmail: invoice keyword + attachment ⇒ true', () => {
+  assert.equal(isInvoiceEmail(msg({ subject: 'Su factura de mayo', hasAttachment: true, attachments: [{ filename: 'doc.pdf' }] })), true);
+});
+
+test('isInvoiceEmail: a named invoice attachment counts even with a terse note', () => {
+  assert.equal(isInvoiceEmail(msg({ subject: 'hola', hasAttachment: true, attachments: [{ filename: 'Factura-001.pdf' }] })), true);
+});
+
+test('isInvoiceEmail: keyword but no attachment ⇒ false', () => {
+  assert.equal(isInvoiceEmail(msg({ subject: 'Su factura', hasAttachment: false, attachments: [] })), false);
+});
+
+test('isInvoiceEmail: ordinary mail ⇒ false', () => {
+  assert.equal(isInvoiceEmail(msg({ subject: 'Reunión el lunes', hasAttachment: true, attachments: [{ filename: 'agenda.pdf' }] })), false);
+});
+
+// ── parseInvoiceAmount ──────────────────────────────────────────────────────
+test('parseInvoiceAmount picks the largest figure and its currency', () => {
+  const a = parseInvoiceAmount(msg({ subject: 'Total RD$ 12,500.00', snippet: 'ITBIS RD$ 1,907.63' }));
+  assert.deepEqual(a, { amount: 12500, currency: 'DOP' });
+});
+
+test('parseInvoiceAmount returns null when there is no money', () => {
+  assert.equal(parseInvoiceAmount(msg({ subject: 'sin montos', snippet: 'nada' })), null);
+});
+
+// ── resolveGmailThreads ─────────────────────────────────────────────────────
+test('groups by threadId, newest-activity first, unread = inbound unread', () => {
+  const messages = [
+    msg({ id: 'a1', threadId: 'A', fromEmail: 'x@ligne-roset.com', subject: 'A1 old', snippet: 's', receivedAt: NOW - 10 * MIN }),
+    msg({ id: 'a2', threadId: 'A', fromEmail: 'x@ligne-roset.com', subject: 'A2 new', snippet: 's', receivedAt: NOW - 5 * MIN }),
+    msg({ id: 'b1', threadId: 'B', fromEmail: 'y@lifestylegarden.do', subject: 'B1', snippet: 's', receivedAt: NOW - 1 * MIN }),
+  ];
+  const list = resolveGmailThreads(messages, {});
+  assert.deepEqual(list.map((t) => t.threadId), ['B', 'A']); // B newer
+  const a = list.find((t) => t.threadId === 'A');
+  assert.equal(a.subject, 'A2 new');     // newest in-thread subject
+  assert.equal(a.unread, 2);             // both inbound, unread
+  assert.equal(a.count, 2);
+  assert.equal(a.brand, 'ligne-roset');  // from the inbound sender
+});
+
+test('thread brand follows the inbound counterpart, not our outbound reply', () => {
+  const messages = [
+    msg({ id: 'i', threadId: 'T', direction: 'in', fromEmail: 'x@lifestylegarden.do', receivedAt: NOW - 5 * MIN }),
+    msg({ id: 'o', threadId: 'T', direction: 'out', fromEmail: 'us@alcover.do', receivedAt: NOW - 1 * MIN }),
+  ];
+  const [t] = resolveGmailThreads(messages, {});
+  assert.equal(t.brand, 'lifestylegarden');
+});
+
+test('hasInvoice flags a thread carrying an invoice message; needle filters', () => {
+  const messages = [
+    msg({ id: 'a', threadId: 'A', subject: 'Factura abril', hasAttachment: true, attachments: [{ filename: 'f.pdf' }], receivedAt: NOW }),
+    msg({ id: 'b', threadId: 'B', subject: 'Saludo', receivedAt: NOW - MIN }),
+  ];
+  const all = resolveGmailThreads(messages, {});
+  assert.equal(all.find((t) => t.threadId === 'A').hasInvoice, true);
+  assert.equal(all.find((t) => t.threadId === 'B').hasInvoice, false);
+  assert.deepEqual(resolveGmailThreads(messages, { needle: 'factura' }).map((t) => t.threadId), ['A']);
+});
+
+// ── resolveGmailThread ──────────────────────────────────────────────────────
+test('resolveGmailThread returns one thread oldest-first', () => {
+  const messages = [
+    msg({ id: 'a2', threadId: 'A', subject: 'asunto', receivedAt: NOW - 2 * MIN }),
+    msg({ id: 'a1', threadId: 'A', subject: 'asunto', receivedAt: NOW - 9 * MIN }),
+    msg({ id: 'b', threadId: 'B', receivedAt: NOW }),
+  ];
+  const t = resolveGmailThread(messages, { threadId: 'A' });
+  assert.deepEqual(t.items.map((m) => m.id), ['a1', 'a2']);
+  assert.equal(t.subject, 'asunto');
+});
+
+// ── resolveGmailInvoices ────────────────────────────────────────────────────
+test('resolveGmailInvoices lists only invoices, newest first, with brand + amount', () => {
+  const messages = [
+    msg({ id: 'inv', threadId: 'A', fromEmail: 'billing@ligne-roset.com', subject: 'Factura · Total US$ 3,200.00', hasAttachment: true, attachments: [{ filename: 'inv.pdf' }], receivedAt: NOW }),
+    msg({ id: 'plain', threadId: 'B', subject: 'hola', receivedAt: NOW - MIN }),
+  ];
+  const invoices = resolveGmailInvoices(messages, {});
+  assert.equal(invoices.length, 1);
+  assert.equal(invoices[0].id, 'inv');
+  assert.equal(invoices[0].brand, 'ligne-roset');
+  assert.deepEqual(invoices[0].amount, { amount: 3200, currency: 'USD' });
+});

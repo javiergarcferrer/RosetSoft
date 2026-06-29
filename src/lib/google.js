@@ -80,6 +80,15 @@ export async function sendGmail({ to, cc, bcc, subject, html, text, fromName, at
   return invokeGoogle({ gmailSend: { to, cc, bcc, subject, html, text, fromName, attachments: [...attachments, ...encoded] } });
 }
 
+/**
+ * Pull recent inbox + sent mail into gmail_messages (server-side, service role)
+ * so the Gmail inbox can read it. Returns { scanned, synced }. `query` overrides
+ * the default Gmail search; `maxResults` caps the scan (server clamps to 250).
+ */
+export async function syncGmail({ query, maxResults } = {}) {
+  return invokeGoogle({ gmailSync: { query, maxResults } });
+}
+
 // ── Drive ─────────────────────────────────────────────────────────────────
 
 /** Find (or create) the single workspace root folder; returns { id, url }. */
