@@ -403,7 +403,16 @@ export default function TogoStage({
   }, [mode]);
 
   return (
-    <div className={`relative ${className}`} aria-label="Configurador Togo">
+    // position via INLINE STYLE, not classes: the caller passes `absolute inset-0`
+    // but the root ALSO carried a hardcoded `relative`, and in the built CSS
+    // `.relative` is emitted after `.absolute` so it WON the tie — the root became
+    // `position: relative`, which ignores inset-0 for sizing and collapsed to auto
+    // height (its only children are absolutely-positioned → contribute 0). The
+    // canvas then never got a viewport-tracking height and the ResizeObserver read
+    // H≈0 and bailed, so the stage couldn't respond to screen size. Forcing
+    // absolute+inset:0 inline makes the root fill its parent regardless of class
+    // order, and it's still a positioning context for the mount/overlay below.
+    <div style={{ position: 'absolute', inset: 0 }} className={className} aria-label="Configurador Togo">
       <div ref={mountRef} className="absolute inset-0" />
       {failed && (
         <div className="absolute inset-0 grid place-items-center text-center px-6 text-xs text-ink-500">
