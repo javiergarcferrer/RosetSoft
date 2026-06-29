@@ -10,7 +10,7 @@ import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { buildTogoGroup, disposeGroup } from '../../components/togo/togoSceneBuilder.js';
 import { loadTogoModels } from '../../components/togo/togoModelLoader.js';
 import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
-import { useMeshPlans, useTopDownTiles } from '../../components/togo/useMeshPlans.js';
+import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
@@ -24,7 +24,7 @@ import togoWireLounge from '../../assets/togo/togo_lounge.svg?raw';
 import Modal from '../../components/Modal.jsx';
 import MaterialColorPicker from '../../components/quote-builder/MaterialColorPicker.jsx';
 import ImageView from '../../components/ImageView.jsx';
-import TogoScene3D from '../../components/togo/TogoScene3D.jsx';
+import TogoStage from '../../components/togo/TogoStage.jsx';
 import TogoArViewer from '../../components/togo/TogoArViewer.jsx';
 
 const SCALE = PX_PER_CM;
@@ -45,17 +45,18 @@ const WIRE_NAME_ALIAS = [
   [/corner|angle|esquina|rincon/, 'lounge'],
 ];
 
-// The wireframe that best fits a catalog model — by exact footprint first (the
-// shape), then an alias, then a name keyword; else null (caller falls back to the
-// model's own svg). Renders thin → callers crisp it with non-scaling strokes.
+// The wireframe that best fits a catalog model. A distinctive shape NAME wins
+// first (a Corner and an Armchair are both 102×102 — only the name tells them
+// apart), then exact footprint, then an alias / catalog keyword; else null
+// (caller falls back to the model's own svg). Crisp via non-scaling strokes.
 function wireframeFor(model) {
   if (!model) return null;
-  const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;
-  let id = WIRE_BY_FOOTPRINT.get(fp) || WIRE_FOOTPRINT_ALIAS.get(fp);
+  const name = String(model.name || '').toLowerCase();
+  let id = WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
   if (!id) {
-    const name = String(model.name || '').toLowerCase();
-    id = TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id
-      || WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
+    const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;
+    id = WIRE_BY_FOOTPRINT.get(fp) || WIRE_FOOTPRINT_ALIAS.get(fp)
+      || TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id;
   }
   return (id && TOGO_WIRES[id]) || null;
 }
@@ -96,16 +97,6 @@ function useCountUp(target) {
 // The Done-screen celebration palette — the ONE place the monochrome Rams skin
 // earns colour, because a sent request is the reward moment.
 const CONFETTI_COLORS = ['#e2725b', '#2f6f6b', '#d9a441', '#3b5f8a', '#b8553f', '#6c8c5a'];
-
-// Make a plan SVG fill its footprint tile. Every plan SVG's viewBox IS its own cm
-// footprint (mesh-derived or DWG) and the tile is sized to that same footprint, so
-// the fill is a clean uniform scale — no distortion. width/height 100% pins the
-// element to the tile (the SVGs carry no width/height of their own), avoiding the
-// browser's intrinsic-size guess that would leave a strip on one side.
-const fillSvg = (svg) =>
-  (typeof svg === 'string' && svg.startsWith('<svg') && !svg.includes('preserveAspectRatio'))
-    ? svg.replace('<svg', '<svg preserveAspectRatio="none" width="100%" height="100%"')
-    : svg;
 
 // The material editor's finish presets — physically-based fabric looks that
 // re-skin the 3D visualizer live (roughness + the sheen lobe that makes fabric
@@ -173,19 +164,11 @@ export default function TogoEmbed() {
   const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ hotbar
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
-  const [lastAddedUid, setLastAddedUid] = useState(null); // the just-placed piece → spring-in pop
   const [dlOpen, setDlOpen] = useState(false);   // the download format chooser
   const [objBusy, setObjBusy] = useState(false); // building the 3D OBJ (loads three on demand)
   // false → show the launch card; the card opens the configurator in a NEW TAB
   // (?ctx=modal → straight to the build), so it always gets the full screen.
   const launched = isModalContext();
-
-  // Mark a freshly-placed piece so its tile plays the spring-in pop once, then
-  // clears (so a later unrelated re-render doesn't replay it).
-  const flashAdded = useCallback((uid) => {
-    setLastAddedUid(uid);
-    setTimeout(() => setLastAddedUid((u) => (u === uid ? null : u)), 480);
-  }, []);
 
   // Dieter Rams skin: while the configurator is mounted, flag <body> so the
   // monochrome variable remap (index.css) reaches the portalled modals too.
@@ -297,39 +280,12 @@ export default function TogoEmbed() {
     return o;
   }, [models, meshPlans]);
 
-  // Realistic top-down renders (the FBX shot from above) for the tiles on the
-  // plan — the SAME 3D mesh + dominant-colour fabric the 3D view uses, so the 2D
-  // plan IS a top view of the 3D and reflects material changes live. Keyed per
-  // (model + fabric) so two pieces in different fabrics get their own render;
-  // sized from the mesh-measured footprint.
-  const modelById = useMemo(() => new Map(models.map((m) => [m.id, m])), [models]);
-  const topDownEntries = useMemo(() => {
-    const seen = new Map();
-    for (const p of placed) {
-      const m = modelById.get(p.pieceId);
-      if (!m?.mesh?.url) continue;
-      const code = p.material?.code || '';
-      const id = `${m.id}|${code}`;
-      if (seen.has(id)) continue;
-      seen.set(id, {
-        id, url: m.mesh.url, upAxis: m.mesh.upAxis, rotateY: m.mesh.rotateY, scale: m.mesh.scale,
-        widthCm: resolvedById[m.id]?.widthCm, depthCm: resolvedById[m.id]?.depthCm, fabricCode: code || null,
-      });
-    }
-    return [...seen.values()];
-  }, [placed, modelById, resolvedById]);
-  const topDownById = useTopDownTiles(topDownEntries);
 
   const vm = useMemo(() => resolveConfigurator(placed, resolvedById, { scale: SCALE }), [placed, resolvedById]);
   const scene3d = useMemo(() => resolveTogoScene(scenePlacementsFromPlaced(placed, resolvedById)), [placed, resolvedById]);
   const selected = placed.find((p) => p.uid === selectedUid) || null;
   const selectedFamily = selected ? (families.get(resolvedById[selected.pieceId]?.root) || null) : null;
   const selResolved = selected ? resolvePlacement(selected, resolvedById) : null;
-  const codeByUid = useMemo(() => {
-    const o = {};
-    for (const p of placed) if (p.material?.code) o[p.uid] = p.material.code;
-    return o;
-  }, [placed]);
 
   // Togo's price depends on the fabric GRADE, so a piece has no real price until
   // a fabric is chosen: the estimate sums ONLY fabric-chosen pieces (the rest
@@ -355,8 +311,8 @@ export default function TogoEmbed() {
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setPlaced((prev) => [...prev, { uid, pieceId: modelId, x: c.x, y: c.y, rot: 0 }]);
     setSelectedUid(uid);
-    flashAdded(uid); buzz(11);
-  }, [resolvedById, placed, flashAdded]);
+    buzz(11);
+  }, [resolvedById, placed]);
 
   // uid-parameterized so the on-plan hover controls can rotate/delete ANY piece
   // (not just the selected one) without a round-trip to the toolbar.
@@ -458,26 +414,11 @@ export default function TogoEmbed() {
     setMatOpen(true);
   }, [selectedUid, placed.length]);
 
-  const dragRef = useRef(null);
-  const onTileDown = useCallback((e, p) => {
-    e.stopPropagation(); setSelectedUid(p.uid);
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    dragRef.current = { uid: p.uid, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y };
+  // The 3D stage commits a piece's new plan position on drop (the snap/clamp ran
+  // inside the stage against the live layout).
+  const movePiece = useCallback((uid, x, y) => {
+    setPlaced((prev) => prev.map((p) => (p.uid === uid ? { ...p, x, y } : p)));
   }, []);
-  const onTileMove = useCallback((e) => {
-    const d = dragRef.current; if (!d) return;
-    const r = resolvedById[placed.find((p) => p.uid === d.uid)?.pieceId]; if (!r) return;
-    setPlaced((prev) => {
-      const me = prev.find((p) => p.uid === d.uid); if (!me) return prev;
-      const fp = footprintOf(r, me.rot);
-      const nx = d.ox + (e.clientX - d.sx) / SCALE, ny = d.oy + (e.clientY - d.sy) / SCALE;
-      const others = prev.filter((p) => p.uid !== d.uid).map((p) => { const f = footprintOf(resolvedById[p.pieceId], p.rot); return { x: p.x, y: p.y, w: f.w, h: f.h }; });
-      const snapped = snapPlacement({ x: nx, y: ny, w: fp.w, h: fp.h }, others);
-      const c = clampToPlan(snapped.x, snapped.y, fp.w, fp.h);
-      return prev.map((p) => (p.uid === d.uid ? { ...p, x: c.x, y: c.y } : p));
-    });
-  }, [placed, resolvedById]);
-  const onTileUp = useCallback((e) => { dragRef.current = null; e.currentTarget.releasePointerCapture?.(e.pointerId); }, []);
 
   // The launch card — what the embed shows FIRST. Tapping it opens the
   // configurator in a NEW TAB (full screen, no iframe limits). Skipped when this
@@ -530,13 +471,9 @@ export default function TogoEmbed() {
       {/* The stage — a window into the Togo. */}
       <CanvasArea
         fill
-        view={view} vm={vm} scene3d={scene3d} material={material} svgById={svgById} topDownById={topDownById}
-        selectedUid={selectedUid} setSelectedUid={setSelectedUid} codeByUid={codeByUid}
-        placed={placed} onTileDown={onTileDown} onTileMove={onTileMove} onTileUp={onTileUp}
-        hoveredPieceId={hoveredPieceId} setHoveredPieceId={setHoveredPieceId}
-        onRotatePiece={rotatePiece} onDeletePiece={deletePiece}
+        view={view} placed={placed} resolvedById={resolvedById} material={material}
+        selectedUid={selectedUid} onSelect={setSelectedUid} onMove={movePiece}
         models={models} onAddPiece={addPiece} thumbById={thumbById}
-        lastAddedUid={lastAddedUid}
       />
 
       {/* ── Top-left: brand + 2D/3D toggle ── */}
@@ -742,11 +679,6 @@ function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, 
   );
 }
 
-/** The canvas — the visual hero. 3D visualizer (TogoScene3D, covered in the
- *  chosen fabric/finish) OR the top-down 2D plan with draggable tiles. The 2D
- *  plan is a FIXED cm-sized canvas at SCALE px/cm (the drag math divides pointer
- *  deltas by SCALE) — it is NEVER rescaled; on small screens it lives in an
- *  `overflow-auto` box so it pans instead. Heights make it large on every size. */
 // Empty-plan starter overlay — a welcoming grid of the AVAILABLE MODELS (each its
 // clean Togo wireframe); tap one to drop it onto the plan. Floats over the grid,
 // only while the plan is empty.
@@ -779,128 +711,19 @@ function EmptyPlanStart({ models = [], thumbById = {}, onAddPiece }) {
 }
 
 function CanvasArea({
-  view, vm, scene3d, material, svgById, topDownById = {}, selectedUid, setSelectedUid, codeByUid, placed,
-  onTileDown, onTileMove, onTileUp, hoveredPieceId, setHoveredPieceId, onRotatePiece, onDeletePiece,
-  models = [], onAddPiece, thumbById = {}, lastAddedUid = null, fill = false,
+  view, placed, resolvedById, material, selectedUid, onSelect, onMove,
+  models = [], onAddPiece, thumbById = {}, fill = false,
 }) {
-  const [hoveredUid, setHoveredUid] = useState(null);
-  // `fill` = fill the parent stage edge-to-edge (the full-bleed game window);
-  // otherwise the legacy fixed-height framed box.
   const boxedH = 'h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]';
-  if (view === '3d') {
-    return <TogoScene3D scene3d={scene3d} material={material} className={`togo-enter-3d ${fill ? 'w-full h-full overflow-hidden bg-ink-50/40' : `w-full ${boxedH} rounded-xl border border-ink-200 overflow-hidden bg-ink-50/40`}`} />;
-  }
-  const enter = (t) => { setHoveredUid(t.uid); setHoveredPieceId?.(t.pieceId); };
-  const leave = () => { setHoveredUid(null); setHoveredPieceId?.(null); };
   return (
-    <div className={`togo-enter-2d ${fill ? 'absolute inset-0 overflow-auto bg-ink-50/40 p-4 pt-16 pb-44 sm:px-8' : `relative overflow-auto rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}`}>
-      {!vm.tiles.length && <EmptyPlanStart models={models} thumbById={thumbById} onAddPiece={onAddPiece} />}
-      <div
-        className="relative mx-auto"
-        style={{
-          width: vm.canvas.wPx, height: vm.canvas.hPx,
-          backgroundSize: `${50 * SCALE}px ${50 * SCALE}px`,
-          backgroundImage:
-            'linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),'
-            + 'linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)',
-        }}
-        onPointerDown={() => setSelectedUid(null)}
-      >
-        {/* Overall assembled dimensions — measures the used area (top run + the
-            run coming down), live as pieces move. */}
-        <PlanDimensions tiles={vm.tiles} />
-
-        {vm.tiles.map((t) => {
-          const sel = t.uid === selectedUid;
-          // Linked-highlight: hovering this model in the palette (or another of
-          // its instances) rings every placed instance, and vice-versa.
-          const linked = !sel && hoveredPieceId != null && t.pieceId === hoveredPieceId;
-          const code = codeByUid[t.uid];
-          const td = topDownById[`${t.pieceId}|${code || ''}`];
-          // Size the realistic render to the placement FOOTPRINT (× the shadow
-          // margin baked into the PNG), exactly like the silhouette fallback — so
-          // the model fills its stated W×D box. Sizing to the render's own measured
-          // extent (td.wCm/hCm) left the model floating with a white strip below
-          // when the rescaled 3D box came out smaller than the catalogue footprint.
-          const tdMargin = td?.margin || 1;
-          const tdW = t.innerWPx * tdMargin;
-          const tdH = t.innerHPx * tdMargin;
-          const showControls = t.uid === hoveredUid || sel;
-          return (
-            <div
-              key={t.uid}
-              onPointerDown={(e) => onTileDown(e, placed.find((p) => p.uid === t.uid))}
-              onPointerMove={onTileMove}
-              onPointerUp={onTileUp}
-              onMouseEnter={() => enter(t)}
-              onMouseLeave={leave}
-              className={['absolute touch-none cursor-grab active:cursor-grabbing select-none', sel ? 'z-20' : 'z-10', t.uid === lastAddedUid ? 'togo-pop' : ''].join(' ')}
-              style={{ left: t.leftPx, top: t.topPx, width: t.wPx, height: t.hPx }}
-            >
-              <div className={['absolute inset-0 rounded-md', sel ? 'ring-2 ring-brand-500 bg-brand-500/5' : linked ? 'ring-2 ring-brand-300 bg-brand-500/5' : 'ring-1 ring-transparent hover:ring-ink-300'].join(' ')} />
-              {td?.dataUrl ? (
-                // Realistic top-down render of the mesh, sized to its true footprint
-                // (with a small shadow margin), centred + rotated to the placement.
-                <img src={td.dataUrl} alt="" draggable={false}
-                  className="absolute top-1/2 left-1/2 max-w-none pointer-events-none select-none transition-transform duration-300 ease-out"
-                  style={{ width: tdW, height: tdH, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} />
-              ) : (
-                <div className="absolute top-1/2 left-1/2 text-ink-800 transition-transform duration-300 ease-out" style={{ width: t.innerWPx, height: t.innerHPx, transform: `translate(-50%, -50%) rotate(${t.rot}deg)` }} dangerouslySetInnerHTML={{ __html: fillSvg(svgById[t.pieceId]) }} />
-              )}
-              <span className="absolute left-1/2 -translate-x-1/2 bottom-0.5 inline-flex items-center gap-1 rounded bg-ink-900/70 text-white text-[9px] leading-none px-1 py-0.5 tabular-nums pointer-events-none">
-                {code && <img src={swatchUrl(code)} alt="" className="w-2.5 h-2.5 rounded-sm object-cover" />}
-                {t.dimsLabel}
-              </span>
-
-              {/* On-plan contextual controls — appear on hover/selection right
-                  under the piece, so rotate/delete is one click away (no trip to
-                  the toolbar). stopPropagation keeps a click off the drag/deselect. */}
-              {showControls && (
-                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
-                  <button type="button" title="Rotar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRotatePiece(t.uid); }} className="w-7 h-7 grid place-items-center rounded-full bg-surface shadow-pop border border-ink-200 text-ink-700 hover:bg-ink-50"><RotateCw size={14} /></button>
-                  <button type="button" title="Quitar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDeletePiece(t.uid); }} className="w-7 h-7 grid place-items-center rounded-full bg-surface shadow-pop border border-ink-200 text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+    <div className={fill ? 'absolute inset-0 overflow-hidden bg-ink-50/40' : `relative overflow-hidden rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}>
+      <TogoStage
+        mode={view} placed={placed} resolvedById={resolvedById} material={material}
+        selectedUid={selectedUid} onSelect={onSelect} onMove={onMove}
+        className="absolute inset-0"
+      />
+      {!placed.length && <EmptyPlanStart models={models} thumbById={thumbById} onAddPiece={onAddPiece} />}
     </div>
-  );
-}
-
-/** Overall-assembly dimension lines for the 2D plan — a width run along the top
- *  and a depth run down the left of the bounding box of all placed pieces, each
- *  labelled in cm. Pure overlay (px = cm at SCALE 1), non-interactive, recomputed
- *  every render so it tracks the layout as pieces are added/moved/rotated. */
-function PlanDimensions({ tiles }) {
-  if (!tiles || tiles.length === 0) return null;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const t of tiles) {
-    minX = Math.min(minX, t.leftPx); minY = Math.min(minY, t.topPx);
-    maxX = Math.max(maxX, t.leftPx + t.wPx); maxY = Math.max(maxY, t.topPx + t.hPx);
-  }
-  const w = Math.round(maxX - minX), d = Math.round(maxY - minY);
-  const yT = Math.max(11, minY - 16);   // width dimension line (above the layout)
-  const xL = Math.max(11, minX - 16);   // depth dimension line (left of the layout)
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-  return (
-    <svg className="absolute inset-0 z-[6] pointer-events-none overflow-visible text-brand-600" width="100%" height="100%" aria-hidden>
-      <g strokeOpacity="0.65">
-        <line x1={minX} y1={yT} x2={maxX} y2={yT} stroke="currentColor" strokeWidth="1" />
-        <line x1={minX} y1={yT - 4} x2={minX} y2={yT + 4} stroke="currentColor" strokeWidth="1" />
-        <line x1={maxX} y1={yT - 4} x2={maxX} y2={yT + 4} stroke="currentColor" strokeWidth="1" />
-        <line x1={xL} y1={minY} x2={xL} y2={maxY} stroke="currentColor" strokeWidth="1" />
-        <line x1={xL - 4} y1={minY} x2={xL + 4} y2={minY} stroke="currentColor" strokeWidth="1" />
-        <line x1={xL - 4} y1={maxY} x2={xL + 4} y2={maxY} stroke="currentColor" strokeWidth="1" />
-      </g>
-      <rect x={cx - 25} y={yT - 8} width="50" height="15" rx="3" fill="white" fillOpacity="0.92" />
-      <text x={cx} y={yT + 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="currentColor">{w} cm</text>
-      <g transform={`rotate(-90 ${xL} ${cy})`}>
-        <rect x={xL - 25} y={cy - 8} width="50" height="15" rx="3" fill="white" fillOpacity="0.92" />
-        <text x={xL} y={cy + 3} textAnchor="middle" fontSize="10" fontWeight="600" fill="currentColor">{d} cm</text>
-      </g>
-    </svg>
   );
 }
 
