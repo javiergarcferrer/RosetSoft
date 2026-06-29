@@ -1,6 +1,8 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 // For GitHub Pages: set base to '/<repo-name>/' or use '/' for user.github.io.
 // You can override via VITE_BASE env var when deploying.
@@ -81,8 +83,26 @@ export default defineConfig(({ mode }) => {
 
   const injectOgOrigin = {
     name: 'inject-og-origin',
+    // index.html goes through Vite's HTML pipeline...
     transformIndexHtml(html) {
       return html.split('%VITE_PUBLIC_ORIGIN%').join(publicOrigin);
+    },
+    // ...but the per-link preview launchers (public/p/*.html) are copied
+    // verbatim from public/ and never see transformIndexHtml. Their og:image
+    // MUST resolve to the SAME host that serves them (soft.alcover.do, not the
+    // www marketing site, which 404s these assets and collapses the WhatsApp
+    // card to text-only), so substitute the placeholder in the COPIED output
+    // here. closeBundle runs after Vite has copied publicDir into dist.
+    closeBundle() {
+      const dir = join(process.cwd(), 'dist', 'p');
+      if (!existsSync(dir)) return;
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith('.html')) continue;
+        const p = join(dir, f);
+        const src = readFileSync(p, 'utf8');
+        if (!src.includes('%VITE_PUBLIC_ORIGIN%')) continue;
+        writeFileSync(p, src.split('%VITE_PUBLIC_ORIGIN%').join(publicOrigin));
+      }
     },
   };
 

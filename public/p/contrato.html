@@ -15,11 +15,14 @@
          route `#/contrato/<slug/token>`. Crawlers don't run JS, so they keep the
          card; humans get redirected.
 
-         og:image is an ABSOLUTE production URL (WhatsApp rejects relative ones).
-         Files under public/ are copied verbatim — they do NOT pass through Vite's
-         %VITE_PUBLIC_ORIGIN% substitution — so the production origin is inlined
-         here on purpose. The redirect itself uses an origin-relative path, so it
-         still works on preview deploys. The image MUST stay a BASELINE jpeg and
+         og:image must be ABSOLUTE (WhatsApp rejects relative ones) AND on the
+         SAME host that serves this page — soft.alcover.do, NOT the www marketing
+         site (which 404s these files, collapsing the card to text-only). So it
+         uses the %VITE_PUBLIC_ORIGIN% placeholder, exactly like index.html's
+         quote card; the inject-og-origin Vite plugin substitutes it (in index.html
+         AND in these public/p/*.html launchers) at build time. The redirect uses
+         an origin-relative path, so it still works on preview deploys. The image
+         MUST stay a BASELINE jpeg and
          the filename is version-bumped on every re-render (WhatsApp caches the
          card per image URL for weeks); tests/ogImage.test.js pins both. There is
          deliberately NO og:url tag — Meta keys its cached link object by the
@@ -31,8 +34,8 @@
     <meta property="og:locale" content="es_DO" />
     <meta property="og:title" content="Su plan de pago · ALCOVER" />
     <meta property="og:description" content="Revíselo y fírmelo en línea, desde su teléfono." />
-    <meta property="og:image" content="https://www.alcover.do/og-contrato-v1.jpg" />
-    <meta property="og:image:secure_url" content="https://www.alcover.do/og-contrato-v1.jpg" />
+    <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-contrato-v1.jpg" />
+    <meta property="og:image:secure_url" content="%VITE_PUBLIC_ORIGIN%/og-contrato-v1.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -40,7 +43,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Su plan de pago · ALCOVER" />
     <meta name="twitter:description" content="Revíselo y fírmelo en línea, desde su teléfono." />
-    <meta name="twitter:image" content="https://www.alcover.do/og-contrato-v1.jpg" />
+    <meta name="twitter:image" content="%VITE_PUBLIC_ORIGIN%/og-contrato-v1.jpg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       // Forward a human into the SPA. `?d=` carries the `slug/token` suffix the

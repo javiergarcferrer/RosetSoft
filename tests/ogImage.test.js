@@ -71,10 +71,16 @@ for (const { img, launcher, hash } of CARDS) {
   const name = img.replace('public/', '');
   test(`${launcher} carries its own card and forwards into the SPA`, () => {
     const html = readFileSync(root(launcher), 'utf8');
-    // Points at ITS image, by its exact (versioned) filename.
-    const re = new RegExp(`og:image" content="https://[^"]*/${name.replace('.', '\\.')}"`);
-    assert.match(html, re, `${launcher}: og:image must be the absolute, versioned ${name}`);
-    assert.match(html, /og:image" content="https:\/\//, `${launcher}: og:image must be absolute (WhatsApp rejects relative)`);
+    // Points at ITS image, by its exact (versioned) filename, through the
+    // %VITE_PUBLIC_ORIGIN% placeholder the build substitutes — so the image
+    // resolves to the SAME host that serves the page (never the www marketing
+    // site, which 404s these and collapses the card to text-only).
+    const re = new RegExp(`og:image" content="%VITE_PUBLIC_ORIGIN%/${name.replace('.', '\\.')}"`);
+    assert.match(html, re, `${launcher}: og:image must be %VITE_PUBLIC_ORIGIN%/${name}`);
+    assert.ok(
+      !/og:image" content="https?:\/\//.test(html),
+      `${launcher}: og:image must use %VITE_PUBLIC_ORIGIN% (a hardcoded host like www 404s the image)`,
+    );
     // Same canonical trap as index.html — keep og:url OUT.
     assert.ok(!/property="og:url"/.test(html), `${launcher}: og:url collapses the preview cache — keep it out`);
     // A human (JS) is forwarded into the matching SPA hash route.

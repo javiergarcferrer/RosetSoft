@@ -9,8 +9,9 @@
          public configurator URL (main.jsx mounts the embed there directly; the
          legacy `#/embed/togo` hash route still resolves too). The crawler needs
          this launcher because `/configurator` is itself served by index.html, so
-         a raw share of it would show the generic quote card. Absolute prod
-         og:image (public/ skips %VITE_PUBLIC_ORIGIN%); baseline jpeg,
+         a raw share of it would show the generic quote card. og:image uses the
+         %VITE_PUBLIC_ORIGIN% placeholder (substituted at build, same host as the
+         page — never the www marketing site, which 404s these); baseline jpeg,
          version-bumped filename, no og:url — pinned by tests/ogImage.test.js. -->
     <title>Diseñe su Togo · ALCOVER</title>
     <meta name="description" content="Combine módulos y telas y véalo en vivo." />
@@ -19,8 +20,8 @@
     <meta property="og:locale" content="es_DO" />
     <meta property="og:title" content="Diseñe su Togo · ALCOVER" />
     <meta property="og:description" content="Combine módulos y telas y véalo en vivo." />
-    <meta property="og:image" content="https://www.alcover.do/og-togo-v1.jpg" />
-    <meta property="og:image:secure_url" content="https://www.alcover.do/og-togo-v1.jpg" />
+    <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-togo-v1.jpg" />
+    <meta property="og:image:secure_url" content="%VITE_PUBLIC_ORIGIN%/og-togo-v1.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -28,7 +29,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Diseñe su Togo · ALCOVER" />
     <meta name="twitter:description" content="Combine módulos y telas y véalo en vivo." />
-    <meta name="twitter:image" content="https://www.alcover.do/og-togo-v1.jpg" />
+    <meta name="twitter:image" content="%VITE_PUBLIC_ORIGIN%/og-togo-v1.jpg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       (function () {

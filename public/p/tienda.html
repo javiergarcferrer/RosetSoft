@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Link-preview launcher for the STOREFRONT (Tienda) link. See
          public/p/contrato.html for the full rationale. No token, so the script
-         forwards straight to `#/tienda`. Absolute prod og:image (public/ skips
-         %VITE_PUBLIC_ORIGIN%); baseline jpeg, version-bumped filename, no
-         og:url — pinned by tests/ogImage.test.js. -->
+         forwards straight to `#/tienda`. og:image uses the %VITE_PUBLIC_ORIGIN%
+         placeholder (substituted at build, same host as the page — never the www
+         marketing site, which 404s these); baseline jpeg, version-bumped
+         filename, no og:url — pinned by tests/ogImage.test.js. -->
     <title>Tienda ALCOVER</title>
     <meta name="description" content="Explore la colección, disponible ahora." />
     <meta property="og:type" content="website" />
@@ -15,8 +16,8 @@
     <meta property="og:locale" content="es_DO" />
     <meta property="og:title" content="Tienda ALCOVER" />
     <meta property="og:description" content="Explore la colección, disponible ahora." />
-    <meta property="og:image" content="https://www.alcover.do/og-tienda-v1.jpg" />
-    <meta property="og:image:secure_url" content="https://www.alcover.do/og-tienda-v1.jpg" />
+    <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-tienda-v1.jpg" />
+    <meta property="og:image:secure_url" content="%VITE_PUBLIC_ORIGIN%/og-tienda-v1.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -24,7 +25,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Tienda ALCOVER" />
     <meta name="twitter:description" content="Explore la colección, disponible ahora." />
-    <meta name="twitter:image" content="https://www.alcover.do/og-tienda-v1.jpg" />
+    <meta name="twitter:image" content="%VITE_PUBLIC_ORIGIN%/og-tienda-v1.jpg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       (function () {
