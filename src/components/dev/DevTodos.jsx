@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Trash2, Square, CheckSquare, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
@@ -12,6 +13,7 @@ import { useApp } from '../../context/AppContext.jsx';
 export default function DevTodos() {
   const { profileId } = useApp();
   const scope = profileId || 'team';
+  const location = useLocation();
   const inputRef = useRef(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,7 +29,10 @@ export default function DevTodos() {
     if (!t || busy) return;
     setBusy(true);
     try {
-      await db.devTodos.put({ id: newId(), profileId: scope, text: t, done: false, createdAt: Date.now(), updatedAt: Date.now() });
+      // Stamp the screen the owner is on (route behind the modal) so the fix is
+      // easy to locate. HashRouter → pathname is the in-app route.
+      const route = `${location.pathname}${location.search || ''}`;
+      await db.devTodos.put({ id: newId(), profileId: scope, text: t, route, done: false, createdAt: Date.now(), updatedAt: Date.now() });
       setText('');
       inputRef.current?.focus(); // keep typing the next one
     } finally {
@@ -42,7 +47,10 @@ export default function DevTodos() {
       <button type="button" onClick={() => toggle(t)} className="shrink-0 mt-0.5 text-ink-400 hover:text-ink-700" aria-label={t.done ? 'Marcar pendiente' : 'Marcar hecho'}>
         {t.done ? <CheckSquare size={16} className="text-emerald-600" /> : <Square size={16} />}
       </button>
-      <span className={`min-w-0 flex-1 text-sm break-words ${t.done ? 'text-ink-400 line-through' : 'text-ink-800'}`}>{t.text}</span>
+      <span className="min-w-0 flex-1">
+        <span className={`block text-sm break-words ${t.done ? 'text-ink-400 line-through' : 'text-ink-800'}`}>{t.text}</span>
+        {t.route && <span className="block text-[10px] font-mono text-ink-400 break-all mt-0.5">{t.route}</span>}
+      </span>
       <button type="button" onClick={() => remove(t)} className="shrink-0 btn-icon text-ink-300 hover:text-rose-600" aria-label="Eliminar"><Trash2 size={14} /></button>
     </li>
   );

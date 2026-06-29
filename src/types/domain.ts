@@ -719,6 +719,9 @@ export interface DevTodo {
   profileId: string;
   text: string;
   done: boolean;
+  /** The in-app route the owner was on when they wrote it (so the developer
+   *  knows which screen the fix touches). */
+  route?: string | null;
   doneAt?: number | null;
   createdAt?: number;
   updatedAt?: number;
