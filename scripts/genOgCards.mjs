@@ -43,7 +43,7 @@ const MID = b64(join(FONTS, 'Lausanne-500.woff2'));
 // the Meta link cache and the WhatsApp template button base; leave it be.
 const CARDS = [
   {
-    file: 'og-contrato-v1.jpg',
+    file: 'og-contrato-v2.jpg',
     accent: '#19A06B', // emerald — agreement / money
     glow: 'rgba(25,160,107,0.30)',
     head: 'Su plan de pago,',
@@ -51,7 +51,7 @@ const CARDS = [
     sub: 'Revíselo y fírmelo en línea.',
   },
   {
-    file: 'og-togo-v1.jpg',
+    file: 'og-togo-v2.jpg',
     accent: '#C76B29', // ALCOVER terracotta (current brand)
     glow: 'rgba(199,107,41,0.34)',
     head: 'Diseñe su Togo',
@@ -59,7 +59,7 @@ const CARDS = [
     sub: 'Combine módulos y telas en vivo.',
   },
   {
-    file: 'og-tienda-v1.jpg',
+    file: 'og-tienda-v2.jpg',
     accent: '#5B5BD6', // indigo
     glow: 'rgba(91,91,214,0.32)',
     head: 'La colección ALCOVER,',
@@ -67,7 +67,7 @@ const CARDS = [
     sub: 'Explore la tienda en línea.',
   },
   {
-    file: 'og-cuenta-v1.jpg',
+    file: 'og-cuenta-v2.jpg',
     accent: '#2F6BF0', // blue
     glow: 'rgba(47,107,240,0.30)',
     head: 'Su estado de cuenta,',
@@ -80,8 +80,12 @@ const html = (c) => `<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face{font-family:Lausanne;font-weight:700;src:url(data:font/woff2;base64,${HEAVY}) format('woff2')}
 @font-face{font-family:Lausanne;font-weight:500;src:url(data:font/woff2;base64,${MID}) format('woff2')}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:1200px;height:630px}
-.card{position:relative;width:1200px;height:630px;overflow:hidden;
+/* Paint the dark base on html/body too: a JPEG has no alpha, so any region the
+   card doesn't cover would otherwise flush to BLACK and read as a hard strip
+   (it clipped the wordmark in the first cut). position:fixed + inset:0 pins the
+   card to the exact 1200x630 viewport so it always fills, edge to edge. */
+html,body{width:1200px;height:630px;background:#100f0d}
+.card{position:fixed;inset:0;overflow:hidden;
   background:#100f0d;font-family:Lausanne,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .glow{position:absolute;inset:0;
   background:radial-gradient(900px 520px at 88% 12%, ${c.glow}, transparent 60%),
@@ -95,7 +99,7 @@ html,body{width:1200px;height:630px}
 .sub{margin-left:36px;margin-top:30px;display:flex;align-items:center;gap:18px;
   font-weight:500;font-size:31px;letter-spacing:-0.2px;color:#cfccc4}
 .dot{width:15px;height:15px;border-radius:50%;background:${c.accent};flex:none}
-.mark{position:absolute;left:96px;bottom:74px;font-weight:700;font-size:62px;
+.mark{position:absolute;left:96px;bottom:78px;font-weight:700;font-size:60px;
   letter-spacing:3px;color:#fbfaf8}
 </style></head><body><div class="card">
   <div class="glow"></div><div class="grain"></div>
@@ -121,7 +125,6 @@ for (const c of CARDS) {
       '--disable-gpu',
       '--hide-scrollbars',
       '--force-color-profile=srgb',
-      '--default-background-color=00000000',
       '--window-size=1200,630',
       `--screenshot=${outPath}`,
       `file://${htmlPath}`,
