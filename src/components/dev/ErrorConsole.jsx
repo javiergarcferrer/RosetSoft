@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Bug, X, Trash2, Copy, Check, ChevronRight } from 'lucide-react';
+import { Bug, Trash2, Copy, Check, ChevronRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
+import Modal from '../Modal.jsx';
 import { getErrors, subscribe, clearErrors } from '../../lib/errorLog.js';
 
 const TYPE_BADGE = {
@@ -17,8 +17,7 @@ const TYPE_LABEL = {
 
 function fmtTime(at) {
   const d = new Date(at);
-  const today = new Date();
-  const sameDay = d.toDateString() === today.toDateString();
+  const sameDay = d.toDateString() === new Date().toDateString();
   const t = d.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   return sameDay ? t : `${d.toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit' })} ${t}`;
 }
@@ -43,23 +42,25 @@ function Row({ e }) {
   };
   return (
     <li className="border-b border-ink-100">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="w-full text-left px-3.5 py-2.5 flex items-start gap-2 hover:bg-ink-50 transition-colors">
-        <ChevronRight size={14} className={`mt-0.5 shrink-0 text-ink-300 transition-transform ${open ? 'rotate-90' : ''}`} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge}`}>{TYPE_LABEL[e.type] || e.type}</span>
-            {e.fn && <span className="text-[11px] font-mono text-ink-500">{e.fn}</span>}
-            {e.status !== '' && e.status != null && <span className="text-[11px] font-mono text-rose-600">{e.status}</span>}
-            <span className="ml-auto text-[10px] tabular-nums text-ink-400">{fmtTime(e.at)}</span>
-          </div>
-          <div className="text-xs text-ink-800 mt-0.5 break-words line-clamp-2">{e.message}</div>
-        </div>
-        <span onClick={copy} role="button" tabIndex={0} aria-label="Copiar" className="shrink-0 -m-1 p-1 text-ink-400 hover:text-ink-700">
+      <div className="w-full flex items-start gap-2 px-4 py-2.5">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="min-w-0 flex-1 text-left flex items-start gap-2">
+          <ChevronRight size={14} className={`mt-0.5 shrink-0 text-ink-300 transition-transform ${open ? 'rotate-90' : ''}`} />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge}`}>{TYPE_LABEL[e.type] || e.type}</span>
+              {e.fn && <span className="text-[11px] font-mono text-ink-500 truncate">{e.fn}</span>}
+              {e.status !== '' && e.status != null && <span className="text-[11px] font-mono text-rose-600">{e.status}</span>}
+              <span className="ml-auto text-[10px] tabular-nums text-ink-400 shrink-0">{fmtTime(e.at)}</span>
+            </span>
+            <span className="block text-xs text-ink-800 mt-0.5 break-words line-clamp-2">{e.message}</span>
+          </span>
+        </button>
+        <button type="button" onClick={copy} aria-label="Copiar" className="shrink-0 btn-icon text-ink-400 hover:text-ink-700">
           {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-        </span>
-      </button>
+        </button>
+      </div>
       {open && (
-        <div className="px-3.5 pb-3 -mt-0.5">
+        <div className="px-4 pb-3 pl-10">
           <Field label="Mensaje" value={e.message} />
           <Field label="Respuesta del servidor" value={e.response} mono />
           <Field label="Request" value={e.request} mono />
@@ -78,9 +79,10 @@ function Row({ e }) {
 
 /**
  * Admin-only error console — a floating bug button (badge = captured count) that
- * opens a full-height panel listing recent failures with their FULL request +
- * server response + stack, copyable. Lives off the device-local ring buffer
- * (lib/errorLog); nothing leaves the device. A developer aid, gated to admins.
+ * opens the shared Modal primitive (sheet on mobile, dialog on desktop; handles
+ * safe-areas, scroll-lock and Escape for us) listing recent failures with their
+ * FULL request + server response + stack, copyable. Backed by the device-local
+ * ring buffer (lib/errorLog); nothing leaves the device. Gated to admins.
  */
 export default function ErrorConsole() {
   const { isAdmin } = useApp();
@@ -98,7 +100,7 @@ export default function ErrorConsole() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Consola de errores"
-        className={`fixed left-[max(0.75rem,env(safe-area-inset-left))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[70] inline-flex items-center justify-center w-10 h-10 rounded-full border border-ink-200 bg-surface shadow-pop transition-opacity ${count ? 'opacity-90' : 'opacity-35 hover:opacity-80'}`}
+        className={`fixed left-[max(0.75rem,env(safe-area-inset-left))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[55] inline-flex items-center justify-center w-10 h-10 rounded-full border border-ink-200 bg-surface shadow-pop transition-opacity ${count ? 'opacity-90' : 'opacity-35 hover:opacity-80'}`}
       >
         <Bug size={16} className={count ? 'text-rose-600' : 'text-ink-500'} />
         {count > 0 && (
@@ -108,38 +110,25 @@ export default function ErrorConsole() {
         )}
       </button>
 
-      {open && createPortal(
-        <div className="fixed inset-0 z-[95] flex justify-end bg-black/40" onClick={() => setOpen(false)}>
-          <div
-            className="w-full sm:max-w-lg h-full bg-surface border-l border-ink-200 flex flex-col shadow-2xl animate-in slide-in-from-right-4 duration-200"
-            onClick={(ev) => ev.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 px-3.5 py-3 border-b border-ink-100">
-              <Bug size={16} className="text-ink-500" />
-              <div className="font-display font-semibold text-ink-900">Consola de errores</div>
-              <span className="text-xs text-ink-400 tabular-nums">{count}</span>
-              <div className="ml-auto flex items-center gap-1">
-                <button type="button" onClick={() => { if (count) clearErrors(); }} disabled={!count} className="btn-ghost text-xs disabled:opacity-40" title="Limpiar todo">
-                  <Trash2 size={14} /> Limpiar
-                </button>
-                <button type="button" onClick={() => setOpen(false)} className="btn-icon" aria-label="Cerrar"><X size={16} /></button>
-              </div>
-            </div>
-            {count === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-ink-400 p-8">
-                <Bug size={26} className="mb-2 opacity-50" />
-                <div className="text-sm">Sin errores registrados.</div>
-                <div className="text-xs mt-1">Lo que falle aparecerá aquí con su respuesta completa.</div>
-              </div>
-            ) : (
-              <ul className="flex-1 overflow-y-auto overscroll-contain">
-                {list.map((e) => <Row key={e.id} e={e} />)}
-              </ul>
-            )}
+      <Modal open={open} onClose={() => setOpen(false)} title="Consola de errores" size="lg" flushBody>
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-ink-100 shrink-0">
+          <span className="text-xs text-ink-400 tabular-nums">{count} {count === 1 ? 'error' : 'errores'}</span>
+          <button type="button" onClick={() => count && clearErrors()} disabled={!count} className="btn-ghost text-xs ml-auto disabled:opacity-40">
+            <Trash2 size={14} /> Limpiar
+          </button>
+        </div>
+        {count === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-ink-400 p-8">
+            <Bug size={26} className="mb-2 opacity-50" />
+            <div className="text-sm">Sin errores registrados.</div>
+            <div className="text-xs mt-1">Lo que falle aparecerá aquí con su respuesta completa.</div>
           </div>
-        </div>,
-        document.body,
-      )}
+        ) : (
+          <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            {list.map((e) => <Row key={e.id} e={e} />)}
+          </ul>
+        )}
+      </Modal>
     </>
   );
 }
