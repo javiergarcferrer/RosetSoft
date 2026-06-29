@@ -132,13 +132,20 @@ export function footprintOf(piece, rot) {
  * boxes: round to the grid, then — when the candidate shares a band with a
  * neighbour — pull the nearest pair of edges flush (within EDGE_SNAP_CM). Edge↔edge
  * over {left,right}×{left,right} covers BOTH a flush join (right→neighbour.left)
- * and an alignment (left→neighbour.left); same for the vertical axis. Pure.
+ * and an alignment (left→neighbour.left); same for the vertical axis.
+ *
+ * A snap must never PUSH a piece ON TOP of a neighbour. An align-snap (left→left)
+ * is fine when the OTHER axis joins (the pieces end up flush + aligned, no
+ * overlap) but harmful when it doesn't — and with the generous 26 cm threshold a
+ * normal drag could reach that overlap. So we compute the best X and Y snaps, then
+ * accept the FULLEST combination that leaves the box overlap-free (touching is
+ * fine); failing that we don't snap. Pure.
  */
 export function snapPlacement(cand, others = [], opts = {}) {
   const grid = opts.gridCm ?? SNAP_GRID_CM;
   const snap = opts.edgeCm ?? EDGE_SNAP_CM;
-  let x = Math.round(cand.x / grid) * grid;
-  let y = Math.round(cand.y / grid) * grid;
+  const x = Math.round(cand.x / grid) * grid;
+  const y = Math.round(cand.y / grid) * grid;
   const L = x, R = x + cand.w, T = y, B = y + cand.h;
   let bestDX = Infinity, dx = 0, bestDY = Infinity, dy = 0;
   for (const o of others) {
@@ -158,7 +165,13 @@ export function snapPlacement(cand, others = [], opts = {}) {
       }
     }
   }
-  return { x: x + dx, y: y + dy };
+  const EPS = 0.5;   // touching (shared edge) is NOT overlap
+  const overlaps = (bx, by) => others.some((o) =>
+    bx < o.x + o.w - EPS && bx + cand.w > o.x + EPS && by < o.y + o.h - EPS && by + cand.h > o.y + EPS);
+  for (const [ox, oy] of [[dx, dy], [dx, 0], [0, dy], [0, 0]]) {
+    if (!overlaps(x + ox, y + oy)) return { x: x + ox, y: y + oy };
+  }
+  return { x, y };   // every option overlaps (dragged on top) → leave it where it is
 }
 
 /** Clamp a box's top-left so the whole footprint stays inside the plan. */

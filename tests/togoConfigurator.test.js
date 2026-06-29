@@ -58,6 +58,16 @@ test('snapPlacement rounds to the grid and clicks flush to a neighbour edge', ()
   // Out of range → no snap, just the grid round.
   const far = snapPlacement({ x: 400, y: 300, w: 102, h: 102 }, [settee]);
   assert.deepEqual(far, { x: 400, y: 300 });
+
+  // OVERLAP HAZARD: a piece dragged INSIDE the (wide) settee must NOT be snapped
+  // onto it by a left↔left align — with the generous threshold that would stack
+  // them. The snap is rejected (every option overlaps) and it stays where dragged.
+  const onTop = snapPlacement({ x: 8, y: 4, w: 100, h: 100 }, [settee]);
+  assert.equal(onTop.x, 8, 'no align-snap that lands on top of the neighbour');
+  // …but a flush JOIN from a near distance still locks: right edge ~6 cm shy of
+  // the settee's left snaps butt-flush (and stays overlap-free).
+  const joined = snapPlacement({ x: -94, y: 4, w: 100, h: 100 }, [settee]);
+  assert.equal(joined.x, -100, 'right edge joins the settee left edge (-100+100=0, touching)');
 });
 
 test('clampToPlan keeps the whole footprint inside the plan', () => {
