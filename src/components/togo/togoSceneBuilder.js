@@ -281,20 +281,29 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   const envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
 
-  // Colour-accurate product lighting: let the RoomEnvironment IBL do most of the
-  // work and keep the key gentle, so a dark/saturated swatch renders at its TRUE
-  // depth. A hot key (we had 2.0) over-lit everything and washed deep velvets out
-  // to a pale, milky tint — the "colours render too light" complaint.
-  const key = new THREE.DirectionalLight(0xffffff, 1.0);
-  key.position.set(radius * 0.8, radius * 1.6, radius * 0.9);
+  // Colour-accurate AND fold-accentuating product lighting. The IBL still does
+  // the fill (so a dark/saturated swatch keeps its TRUE depth — a hot key once
+  // washed deep velvets pale), but the KEY now comes in at a LOW, RAKING angle so
+  // it skims ACROSS the Togo's channels and throws a shadow into every fold
+  // valley — the contrast that makes the quilting read plush instead of flat. A
+  // steep top-down key (what we had) lit the fold crests and floors equally and
+  // flattened them. Slightly warm + a touch stronger to deepen those shadows.
+  const key = new THREE.DirectionalLight(0xfff4e8, 1.25);
+  key.position.set(radius * 1.2, radius * 0.95, radius * 0.5);   // low & to the side → grazes the folds
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   const d = radius * 2.2;
   Object.assign(key.shadow.camera, { left: -d, right: d, top: d, bottom: -d, near: 1, far: radius * 6 });
   key.shadow.bias = -0.0004;
-  key.shadow.radius = 6;
+  key.shadow.radius = 5;
   scene.add(key);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 0.25));
+  // A dim, low rim from the opposite side carves the shadow-side folds (so they
+  // don't go to mush) WITHOUT lifting the body — keeps the deep-crease contrast.
+  const rim = new THREE.DirectionalLight(0xe8f0ff, 0.4);
+  rim.position.set(-radius * 0.95, radius * 0.45, -radius * 0.85);
+  scene.add(rim);
+  // Lower hemisphere fill so the channel valleys stay genuinely shadowed.
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 0.16));
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(radius * 12, radius * 12),

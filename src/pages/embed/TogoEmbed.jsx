@@ -11,6 +11,7 @@ import { buildTogoGroup, disposeGroup } from '../../components/togo/togoSceneBui
 import { loadTogoModels } from '../../components/togo/togoModelLoader.js';
 import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
 import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
+import { useTogoThumbnails } from '../../components/togo/togoThumbnails.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
@@ -232,6 +233,10 @@ export default function TogoEmbed() {
     () => Object.fromEntries(models.map((m) => [m.id, wireframeFor(m) || m.svg])),
     [models],
   );
+  // Rendered PERSPECTIVE thumbnails (real FBX, studio rig) keyed by model id —
+  // the modern catalogue image; falls back to the wireframe svg while a render
+  // is still in flight or if the model has no mesh.
+  const renderThumbById = useTogoThumbnails(models);
 
   // Per-model family (grades + retail prices) so a fabric pick reprices exactly
   // like the internal configurator (productForGrade), keyed by family root.
@@ -476,8 +481,8 @@ export default function TogoEmbed() {
       <CanvasArea
         fill
         view={view} placed={placed} resolvedById={resolvedById} material={material}
-        selectedUid={selectedUid} onSelect={setSelectedUid} onMove={movePiece}
-        models={models} onAddPiece={addPiece} thumbById={thumbById}
+        selectedUid={selectedUid} onSelect={setSelectedUid} onMove={movePiece} onRotate={rotateSel}
+        models={models} onAddPiece={addPiece} thumbById={thumbById} renderThumbById={renderThumbById}
       />
 
       {/* ── Top-left: brand + 2D/3D toggle ── */}
@@ -503,28 +508,31 @@ export default function TogoEmbed() {
         </div>
       )}
 
-      {/* ── Bottom control deck — the build hotbar, the contextual selected-piece
-           controls, and the live estimate + quote CTA. The wrapper is
-           click-through (pointer-events-none); only the glass panels catch
-           input, so the canvas stays draggable in the gaps. ── */}
+      {/* ── Selected-piece header — a compact card pinned at the TOP, just below
+           the tool buttons (2D editing only). Its rotate control lives on the
+           canvas beneath the piece itself (see RotateDock). ── */}
+      {view === '2d' && selected && selResolved && (
+        <div className="absolute top-[3.75rem] inset-x-0 z-20 px-3 flex justify-center pointer-events-none">
+          <div className="w-full max-w-md">
+            <SelectedStrip
+              selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
+              thumbById={thumbById} renderThumbById={renderThumbById} rates={rates}
+              onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
+              onDelete={deleteSel}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Bottom control deck — the build hotbar and the live estimate + quote
+           CTA. The wrapper is click-through (pointer-events-none); only the glass
+           panels catch input, so the canvas stays draggable in the gaps. ── */}
       <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none">
         <div className="mx-auto w-full max-w-5xl flex flex-col items-stretch gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
 
-          {/* Contextual selected-piece controls (2D editing only). */}
-          {view === '2d' && selected && selResolved && (
-            <div className="pointer-events-auto self-center w-full max-w-lg togo-rise">
-              <SelectedStrip
-                selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
-                thumbById={thumbById} rates={rates} compact
-                onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
-                onRotate={rotateSel} onDelete={deleteSel}
-              />
-            </div>
-          )}
-
           {/* The build tool: piece hotbar (2D) or the finish editor (3D). */}
           {view === '2d' ? (
-            <PieceHotbar models={models} thumbById={thumbById} onAdd={addPiece} hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
+            <PieceHotbar models={models} thumbById={thumbById} renderThumbById={renderThumbById} onAdd={addPiece} hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
           ) : (
             <div className="pointer-events-auto self-center max-w-full">{materialEditor}</div>
           )}
@@ -581,6 +589,20 @@ export default function TogoEmbed() {
 
 /** A floating glass tool button — the top-right HUD cluster. Icon-only with a
  *  native tooltip; no dropdown, every action is one tap. */
+/** A model's catalogue image: the rendered perspective PNG when ready, else the
+ *  line wireframe svg. One component so the picker, hotbar and selected header
+ *  all show the same modern representation. */
+function ModelThumb({ id, render = {}, svg = '', className = '', alt = '' }) {
+  const url = render[id];
+  if (url) return <img src={url} alt={alt} draggable={false} className={`${className} object-contain select-none`} />;
+  return (
+    <span
+      className={`${className} block text-ink-700 [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]`}
+      dangerouslySetInnerHTML={{ __html: svg || '' }}
+    />
+  );
+}
+
 function HudIcon({ title, onClick, danger = false, children }) {
   return (
     <button
@@ -600,7 +622,7 @@ function HudIcon({ title, onClick, danger = false, children }) {
  *  tile rings when its placed instances are hovered on the plan (and vice-versa),
  *  so the link between palette and canvas reads instantly. Replaces the old
  *  sidebar list + "Agregar pieza" sheet: the build tool lives ON the canvas. */
-function PieceHotbar({ models, thumbById = {}, onAdd, hoveredPieceId, onHover }) {
+function PieceHotbar({ models, thumbById = {}, renderThumbById = {}, onAdd, hoveredPieceId, onHover }) {
   return (
     <div className="hud-panel pointer-events-auto self-center max-w-full overflow-x-auto no-scrollbar">
       <div className="flex items-stretch gap-1.5 p-1.5">
@@ -614,9 +636,9 @@ function PieceHotbar({ models, thumbById = {}, onAdd, hoveredPieceId, onHover })
               onMouseEnter={() => onHover?.(m.id)}
               onMouseLeave={() => onHover?.(null)}
               title={`Agregar ${m.name}`}
-              className={`group shrink-0 w-[68px] rounded-lg border p-1.5 flex flex-col items-center gap-1 transition active:scale-95 ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
+              className={`group shrink-0 w-[74px] rounded-xl border p-1.5 flex flex-col items-center gap-1 transition active:scale-95 ${hot ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-ink-100 hover:bg-ink-50 active:bg-ink-100'}`}
             >
-              <span className="w-12 h-11 block text-ink-700 [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]" dangerouslySetInnerHTML={{ __html: thumbById[m.id] || m.svg }} />
+              <ModelThumb id={m.id} render={renderThumbById} svg={thumbById[m.id] || m.svg} alt={m.name} className="w-14 h-12" />
               <span className="block w-full text-[10px] leading-none text-ink-600 text-center truncate">{m.name}</span>
             </button>
           );
@@ -651,32 +673,28 @@ function MaterialEditor({ finishKey, setFinishKey, weave, setWeave }) {
 /** Selected-piece strip — thumbnail, label, fabric swatch, price, dims + the
  *  per-piece actions (Tela / clear-fabric / rotate / delete). `compact` packs
  *  it onto one floating row for the mobile contextual bar. */
-function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, rates, onPickFabric, onClearFabric, onRotate, onDelete, compact = false }) {
+function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, renderThumbById = {}, rates, onPickFabric, onClearFabric, onDelete }) {
   return (
-    <div className={`flex items-center gap-3 rounded-xl border border-brand-200 ${compact ? 'bg-surface shadow-pop' : 'bg-brand-50/50'} px-3 py-2`}>
-      <span className="shrink-0 w-9 h-9 rounded-md bg-surface text-ink-700 p-0.5 grid place-items-center [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]" dangerouslySetInnerHTML={{ __html: thumbById[selected.pieceId] || '' }} />
+    <div className="hud-panel pointer-events-auto flex items-center gap-2.5 pl-1.5 pr-1.5 py-1.5 togo-rise">
+      <ModelThumb id={selected.pieceId} render={renderThumbById} svg={thumbById[selected.pieceId]} alt={selResolved.label} className="shrink-0 w-11 h-11 rounded-lg bg-ink-50/60" />
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-medium truncate">{selResolved.label}</div>
-        <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
-          {selected.material?.code && <ImageView id={null} fallbackUrl={swatchUrl(selected.material.code)} alt="" className="w-3 h-3 rounded-sm object-cover" />}
-          <span className="truncate">{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin opciones de tela')}</span>
+        <div className="text-[13px] font-display font-semibold leading-tight truncate">{selResolved.label}</div>
+        <div className="text-[11px] text-ink-500 flex items-center gap-1.5 leading-tight mt-0.5">
+          {selected.material?.code && <ImageView id={null} fallbackUrl={swatchUrl(selected.material.code)} alt="" className="w-3.5 h-3.5 rounded-sm object-cover shrink-0" />}
+          <span className="truncate max-w-[42vw]">{selected.material?.fabric || (selectedFamily ? 'Sin tela' : 'Sin opciones')}</span>
           {selected.material && selResolved.unitPrice != null && (
-            <>
-              <span className="text-ink-300">·</span>
-              <span className="tabular-nums font-medium text-ink-700">{formatMoney(selResolved.unitPrice, 'USD', rates)}</span>
-            </>
+            <span className="tabular-nums font-medium text-ink-700 shrink-0">· {formatMoney(selResolved.unitPrice, 'USD', rates)}</span>
           )}
-          <span className="text-ink-400 tabular-nums hidden sm:inline">· {selResolved.widthCm}×{selResolved.depthCm} cm</span>
         </div>
       </div>
+      <span className="hidden xs:inline text-[11px] text-ink-400 tabular-nums shrink-0 mr-0.5">{selResolved.widthCm}×{selResolved.depthCm}</span>
       <div className="flex items-center gap-0.5 shrink-0">
         {selectedFamily && (
-          <button type="button" onClick={onPickFabric} className="btn-ghost text-xs" title="Elegir tela"><Palette size={14} /><span className="hidden sm:inline"> Tela</span></button>
+          <button type="button" onClick={onPickFabric} className="btn-icon" title="Elegir tela"><Palette size={15} /></button>
         )}
         {selected.material && (
           <button type="button" onClick={onClearFabric} className="btn-icon text-ink-500" title="Quitar tela"><X size={15} /></button>
         )}
-        <button type="button" onClick={onRotate} className="btn-icon" title="Rotar"><RotateCw size={15} /></button>
         <button type="button" onClick={onDelete} className="btn-icon text-red-600" title="Quitar"><Trash2 size={15} /></button>
       </div>
     </div>
@@ -686,7 +704,7 @@ function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, 
 // Empty-plan starter overlay — a welcoming grid of the AVAILABLE MODELS (each its
 // clean Togo wireframe); tap one to drop it onto the plan. Floats over the grid,
 // only while the plan is empty.
-function EmptyPlanStart({ models = [], thumbById = {}, onAddPiece }) {
+function EmptyPlanStart({ models = [], thumbById = {}, renderThumbById = {}, onAddPiece }) {
   return (
     <div className="absolute inset-0 z-10 grid place-items-center p-4 pointer-events-none">
       <div className="togo-rise pointer-events-auto text-center w-full max-w-md rounded-2xl bg-surface/90 backdrop-blur-sm border border-ink-200 px-5 py-5 shadow-pop">
@@ -700,10 +718,7 @@ function EmptyPlanStart({ models = [], thumbById = {}, onAddPiece }) {
               onClick={() => onAddPiece?.(m.id)}
               className="rounded-xl border border-ink-100 hover:border-brand-300 hover:bg-brand-50/50 active:scale-95 p-2 flex flex-col items-center gap-1.5 transition"
             >
-              <span
-                className="w-full h-16 block text-ink-700 [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]"
-                dangerouslySetInnerHTML={{ __html: thumbById[m.id] || m.svg }}
-              />
+              <ModelThumb id={m.id} render={renderThumbById} svg={thumbById[m.id] || m.svg} alt={m.name} className="w-full h-16" />
               <span className="block w-full text-[11px] leading-tight text-ink-700 text-center line-clamp-2">{m.name}</span>
             </button>
           ))}
@@ -715,18 +730,32 @@ function EmptyPlanStart({ models = [], thumbById = {}, onAddPiece }) {
 }
 
 function CanvasArea({
-  view, placed, resolvedById, material, selectedUid, onSelect, onMove,
-  models = [], onAddPiece, thumbById = {}, fill = false,
+  view, placed, resolvedById, material, selectedUid, onSelect, onMove, onRotate,
+  models = [], onAddPiece, thumbById = {}, renderThumbById = {}, fill = false,
 }) {
   const boxedH = 'h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]';
+  const [selPos, setSelPos] = useState(null);
+  const showRotate = view === '2d' && selectedUid != null && selPos;
   return (
     <div className={fill ? 'absolute inset-0 overflow-hidden bg-ink-50/40' : `relative overflow-hidden rounded-xl border border-ink-200 bg-ink-50/40 ${boxedH}`}>
       <TogoStage
         mode={view} placed={placed} resolvedById={resolvedById} material={material}
-        selectedUid={selectedUid} onSelect={onSelect} onMove={onMove}
+        selectedUid={selectedUid} onSelect={onSelect} onMove={onMove} onSelectedScreenPos={setSelPos}
         className="absolute inset-0"
       />
-      {!placed.length && <EmptyPlanStart models={models} thumbById={thumbById} onAddPiece={onAddPiece} />}
+      {/* Rotate control floating just beneath the tapped piece. */}
+      {showRotate && (
+        <button
+          type="button"
+          onClick={onRotate}
+          title="Rotar pieza"
+          style={{ left: `${selPos.x}px`, top: `${selPos.y + 12}px` }}
+          className="absolute z-10 -translate-x-1/2 grid place-items-center w-10 h-10 rounded-full bg-surface/95 backdrop-blur border border-ink-200 text-ink-700 shadow-pop active:scale-90 transition hover:bg-ink-50"
+        >
+          <RotateCw size={17} />
+        </button>
+      )}
+      {!placed.length && <EmptyPlanStart models={models} thumbById={thumbById} renderThumbById={renderThumbById} onAddPiece={onAddPiece} />}
     </div>
   );
 }

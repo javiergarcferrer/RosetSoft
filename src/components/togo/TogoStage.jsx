@@ -28,15 +28,15 @@ const PLAN_W = 760, PLAN_H = 540;
  */
 export default function TogoStage({
   placed = [], resolvedById = {}, mode = '2d', material, selectedUid = null,
-  onSelect, onMove, className = '',
+  onSelect, onMove, onSelectedScreenPos, className = '',
 }) {
   const mountRef = useRef(null);
   const api = useRef(null);
   const [failed, setFailed] = useState(false);
 
   // Latest props the imperative three loop reads without re-subscribing.
-  const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove });
-  stateRef.current = { placed, resolvedById, mode, material, selectedUid, onSelect, onMove };
+  const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos });
+  stateRef.current = { placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos };
 
   // placed + resolved → absolute-world pieces (NOT recentred): plan-x→world-x,
   // plan-y→world-z 1:1, so dragging one piece never shifts the others.
@@ -270,7 +270,38 @@ export default function TogoStage({
         return true;
       };
 
-      const renderNow = () => { syncSize(); renderer.render(scene, camera); };
+      // Report the selected piece's on-screen box (centre-x, bottom-y in CSS px)
+      // so the parent can float a control beneath it. Only in 2D, not mid-drag,
+      // and only when it actually moves — so it never churns React every frame.
+      const _selBox = new THREE.Box3(); const _v = new THREE.Vector3();
+      let _lastSel = { uid: undefined, x: -1, y: -1 };
+      const reportSelPos = () => {
+        const cb = stateRef.current.onSelectedScreenPos; if (!cb) return;
+        const l = api.current; if (!l) return;
+        const uid = stateRef.current.selectedUid;
+        const cw = renderer.domElement.clientWidth, ch = renderer.domElement.clientHeight;
+        let pos = null;
+        if (uid != null && l.group && stateRef.current.mode === '2d' && !l.tween && !l.drag) {
+          const pg = l.group.children.find((g) => g.userData.uid === uid);
+          if (pg) {
+            _selBox.setFromObject(pg);
+            let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (let xi = 0; xi < 2; xi++) for (let yi = 0; yi < 2; yi++) for (let zi = 0; zi < 2; zi++) {
+              _v.set(xi ? _selBox.max.x : _selBox.min.x, yi ? _selBox.max.y : _selBox.min.y, zi ? _selBox.max.z : _selBox.min.z).project(camera);
+              const sx = (_v.x * 0.5 + 0.5) * cw, sy = (-_v.y * 0.5 + 0.5) * ch;
+              if (sx < minX) minX = sx; if (sx > maxX) maxX = sx; if (sy > maxY) maxY = sy;
+            }
+            pos = { x: (minX + maxX) / 2, y: maxY };
+          }
+        }
+        const px = pos ? Math.round(pos.x) : -1, py = pos ? Math.round(pos.y) : -1;
+        if (_lastSel.uid !== uid || Math.abs(_lastSel.x - px) > 1 || Math.abs(_lastSel.y - py) > 1) {
+          _lastSel = { uid, x: px, y: py };
+          cb(pos ? { x: px, y: py } : null);
+        }
+      };
+
+      const renderNow = () => { syncSize(); renderer.render(scene, camera); reportSelPos(); };
       let scheduled = false;
       const requestRender = () => { if (scheduled || !alive) return; scheduled = true; raf = requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); }); };
       controls.addEventListener('change', requestRender);
