@@ -30,7 +30,7 @@ import {
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
   resolveAccountingCockpit, resolveReceivables, resolveInvoiceRegister, invoiceRowTotals, buildPaymentEntry,
-  resolveDepositConfirmations,
+  resolveDepositConfirmations, bankAccountOptions,
 } from '../../core/accounting/index.js';
 import { postPaymentTx } from '../../lib/paymentPosting.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
@@ -183,10 +183,14 @@ export default function Facturacion() {
   const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
   const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
   const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope], []);
+  const bankAccountsQ = useLiveQueryStatus(() => db.bankAccounts.where('profileId').equals(scope).toArray(), [scope], []);
   const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && postingsQ.loaded;
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
   const suppliersById = useMemo(() => new Map(suppliersQ.data.map((s) => [s.id, s])), [suppliersQ.data]);
+  // Configured bank accounts → cobro picker options (id/label/currency/accountCode).
+  const bankAccountOpts = useMemo(() => bankAccountOptions(bankAccountsQ.data), [bankAccountsQ.data]);
+  const bankAccountById = useMemo(() => new Map(bankAccountOpts.map((b) => [b.id, b])), [bankAccountOpts]);
   // Open receivables (allocations + FIFO already applied) — feeds each factura's
   // balance + estado in the register, and the "Por cobrar" vital.
   const pipelineReceivables = useMemo(
@@ -821,19 +825,29 @@ export default function Facturacion() {
   // (Debit Banco/Caja / Credit CxC via buildPaymentEntry) + the numbered payment
   // row allocated to THIS factura, the SAME path Banca uses, so the receivable
   // clears without ever leaving Facturación.
-  async function collectInvoice(p, { amount, method, date }) {
-    const amt = Number(amount) || 0;
+  async function collectInvoice(p, { amount, method, date, currency, usdAmount, fxRate, bankAccountId }) {
+    const amt = Number(amount) || 0; // ALWAYS the DOP value posted + allocated
     if (!p || amt <= 0) return { ok: false, error: 'El monto debe ser mayor que cero.' };
     try {
       const id = newId();
       const postedAt = date ? new Date(date).getTime() : Date.now();
       const reference = `Cobro ${p.ncf || ''}`.trim();
+      // The chosen bank account steers WHICH chart leaf the bank line books to.
+      const bank = bankAccountId ? bankAccountById.get(bankAccountId) : null;
+      const cur = currency === 'USD' ? 'USD' : 'DOP';
+      const usd = cur === 'USD' && usdAmount != null ? Number(usdAmount) || 0 : null;
+      const rate = cur === 'USD' && fxRate != null ? Number(fxRate) || 0 : null;
+      const fxFields = {
+        currency: cur, usdAmount: usd, fxRate: rate,
+        bankAccountId: bankAccountId || null,
+      };
       const built = buildPaymentEntry({
         newId, config, postedAt,
         payment: {
           id, direction: 'in', partyType: 'customer', partyId: p.customerId,
           amount: amt, method, reference,
           commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+          ...fxFields, bankAccountCode: bank?.accountCode || null,
         },
       });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
@@ -844,6 +858,7 @@ export default function Facturacion() {
           id, profileId: scope, number: n, direction: 'in', partyType: 'customer', partyId: p.customerId,
           paidAt: postedAt, amount: amt, method, reference,
           commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
+          ...fxFields,
           allocations: [{ docId: p.id, amount: amt }], journalEntryId: built.entry.id,
         }),
       });
@@ -1340,6 +1355,7 @@ export default function Facturacion() {
             row={drawerRow} posting={p} customer={customer} payments={pmts}
             itbisRate={config.itbisRate}
             invLines={invLines} invCurrency={quote?.currencyCode || 'USD'} invRates={quote ? displayRatesFor(quote, settings) : undefined}
+            bankAccounts={bankAccountOpts} settings={settings}
             fiscalActions={ecfActions(drawerRow)}
             fiscalMsg={err}
             onCollect={(args) => collectInvoice(p, args)}

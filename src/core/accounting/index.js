@@ -126,6 +126,9 @@ export {
   resolveImportPanel,
 } from './analytics.js';
 
+// ── cuentas bancarias (bank accounts): config VM + picker options
+export { resolveBankAccounts, bankAccountOptions, BANK_OPTIONS } from './bankAccounts.js';
+
 // ── conciliación bancaria + importación de estados (Banco Popular…)
 export { resolveReconciliation } from './reconciliation.js';
 export { resolveBankImport } from './bankImport.js';

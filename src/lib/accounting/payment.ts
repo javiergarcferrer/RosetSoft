@@ -31,6 +31,7 @@ export interface PaymentPostInput {
   direction: 'in' | 'out';
   partyType: 'customer' | 'supplier';
   partyId?: string | null;
+  /** ALWAYS the DOP value posted to the ledger (the caller converts USD→DOP). */
   amount: number;
   method: PaymentMethod;
   commission?: number;
@@ -38,6 +39,16 @@ export interface PaymentPostInput {
   itbisRetained?: number;
   isrRetained?: number;
   reference?: string;
+  /** Currency the money moved in; defaults to DOP. */
+  currency?: 'DOP' | 'USD';
+  /** USD received and the rate used, stamped on the bank line when currency=USD. */
+  usdAmount?: number | null;
+  fxRate?: number | null;
+  /** The configured bank account settling this payment (BankAccount.id). */
+  bankAccountId?: string | null;
+  /** Chart leaf the bank account posts to — overrides the generic `bank`/`cash`
+   *  role so multiple bank accounts book to their own ledger account. */
+  bankAccountCode?: string | null;
 }
 
 export function buildPaymentEntry({
@@ -50,7 +61,14 @@ export function buildPaymentEntry({
 }): { entry: JournalEntry; lines: JournalLine[] } {
   const gross = round2(payment.amount);
   if (gross <= 0) throw new Error('El monto del pago debe ser mayor que cero.');
-  const cash = requireAccount(config, cashRole(payment.method));
+  // The bank account's own chart leaf when configured, else the generic role.
+  const cash = payment.bankAccountCode || requireAccount(config, cashRole(payment.method));
+  // Foreign-currency stamp for the bank line: dollars received + the rate used.
+  // The ledger amount stays DOP; usd/rate let a USD account reconcile in USD.
+  const fx = payment.currency === 'USD'
+    ? { usd: round2(payment.usdAmount || 0) || null, rate: payment.fxRate ?? null }
+    : { usd: null, rate: null };
+  const bankAccountId = payment.bankAccountId || null;
   const lines: DraftLine[] = [];
 
   if (payment.direction === 'in') {
@@ -59,7 +77,7 @@ export function buildPaymentEntry({
     const retItbis = round2(payment.itbisRetained || 0);
     const retIsr = round2(payment.isrRetained || 0);
     const net = round2(gross - commission - commItbis - retItbis - retIsr);
-    lines.push({ accountCode: cash, debit: net, memo: payment.reference || '' });
+    lines.push({ accountCode: cash, debit: net, memo: payment.reference || '', bankAccountId, ...fx });
     if (commission > 0) lines.push({ accountCode: requireAccount(config, 'cardCommissions'), debit: commission });
     const itbisCredit = round2(commItbis + retItbis);
     if (itbisCredit > 0) lines.push({ accountCode: requireAccount(config, 'itbisCredit'), debit: itbisCredit });
@@ -77,7 +95,7 @@ export function buildPaymentEntry({
       thirdPartyType: 'supplier',
       thirdPartyId: payment.partyId || null,
     });
-    lines.push({ accountCode: cash, credit: gross, memo: payment.reference || '' });
+    lines.push({ accountCode: cash, credit: gross, memo: payment.reference || '', bankAccountId, ...fx });
   }
 
   return buildJournalEntry({

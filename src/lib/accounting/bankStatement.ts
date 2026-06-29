@@ -221,7 +221,22 @@ export function firstMatchingRule(rules: BankRule[] | null | undefined, descript
 
 const AMOUNT_EPS = 0.01;
 
-interface LedgerRow { line?: { id?: string }; postedAt?: number; amount: number; reconciled?: boolean; memo?: string; number?: number | null }
+interface LedgerRow { line?: { id?: string; usd?: number | null }; postedAt?: number; amount: number; usd?: number | null; reconciled?: boolean; memo?: string; number?: number | null }
+
+/**
+ * The signed ledger amount to compare a statement line against. For a DOP
+ * account that's `row.amount` (debit − credit). For a USD account it's the
+ * dollar magnitude carrying the row's debit/credit DIRECTION — `|line.usd|`
+ * (or the precomputed `row.usd`) signed by `sign(row.amount)` — so a USD
+ * statement (in dollars) matches the dollars stored on the line, not the DOP.
+ */
+function signedLedgerAmount(row: LedgerRow, accountCurrency: 'DOP' | 'USD'): number {
+  if (accountCurrency !== 'USD') return row.amount;
+  if (typeof row.usd === 'number' && Number.isFinite(row.usd)) return row.usd;
+  const usdMag = Math.abs(Number(row.line?.usd) || 0);
+  const sign = row.amount < 0 ? -1 : 1;
+  return round2(sign * usdMag);
+}
 
 export interface MatchItem {
   statementLine: BankStatementLine;
@@ -237,12 +252,13 @@ export interface MatchItem {
  * rows cleared before, so they're never re-offered.
  */
 export function matchStatementToLedger({
-  statementLines, ledgerRows, rules, toleranceDays = 5,
+  statementLines, ledgerRows, rules, toleranceDays = 5, accountCurrency = 'DOP',
 }: {
   statementLines?: BankStatementLine[];
   ledgerRows?: LedgerRow[];
   rules?: BankRule[];
   toleranceDays?: number;
+  accountCurrency?: 'DOP' | 'USD';
 } = {}) {
   const tol = toleranceDays * 86400000;
   const pool = (ledgerRows || []).filter((r) => !r.reconciled).map((r) => ({ row: r, claimed: false }));
@@ -252,7 +268,7 @@ export function matchStatementToLedger({
     let bestDelta = Infinity;
     for (const c of pool) {
       if (c.claimed) continue;
-      if (Math.abs(c.row.amount - sl.amount) > AMOUNT_EPS) continue;
+      if (Math.abs(signedLedgerAmount(c.row, accountCurrency) - sl.amount) > AMOUNT_EPS) continue;
       const delta = Math.abs((c.row.postedAt || 0) - sl.date);
       if (delta <= tol && delta < bestDelta) { best = c; bestDelta = delta; }
     }

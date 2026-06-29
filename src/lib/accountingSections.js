@@ -62,6 +62,7 @@ export const ACCOUNTING_SECTIONS = [
     { to: '/accounting/facturacion', label: 'Facturación' },
   ], extraMatch: ['/accounting/facturacion/nueva', '/accounting/ventas', '/accounting/ligne-roset'] },
   { key: 'banca', band: 'ventas', label: 'Banca', icon: Landmark, tabs: [
+    { to: '/accounting/bancos', label: 'Cuentas bancarias' },
     { to: '/accounting/cuentas', label: 'Cobros y pagos' },
     { to: '/accounting/caja-chica', label: 'Caja chica' },
     { to: '/accounting/planes-de-pago', label: 'Planes de pago' },

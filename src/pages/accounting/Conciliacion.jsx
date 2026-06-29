@@ -11,9 +11,13 @@ import FileDropZone from '../../components/FileDropZone.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
-import { formatDop, formatDate } from '../../lib/format.js';
+import { formatDop, formatDate, formatMoney } from '../../lib/format.js';
+
+/** Already-dollar amount → "$1,234.56" (no rate conversion). */
+const formatUsd = (v) => formatMoney(v, 'USD', { USD: 1 });
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { resolveReconciliation, resolveBankImport, buildJournalEntry, round2 } from '../../core/accounting/index.js';
+import { resolveReconciliation, resolveBankImport, buildJournalEntry, round2, bankAccountOptions } from '../../core/accounting/index.js';
+import { bankPdfToText } from '../../lib/loadBankPdf.js';
 
 // Reconciliation table columns (Shopify "edit columns"). The reconcile
 // checkbox is a fixed leading cell (closes over the toggle handler), outside
@@ -37,7 +41,12 @@ const RECON_COLUMNS = [
   {
     key: 'amount', label: 'Monto',
     thClass: 'text-right whitespace-nowrap',
-    cell: ({ row }) => <span className={`block text-right tabular-nums whitespace-nowrap ${row.amount < 0 ? 'text-rose-700' : ''}`}>{formatDop(row.amount)}</span>,
+    cell: ({ row, isUsd }) => (
+      <span className={`block text-right tabular-nums whitespace-nowrap ${row.amount < 0 ? 'text-rose-700' : ''}`}>
+        {isUsd && row.usd != null ? formatUsd(row.usd) : formatDop(row.amount)}
+        {isUsd && row.usd != null && <span className="block text-[11px] text-ink-400">{formatDop(row.amount)}</span>}
+      </span>
+    ),
   },
 ];
 const RECON_DEFAULT = { number: true, memo: true, amount: true };
@@ -57,14 +66,29 @@ export default function Conciliacion() {
   const entriesQ = useLiveQueryStatus(() => db.journalEntries.where('profileId').equals(scope).toArray(), [scope], []);
   const linesQ = useLiveQueryStatus(() => db.journalLines.where('profileId').equals(scope).toArray(), [scope], []);
   const rulesQ = useLiveQueryStatus(() => db.bankRules.where('profileId').equals(scope).toArray(), [scope], []);
-  const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && rulesQ.loaded;
+  const bankAccountsQ = useLiveQueryStatus(() => db.bankAccounts.where('profileId').equals(scope).toArray(), [scope], []);
+  const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && rulesQ.loaded && bankAccountsQ.loaded;
 
-  // Bank/cash accounts = postable leaves under Cajas y Bancos (1-01-001).
-  const bankAccounts = useMemo(
-    () => accountsQ.data.filter((a) => a.isPostable && a.code.startsWith('1-01-001')).sort((a, b) => a.code.localeCompare(b.code)),
+  // Picker source = the CONFIGURED bank accounts (with currency). Pre-config
+  // fallback: the postable chart leaves under Cajas y Bancos (1-01-001), so the
+  // page still works before any bank account is set up (those are always DOP).
+  const configuredOptions = useMemo(() => bankAccountOptions(bankAccountsQ.data), [bankAccountsQ.data]);
+  const leafOptions = useMemo(
+    () => accountsQ.data
+      .filter((a) => a.isPostable && a.code.startsWith('1-01-001'))
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map((a) => ({ id: a.code, label: `${a.code} · ${a.name}`, currency: 'DOP', accountCode: a.code, bank: null })),
     [accountsQ.data],
   );
-  const [accountCode, setAccountCode] = useState('');
+  const accountOptions = configuredOptions.length ? configuredOptions : leafOptions;
+
+  const [selId, setSelId] = useState('');
+  const selected = useMemo(() => accountOptions.find((o) => o.id === selId) || null, [accountOptions, selId]);
+  const accountCode = selected?.accountCode || '';
+  const bankAccountId = configuredOptions.length && selected ? selected.id : null;
+  const accountCurrency = selected?.currency === 'USD' ? 'USD' : 'DOP';
+  const isUsd = accountCurrency === 'USD';
+
   const [stmt, setStmt] = useState('');
   const [busy, setBusy] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -73,8 +97,10 @@ export default function Conciliacion() {
   const recW = useColumnWidths(recCols.cols, 'rs.conciliacion.widths.v1');
 
   const rec = useMemo(
-    () => (accountCode ? resolveReconciliation({ accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data, accountCode, statementBalance: stmt }) : null),
-    [accountCode, accountsQ.data, entriesQ.data, linesQ.data, stmt],
+    () => (accountCode
+      ? resolveReconciliation({ accounts: accountsQ.data, entries: entriesQ.data, lines: linesQ.data, accountCode, bankAccountId, accountCurrency, statementBalance: stmt })
+      : null),
+    [accountCode, bankAccountId, accountCurrency, accountsQ.data, entriesQ.data, linesQ.data, stmt],
   );
 
   async function toggle(row) {
@@ -97,12 +123,12 @@ export default function Conciliacion() {
         <>
           <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-end gap-3 mb-4">
             <label className="text-sm">Cuenta bancaria<br />
-              <select value={accountCode} onChange={(e) => { setAccountCode(e.target.value); setImporting(false); }} className={`${field} w-full sm:min-w-[240px]`}>
+              <select value={selId} onChange={(e) => { setSelId(e.target.value); setImporting(false); }} className={`${field} w-full sm:min-w-[240px]`}>
                 <option value="">— Elige una cuenta —</option>
-                {bankAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+                {accountOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
               </select>
             </label>
-            <label className="text-sm">Saldo del estado<br />
+            <label className="text-sm">Saldo del estado{isUsd ? ' (DOP)' : ''}<br />
               <input type="number" step="0.01" inputMode="decimal" enterKeyHint="done" value={stmt} onChange={(e) => setStmt(e.target.value)} placeholder="Saldo final banco" className={`${field} w-full sm:w-40 text-right tabular-nums`} />
             </label>
           </div>
@@ -112,7 +138,7 @@ export default function Conciliacion() {
           ) : (
             <>
               {importing && (
-                <BankImportPanel scope={scope} accountCode={accountCode} rec={rec} rules={rulesQ.data} accounts={accountsQ.data} onClose={() => setImporting(false)} />
+                <BankImportPanel scope={scope} accountCode={accountCode} accountCurrency={accountCurrency} rec={rec} rules={rulesQ.data} accounts={accountsQ.data} onClose={() => setImporting(false)} />
               )}
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -146,7 +172,7 @@ export default function Conciliacion() {
                       </thead>
                       <tbody>
                         {rec.rows.map((row) => {
-                          const ctx = { row };
+                          const ctx = { row, isUsd };
                           return (
                             <tr key={row.line.id} className={row.reconciled ? 'bg-emerald-50/40' : ''}>
                               <td>
@@ -199,19 +225,32 @@ const STATUS_BADGE = {
   unmatched: { cls: 'bg-amber-100 text-amber-700', label: 'Sin match' },
 };
 
-function BankImportPanel({ scope, accountCode, rec, rules, accounts, onClose }) {
+function BankImportPanel({ scope, accountCode, accountCurrency = 'DOP', rec, rules, accounts, onClose }) {
+  const isUsd = accountCurrency === 'USD';
+  const fmtAmount = isUsd ? formatUsd : formatDop;
   const [bank, setBank] = useState('popular');
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [err, setErr] = useState('');
   const [sel, setSel] = useState({}); // index -> { post, account, remember }
   const [fileName, setFileName] = useState('');
   const [pasteMode, setPasteMode] = useState(false);
 
   const imp = useMemo(
-    () => (text.trim() ? resolveBankImport({ statementText: text, bank, rules, reconciliation: rec }) : null),
-    [text, bank, rules, rec],
+    () => (text.trim() ? resolveBankImport({ statementText: text, bank, rules, reconciliation: rec, accountCurrency }) : null),
+    [text, bank, rules, rec, accountCurrency],
   );
+
+  // PDF statement → the same tab/newline text the CSV/TSV parser consumes.
+  async function handlePdf(file) {
+    setErr(''); setExtracting(true);
+    try {
+      const t = await bankPdfToText(file);
+      setText(t); setFileName(file?.name || 'estado.pdf');
+    } catch (e) { setErr(userMessageFor(e)); }
+    finally { setExtracting(false); }
+  }
 
   useEffect(() => {
     if (!imp) { setSel({}); return; }
@@ -280,12 +319,18 @@ function BankImportPanel({ scope, accountCode, rec, rules, accounts, onClose }) 
       ) : (
         <>
           <FileDropZone
-            mode="text"
-            accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel"
-            hint="Arrastra el .csv exportado de tu banco (Fecha · Descripción · Débito · Crédito · Balance)"
+            mode="file"
+            accept=".csv,.txt,.pdf,text/csv,text/plain,application/vnd.ms-excel,application/pdf"
+            hint="Arrastra el .csv o el PDF del estado de cuenta de tu banco (Fecha · Descripción · Débito · Crédito · Balance)"
+            busy={extracting}
             fileName={fileName}
-            onClear={() => { setFileName(''); setText(''); }}
-            onText={(t, f) => { setText(t); setFileName(f?.name || 'estado.csv'); }}
+            onClear={() => { setFileName(''); setText(''); setErr(''); }}
+            onFile={async (f) => {
+              const name = (f?.name || '').toLowerCase();
+              const isPdf = name.endsWith('.pdf') || (f?.type || '').toLowerCase() === 'application/pdf';
+              if (isPdf) { await handlePdf(f); return; }
+              setErr(''); setText(await f.text()); setFileName(f?.name || 'estado.csv');
+            }}
           />
           {!fileName && (
             <button type="button" onClick={() => setPasteMode(true)} className="mt-1.5 text-xs text-ink-500 hover:text-ink-900">o pegar el texto manualmente</button>
@@ -311,21 +356,26 @@ function BankImportPanel({ scope, accountCode, rec, rules, accounts, onClose }) 
                 <div key={i} className="border border-ink-100 rounded-lg p-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
                   <span className="text-ink-500 text-xs whitespace-nowrap tabular-nums">{formatDate(it.statementLine.date)}</span>
                   <span className="flex-1 min-w-[140px] text-sm truncate" title={it.statementLine.description}>{it.statementLine.description || '—'}</span>
-                  <span className={`text-sm tabular-nums whitespace-nowrap ${it.statementLine.amount < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{formatDop(it.statementLine.amount)}</span>
+                  <span className={`text-sm tabular-nums whitespace-nowrap ${it.statementLine.amount < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{fmtAmount(it.statementLine.amount)}</span>
                   <span className={`text-[11px] px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>
                   {it.status === 'matched' ? (
                     <span className="text-xs text-ink-500 whitespace-nowrap">↔ #{it.ledgerRow.number ?? '—'} {it.ledgerRow.memo || ''}</span>
+                  ) : isUsd ? (
+                    // A new USD bank-only line needs a rate to book in DOP; not posted here.
+                    <span className="text-xs text-ink-400 whitespace-nowrap">Regístralo manualmente (USD)</span>
                   ) : (
                     <select value={s.account || ''} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], account: e.target.value } }))} className="input text-xs py-1 w-full sm:w-56">
                       <option value="">— cuenta contrapartida —</option>
                       {contraAccounts.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
                     </select>
                   )}
-                  <label className="text-xs text-ink-600 inline-flex items-center gap-1 whitespace-nowrap">
-                    <input type="checkbox" checked={!!s.post} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], post: e.target.checked } }))} />
-                    {it.status === 'matched' ? 'Conciliar' : 'Registrar'}
-                  </label>
-                  {it.status !== 'matched' && (
+                  {(it.status === 'matched' || !isUsd) && (
+                    <label className="text-xs text-ink-600 inline-flex items-center gap-1 whitespace-nowrap">
+                      <input type="checkbox" checked={!!s.post} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], post: e.target.checked } }))} />
+                      {it.status === 'matched' ? 'Conciliar' : 'Registrar'}
+                    </label>
+                  )}
+                  {it.status !== 'matched' && !isUsd && (
                     <label className="text-xs text-ink-400 inline-flex items-center gap-1 whitespace-nowrap" title="Guardar una regla para la próxima vez">
                       <input type="checkbox" checked={!!s.remember} onChange={(e) => setSel((m) => ({ ...m, [i]: { ...m[i], remember: e.target.checked } }))} /> regla
                     </label>

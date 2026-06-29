@@ -95,6 +95,7 @@ export interface DraftLine {
   thirdPartyType?: string | null;
   thirdPartyId?: string | null;
   ncf?: string | null;
+  bankAccountId?: string | null;
 }
 
 export interface BuildEntryArgs {
@@ -157,6 +158,7 @@ export function buildJournalEntry({
     thirdPartyType: l.thirdPartyType ?? null,
     thirdPartyId: l.thirdPartyId ?? null,
     ncf: l.ncf ?? null,
+    bankAccountId: l.bankAccountId ?? null,
     sortOrder: i + 1,
   }));
   return { entry, lines: builtLines };

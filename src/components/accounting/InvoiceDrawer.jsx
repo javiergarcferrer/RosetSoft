@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, ArrowDownCircle, Ban } from 'lucide-react';
 import { formatDop, formatDate } from '../../lib/format.js';
+import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { QuoteLinesTable } from './QuoteLinesDetail.jsx';
 
 /**
@@ -44,10 +45,13 @@ function Row({ label, value, strong, big, rule, tone }) {
   );
 }
 
-export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, invLines, invCurrency = 'USD', invRates, fiscalActions, fiscalMsg, onCollect, onVoid, onClose }) {
+export default function InvoiceDrawer({ row, posting, customer, payments, itbisRate, invLines, invCurrency = 'USD', invRates, bankAccounts = [], settings, fiscalActions, fiscalMsg, onCollect, onVoid, onClose }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('transfer');
   const [date, setDate] = useState(todayInput());
+  const [currency, setCurrency] = useState('DOP'); // 'DOP' | 'USD' — the cobro's currency
+  const [rate, setRate] = useState(String(effectiveDopRate(settings)));
+  const [bankAccountId, setBankAccountId] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [voidOpen, setVoidOpen] = useState(false);
@@ -92,13 +96,37 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
   const sortedPayments = (payments || []).slice().sort((a, b) => (a.paidAt || 0) - (b.paidAt || 0));
   const methodLabel = (m) => (METHODS.find(([k]) => k === m)?.[1]) || (m === 'card' ? 'Tarjeta' : m || '—');
 
+  // Cobro currency state. The ledger ALWAYS posts DOP; for USD the input is
+  // dollars and `dopAmount` = usd × rate, rounded to 2dp (what hits the books).
+  const isUsd = currency === 'USD';
+  const fxRate = Number(rate) || 0;
+  const enteredAmt = Number(amount) || 0; // pesos (DOP) or dollars (USD)
+  const dopAmount = isUsd ? Math.round(enteredAmt * fxRate * 100) / 100 : enteredAmt;
+  // Default fill: full balance in the input's own currency (USD → balance/rate).
+  const inputPlaceholder = isUsd
+    ? (fxRate > 0 ? (balance / fxRate).toFixed(2) : '0.00')
+    : balance.toFixed(2);
+  // Show the bank accounts of the chosen currency first, but allow any.
+  const bankOpts = (bankAccounts || []);
+
   async function submitCobro() {
     setErr('');
-    const amt = Number(amount) || balance;
+    if (isUsd && fxRate <= 0) { setErr('La tasa USD→DOP debe ser mayor que cero.'); return; }
+    // Default to the full balance: in DOP directly; in USD via balance/rate.
+    const usd = isUsd ? (enteredAmt || (fxRate > 0 ? Math.round((balance / fxRate) * 100) / 100 : 0)) : null;
+    const amt = isUsd ? Math.round((usd || 0) * fxRate * 100) / 100 : (enteredAmt || balance);
     if (amt <= 0) { setErr('El monto debe ser mayor que cero.'); return; }
     if (amt - balance > 0.005) { setErr(`El cobro excede el balance (${formatDop(balance)}).`); return; }
     setSaving(true);
-    const r = await onCollect({ amount: amt, method, date });
+    const r = await onCollect({
+      amount: amt,
+      currency,
+      usdAmount: isUsd ? usd : null,
+      fxRate: isUsd ? fxRate : null,
+      bankAccountId: bankAccountId || null,
+      method,
+      date,
+    });
     setSaving(false);
     if (!r?.ok) { setErr(r?.error || 'No se pudo registrar el cobro.'); return; }
     setAmount('');
@@ -159,14 +187,43 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
           {!isNote && !voided && balance > 0 && (
             <div className="surface-subtle p-3.5">
               <div className="eyebrow-xs text-ink-500 mb-2 inline-flex items-center gap-1.5"><ArrowDownCircle size={13} aria-hidden /> Registrar cobro</div>
+              {/* Moneda del cobro — el libro siempre asienta DOP. */}
+              <div className="inline-flex rounded-lg border border-ink-200 p-0.5 mb-2" role="group" aria-label="Moneda del cobro">
+                {['DOP', 'USD'].map((c) => (
+                  <button key={c} type="button" onClick={() => setCurrency(c)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md min-w-0 ${currency === c ? 'bg-brand-600 text-white' : 'text-ink-500 hover:text-ink-700'}`}>
+                    {c}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <label className="block min-w-0 text-[11px] text-ink-500">Monto
-                  <input type="number" min="0" step="0.01" inputMode="decimal" value={amount} placeholder={balance.toFixed(2)}
+                <label className="block min-w-0 text-[11px] text-ink-500">{isUsd ? 'Monto (USD)' : 'Monto'}
+                  <input type="number" min="0" step="0.01" inputMode="decimal" value={amount} placeholder={inputPlaceholder}
                     onChange={(e) => setAmount(e.target.value)} className="input w-full min-w-0 mt-1 text-right tabular-nums" />
                 </label>
                 <label className="block min-w-0 text-[11px] text-ink-500">Método
                   <select value={method} onChange={(e) => setMethod(e.target.value)} className="input w-full min-w-0 mt-1">
                     {METHODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                </label>
+                {isUsd && (
+                  <label className="block min-w-0 text-[11px] text-ink-500 sm:col-span-2">Tasa USD→DOP
+                    <input type="number" min="0" step="0.01" inputMode="decimal" value={rate}
+                      onChange={(e) => setRate(e.target.value)} className="input w-full min-w-0 mt-1 text-right tabular-nums" />
+                    <span className="block text-[11px] text-ink-400 mt-1">
+                      Equivale a <span className="tabular-nums text-ink-600">{formatDop(dopAmount || (fxRate > 0 ? balance : 0))}</span> al libro.
+                    </span>
+                  </label>
+                )}
+                <label className="block min-w-0 text-[11px] text-ink-500 sm:col-span-2">Cuenta bancaria
+                  <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className="input w-full min-w-0 mt-1">
+                    <option value="">Banco predeterminado</option>
+                    {bankOpts.filter((b) => b.currency === currency).map((b) => (
+                      <option key={b.id} value={b.id}>{b.label}</option>
+                    ))}
+                    {bankOpts.filter((b) => b.currency !== currency).map((b) => (
+                      <option key={b.id} value={b.id}>{b.label} ({b.currency})</option>
+                    ))}
                   </select>
                 </label>
                 <label className="block min-w-0 text-[11px] text-ink-500 sm:col-span-2">Fecha
@@ -175,7 +232,7 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
               </div>
               <button type="button" onClick={submitCobro} disabled={saving} className="btn-primary w-full justify-center mt-2.5">
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <ArrowDownCircle size={15} />}
-                {Number(amount) > 0 ? 'Registrar cobro' : `Cobrar saldo completo (${formatDop(balance)})`}
+                {enteredAmt > 0 ? 'Registrar cobro' : `Cobrar saldo completo (${formatDop(balance)})`}
               </button>
               {err && <p className="text-xs text-rose-600 mt-2">{err}</p>}
             </div>

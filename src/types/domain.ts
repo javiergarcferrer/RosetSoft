@@ -977,6 +977,37 @@ export interface BankRule {
   updatedAt?: number;
 }
 
+/** ISO-4217 currencies the dealer transacts in (functional currency = DOP). */
+export type Currency = 'DOP' | 'USD';
+
+/**
+ * A configured bank account (cuenta bancaria) the dealer collects/pays through.
+ * Master data, NOT the chart of accounts: it maps to a postable ledger leaf
+ * (`accountCode`, under Cajas y Bancos 1-01-001) and carries the currency +
+ * bank-profile metadata the cobro form and the reconciliation/import need. The
+ * ledger stays in DOP; a USD account records the foreign amount on its bank line
+ * (JournalLine.usd) and reconciles against the statement in USD.
+ */
+export interface BankAccount {
+  id: string;
+  profileId: string;
+  /** Friendly label, e.g. "BPD Cuenta Corriente". */
+  name: string;
+  /** BANK_PROFILES key for the statement importer ('popular' | 'generic' | …). */
+  bank?: string | null;
+  currency: Currency;
+  /** The postable chart leaf this account posts to (under 1-01-001). */
+  accountCode?: string | null;
+  /** Masked account number, for display only. */
+  accountNumber?: string | null;
+  openingBalance?: number;
+  openingAt?: number | null;
+  archived?: boolean;
+  sortOrder?: number;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 /* --------------------------- Collections / dunning ----------------------- */
 
 /** One step of the dunning cadence: a reminder on `offsetDays` relative to the
@@ -1114,6 +1145,17 @@ export interface Payment {
   commissionItbis: number;
   itbisRetained: number;
   isrRetained: number;
+  /**
+   * Currency the money actually moved in. `amount` is ALWAYS the DOP value
+   * posted to the (DOP) ledger; for a USD cobro, `usdAmount` holds the dollars
+   * received and `fxRate` the USD→DOP rate used to convert (amount ≈ usdAmount ×
+   * fxRate). Defaults to DOP for every legacy/peso payment.
+   */
+  currency?: Currency;
+  fxRate?: number | null;
+  usdAmount?: number | null;
+  /** The configured bank account this cobro/pago settled through (BankAccount.id). */
+  bankAccountId?: string | null;
   /** Invoice-level allocation: which documents this payment settles. */
   allocations?: { docId: string; docType?: string; amount: number }[];
   /**
@@ -2433,5 +2475,8 @@ export interface JournalLine {
   sortOrder?: number;
   /** Set when the line was reconciled against the bank statement (else null). */
   reconciledAt?: number | null;
+  /** For a bank/cash line, the configured BankAccount this movement belongs to
+   *  (lets reconciliation group by real bank account, not just chart code). */
+  bankAccountId?: string | null;
   createdAt?: number;
 }

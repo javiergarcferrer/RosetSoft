@@ -106,6 +106,44 @@ test('a reconciled ledger row is never matched twice', () => {
   assert.equal(items[1].status, 'unmatched'); // only one ledger row to claim
 });
 
+test('matcher is currency-aware: USD matches by line.usd, DOP default by amount', () => {
+  // A USD account's statement is in dollars; the ledger row carries the DOLLARS
+  // in line.usd and the DOP in debit/credit. Statement −1180 (USD out) must
+  // match the row whose line.usd is 1180, NOT its DOP amount (−69,000).
+  const statementLines = [
+    { date: Date.UTC(2026, 0, 5), description: 'PAGO USD', amount: -1180, balance: null, raw: '' },
+    { date: Date.UTC(2026, 0, 7), description: 'DEPOSITO USD', amount: 25000, balance: null, raw: '' },
+  ];
+  const usdRows = [
+    { line: { id: 'U1', usd: 1180 }, postedAt: Date.UTC(2026, 0, 5), amount: -69000, reconciled: false },
+    { line: { id: 'U2', usd: 25000 }, postedAt: Date.UTC(2026, 0, 7), amount: 1462500, reconciled: false },
+  ];
+  const usd = matchStatementToLedger({ statementLines, ledgerRows: usdRows, accountCurrency: 'USD' });
+  assert.equal(usd.items[0].status, 'matched');
+  assert.equal(usd.items[0].ledgerRow.line.id, 'U1'); // by dollars, not DOP
+  assert.equal(usd.items[1].status, 'matched');
+  assert.equal(usd.items[1].ledgerRow.line.id, 'U2');
+
+  // Without USD, the same lines compare against the DOP amount → no match.
+  const dop = matchStatementToLedger({ statementLines, ledgerRows: usdRows });
+  assert.equal(dop.items[0].status, 'unmatched');
+  assert.equal(dop.items[1].status, 'unmatched');
+
+  // DOP default still matches by the DOP amount.
+  const dopRows = [{ line: { id: 'D1' }, postedAt: Date.UTC(2026, 0, 5), amount: -1180, reconciled: false }];
+  const dop2 = matchStatementToLedger({ statementLines: [statementLines[0]], ledgerRows: dopRows });
+  assert.equal(dop2.items[0].status, 'matched');
+  assert.equal(dop2.items[0].ledgerRow.line.id, 'D1');
+});
+
+test('USD matcher honors a precomputed signed row.usd', () => {
+  const statementLines = [{ date: Date.UTC(2026, 0, 5), description: 'X', amount: -300, balance: null, raw: '' }];
+  // row.usd already signed (from resolveReconciliation) — used as-is.
+  const rows = [{ line: { id: 'R1', usd: 300 }, usd: -300, postedAt: Date.UTC(2026, 0, 5), amount: -17550, reconciled: false }];
+  const r = matchStatementToLedger({ statementLines, ledgerRows: rows, accountCurrency: 'USD' });
+  assert.equal(r.items[0].status, 'matched');
+});
+
 test('resolveBankImport wires parse + match against a reconciliation', () => {
   const reconciliation = { rows: [{ line: { id: 'L1' }, postedAt: Date.UTC(2026, 0, 5), amount: -1180, reconciled: false }] };
   const r = resolveBankImport({ statementText: BP_CSV, bank: 'popular', rules: [], reconciliation });

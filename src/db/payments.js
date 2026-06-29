@@ -35,9 +35,19 @@ export async function recordPayment({ scope, config, payment, postedAt }) {
     commissionItbis: Number(payment.commissionItbis) || 0,
     itbisRetained: Number(payment.itbisRetained) || 0,
     isrRetained: Number(payment.isrRetained) || 0,
+    // Currency + bank-account context (default DOP / generic bank).
+    currency: payment.currency === 'USD' ? 'USD' : 'DOP',
+    usdAmount: payment.usdAmount != null ? Number(payment.usdAmount) || 0 : null,
+    fxRate: payment.fxRate != null ? Number(payment.fxRate) || 0 : null,
+    bankAccountId: payment.bankAccountId || null,
   };
 
-  const built = buildPaymentEntry({ newId, config, postedAt: at, payment: common });
+  // bankAccountCode steers WHICH ledger leaf the bank line books to; it's
+  // derived from the chosen bank account, not a stored payment column.
+  const built = buildPaymentEntry({
+    newId, config, postedAt: at,
+    payment: { ...common, bankAccountCode: payment.bankAccountCode || null },
+  });
 
   // 1) journal entry  2) lines  3) payment row — same order as the manual form.
   await assignSequenceNumber({

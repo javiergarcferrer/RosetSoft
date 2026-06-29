@@ -58,6 +58,40 @@ test('pago a suplidor: Debit CxP / Credit banco', () => {
   assert.equal(lines.find((l) => l.accountCode === M.bank).credit, 8000);
 });
 
+test('cobro en USD: bank line books its OWN account, DOP amount, stamped usd+rate+bankAccountId', () => {
+  // Customer pays USD 1,000 at 60.50 → DOP 60,500 hits the USD bank account.
+  const { lines } = buildPaymentEntry({
+    newId: ids(), config,
+    payment: {
+      id: 'pUsd', direction: 'in', partyType: 'customer', partyId: 'c1',
+      amount: 60500, method: 'transfer', currency: 'USD', usdAmount: 1000, fxRate: 60.5,
+      bankAccountId: 'ba-usd', bankAccountCode: '1-01-001-02-02-00',
+    },
+  });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  // Posts to the account's OWN chart leaf, not the generic bank role.
+  const bankLine = lines.find((l) => l.accountCode === '1-01-001-02-02-00');
+  assert.ok(bankLine, 'bank line books to the configured account code');
+  assert.equal(bankLine.debit, 60500);              // DOP value in the ledger
+  assert.equal(bankLine.usd, 1000);                 // dollars received
+  assert.equal(bankLine.rate, 60.5);                // rate used
+  assert.equal(bankLine.bankAccountId, 'ba-usd');   // grouped by real account
+  // CxC still clears at the DOP gross.
+  assert.equal(lines.find((l) => l.accountCode === M.accountsReceivable).credit, 60500);
+});
+
+test('cobro en DOP: no fx stamp, generic bank role when no account chosen', () => {
+  const { lines } = buildPaymentEntry({
+    newId: ids(), config,
+    payment: { id: 'pDop', direction: 'in', partyType: 'customer', partyId: 'c1', amount: 5000, method: 'bank', currency: 'DOP', bankAccountId: 'ba-dop' },
+  });
+  const bankLine = lines.find((l) => l.accountCode === M.bank);
+  assert.equal(bankLine.debit, 5000);
+  assert.equal(bankLine.usd, null);
+  assert.equal(bankLine.rate, null);
+  assert.equal(bankLine.bankAccountId, 'ba-dop');
+});
+
 test('buildPaymentEntry rejects a non-positive amount', () => {
   assert.throws(() => buildPaymentEntry({
     newId: ids(), config, payment: { id: 'p4', direction: 'in', partyType: 'customer', amount: 0, method: 'cash' },

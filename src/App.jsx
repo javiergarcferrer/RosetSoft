@@ -76,6 +76,7 @@ const AccountingReceptorInbox = lazyPage(() => import('./pages/accounting/Recept
 const AccountingCuentas = lazyPage(() => import('./pages/accounting/CuentasCobrarPagar.jsx'));
 const AccountingPaymentPlans = lazyPage(() => import('./pages/accounting/PaymentPlans.jsx'));
 const AccountingConciliacion = lazyPage(() => import('./pages/accounting/Conciliacion.jsx'));
+const AccountingBancosConfig = lazyPage(() => import('./pages/accounting/BancosConfig.jsx'));
 const AccountingCajaChica = lazyPage(() => import('./pages/accounting/CajaChica.jsx'));
 const AccountingImpuestos = lazyPage(() => import('./pages/accounting/Impuestos.jsx'));
 const AccountingInformes = lazyPage(() => import('./pages/accounting/Informes.jsx'));
@@ -356,6 +357,7 @@ function ProtectedApp() {
             <Route path="accounting/caja-chica" element={<AccountingCajaChica />} />
             <Route path="accounting/planes-de-pago" element={<AccountingPaymentPlans />} />
             <Route path="accounting/conciliacion" element={<AccountingConciliacion />} />
+            <Route path="accounting/bancos" element={<AccountingBancosConfig />} />
             <Route path="accounting/impuestos" element={<AccountingImpuestos />} />
             <Route path="accounting/informes" element={<AccountingInformes />} />
             <Route path="accounting/periodos" element={<AccountingPeriodos />} />

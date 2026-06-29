@@ -38,6 +38,7 @@ import type {
   PettyCashFund,
   PettyCashVoucher,
   BankRule,
+  BankAccount,
   CollectionReminder,
   Budget,
   RecurringTemplate,
@@ -131,6 +132,7 @@ const TABLES = {
   pettyCashFunds:     { db: 'petty_cash_funds',    pk: 'id' },
   pettyCashVouchers:  { db: 'petty_cash_vouchers', pk: 'id' },
   bankRules:          { db: 'bank_rules',          pk: 'id' },
+  bankAccounts:       { db: 'bank_accounts',       pk: 'id' },
   collectionReminders:{ db: 'collection_reminders', pk: 'id' },
   budgets:            { db: 'budgets',             pk: 'id' },
   recurringTemplates: { db: 'recurring_templates', pk: 'id' },
@@ -200,6 +202,7 @@ export interface TableRowMap {
   pettyCashFunds: PettyCashFund;
   pettyCashVouchers: PettyCashVoucher;
   bankRules: BankRule;
+  bankAccounts: BankAccount;
   collectionReminders: CollectionReminder;
   budgets: Budget;
   recurringTemplates: RecurringTemplate;
