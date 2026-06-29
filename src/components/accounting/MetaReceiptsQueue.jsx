@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Megaphone, Loader2, RefreshCw, FileText, Check, X, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Megaphone, Loader2, RefreshCw, FileText, Check, X, ExternalLink, Settings } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId, assignSequenceNumber, invalidate } from '../../db/database.js';
 import { supabase } from '../../db/supabaseClient.js';
@@ -53,28 +54,16 @@ export default function MetaReceiptsQueue() {
 
   const [syncing, setSyncing] = useState(false);
   const [busy, setBusy] = useState(null);
+  // Set when the last sync reported Meta isn't connected — surfaces an inline
+  // CTA to the integraciones screen instead of a dead-end "sin conectar" toast.
+  const [notConnected, setNotConnected] = useState(false);
 
   const vm = useMemo(() => resolveMetaReceiptsQueue({
     receipts: receiptsQ.data, suppliers: suppliersQ.data, accounts: accountsQ.data, dopRate,
   }), [receiptsQ.data, suppliersQ.data, accountsQ.data, dopRate]);
 
-  // Empty queue → a slim, always-visible bar so the dealer can pull receipts on
-  // demand (the cron also fills it monthly). The full panel renders below once
-  // there's something to review.
-  if (!vm.count) {
-    return (
-      <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-ink-100 bg-surface px-3.5 py-2">
-        <div className="text-sm text-ink-500 flex items-center gap-2 min-w-0">
-          <Megaphone size={15} className="text-ink-400 shrink-0" />
-          <span className="truncate">Recibos de Meta Ads — nada pendiente</span>
-        </div>
-        <button type="button" onClick={sync} disabled={syncing} className="btn-ghost text-sm whitespace-nowrap disabled:opacity-40">
-          {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
-        </button>
-      </div>
-    );
-  }
-
+  // Declared ABOVE the early return so the empty-state bar's button doesn't lean
+  // on function hoisting across a conditional return.
   async function sync() {
     setSyncing(true);
     try {
@@ -85,13 +74,42 @@ export default function MetaReceiptsQueue() {
       // trip the app's invalidation bus — refresh the live queries so the new
       // drafts appear without a page reload.
       invalidate();
-      if (data?.configured === false) toast(data.error || 'Meta sin conectar', { tone: 'error' });
-      else toast(`Sincronizado · ${data?.synced ?? 0} ciclo(s)`, { tone: 'success' });
+      if (data?.configured === false) {
+        setNotConnected(true);
+        toast(data.error || 'Meta sin conectar — conéctalo en Integraciones', { tone: 'error' });
+      } else {
+        setNotConnected(false);
+        toast(`Sincronizado · ${data?.synced ?? 0} ciclo(s)`, { tone: 'success' });
+      }
     } catch (e) {
       toast(userMessageFor(e), { tone: 'error' });
     } finally {
       setSyncing(false);
     }
+  }
+
+  // Empty queue → a slim, always-visible bar so the dealer can pull receipts on
+  // demand (the cron also fills it monthly). The full panel renders below once
+  // there's something to review.
+  if (!vm.count) {
+    return (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 bg-surface px-3.5 py-2">
+        <div className="text-sm text-ink-500 flex items-center gap-2 min-w-0">
+          <Megaphone size={15} className="text-ink-400 shrink-0" />
+          <span className="truncate">Recibos de Meta Ads — nada pendiente</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {notConnected && (
+            <Link to="/integraciones" className="btn-ghost text-sm whitespace-nowrap">
+              <Settings size={14} /> Conectar Meta
+            </Link>
+          )}
+          <button type="button" onClick={sync} disabled={syncing} className="btn-ghost text-sm whitespace-nowrap disabled:opacity-40">
+            {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Sincronizar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   async function createMetaSupplier() {
@@ -189,7 +207,7 @@ export default function MetaReceiptsQueue() {
                 <div className="min-w-0">
                   <div className="tabular-nums font-semibold text-lg text-ink-900 leading-none">{r.amountDop != null ? formatDop(r.amountDop) : '—'}</div>
                   <div className="text-[11px] text-ink-400 tabular-nums mt-1 truncate">
-                    {r.currency} {r.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · cuenta {r.adAccountId}
+                    {r.currency} {r.amount != null ? Number(r.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} · cuenta {r.adAccountId}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">

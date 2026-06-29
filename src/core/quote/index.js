@@ -48,6 +48,7 @@ export {
 export { resolveQuoteView, linePriced, componentPriced } from './views/quoteView.js';
 export { resolveLineList } from './views/editor.js';
 export { resolveLineItem } from './views/lineItem.js';
+export { resolveQuoteHeader, sellerName } from './views/header.js';
 export { resolveDashboard } from './views/dashboard.js';
 export { resolveQuotesList, resolveOrdersList, resolveProfessionalsList, resolveCustomersList } from './views/lists.js';
 export { resolveOrderDetail, resolveCustomerDetail, resolveProfessionalDetail } from './views/detail.js';

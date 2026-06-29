@@ -3,12 +3,7 @@
 // Pure: no React, no db.
 import { round2 } from '../../lib/accounting/ledger.js';
 import { isCreditNote } from '../../lib/accounting/ecf.js';
-
-function inWindow(t, start, end) {
-  if (start != null && t < start) return false;
-  if (end != null && t > end) return false;
-  return true;
-}
+import { inWindow, shapeExpedienteCost } from './_shared.js';
 
 /**
  * Formato 607 — ventas de bienes y servicios. One row per posted sale in the
@@ -86,12 +81,10 @@ export function resolveItbisLiquidation({ salesPostings, expenses, purchases, im
   const expedienteImportItbis = expedienteWindow
     .reduce((s, e) => s + (Number(e.importItbis) || 0), 0);
   // Cost-sheet ITBIS: each cost's recoverable portion, clamped to its amount
-  // (mirrors expedienteCostTotals — duplicated sum here to stay row-shaped).
+  // (shapeExpedienteCost is the same split the 606 docs use, so the two filings
+  // agree on every cost's creditable ITBIS).
   const expedienteCostItbis = expedienteWindow.reduce((s, e) => s
-    + (e.costs || []).reduce((cs, c) => {
-      const a = Math.max(0, Number(c?.amount) || 0);
-      return cs + Math.min(Math.max(0, Number(c?.itbis) || 0), a);
-    }, 0), 0);
+    + (e.costs || []).reduce((cs, c) => cs + shapeExpedienteCost(c).itbis, 0), 0);
   // Petty-cash vales with an NCF are creditable local compras too — they also
   // appear in the 606, so the IT-1 crédito fiscal must include them or the two
   // filings disagree (the DGII cross-checks 606 vs IT-1).

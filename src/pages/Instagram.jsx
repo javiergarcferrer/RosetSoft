@@ -86,11 +86,9 @@ export default function Instagram() {
   }, [linked, load]);
 
   // 1-second clock so the freshness label ticks between polls (paused hidden).
+  // Only runs once there's actually a freshness label to tick (linked + data on
+  // screen) — before that the interval is pure waste.
   const [nowTick, setNowTick] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => { if (document.visibilityState === 'visible') setNowTick(Date.now()); }, 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const sp = useMemo(() => (snap.raw ? resolveSocialPulse(snap.raw) : null), [snap.raw]);
   const st = useMemo(() => (stud.raw ? resolveIgStudio(stud.raw) : null), [stud.raw]);
@@ -99,6 +97,12 @@ export default function Instagram() {
   const [adsOpen, setAdsOpen] = useState(false);
 
   const anyData = !!(sp || st);
+  // 1-second clock — armed only while linked AND something is on screen to label.
+  useEffect(() => {
+    if (!linked || !anyData) return undefined;
+    const id = setInterval(() => { if (document.visibilityState === 'visible') setNowTick(Date.now()); }, 1000);
+    return () => clearInterval(id);
+  }, [linked, anyData]);
   const bothError = !!snap.error && !!stud.error;
   const loadedAt = Math.max(snap.at || 0, stud.at || 0) || null;
   const error = snap.error || stud.error;

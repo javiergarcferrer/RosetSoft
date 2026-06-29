@@ -19,7 +19,7 @@ export default function ScopeToggle({ scope, onChange }) {
       ? 'px-3 py-1.5 min-h-8 coarse:min-h-11 bg-ink-900 text-ink-50'
       : 'px-3 py-1.5 min-h-8 coarse:min-h-11 text-ink-600 hover:bg-ink-100 active:bg-ink-200 transition-colors';
   return (
-    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
+    <div role="group" aria-label="Alcance" className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs font-medium select-none">
       <button type="button" onClick={() => onChange(SCOPE_MINE)} aria-pressed={scope === SCOPE_MINE} className={cls(scope === SCOPE_MINE)}>
         Mías
       </button>

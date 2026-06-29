@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Lock, LockOpen, Loader2 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
@@ -50,6 +51,7 @@ export default function Periodos() {
     return out;
   }, []);
   const [busy, setBusy] = useState(null);
+  const [toggleErr, setToggleErr] = useState('');
   const { columns, visible, setVisible, reset, cols } = useColumns(PERIODO_COLUMNS, PERIODO_DEFAULT, PERIODO_COLS_KEY);
   const { tableRef, tableStyle, thProps, ResizeHandle, reset: resetWidths } = useColumnWidths(cols, 'rs.periodos.widths.v1');
 
@@ -57,6 +59,7 @@ export default function Periodos() {
     const key = `${year}-${month}`;
     const row = byKey.get(key);
     const closed = row?.status === 'closed';
+    setToggleErr('');
     setBusy(key);
     try {
       if (row) {
@@ -64,6 +67,10 @@ export default function Periodos() {
       } else {
         await db.fiscalPeriods.put({ id: newId(), profileId: scope, year, month, status: 'closed', closedAt: Date.now() });
       }
+    } catch (e) {
+      // A denied close/reopen must surface — never leave the row showing the old
+      // state as if the write succeeded.
+      setToggleErr(userMessageFor(e));
     } finally {
       setBusy(null);
     }
@@ -73,6 +80,8 @@ export default function Periodos() {
     <AccountingGate title="Períodos contables">
       <PageHeader title="Períodos contables"
         subtitle="Cierra un mes para que no se pueda asentar en él (se valida en la base de datos)" />
+
+      {toggleErr && <p className="text-sm text-rose-600 mt-2">{toggleErr}</p>}
 
       {!periodsQ.loaded ? <ListLoading /> : (
         <div className="card overflow-hidden max-w-xl">

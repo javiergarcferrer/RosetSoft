@@ -174,7 +174,7 @@ export default function GmailCard() {
 
         {/* Sign in with Google — domain allow-list */}
         <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
-          <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Acceso con Google (login)</div>
+          <label className="text-[11px] uppercase tracking-wider text-ink-400 mb-1 block" htmlFor="google-login-domain">Acceso con Google (login)</label>
           <p className="text-xs text-ink-500 mb-2">
             Habilita el botón “Continuar con Google” en la pantalla de inicio para tu equipo. Solo entran
             las cuentas de Google de este dominio; en su primer acceso quedan <em>pendientes de aprobación</em>.
@@ -182,6 +182,7 @@ export default function GmailCard() {
           </p>
           <div className="flex items-center gap-2">
             <input
+              id="google-login-domain"
               type="text"
               className="input flex-1"
               placeholder={fallbackDomain || 'p. ej. alcover.do'}

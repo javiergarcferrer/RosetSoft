@@ -44,13 +44,13 @@ function StatementHead({ periods, showDelta }) {
   return (
     <thead>
       <tr className="border-b border-ink-200">
-        <th className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Cuenta</th>
+        <th scope="col" className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Cuenta</th>
         {periods.map((p, i) => (
-          <th key={i} className={`py-2 pl-3 text-right eyebrow-xs font-semibold capitalize whitespace-nowrap ${i > 0 ? 'text-ink-400' : 'text-ink-600'}`}>
+          <th key={i} scope="col" className={`py-2 pl-3 text-right eyebrow-xs font-semibold capitalize whitespace-nowrap ${i > 0 ? 'text-ink-400' : 'text-ink-600'}`}>
             {p.label}
           </th>
         ))}
-        {showDelta && <th className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-500">Δ</th>}
+        {showDelta && <th scope="col" className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-500">Δ</th>}
       </tr>
     </thead>
   );
@@ -271,6 +271,7 @@ export default function Statements() {
           {view === 'table' ? (
             <div className="card p-4 overflow-x-auto min-w-0">
               <table className="w-full">
+                <caption className="sr-only">Balance general por cuenta — valores en RD$</caption>
                 <StatementHead periods={balance.periods} showDelta={showDelta} />
                 <tbody>
                   <SectionRow title="Activos" colCount={colCount} first />
@@ -349,6 +350,7 @@ export default function Statements() {
           {view === 'table' ? (
             <div className="card p-4 overflow-x-auto min-w-0">
               <table className="w-full">
+                <caption className="sr-only">Estado de resultados por cuenta — valores en RD$</caption>
                 <StatementHead periods={income.periods} showDelta={showDelta} />
                 <tbody>
                   <SectionRow title="Ingresos" colCount={colCount} first />
@@ -421,10 +423,11 @@ function CashFlowSection({ cf, period }) {
       </div>
       <div className="card p-4 overflow-x-auto min-w-0">
         <table className="w-full">
+          <caption className="sr-only">Estado de flujo de efectivo — valores en RD$</caption>
           <thead>
             <tr className="border-b border-ink-200">
-              <th className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Concepto</th>
-              <th className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-600 capitalize whitespace-nowrap">{period.label}</th>
+              <th scope="col" className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Concepto</th>
+              <th scope="col" className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-600 capitalize whitespace-nowrap">{period.label}</th>
             </tr>
           </thead>
           <tbody>

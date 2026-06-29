@@ -121,7 +121,9 @@ export default function CustomsTaxes() {
                     <tbody>
                       {rows.map((r) => (
                         <tr key={r.id} onClick={() => navigate(`/accounting/importaciones/${r.id}`)}
-                          className="cursor-pointer hover:bg-ink-50 transition-colors">
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/accounting/importaciones/${r.id}`); } }}
+                          tabIndex={0}
+                          className="cursor-pointer hover:bg-ink-50 transition-colors focus-visible:bg-ink-50 focus-visible:outline-none">
                           <td className="text-ink-500 whitespace-nowrap">{formatDate(r.date)}</td>
                           <td className="tabular-nums text-ink-500 whitespace-nowrap">{r.number != null ? `#${r.number}` : '—'}</td>
                           <td className="min-w-0">{r.supplierName || '—'}</td>

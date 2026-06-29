@@ -96,23 +96,32 @@ export default function StoryViewer({ stories = [], startIndex = 0, profile, onC
   }, [close, next, prev]);
 
   // ── per-story insights, on demand + cached ───────────────────────────
+  // The effect deps are only [story?.id], so it can't read the latest `insights`
+  // without a stale closure. A ref-backed set of ids that have already started
+  // loading is the source of truth for "already in flight / done", so advancing
+  // through stories never refetches an id (and never refetches because a sibling
+  // story's fetch resolved and re-rendered). The state map still drives render.
+  const requestedRef = useRef(new Set());
   useEffect(() => {
     const id = story?.id;
-    if (!id || insights[id]) return;
+    if (!id || requestedRef.current.has(id)) return;
+    requestedRef.current.add(id);
     setInsights((m) => ({ ...m, [id]: { loading: true, rows: [], error: null } }));
-    let alive = true;
     supabase.functions.invoke('meta-social', { body: { mediaInsights: { mediaId: id, story: true } } })
       .then(({ data, error }) => {
-        if (!alive) return;
         setInsights((m) => ({
           ...m,
           [id]: data?.ok
             ? { loading: false, rows: resolveMediaInsights(data.metrics), error: null }
             : { loading: false, rows: [], error: data?.error || error?.message || 'sin datos' },
         }));
+      })
+      .catch(() => {
+        // A network reject still resolves the cell so it doesn't spin forever;
+        // it stays in `requested` so we don't hammer a failing id on every nav.
+        setInsights((m) => ({ ...m, [id]: { loading: false, rows: [], error: 'sin datos' } }));
       });
-    return () => { alive = false; };
-  }, [story?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [story?.id]);
 
   // ── tap vs hold-to-pause on the media ────────────────────────────────
   const holdRef = useRef({ t: 0, held: false });

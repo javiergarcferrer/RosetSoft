@@ -45,7 +45,8 @@ export default function Settings() {
       // Drop the "Guardado" badge after a beat so the button is reusable.
       setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000);
     } catch (e) {
-      console.error('saveSettings failed', e);
+      // userMessageFor routes the raw error through captureError (the admin
+      // error console) — no need for a separate console.error.
       setSaveError(userMessageFor(e));
       setSaveState('error');
     }
@@ -182,8 +183,14 @@ export default function Settings() {
                 <input className="input" type="number" min="0" max="100" inputMode="decimal" enterKeyHint="done" value={local.defaultDiscountPct ?? 0} onChange={(e) => set('defaultDiscountPct', clampPct(e.target.value))} />
               </div>
               <div>
-                <div className="label">ITBIS</div>
-                <div className="input bg-ink-50 text-ink-500 cursor-not-allowed">18% (fijo)</div>
+                <label className="label" htmlFor="settings-itbis">ITBIS</label>
+                <input
+                  id="settings-itbis"
+                  className="input bg-ink-50 text-ink-500 cursor-not-allowed"
+                  value="18% (fijo)"
+                  disabled
+                  readOnly
+                />
               </div>
               <div>
                 <div className="label">Tasa mensual plan de pago %</div>
@@ -226,10 +233,12 @@ function StoreCard({ settings, saveSettings, customers }) {
   const [copied, setCopied] = useState(false);
   const [value, setValue] = useState(settings?.storeCustomerId || '');
   const [status, setStatus] = useState('idle'); // idle | saving | saved | error
+  const [statusErr, setStatusErr] = useState(null);
   // Cost discount %: local while editing, persisted on blur. Default 60 mirrors
   // the column default so a fresh install reads the standing dealer discount.
   const [disc, setDisc] = useState(String(settings?.companyDiscountPct ?? 60));
   const [discStatus, setDiscStatus] = useState('idle');
+  const [discErr, setDiscErr] = useState(null);
   // Re-sync to the persisted values when they change elsewhere / after a save.
   useEffect(() => { setValue(settings?.storeCustomerId || ''); }, [settings?.storeCustomerId]);
   useEffect(() => { setDisc(String(settings?.companyDiscountPct ?? 60)); }, [settings?.companyDiscountPct]);
@@ -241,12 +250,14 @@ function StoreCard({ settings, saveSettings, customers }) {
     const next = e.target.value || null;
     setValue(next || '');       // optimistic — the select reflects the choice now
     setStatus('saving');
+    setStatusErr(null);
     try {
       await saveSettings({ storeCustomerId: next });
       setStatus('saved');
       setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
     } catch (err) {
-      console.error('store customer save failed', err);
+      // userMessageFor captures the raw error and returns the actionable text.
+      setStatusErr(userMessageFor(err));
       setStatus('error');
     }
   }
@@ -256,12 +267,13 @@ function StoreCard({ settings, saveSettings, customers }) {
     setDisc(String(next));      // reflect the clamp
     if (next === (settings?.companyDiscountPct ?? 60)) { setDiscStatus('idle'); return; }
     setDiscStatus('saving');
+    setDiscErr(null);
     try {
       await saveSettings({ companyDiscountPct: next });
       setDiscStatus('saved');
       setTimeout(() => setDiscStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
     } catch (err) {
-      console.error('company discount save failed', err);
+      setDiscErr(userMessageFor(err));
       setDiscStatus('error');
     }
   }
@@ -311,6 +323,9 @@ function StoreCard({ settings, saveSettings, customers }) {
             Se guarda automáticamente. Se oculta de Clientes y sus cotizaciones
             (excepto rechazadas y archivadas) surten la tienda.
           </p>
+          {status === 'error' && statusErr && (
+            <p role="alert" className="text-[11px] text-red-600 mt-1.5 break-words">{statusErr}</p>
+          )}
         </div>
         <div>
           <div className="label inline-flex items-center gap-2">
@@ -335,6 +350,9 @@ function StoreCard({ settings, saveSettings, customers }) {
             Vista cliente y PDF) para reflejar tu costo. No afecta la tienda
             pública ni a otros clientes.
           </p>
+          {discStatus === 'error' && discErr && (
+            <p role="alert" className="text-[11px] text-red-600 mt-1.5 break-words">{discErr}</p>
+          )}
         </div>
         <div className="sm:col-span-2">
           <div className="label">Enlace público</div>
@@ -496,7 +514,11 @@ function RateCard({ local, set, saveSettings }) {
   async function saveManual() {
     const sell = Number(manualSell);
     if (!sell || sell <= 0) { setManualErr('Ingresa una tasa de venta válida.'); return; }
-    const buy = manualBuy === '' ? sell : Number(manualBuy);
+    // Validate/clamp buy: empty or non-positive falls back to sell; reject NaN
+    // (garbage like "abc") so a bad buy can never persist silently.
+    const buyRaw = Number(manualBuy);
+    if (manualBuy !== '' && Number.isNaN(buyRaw)) { setManualErr('Ingresa una tasa de compra válida.'); return; }
+    const buy = (manualBuy === '' || buyRaw <= 0) ? sell : buyRaw;
     setSavingManual(true); setManualErr(null); setManualOk(false);
     try {
       await saveSettings({ exchangeRate: { buy, sell, updatedAt: Date.now() } });
@@ -509,8 +531,14 @@ function RateCard({ local, set, saveSettings }) {
   }
 
   const eff = effectiveDopRate(local);
-  const sample = (10000 / eff).toFixed(2);
-  const sampleInverse = (100 * eff).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  // Guard the sample conversions: with no rate yet (eff === 0) the math is
+  // 10000/0 → Infinity and 100*0 → 0, which rendered "Infinity" / "NaN" on a
+  // fresh install. Show an em dash until there's a real rate to convert with.
+  const hasRate = Number.isFinite(eff) && eff > 0;
+  const sample = hasRate ? (10000 / eff).toFixed(2) : '—';
+  const sampleInverse = hasRate
+    ? (100 * eff).toLocaleString('en-US', { maximumFractionDigits: 0 })
+    : '—';
   const fmt = (n) => (n == null || n === '' ? '—' : Number(n).toFixed(2));
 
   return (
@@ -590,8 +618,9 @@ function RateCard({ local, set, saveSettings }) {
           </p>
           <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3">
             <div>
-              <div className="label">Compra (RD$ / USD)</div>
+              <label className="label" htmlFor="rate-manual-buy">Compra (RD$ / USD)</label>
               <input
+                id="rate-manual-buy"
                 type="number"
                 step="0.01"
                 inputMode="decimal"
@@ -602,8 +631,9 @@ function RateCard({ local, set, saveSettings }) {
               />
             </div>
             <div>
-              <div className="label">Venta (se cotiza con esta)</div>
+              <label className="label" htmlFor="rate-manual-sell">Venta (se cotiza con esta)</label>
               <input
+                id="rate-manual-sell"
                 type="number"
                 step="0.01"
                 inputMode="decimal"

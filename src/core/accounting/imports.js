@@ -6,6 +6,7 @@ import { landedCost, landedUnitCost } from '../../lib/accounting/importLiquidati
 import {
   resolveExpediente, expedienteLanded, expedienteCreditableItbis, expedienteCostTotals, costLabel,
 } from '../../lib/accounting/expediente.js';
+import { inWindow } from './_shared.js';
 
 export const PAYMENT_LABELS = { bank: 'Banco', credit: 'Crédito', cash: 'Efectivo', card: 'Tarjeta' };
 
@@ -13,11 +14,7 @@ export function resolveImportsList({ imports, suppliers, items, start, end } = {
   const supById = new Map((suppliers || []).map((s) => [s.id, s]));
   const itemById = new Map((items || []).map((i) => [i.id, i]));
   const rows = (imports || [])
-    .filter((l) => {
-      if (start != null && l.liquidatedAt < start) return false;
-      if (end != null && l.liquidatedAt > end) return false;
-      return true;
-    })
+    .filter((l) => inWindow(l.liquidatedAt, start, end))
     .map((l) => {
       const landed = landedCost(l);
       return {
@@ -270,12 +267,7 @@ export function resolveCustomsTaxes({ expedientes, suppliers, start, end } = {})
   const supById = new Map((suppliers || []).map((s) => [s.id, s]));
   const rows = (expedientes || [])
     .filter((e) => e.status !== 'draft')
-    .filter((e) => {
-      const t = e.liquidatedAt || 0;
-      if (start != null && t < start) return false;
-      if (end != null && t > end) return false;
-      return true;
-    })
+    .filter((e) => inWindow(e.liquidatedAt || 0, start, end))
     .map((e) => {
       const cif = round2(e.cif || 0);
       const gravamen = round2(e.duty || 0);

@@ -114,7 +114,7 @@ export { buildPaymentEntry, paymentNet } from '../../lib/accounting/payment.js';
 export { resolveDepositConfirmations } from './deposits.js';
 
 // ── dashboard KPIs
-export { resolveAccountingDashboard } from './dashboard.js';
+export { resolveAccountingDashboard, resolveEcfSequenceAlerts } from './dashboard.js';
 
 // ── cockpit (command center): today-scoped deadlines + period close + actions
 export { resolveAccountingCockpit } from './cockpit.js';

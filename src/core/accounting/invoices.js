@@ -7,12 +7,14 @@ import { round2 } from '../../lib/accounting/ledger.js';
 import { isCreditNote } from '../../lib/accounting/ecf.js';
 
 const DAY = 86400000;
-// Default credit term — when a factura a crédito turns vencida (the estado pill
-// + the drawer's fecha límite). 30 días is the house term; the e-CF carries its
-// own fecha límite, but for the register the fixed term is the simple, right call.
-const TERM_DAYS = 30;
+// THE single credit term — when a factura a crédito turns vencida (the estado
+// pill, the funnel's "Vencida" bucket + the drawer's fecha límite). 30 días is
+// the house term; the e-CF carries its own fecha límite, but for these surfaces
+// the fixed term is the simple, right call. Both the pipeline (funnel) and the
+// register classify "vencida" off this same source so they can never disagree.
+export const TERM_DAYS = 30;
 
-export function resolveInvoicePipeline({ salesPostings, receivables, customersById, now, overdueDays = 30 } = {}) {
+export function resolveInvoicePipeline({ salesPostings, receivables, customersById, now, overdueDays = TERM_DAYS } = {}) {
   const at = now || 0;
   const openByDoc = new Map();
   for (const row of receivables?.rows || []) {
@@ -69,7 +71,7 @@ export function resolveInvoicePipeline({ salesPostings, receivables, customersBy
  *
  * status: 'paid' | 'open' | 'partial' | 'overdue' | 'note'
  */
-export function resolveInvoiceRegister({ salesPostings, receivables, customersById, now } = {}) {
+export function resolveInvoiceRegister({ salesPostings, receivables, customersById, now, termDays = TERM_DAYS } = {}) {
   const at = now || 0;
   const openByDoc = new Map();
   for (const row of receivables?.rows || []) {
@@ -86,7 +88,7 @@ export function resolveInvoiceRegister({ salesPostings, receivables, customersBy
     const deposit = round2(p.depositApplied || 0);
     const open = (isNote || voided) ? 0 : round2(openByDoc.get(p.id) ?? 0);
     const cobrado = round2(Math.max(0, total - deposit - open));
-    const dueAt = (p.postedAt || 0) + TERM_DAYS * DAY;
+    const dueAt = (p.postedAt || 0) + termDays * DAY;
     const overdue = open > 0.01 && at > dueAt;
     const ecf = p.ecfStatus || '';
     const needsEcf = !voided && (ecf === 'pending' || ecf === 'rejected');

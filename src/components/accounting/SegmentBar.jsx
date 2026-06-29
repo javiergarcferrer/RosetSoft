@@ -5,7 +5,7 @@ import { Search } from 'lucide-react';
  * segment filter. Controlled: `groupBy`/`query` + their setters; `options` is
  * `[{ key, label }]`.
  */
-export default function SegmentBar({ groupBy, onGroupBy, options, query, onQuery }) {
+export default function SegmentBar({ groupBy, onGroupBy, options, query = '', onQuery }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3">
       <label className="text-xs text-ink-500">Agrupar por</label>

@@ -54,7 +54,7 @@ export default function CustomerDetail() {
   // cliente…" stub after deleting the row they were just looking at.
   const [editing, setEditing] = useState(null);
 
-  const customer = useLiveQuery(
+  const { data: customer, loaded: customerLoaded } = useLiveQueryStatus(
     () => db.customers.get(customerId),
     [customerId],
     null,
@@ -129,13 +129,28 @@ export default function CustomerDetail() {
   );
 
   if (!customer) {
+    // Distinguish first-fetch-in-flight from a genuinely missing record: a
+    // deleted/bad id used to spin "Cargando cliente…" forever.
+    if (!customerLoaded) {
+      return (
+        <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
+          <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
+            <User size={20} className="text-ink-300" />
+          </span>
+          <p className="text-sm text-ink-500">Cargando cliente…</p>
+        </div>
+      );
+    }
     return (
-      <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
-        <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
-          <User size={20} className="text-ink-300" />
-        </span>
-        <p className="text-sm text-ink-500">Cargando cliente…</p>
-      </div>
+      <>
+        <BackLink to="/customers">Volver a clientes</BackLink>
+        <EmptyState
+          icon={User}
+          title="Cliente no encontrado"
+          description="Este cliente no existe o fue eliminado."
+          action={<Link to="/customers" className="btn-brand">Ver clientes</Link>}
+        />
+      </>
     );
   }
 

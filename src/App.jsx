@@ -256,7 +256,11 @@ function ProtectedApp() {
           <Route
             path="jarvis"
             element={(
-              <Suspense fallback={<div style={{ height: '100%', background: '#000' }} />}>
+              <Suspense fallback={(
+                <div role="status" style={{ height: '100%', background: '#000' }}>
+                  <span className="sr-only">Cargando…</span>
+                </div>
+              )}>
                 <Jarvis />
               </Suspense>
             )}
@@ -416,7 +420,11 @@ export default function App() {
           <Route
             path="/embed/togo"
             element={(
-              <Suspense fallback={<div style={{ height: '100%', background: '#fff' }} />}>
+              <Suspense fallback={(
+                <div role="status" style={{ height: '100%', background: '#fff' }}>
+                  <span className="sr-only">Cargando…</span>
+                </div>
+              )}>
                 <TogoEmbed />
               </Suspense>
             )}

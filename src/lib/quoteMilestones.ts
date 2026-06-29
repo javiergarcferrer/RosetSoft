@@ -176,9 +176,12 @@ export function readyToInvoice(
   return isFloorSale(quote) && !!quote.depositReceivedAt;
 }
 
-/** The effective invoice date — delivery if known, else the deposit, else accept. */
+/** The effective invoice date — delivery if known, else the deposit, else accept.
+ *  `now` is a defaulted param (not an inline Date.now()) so the function stays
+ *  pure/testable: every milestone-less quote resolves to the SAME passed clock. */
 export function invoiceReadyAt(
   quote: Pick<Quote, 'deliveredAt' | 'depositReceivedAt' | 'acceptedAt'> | null | undefined,
+  now: number = Date.now(),
 ): number {
-  return quote?.deliveredAt || quote?.depositReceivedAt || quote?.acceptedAt || Date.now();
+  return quote?.deliveredAt || quote?.depositReceivedAt || quote?.acceptedAt || now;
 }

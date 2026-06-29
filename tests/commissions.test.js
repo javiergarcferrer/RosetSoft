@@ -172,6 +172,19 @@ test('breakdown: courtesy alone is a proportional reduction, no dollar-for-dolla
   assert.deepEqual(b, { gross: 190, discount: 0, net: 190 });
 });
 
+test('breakdown: a clearance (negative base) floors gross at 0 so the figures reconcile', () => {
+  // A clearance quote can drive taxableBase negative (margin below cost). Without
+  // flooring, preDiscountBase would be negative and gross would print BELOW zero
+  // while net floors at 0 — an unreconcilable card. Gross now floors at 0.
+  const b = commissionBreakdown({ taxableBase: -200, discountAmt: 0 }, 20);
+  assert.deepEqual(b, { gross: 0, discount: 0, net: 0 });
+  assert.ok(b.gross >= 0);
+  // Even a discount that doesn't lift the base back above 0 keeps gross at 0.
+  const b2 = commissionBreakdown({ taxableBase: -300, discountAmt: 100 }, 20);
+  assert.equal(b2.gross, 0);
+  assert.equal(b2.net, 0);
+});
+
 /* ----------------------------- decoratorBilling ----------------------- */
 
 test('decoratorBilling defaults to commission when unset/null/missing', () => {

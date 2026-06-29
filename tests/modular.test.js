@@ -175,7 +175,44 @@ test('renameModule sets moduleName across the whole group', () => {
 /* ----------------------- line ⇄ component moves ----------------------- */
 
 import { absorbLineAsComponents, extractComponentsAsLine, healComponentAlternatives } from '../src/lib/modules.js';
-import { lineTotal } from '../src/lib/pricing.js';
+import { lineTotal, lineTotalRange, compoundSubtotalRange } from '../src/lib/pricing.js';
+
+/* ---- absorb total-preservation: margin + discount + RANGE survive the move --- */
+
+test('absorb: a range line with line margin + discount keeps its TOTAL range', () => {
+  // A material-less RANGE line carrying both line-level adjustments. Absorbing it
+  // into a modular must fold margin/discount into BOTH ends so the compound's
+  // subtotal range equals the original line's total range exactly (qty included).
+  const line = {
+    kind: 'item', name: 'KASHIMA SEAT', qty: 2,
+    priceMin: 1000, priceMax: 1500, lineMarginPct: 10, lineDiscountPct: 5,
+  };
+  const before = lineTotalRange(line);
+  // sanity: it really is a range and adjustments really applied
+  // low  = 1000 × 1.10 × 0.95 × 2 = 2090 ; high = 1500 × ... × 2 = 3135
+  assert.equal(Math.round(before.min), 2090);
+  assert.equal(Math.round(before.max), 3135);
+  assert.ok(before.max > before.min);
+
+  const comps = absorbLineAsComponents(line, true, ids());
+  const after = compoundSubtotalRange({ components: comps });
+  // Total preserved exactly (bit-for-bit) across the move.
+  assert.deepEqual(after, before);
+});
+
+test('absorb: a compound source with a range component preserves the total range', () => {
+  const line = {
+    kind: 'item', name: 'SECTIONAL', lineMarginPct: 20, lineDiscountPct: 10,
+    components: [
+      { id: 'a', name: 'SEAT', qty: 1, priceMin: 500, priceMax: 900 }, // range
+      { id: 'b', name: 'OTTO', qty: 2, unitPrice: 200 },               // fixed
+    ],
+  };
+  const before = lineTotalRange(line);
+  const comps = absorbLineAsComponents(line, true, ids());
+  const after = compoundSubtotalRange({ components: comps });
+  assert.deepEqual(after, before);
+});
 
 test('absorb: simple line into a modular → one module, total preserved, optional maps to moduleOptional', () => {
   const line = {
@@ -273,6 +310,41 @@ test('extract gate: a module inside a pick-one refuses extraction', () => {
     ],
   };
   assert.equal(extractComponentsAsLine(line, ['a'], ids()), null);
+});
+
+test('absorb: an absorbed component-alternative group heals to exactly one selected member', () => {
+  // Source compound whose pick-one group lost its selection (0 selected). The
+  // absorb path must heal it like the extract path so the group always carries
+  // exactly one selected member afterwards.
+  const line = {
+    kind: 'item', name: 'COMPO',
+    components: [
+      { id: 'x', qty: 1, unitPrice: 200, alternativeGroup: 'g', isSelectedAlternative: false },
+      { id: 'y', qty: 1, unitPrice: 500, alternativeGroup: 'g', isSelectedAlternative: false },
+      { id: 'z', qty: 1, unitPrice: 100 },
+    ],
+  };
+  const comps = absorbLineAsComponents(line, true, ids());
+  // The remapped group id (fresh) — find it from the absorbed components.
+  const grp = comps.find((c) => c.alternativeGroup)?.alternativeGroup;
+  assert.ok(grp);
+  const members = comps.filter((c) => c.alternativeGroup === grp);
+  assert.equal(members.length, 2);
+  assert.equal(members.filter((c) => c.isSelectedAlternative).length, 1); // exactly one
+});
+
+test('absorb: a lone component-alternative survivor dissolves on the way in', () => {
+  // Only ONE member of the group remains → after absorb it is no longer an
+  // alternative (mirrors healComponentAlternatives' lone-survivor rule).
+  const line = {
+    kind: 'item', name: 'COMPO',
+    components: [
+      { id: 'x', qty: 1, unitPrice: 200, alternativeGroup: 'g', isSelectedAlternative: true },
+      { id: 'z', qty: 1, unitPrice: 100 },
+    ],
+  };
+  const comps = absorbLineAsComponents(line, true, ids());
+  assert.ok(comps.every((c) => !c.alternativeGroup));
 });
 
 test('healComponentAlternatives: lone survivor dissolves; lost selection promotes', () => {

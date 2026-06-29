@@ -17,7 +17,7 @@
  * The caller records a kardex IN per line at its landed unit cost (read straight
  * off `resolveExpediente`). Pure: no React, no Supabase.
  */
-import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
+import { round2, round4, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
 import type { ImportExpediente, ImportCost, JournalEntry, JournalLine, PaymentMethod } from '../../types/domain.ts';
 
@@ -146,7 +146,7 @@ export function resolveExpediente(
     if (i === taxed.length - 1) share = round2(costNet - assigned); // drift → last
     assigned = round2(assigned + share);
     const landedTotal = round2(l.cif + l.gravamen + l.selectivo + share);
-    const landedUnitCost = l.qty > 0 ? Math.round((landedTotal / l.qty) * 10000) / 10000 : 0;
+    const landedUnitCost = l.qty > 0 ? round4(landedTotal / l.qty) : 0;
     return { ...l, costShare: share, landedTotal, landedUnitCost };
   });
 
@@ -250,6 +250,16 @@ export function buildExpedienteEntry({ newId, config, expediente, postedAt }: {
   const r = resolveExpediente(expediente, config);
   const { landed, creditableItbis, gravamen, selectivo, importItbis } = r.totals;
   const costs = Array.isArray(expediente.costs) ? expediente.costs : [];
+  // A cost sheet only capitalizes through the product lines (prorated by CIF/qty).
+  // With no resolvable line, costNet has nowhere to land: its DEBIT (inventory)
+  // is 0 while the cost CREDITS below would still be emitted → an off-balance
+  // asiento. Fail loud, before assertBalanced would, so the dealer adds a line.
+  if (r.lines.length === 0) {
+    const hasCosts = costs.some((c) => round2(c?.amount || 0) > 0);
+    throw new Error(hasCosts
+      ? 'El expediente tiene costos pero ninguna línea de producto donde capitalizarlos. Agrega al menos una línea.'
+      : 'El expediente no tiene costo a capitalizar.');
+  }
   if (landed <= 0) throw new Error('El expediente no tiene costo a capitalizar.');
 
   const lines: DraftLine[] = [

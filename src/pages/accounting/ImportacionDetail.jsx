@@ -401,7 +401,9 @@ export default function ImportacionDetail() {
                   return (
                     <tr key={c.id}
                       onClick={() => { if (!own) navigate(`/accounting/compras-gastos/${c.id}`); }}
-                      className={own ? '' : 'cursor-pointer hover:bg-ink-50 transition-colors'}>
+                      onKeyDown={own ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/accounting/compras-gastos/${c.id}`); } }}
+                      tabIndex={own ? undefined : 0}
+                      className={own ? '' : 'cursor-pointer hover:bg-ink-50 transition-colors focus-visible:bg-ink-50 focus-visible:outline-none'}>
                       <td className="text-ink-500 whitespace-nowrap">{formatDate(c.date)}</td>
                       <td className="min-w-0">{c.supplierName || '—'}</td>
                       <td className="text-ink-600 min-w-0">

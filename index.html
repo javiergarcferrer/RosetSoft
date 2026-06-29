@@ -25,7 +25,7 @@
         try {
           var hash = location.hash || '';
           var path = location.pathname || '';
-          var isPublic = path === '/configurator' || path === '/configurator/' || hash.indexOf('#/q/') === 0 || hash.indexOf('#/contrato/') === 0 || hash.indexOf('#/tienda') === 0 || hash.indexOf('#/embed') === 0 || hash.indexOf('#/eliminar-datos') === 0;
+          var isPublic = path === '/configurator' || path === '/configurator/' || hash.indexOf('#/q/') === 0 || hash.indexOf('#/contrato/') === 0 || hash.indexOf('#/cuenta/') === 0 || hash.indexOf('#/tienda') === 0 || hash.indexOf('#/embed') === 0 || hash.indexOf('#/eliminar-datos') === 0;
           var pref = null;
           try { pref = localStorage.getItem('rs.theme'); } catch (e) {}
           var dark =

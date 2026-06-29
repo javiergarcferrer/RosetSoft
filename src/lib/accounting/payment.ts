@@ -77,6 +77,10 @@ export function buildPaymentEntry({
     const retItbis = round2(payment.itbisRetained || 0);
     const retIsr = round2(payment.isrRetained || 0);
     const net = round2(gross - commission - commItbis - retItbis - retIsr);
+    // The bank can't receive a negative deposit: commission + retentions exceeding
+    // the gross is a data error (e.g. a mis-entered commission). Fail clearly here
+    // rather than let buildJournalEntry reject a negative debit with a cryptic msg.
+    if (net < 0) throw new Error('Las comisiones y retenciones superan el monto del cobro.');
     lines.push({ accountCode: cash, debit: net, memo: payment.reference || '', bankAccountId, ...fx });
     if (commission > 0) lines.push({ accountCode: requireAccount(config, 'cardCommissions'), debit: commission });
     const itbisCredit = round2(commItbis + retItbis);

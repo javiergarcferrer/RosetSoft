@@ -116,6 +116,22 @@ function fechaFirmaNow(): string {
  * endpoint failed (authenticate semilla/token vs transmit) — never headers, so
  * the bearer token can't leak into the message or the function logs.
  */
+// We echo the DGII response body to the dealer so they can read the real
+// validation message, but it's an UNTRUSTED upstream string: cap its length and
+// redact anything token/key-shaped (a long opaque alphanumeric run, or a value
+// behind a token/bearer/key/secret label) so a stray credential in the upstream
+// payload can never surface in the client error or the function logs.
+const MAX_ECHO_CHARS = 1500;
+function sanitizeUpstreamBody(raw: string): string {
+  let s = raw
+    // value after a token/secret-ish JSON key: "token":"…" / "access_token": "…"
+    .replace(/("?(?:access_?token|id_?token|refresh_?token|token|bearer|api_?key|apikey|secret|password|authorization)"?\s*[:=]\s*"?)([^"\s,}]+)/gi, '$1[redacted]')
+    // bare long opaque runs (JWT-ish / base64-ish 24+ chars) anywhere in the body
+    .replace(/\b[A-Za-z0-9_\-]{24,}\.[A-Za-z0-9_\-]{8,}(?:\.[A-Za-z0-9_\-]+)?\b/g, '[redacted]');
+  if (s.length > MAX_ECHO_CHARS) s = s.slice(0, MAX_ECHO_CHARS) + '…';
+  return s;
+}
+
 function describeError(e: any): string {
   const parts: string[] = [];
   const seen = new Set<unknown>();
@@ -128,7 +144,7 @@ function describeError(e: any): string {
     if (data != null) {
       let body = '';
       try { body = typeof data === 'string' ? data : JSON.stringify(data); } catch { body = String(data); }
-      body = body.trim();
+      body = sanitizeUpstreamBody(body.trim());
       if (body && body !== '""' && body !== '{}' && body !== 'null') parts.push(body);
     }
     const url = cur?.config?.url || cur?.request?.path;
@@ -171,7 +187,7 @@ let lastHttpError = '';
           const data = err?.response?.data;
           let bodyStr = '';
           try { bodyStr = data == null ? '' : (typeof data === 'string' ? data : JSON.stringify(data)); } catch { bodyStr = String(data); }
-          const crumbs = [status ? `HTTP ${status}` : '', url ? `@ ${url}` : '', bodyStr ? bodyStr.slice(0, 1500) : ''].filter(Boolean);
+          const crumbs = [status ? `HTTP ${status}` : '', url ? `@ ${url}` : '', bodyStr ? sanitizeUpstreamBody(bodyStr) : ''].filter(Boolean);
           if (crumbs.length) lastHttpError = crumbs.join(' · ');
           return Promise.reject(err);
         },
@@ -306,7 +322,7 @@ Deno.serve(async (req: Request) => {
     if (!trackId) {
       // No trackId ⇒ the DGII did NOT acknowledge reception — never report
       // 'sent' (the posting would look transmitted while nothing arrived).
-      return json({ ok: false, error: `La DGII no devolvió trackId: ${JSON.stringify(response ?? null)}` }, 502);
+      return json({ ok: false, error: `La DGII no devolvió trackId: ${sanitizeUpstreamBody(JSON.stringify(response ?? null))}` }, 502);
     }
 
     return json({ ok: true, trackId, securityCode, fechaFirma, status: 'sent', response });

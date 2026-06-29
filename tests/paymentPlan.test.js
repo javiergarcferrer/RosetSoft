@@ -124,6 +124,17 @@ test('custom split: labels + pct ride on each installment', () => {
   assert.equal(s.installments[1].label, 'A la entrega');
 });
 
+test('custom split: monthlyUsd is 0 — staged mode has no fixed monthly cuota', () => {
+  // It must NOT leak the first stage's amount: a staged plan (50/20/20/10) has no
+  // single monthly figure, so the field reads 0 and a renderer can't mistake the
+  // first stage for a recurring cuota.
+  const splits = [50, 20, 20, 10].map((pct, i) => ({ pct, dueAt: addMonths(FIRST_DUE, i) }));
+  const s = buildCustomSchedule({ totalUsd: 10000, splits });
+  assert.equal(s.monthlyUsd, 0);
+  // Per-stage amounts are still intact (the leak is only on the summary field).
+  assert.deepEqual(s.installments.map((r) => r.amount), [5000, 2000, 2000, 1000]);
+});
+
 test('SPLIT_PRESETS each sum to 100', () => {
   for (const p of SPLIT_PRESETS) {
     assert.equal(p.pcts.reduce((a, b) => a + b, 0), 100, `${p.label} must total 100`);

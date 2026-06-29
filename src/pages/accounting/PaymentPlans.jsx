@@ -12,6 +12,7 @@ import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { resolvePaymentPlanFollowUp } from '../../core/quote/index.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { formatMoney, formatDate } from '../../lib/format.js';
 
 /**
@@ -51,6 +52,7 @@ export default function PaymentPlans() {
   const dop = (v) => (rate ? formatMoney(v, 'DOP', { DOP: rate }) : '');
 
   async function collect(plan, n) {
+    if (!plan) return; // plansQ.data may be mid-refetch when the row was clicked
     const key = `${plan.id}:${n}`;
     if (collecting) return;
     setCollecting(key);
@@ -59,8 +61,7 @@ export default function PaymentPlans() {
       await collectInstallment({ plan, installmentN: n, config, scope, rate });
       // The live query refetches on the mutation's invalidate — no local update.
     } catch (e) {
-      console.error('[PaymentPlans] collect failed:', e);
-      setErr('No se pudo registrar el cobro.');
+      setErr(userMessageFor(e));
     } finally {
       setCollecting('');
     }

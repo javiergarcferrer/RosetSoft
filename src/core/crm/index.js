@@ -37,6 +37,9 @@ export {
   resolveEmailAudience,
   buildBroadcastRecipients,
   fillTemplateBody,
+  fillEmailTokens,
+  escapeHtml,
+  normalizeGroupRows,
   resolveCampaignsList,
 } from './views/campaigns.js';
 export {

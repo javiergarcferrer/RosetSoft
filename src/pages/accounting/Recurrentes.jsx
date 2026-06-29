@@ -12,7 +12,7 @@ import { useConfirm, useToast } from '../../components/ConfirmProvider.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 import {
-  resolveRecurring, materializeExpense, advance, buildExpenseEntry, resolveAccountingConfig,
+  resolveRecurring, materializeExpense, advance, buildExpenseEntry, resolveAccountingConfig, round2,
 } from '../../core/accounting/index.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -89,7 +89,7 @@ export default function Recurrentes() {
 
       {!loaded ? <ListLoading /> : (
         <>
-          {showForm && <RecurrenteForm scope={scope} accounts={accountsQ.data} suppliers={suppliersQ.data} onClose={() => setShowForm(false)} />}
+          {showForm && <RecurrenteForm scope={scope} config={config} accounts={accountsQ.data} suppliers={suppliersQ.data} onClose={() => setShowForm(false)} />}
 
           {agenda.count === 0 && !showForm ? (
             <EmptyState icon={Repeat} title="Sin recurrentes" description="Crea una plantilla para alquiler, internet, servicios… y genérala cada período sin volver a teclearla." />
@@ -131,7 +131,7 @@ export default function Recurrentes() {
 const fieldCls = 'input w-full';
 const numCls = 'input w-full text-right tabular-nums';
 
-function RecurrenteForm({ scope, accounts, suppliers, onClose }) {
+function RecurrenteForm({ scope, config, accounts, suppliers, onClose }) {
   const [f, setF] = useState({
     name: '', freq: 'monthly', interval: 1, startAt: today(), supplierId: '', accountCode: '',
     description: '', base: '', itbis: '', itbisCreditable: true, paymentMethod: 'credit',
@@ -191,7 +191,7 @@ function RecurrenteForm({ scope, accounts, suppliers, onClose }) {
           </select>
         </label>
         <label className="text-sm sm:col-span-2">Concepto<br /><input value={f.description} onChange={(e) => setF((s) => ({ ...s, description: e.target.value }))} className={fieldCls} /></label>
-        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={f.base} onChange={(e) => setF((s) => ({ ...s, base: e.target.value }))} onBlur={() => { if (!f.itbis && f.base) setF((s) => ({ ...s, itbis: String(Math.round((Number(s.base) || 0) * 18) / 100 * 10) / 10 })); }} className={numCls} /></label>
+        <label className="text-sm">Base<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={f.base} onChange={(e) => setF((s) => ({ ...s, base: e.target.value }))} onBlur={() => { if (!f.itbis && f.base) setF((s) => ({ ...s, itbis: String(round2(((Number(s.base) || 0) * config.itbisRate) / 100)) })); }} className={numCls} /></label>
         <label className="text-sm">ITBIS<br /><input type="number" step="0.01" min="0" inputMode="decimal" value={f.itbis} onChange={(e) => setF((s) => ({ ...s, itbis: e.target.value }))} className={numCls} /></label>
         <label className="text-sm">Forma de pago<br />
           <select value={f.paymentMethod} onChange={(e) => setF((s) => ({ ...s, paymentMethod: e.target.value }))} className={fieldCls}>

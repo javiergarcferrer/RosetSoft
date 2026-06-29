@@ -35,6 +35,7 @@ export function isPublicRoute(
   if (/^\/configurator\/?$/.test(pathname || '')) return true;   // clean configurator URL
   return hash.indexOf('#/q/') === 0
     || hash.indexOf('#/contrato/') === 0
+    || hash.indexOf('#/cuenta/') === 0
     || hash.indexOf('#/tienda') === 0
     || hash.indexOf('#/embed') === 0
     || hash.indexOf('#/eliminar-datos') === 0;

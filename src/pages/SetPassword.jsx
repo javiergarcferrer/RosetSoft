@@ -69,12 +69,27 @@ export default function SetPassword() {
       if (authErr) throw authErr;
 
       // 2. Our app DB: stamp the moment so the Gate stops showing
-      //    this screen on the next render.
-      if (currentProfile?.id) {
-        await db.profiles.update(currentProfile.id, {
-          passwordSetAt: Date.now(),
-        });
+      //    this screen on the next render. If we don't yet know which
+      //    profile to stamp (AppContext hasn't resolved currentProfile),
+      //    refresh it first and re-read — never silently skip the stamp,
+      //    or the Gate re-renders SetPassword forever after the password
+      //    was already set in Auth. The whole step is idempotent: a stamp
+      //    failure surfaces an error and the user can retry safely (the
+      //    Auth password is already set; re-submitting just re-stamps).
+      let profileId = currentProfile?.id;
+      if (!profileId) {
+        const refreshed = await refreshCurrentProfile();
+        profileId = refreshed?.id || currentProfile?.id;
       }
+      if (!profileId) {
+        throw new Error(
+          'Tu contraseña se guardó, pero no pudimos terminar de configurar tu perfil. ' +
+          'Recarga la página e inténtalo de nuevo.',
+        );
+      }
+      await db.profiles.update(profileId, {
+        passwordSetAt: Date.now(),
+      });
 
       // 3. Pull the updated profile so AppContext drops the
       //    null-passwordSetAt and the Gate falls through to the app.

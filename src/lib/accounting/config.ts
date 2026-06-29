@@ -16,6 +16,7 @@
  *
  * Pure: no React, no Supabase.
  */
+import { round2 } from './ledger.js';
 import type { AccountingConfig } from '../../types/domain.ts';
 
 export interface PostingRole {
@@ -119,7 +120,7 @@ export function accountFor(
 
 /** ITBIS amount for a base, at the config's rate. */
 export function itbisOn(base: number, config: ResolvedAccountingConfig): number {
-  return Math.round(((Number(base) || 0) * config.itbisRate) / 100 * 100) / 100;
+  return round2(((Number(base) || 0) * config.itbisRate) / 100);
 }
 
 /** Resolve a posting role to a code, or throw — a missing mapping mis-books. */

@@ -9,6 +9,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import Modal from '../../components/Modal.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { DebouncedInput } from '../../components/DebouncedInput.jsx';
 import { inviteUser, deleteUser } from '../../lib/invite.js';
 
@@ -289,28 +290,6 @@ function Avatar({ name, email, role }) {
   );
 }
 
-function RolePill({ role }) {
-  if (role === 'admin') {
-    return (
-      <span className="badge-brand">
-        Administrador
-      </span>
-    );
-  }
-  if (role === 'accounting') {
-    return (
-      <span className="badge">
-        Contabilidad
-      </span>
-    );
-  }
-  return (
-    <span className="badge">
-      Vendedor
-    </span>
-  );
-}
-
 function ActivePill({ profile }) {
   if (profile.active) {
     return (
@@ -391,6 +370,7 @@ function fmtSessionAgo(ts) {
 }
 
 function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   // savedField names the column the user just edited inline — the row
@@ -457,14 +437,30 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
     if (isSelf) return;
     const isInvite = invitePending;
     const label = profile.name || profile.email || 'este usuario';
-    const confirmText = isInvite
-      ? `¿Cancelar la invitación a “${label}”?\n\n` +
-        `Se eliminará el registro y el enlace del correo dejará de funcionar.`
-      : `¿Eliminar a “${label}”?\n\n` +
-        `Su cuenta de Supabase y su perfil se borrarán por completo. ` +
-        `Las cotizaciones que creó se mantienen, pero sin atribución. ` +
-        `Para volver a darle acceso tendrás que invitarlo de nuevo.`;
-    if (!confirm(confirmText)) return;
+    // Shared in-app confirm (NOT native window.confirm, which some PWAs block
+    // and silently resolve to false → the delete never runs and looks broken).
+    const ok = await confirm(isInvite
+      ? {
+          title: 'Cancelar invitación',
+          message:
+            `¿Cancelar la invitación a “${label}”?\n\n` +
+            'Se eliminará el registro y el enlace del correo dejará de funcionar.',
+          confirmLabel: 'Cancelar invitación',
+          cancelLabel: 'Volver',
+          tone: 'danger',
+        }
+      : {
+          title: 'Eliminar usuario',
+          message:
+            `¿Eliminar a “${label}”?\n\n` +
+            'Su cuenta de Supabase y su perfil se borrarán por completo. ' +
+            'Las cotizaciones que creó se mantienen, pero sin atribución. ' +
+            'Para volver a darle acceso tendrás que invitarlo de nuevo.',
+          confirmLabel: 'Eliminar',
+          cancelLabel: 'Cancelar',
+          tone: 'danger',
+        });
+    if (!ok) return;
     setError(null); setBusy(true);
     try {
       await deleteUser({ session, id: profile.id });
@@ -682,10 +678,6 @@ function clampPct(raw) {
   return Math.round(n * 10) / 10;
 }
 
-// `RolePill` is kept here for future use in a more compact row layout;
-// ignore the unused lint locally.
-void RolePill;
-
 // ---------------------------------------------------------------------------
 // InviteModal — admin posts here to send a Supabase invite email and
 // pre-create the matching profile row. Wraps the `invite-user` Edge
@@ -850,7 +842,7 @@ function InviteModal({ open, onClose, session, onInvited }) {
               enterKeyHint="done"
               className="input tabular-nums"
               value={pct}
-              onChange={(e) => setPct(e.target.value)}
+              onChange={(e) => setPct(clampPct(e.target.value))}
             />
           </div>
         </div>

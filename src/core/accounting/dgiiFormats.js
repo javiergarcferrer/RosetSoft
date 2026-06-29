@@ -137,6 +137,15 @@ export function collectionSplit(payments) {
  * Defaults: tipo de ingreso 1 (operaciones); the deposit applied at invoicing
  * (collected before the cobros module sees it) reports as cheque/transferencia
  * — the house's deposit channel; the uncollected remainder as venta a crédito.
+ *
+ * NOTAS DE CRÉDITO (e-CF tipo 34 / NCF B04) — DGII convention, do NOT "net" here:
+ * a credit note is reported as its OWN 607 record with POSITIVE montos and the
+ * original factura's NCF in field 4 (NCF modificado). The DGII nets it against
+ * the period income via that tipo-04 + modified-NCF linkage — the TXT carries
+ * the note's gross figures, never a negative or a pre-subtracted amount. (The
+ * on-screen resolveSales607 totals DO net the note for the dealer's IT-1
+ * reconciliation view; that's a display roll-up, separate from this per-row
+ * file.) Pinned by tests/dgiiFormats.test.js — keep the row amounts positive.
  */
 export function dgii607Txt({ rows, payments, rncEmisor, period } = {}) {
   const list = rows || [];

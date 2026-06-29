@@ -213,7 +213,14 @@ export default function PublicContractView() {
               <a href={bundle.plan.signedPdfUrl} target="_blank" rel="noopener noreferrer" className="btn-brand inline-flex">
                 <Download size={14} aria-hidden /> Descargar contrato firmado
               </a>
-            ) : null}
+            ) : (
+              // The signature is recorded, but the signed PDF render didn't
+              // archive a file — don't leave the card silent; tell the client
+              // the document is being prepared so they know to come back.
+              <p className="text-xs text-ink-500">
+                El documento firmado se está preparando. Vuelve a abrir este enlace en unos minutos para descargarlo.
+              </p>
+            )}
           </section>
         ) : (
           <section className="card p-5 sm:p-6 space-y-4">

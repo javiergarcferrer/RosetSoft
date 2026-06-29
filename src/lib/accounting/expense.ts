@@ -12,7 +12,7 @@
  * Pure: no React, no Supabase (the caller passes `newId`).
  */
 import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
-import { accountFor, itbisOn, type ResolvedAccountingConfig } from './config.js';
+import { requireAccount, itbisOn, type ResolvedAccountingConfig } from './config.js';
 import type { Expense, JournalEntry, JournalLine, PaymentMethod } from '../../types/domain.ts';
 
 export interface ExpenseTaxParts {
@@ -52,13 +52,6 @@ function payRole(method: PaymentMethod): string {
   return 'bank'; // 'bank' and 'card' both settle out of the bank account
 }
 
-/** Resolve a posting role to a code, or throw — a missing mapping mis-books. */
-function req(config: ResolvedAccountingConfig, role: string): string {
-  const code = accountFor(config, role);
-  if (!code) throw new Error(`Cuenta no configurada para el rol "${role}".`);
-  return code;
-}
-
 export interface BuildExpenseEntryArgs {
   newId: () => string;
   config: ResolvedAccountingConfig;
@@ -88,17 +81,17 @@ export function buildExpenseEntry({
     { accountCode: gastoAccount, debit: base, memo: expense.description || '' },
   ];
   if (itbis > 0) {
-    lines.push({ accountCode: req(config, 'itbisCredit'), debit: itbis });
+    lines.push({ accountCode: requireAccount(config, 'itbisCredit'), debit: itbis });
   }
   lines.push({
-    accountCode: req(config, payRole(expense.paymentMethod)),
+    accountCode: requireAccount(config, payRole(expense.paymentMethod)),
     credit: net,
     thirdPartyType: expense.supplierId ? 'supplier' : null,
     thirdPartyId: expense.supplierId || null,
     ncf: expense.ncf || null,
   });
-  if (retIsr > 0) lines.push({ accountCode: req(config, 'isrWithheld'), credit: retIsr });
-  if (retItbis > 0) lines.push({ accountCode: req(config, 'itbisWithheld'), credit: retItbis });
+  if (retIsr > 0) lines.push({ accountCode: requireAccount(config, 'isrWithheld'), credit: retIsr });
+  if (retItbis > 0) lines.push({ accountCode: requireAccount(config, 'itbisWithheld'), credit: retItbis });
 
   return buildJournalEntry({
     newId,

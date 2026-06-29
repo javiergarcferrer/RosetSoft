@@ -42,6 +42,17 @@ test('computePayrollItem: TSS deductions + net', () => {
   assert.equal(it.net, round2(50000 - it.sfsEmp - it.afpEmp - it.isr));
 });
 
+test('INFOTEP patronal is computed on the cotizable base, not gross (viáticos excluded)', () => {
+  const salary = 50_000;
+  // Viáticos: taxable? no, cotizable? no → in gross ("Sueldos") but OUT of the
+  // TSS/INFOTEP contributory base.
+  const it = computePayrollItem(salary, { earnings: [{ label: 'Viáticos', amount: 8_000 }] });
+  assert.equal(it.gross, round2(salary + 8_000));
+  // INFOTEP rides the cotizable base (= ordinary salary here), NOT the gross.
+  assert.equal(it.infotepPat, round2(salary * DR_PAYROLL.infotepPat / 100));
+  assert.notEqual(it.infotepPat, round2(it.gross * DR_PAYROLL.infotepPat / 100));
+});
+
 test('computePayrollItem applies the TSS topes per insurance', () => {
   const s = 500_000; // above every tope
   const it = computePayrollItem(s);

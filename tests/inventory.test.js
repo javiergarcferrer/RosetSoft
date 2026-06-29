@@ -27,6 +27,18 @@ test('weightedAverageIn blends costs by quantity', () => {
   assert.equal(weightedAverageIn(0, 0, 5, 80), 80);
 });
 
+test('weightedAverageIn treats a negative running qty as 0 (no average poisoning)', () => {
+  // After an over-draw the running qty is negative; a later receipt must set the
+  // average to the incoming cost, NOT fold in the bogus (negative qty × old avg).
+  // -5 @ old avg 100, receive 5 @ 200 → guard treats on-hand as 0, so the new
+  // average is purely the incoming cost (200), not poisoned by (-5 × 100).
+  assert.equal(weightedAverageIn(-5, 100, 5, 200), 200);
+  // Same regardless of incoming qty — a negative on-hand never contributes value.
+  assert.equal(weightedAverageIn(-5, 100, 3, 200), 200);
+  // No incoming and net-negative running qty → 0 (nothing reliable to average).
+  assert.equal(weightedAverageIn(-5, 100, 0, 200), 0);
+});
+
 test('resolveKardex replays movements into running qty/avg/value', () => {
   const movements = [
     { id: 'm1', itemId: 'i1', type: 'in', qty: 10, unitCost: 100, movedAt: 1 },
@@ -92,6 +104,18 @@ test('buildCogsEntry posts costo de venta / inventario', () => {
 
 test('buildCogsEntry refuses a non-positive cost', () => {
   assert.throws(() => buildCogsEntry({ newId: ids(), config, cost: 0 }), /mayor que cero/);
+});
+
+test('resolveKardex clamps valuation at 0 on an over-draw (no negative inventory value)', () => {
+  // Receive 5 @ 100, then draw 8 (over-draw) → on-hand −3, avg stays 100.
+  const k = resolveKardex([
+    { id: 'm1', type: 'in', qty: 5, unitCost: 100, movedAt: 1 },
+    { id: 'm2', type: 'out', qty: 8, movedAt: 2 },
+  ]);
+  assert.equal(k.qty, -3);
+  assert.equal(k.avgCost, 100); // average untouched by a quantity error
+  assert.equal(k.value, 0);     // clamped — no negative money in stock
+  assert.equal(k.rows[k.rows.length - 1].value, 0);
 });
 
 /* --------------------------------- 606 ---------------------------------- */

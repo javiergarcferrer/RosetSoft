@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Ship, FileText, Container, Calculator } from 'lucide-react';
+import { Ship, FileText, Container, Calculator } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import ListSearchHeader from '../../components/search/ListSearchHeader.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
 import useColumns from '../../components/search/useColumns.js';
@@ -154,8 +155,7 @@ const LEGACY_COLS_STORAGE_KEY = 'rs.importaciones.historico.cols.v1';
  * single liquidations stay on a read-only Histórico tab.
  */
 export default function Importaciones() {
-  const { profileId, currentProfile } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId } = useApp();
   const scope = profileId || 'team';
   const navigate = useNavigate();
 
@@ -194,21 +194,11 @@ export default function Importaciones() {
     ResizeHandle: ExpResizeHandle, reset: resetExpWidths,
   } = useColumnWidths(expCols, 'rs.importaciones.expedientes.widths.v1');
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Importaciones" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   const empty = vm.totalCount === 0 && vm.legacy.count === 0;
   const onHistorico = tab === 'historico' && vm.legacy.count > 0;
 
   return (
-    <>
+    <AccountingGate title="Importaciones">
       <PageHeader title="Importaciones" subtitle="Expediente aduanal (DGA) → costo en destino al inventario"
         actions={(
           <div className="flex items-center gap-2">
@@ -314,7 +304,7 @@ export default function Importaciones() {
                     {vm.rows.map((r) => (
                       <tr key={r.id}
                         onClick={() => navigate(`/accounting/importaciones/${r.id}`)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/accounting/importaciones/${r.id}`); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/accounting/importaciones/${r.id}`); } }}
                         tabIndex={0}
                         className="cursor-pointer transition-colors active:bg-ink-100 focus-visible:bg-ink-50 focus-visible:outline-none">
                         {expCols.map((col) => (
@@ -331,7 +321,7 @@ export default function Importaciones() {
           )}
         </>
       )}
-    </>
+    </AccountingGate>
   );
 }
 

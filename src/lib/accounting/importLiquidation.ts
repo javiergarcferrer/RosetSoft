@@ -11,7 +11,7 @@
  *
  * The caller also records a kardex IN at landedCost / qty. Pure.
  */
-import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
+import { round2, round4, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
 import type { JournalEntry, JournalLine, PaymentMethod } from '../../types/domain.ts';
 
@@ -42,7 +42,7 @@ export function computeImportTaxes({ cif, config }: { cif: number; config: Resol
 export function landedUnitCost(parts: ImportCostParts, qty: number): number {
   const q = Number(qty) || 0;
   if (q <= 0) return 0;
-  return Math.round((landedCost(parts) / q) * 10000) / 10000;
+  return round4(landedCost(parts) / q);
 }
 
 function payRole(method: PaymentMethod): string {
@@ -159,7 +159,7 @@ export function allocateShipment<T extends { quantity: number; unitCostUsd: numb
     if (i === valid.length - 1) allocatedExtras = round2(spread - assigned); // drift → last
     assigned = round2(assigned + allocatedExtras);
     const landedTotal = round2(cipValue + allocatedExtras);
-    const landedUnitCost = Math.round((landedTotal / line.quantity) * 10000) / 10000;
+    const landedUnitCost = round4(landedTotal / line.quantity);
     return { line, cipValue, allocatedExtras, landedTotal, landedUnitCost };
   });
 

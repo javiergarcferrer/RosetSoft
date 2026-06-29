@@ -300,6 +300,15 @@ export default function AccountingDashboard() {
   const expComp = useMemo(() => resolveExpenseComparative({
     expenses: expensesQ.data, accounts: accountsQ.data, period,
   }), [expensesQ.data, accountsQ.data, period]);
+  // Bullet-bar rows for the "Gastos por categoría" card: the top 7 categories on
+  // ONE shared scale (the max of current + previous across them), so the tick
+  // (previous period) and bar (current) read against each other. Kept in the
+  // View — it's pure presentation over the already-resolved VM data.
+  const expCompBars = useMemo(() => {
+    const shown = expComp.slice(0, 7);
+    const max = Math.max(0, ...shown.flatMap((x) => [x.current, x.previous]));
+    return { shown, max };
+  }, [expComp]);
 
   const monthly = useMemo(() => resolveMonthlyComparative({
     salesPostings: salesQ.data, payments: paymentsQ.data, expenses: expensesQ.data,
@@ -629,22 +638,18 @@ export default function AccountingDashboard() {
                       period, so "above/below where it was" reads without a
                       second column of numbers. */}
                   <div className="space-y-3">
-                    {(() => {
-                      const shown = expComp.slice(0, 7);
-                      const max = Math.max(...shown.flatMap((x) => [x.current, x.previous]));
-                      return shown.map((r) => (
-                        <Link key={r.code} to={`/accounting/ledger?cuenta=${r.code}`} className="block min-w-0 rounded-md -mx-1 px-1 py-0.5 hover:bg-ink-50/60 transition-colors" title={`${r.name}: ${formatDop(r.current)} · ${period.prev.label} ${formatDop(r.previous)} — ver el mayor`}>
-                          <div className="flex items-baseline justify-between gap-2 text-sm mb-1 min-w-0">
-                            <span className="truncate text-ink-700 min-w-0">{r.name}</span>
-                            <span className="shrink-0 inline-flex items-baseline gap-2">
-                              <span className="tabular-nums font-medium">{formatDop(r.current)}</span>
-                              <DeltaChip delta={r.delta} vs={period.prev.label} />
-                            </span>
-                          </div>
-                          <BulletBar value={r.current} marker={r.previous} max={max} color={C.sales} />
-                        </Link>
-                      ));
-                    })()}
+                    {expCompBars.shown.map((r) => (
+                      <Link key={r.code} to={`/accounting/ledger?cuenta=${r.code}`} className="block min-w-0 rounded-md -mx-1 px-1 py-0.5 hover:bg-ink-50/60 transition-colors" title={`${r.name}: ${formatDop(r.current)} · ${period.prev.label} ${formatDop(r.previous)} — ver el mayor`}>
+                        <div className="flex items-baseline justify-between gap-2 text-sm mb-1 min-w-0">
+                          <span className="truncate text-ink-700 min-w-0">{r.name}</span>
+                          <span className="shrink-0 inline-flex items-baseline gap-2">
+                            <span className="tabular-nums font-medium">{formatDop(r.current)}</span>
+                            <DeltaChip delta={r.delta} vs={period.prev.label} />
+                          </span>
+                        </div>
+                        <BulletBar value={r.current} marker={r.previous} max={expCompBars.max} color={C.sales} />
+                      </Link>
+                    ))}
                   </div>
                   <p className="text-[11px] text-ink-400 mt-3">barra = {monthLabel} · marca = {period.prev.label}</p>
                 </div>

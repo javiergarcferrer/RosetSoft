@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigationType, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
+import { userMessageFor } from '../lib/errorMessages.js';
+import { useToast } from '../components/ConfirmProvider.jsx';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import {
@@ -179,16 +181,21 @@ function SelectBox({ checked, indeterminate = false, onChange, label }) {
  * creation is event-driven on quote-acceptance.
  */
 function useQuoteOps(qu) {
+  const toast = useToast();
   async function del(e) {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm(`¿Eliminar la cotización ${describeQuote(qu)}?`)) return;
-    const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
-    await db.quoteLines.bulkDelete(lines.map((l) => l.id));
-    await db.quotes.delete(qu.id);
-    // Deleting a committed quote frees its LSG pieces — reconcile reads the
-    // quote as gone and adds them back on Shopify (then clears the ledger row).
-    reconcileQuoteStock(qu.id).catch(() => {});
+    try {
+      const lines = await db.quoteLines.where('quoteId').equals(qu.id).toArray();
+      await db.quoteLines.bulkDelete(lines.map((l) => l.id));
+      await db.quotes.delete(qu.id);
+      // Deleting a committed quote frees its LSG pieces — reconcile reads the
+      // quote as gone and adds them back on Shopify (then clears the ledger row).
+      reconcileQuoteStock(qu.id).catch(() => {});
+    } catch (err) {
+      toast(userMessageFor(err), { tone: 'error' });
+    }
   }
 
   return { del };
@@ -196,6 +203,8 @@ function useQuoteOps(qu) {
 
 export default function Quotes() {
   const { profileId, profiles, settings, currentProfile, isAdmin } = useApp();
+  const navigate = useNavigate();
+  const toast = useToast();
   // Mías / Equipo scope — defaults to the signed-in seller's own quotes
   // (same toggle the home uses). Falls back to team when the current user
   // isn't known yet.
@@ -366,7 +375,12 @@ export default function Quotes() {
     const ids = [...selected];
     if (ids.length === 0) return;
     const now = Date.now();
-    await Promise.all(ids.map((id) => db.quotes.update(id, { status: 'archived', archivedAt: now })));
+    try {
+      await Promise.all(ids.map((id) => db.quotes.update(id, { status: 'archived', archivedAt: now })));
+    } catch (e) {
+      toast(userMessageFor(e), { tone: 'error' });
+      return;
+    }
     // Archiving frees an accepted quote — restock its LSG pieces (the single
     // stepper-archive gets this via updateQuote; bulk must do it too).
     for (const id of ids) reconcileQuoteStock(id).catch(() => {});
@@ -378,12 +392,17 @@ export default function Quotes() {
     const ids = [...selected];
     if (ids.length === 0) return;
     if (!confirm(`¿Eliminar ${ids.length} cotización${ids.length === 1 ? '' : 'es'}? Esta acción no se puede deshacer.`)) return;
-    for (const id of ids) {
-      const qlines = await db.quoteLines.where('quoteId').equals(id).toArray();
-      await db.quoteLines.bulkDelete(qlines.map((l) => l.id));
-      await db.quotes.delete(id);
-      // Free each deleted quote's LSG pieces back to Shopify (best-effort).
-      reconcileQuoteStock(id).catch(() => {});
+    try {
+      for (const id of ids) {
+        const qlines = await db.quoteLines.where('quoteId').equals(id).toArray();
+        await db.quoteLines.bulkDelete(qlines.map((l) => l.id));
+        await db.quotes.delete(id);
+        // Free each deleted quote's LSG pieces back to Shopify (best-effort).
+        reconcileQuoteStock(id).catch(() => {});
+      }
+    } catch (e) {
+      toast(userMessageFor(e), { tone: 'error' });
+      return;
     }
     clearSel();
   }
@@ -658,17 +677,28 @@ function QuoteCard({ qu, client, creator, order, tracking, total, rates, invoice
 }
 
 function QuoteRow({ qu, client, creator, total, rates, grouped = false, invoice, cols, selected = false, onToggleSelect }) {
+  const navigate = useNavigate();
   const { del } = useQuoteOps(qu);
   const creatorLabel = creatorDisplay(creator);
   // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
   const ctx = { qu, client, creatorLabel, total, rates, invoice };
+  const open = () => navigate(`/quotes/${qu.id}`);
 
   return (
     <tr
       className={`cursor-pointer transition-colors hover:bg-ink-50/80 active:bg-ink-100 ${
         selected ? 'bg-brand-50/60' : grouped ? 'bg-ink-50/40' : ''
       }`}
-      onClick={() => (window.location.hash = `#/quotes/${qu.id}`)}
+      onClick={open}
+      tabIndex={0}
+      role="button"
+      aria-label={`Abrir cotización #${qu.number || ''}`}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault();
+          open();
+        }
+      }}
     >
       {/* Selection cell — stop the click here so ticking the box never opens
           the quote (the rest of the row still navigates). */}

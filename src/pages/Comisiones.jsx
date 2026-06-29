@@ -278,7 +278,7 @@ export default function Comisiones() {
     );
   }
 
-  const usd = (v) => formatMoney(v, 'USD');
+  const usd = (v) => formatMoney(v, 'USD', { USD: 1 });
 
   // Column visibility (Shopify "edit columns") — one per desktop list table,
   // persisted per browser. Each table renders `cols` and feeds the menu the

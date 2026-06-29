@@ -191,7 +191,7 @@ export default function CuentasCobrarPagar() {
       });
       setPrintDoc({ blob, title: 'Estado de cuenta' });
     } catch (e) {
-      window.alert(userMessageFor(e));
+      toast(userMessageFor(e), { tone: 'error' });
     } finally {
       setPrintingSt(false);
     }
@@ -202,9 +202,10 @@ export default function CuentasCobrarPagar() {
   async function remind(r) {
     const due = r.dueReminders && r.dueReminders[0];
     if (!due) return;
+    const phone = String(r.party?.phone || '').replace(/\D/g, '');
+    if (!phone) { toast('Este cliente no tiene teléfono registrado', { tone: 'error' }); return; }
     setReminding(r.partyId);
     try {
-      const phone = String(r.party?.phone || '').replace(/\D/g, '');
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(due.message)}`, '_blank', 'noopener');
       await db.collectionReminders.put({
         id: newId(), profileId: scope, customerId: r.partyId, docId: due.docId, docType: 'sale',

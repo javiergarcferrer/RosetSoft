@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, UserSquare2, ArrowRight, ChevronDown, ExternalLink, FileText, Mail,
-  MessageCircle, Phone, SearchX, Trash2, Megaphone, ArrowUp, ArrowDown, ArrowUpDown,
+  MessageCircle, Phone, SearchX, Trash2, Megaphone,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -17,6 +17,7 @@ import {
   Cell, CELL_CLS, PanelField, PanelTextArea, RncPanelField, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
 } from '../components/sheet/cells.jsx';
+import { ColumnTh, NoMatchesCard, QuickAction, STATUS_LABELS } from '../components/sheet/shared.jsx';
 import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
@@ -33,16 +34,6 @@ const SORT_OPTIONS = [
   { key: 'activity', label: 'Actividad reciente' },
   { key: 'created', label: 'Fecha de alta' },
 ];
-
-// Section labels for the per-row quote dropdown — plural, mirroring
-// ProfessionalDetail's sections so the two surfaces read the same way.
-const STATUS_LABELS = {
-  draft: 'Borradores',
-  sent: 'Enviadas',
-  accepted: 'Aceptadas',
-  declined: 'Rechazadas',
-  archived: 'Archivadas',
-};
 
 /**
  * Desktop sheet columns (Shopify-orders-style customizable list). ONE ordered
@@ -240,7 +231,12 @@ export default function Professionals() {
 
   async function removePro(p) {
     if (!confirm(`¿Eliminar a "${p.name}"? Las cotizaciones asignadas conservan el % pero pierden la referencia al profesional.`)) return;
-    await db.professionals.delete(p.id);
+    try {
+      await db.professionals.delete(p.id);
+      setWriteError('');
+    } catch (e) {
+      setWriteError(`No se pudo eliminar el profesional: ${userMessageFor(e)}`);
+    }
   }
 
   // The blank bottom row: drafts live here until the name lands, then the
@@ -420,62 +416,6 @@ export default function Professionals() {
 
       <ProfessionalModal professional={creating} onClose={() => setCreating(null)} profileId={profileId} />
     </>
-  );
-}
-
-/** The "nothing survived the filters" hint, card-shaped for the mobile stack. */
-function NoMatchesCard() {
-  return (
-    <div className="card p-3 flex items-center gap-2 text-sm text-ink-400">
-      <SearchX size={15} className="flex-shrink-0" aria-hidden />
-      Sin resultados — ajusta la búsqueda o los filtros.
-    </div>
-  );
-}
-
-/**
- * Renders one sortable header from a column definition. It mirrors SortableTh's
- * sort affordance but owns its own <th> so the resize hook can spread thProps
- * (data-col-key + persisted width) onto it and render the drag handle as its
- * last child — SortableTh's <th> isn't ours to augment. Non-sortable columns
- * (no `col.sortKey`) fall back to a plain resizable header.
- */
-function ColumnTh({ col, sort, onSort, thProps, ResizeHandle }) {
-  if (!col.sortKey) {
-    return (
-      <th className={col.thClass || ''} {...thProps(col.key)}>
-        {col.label}
-        {ResizeHandle(col.key)}
-      </th>
-    );
-  }
-  const active = sort.key === col.sortKey;
-  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <th
-      className={col.thClass || ''}
-      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-      {...thProps(col.key)}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(active
-          ? { key: col.sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
-          : { key: col.sortKey, dir: col.numeric ? 'desc' : 'asc' })}
-        className={`group/th inline-flex items-center gap-1 transition-colors hover:text-ink-900 ${
-          col.numeric ? 'w-full justify-end' : ''
-        } ${active ? 'text-ink-900' : ''}`}
-        title={`Ordenar por ${col.label}`}
-      >
-        {col.label}
-        <Icon
-          size={11}
-          className={active ? 'text-brand-600' : 'text-ink-200 group-hover/th:text-ink-400 transition-colors'}
-          aria-hidden
-        />
-      </button>
-      {ResizeHandle(col.key)}
-    </th>
   );
 }
 
@@ -700,28 +640,6 @@ function MobileNewCard({ onCreate }) {
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
       />
     </div>
-  );
-}
-
-/**
- * Contact quick action — contacting the referrer IS the job. `to` renders an
- * in-app Link (WhatsApp goes to OUR inbox, /chats?chat=<phone>, never out to
- * wa.me — the business chats from the Cloud API number, logged in the CRM);
- * `href` covers the native tel:/mailto: handoffs that have no in-app pane.
- */
-function QuickAction({ href, to, icon: Icon, label }) {
-  const cls = 'inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]';
-  if (to) {
-    return (
-      <Link to={to} className={cls}>
-        <Icon size={13} aria-hidden /> {label}
-      </Link>
-    );
-  }
-  return (
-    <a href={href} className={cls}>
-      <Icon size={13} aria-hidden /> {label}
-    </a>
   );
 }
 

@@ -71,6 +71,15 @@ export function dueStepFor(
   const sent = new Set(sentOffsets);
   let pick: DunningStep | null = null;
   for (const st of policy.steps) {
+    // A step is "reached" once daysSinceDue ≥ its offset. NOTE (pre-due
+    // reminders, AMBIGUOUS — behavior intentionally unchanged): a negative offset
+    // (e.g. −3 = "remind 3 days BEFORE due") becomes reachable as soon as
+    // daysSinceDue ≥ −3, i.e. from 3 days before due onward — so it stays
+    // "pending" through the whole overdue period until sent, and the
+    // most-escalated reachable+unsent step wins (for negatives that's the one
+    // CLOSEST to due, since −3 > −7). This matches the current product behavior;
+    // if the desired semantics are "fire a pre-due step only in its window",
+    // that's a separate decision for the owner. See report.
     if (st.offsetDays <= daysSinceDue && !sent.has(st.offsetDays)) {
       if (!pick || st.offsetDays > pick.offsetDays) pick = st;
     }

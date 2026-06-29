@@ -101,9 +101,15 @@ async function buildCatalog(admin: Admin): Promise<Row> {
   // Storefront FX: Banco Popular venta (same source as the app), with the legacy
   // shapes as fallbacks. Static figure; the page formats USD → DOP with it.
   const ex = (settings.exchange_rate || settings.bsc || settings.bpd || {}) as { buy?: unknown; sell?: unknown };
+  // Public-safe contact number for the storefront CTA — the dealer's company
+  // phone, or the connected WhatsApp display number as a fallback. Phone ONLY;
+  // nothing else about the number/account leaves the server.
+  const contactPhone =
+    String(settings.company_phone || settings.whatsapp_display_number || '').trim() || null;
   const base = {
     storeName: settings.company_name || 'Tienda',
     logoImageId: settings.logo_image_id || null,
+    contactPhone,
     rates: { USD: 1, DOP: Number(ex.sell) || Number(ex.buy) || 60.0 },
   };
 

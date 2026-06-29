@@ -48,6 +48,16 @@ test('cobro por tarjeta: gateway commission + retentions, bank gets the net', ()
   assert.equal(lines.find((l) => l.accountCode === M.isrAdvance).debit, 100);
 });
 
+test('cobro por tarjeta: commission + retentions exceeding the gross throws (no negative bank line)', () => {
+  assert.throws(() => buildPaymentEntry({
+    newId: ids(), config,
+    payment: {
+      id: 'pNeg', direction: 'in', partyType: 'customer', partyId: 'c1', amount: 1000, method: 'card',
+      commission: 800, commissionItbis: 144, itbisRetained: 100, isrRetained: 50, // sum > 1000
+    },
+  }), /superan el monto/i);
+});
+
 test('pago a suplidor: Debit CxP / Credit banco', () => {
   const { lines } = buildPaymentEntry({
     newId: ids(), config,

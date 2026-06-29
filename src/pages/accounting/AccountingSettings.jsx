@@ -1,13 +1,15 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Shield, Settings2, Check, Loader2, KeyRound, FileCheck } from 'lucide-react';
+import { Settings2, Check, Loader2, KeyRound, FileCheck } from 'lucide-react';
 import { updateSettings } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
-import EmptyState from '../../components/EmptyState.jsx';
 import FileDropZone from '../../components/FileDropZone.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import { formatDate } from '../../lib/format.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { saveEcfCredentials } from '../../lib/ecfCert.js';
+import { cleanRnc, isValidRncOrCedula } from '../../lib/rncLookup.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
 const ECF_ENVS = [
@@ -27,14 +29,15 @@ const ECF_ENVS = [
  * accounting/admin.
  */
 export default function AccountingSettings() {
-  const { profileId, currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { profileId, settings } = useApp();
+  const confirm = useConfirm();
   const scope = profileId || 'team';
 
   const resolved = useMemo(() => resolveAccountingConfig(settings?.accountingConfig), [settings]);
   const [form, setForm] = useState(resolved);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
+  const [err, setErr] = useState('');
   const [companyRnc, setCompanyRnc] = useState(settings?.companyRnc || '');
   const [ecfEnv, setEcfEnv] = useState(settings?.ecfEnvironment || 'cert');
   // Re-seed the form whenever the persisted config changes (first load / refresh).
@@ -51,32 +54,51 @@ export default function AccountingSettings() {
   const [certSaving, setCertSaving] = useState(false);
   const [certMsg, setCertMsg] = useState('');
 
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Configuración contable" subtitle=" " />
-        <EmptyState icon={Shield} title="Acceso restringido"
-          description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
-
   function setRate(key, v) { setForm((f) => ({ ...f, [key]: v === '' ? '' : Number(v) })); }
 
   async function save() {
+    setErr('');
+    setSavedAt(0);
+    // RNC del emisor — optional, but if present must be a valid RNC (9) /
+    // cédula (11); a malformed one silently produces a bad 606/607 TXT.
+    const rnc = cleanRnc(companyRnc);
+    if (rnc && !isValidRncOrCedula(rnc)) {
+      setErr('El RNC del emisor debe tener 9 dígitos (empresa) u 11 (cédula).');
+      return;
+    }
+    // Tax rates — a field cleared to '' must not silently become 0%. Require
+    // each present and >= 0 (warn, don't block, on a 0% ITBIS).
+    const rateFields = ['itbisRate', 'dutyRate', 'retentionIsrServicesRate', 'retentionItbisRate'];
+    for (const k of rateFields) {
+      const v = Number(form[k]);
+      if (form[k] === '' || !Number.isFinite(v) || v < 0) {
+        setErr('Las tasas no pueden quedar vacías ni ser negativas.');
+        return;
+      }
+    }
+    if (Number(form.itbisRate) === 0) {
+      const ok = await confirm({
+        title: 'ITBIS en 0%',
+        message: 'El ITBIS quedará en 0%. Los asientos y la facturación no aplicarán ITBIS. ¿Continuar?',
+        confirmLabel: 'Guardar de todos modos',
+      });
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       await updateSettings(scope, {
-        companyRnc: companyRnc.trim(),
+        companyRnc: rnc,
         ecfEnvironment: ecfEnv,
         accountingConfig: {
-          itbisRate: Number(form.itbisRate) || 0,
-          dutyRate: Number(form.dutyRate) || 0,
-          retentionIsrServicesRate: Number(form.retentionIsrServicesRate) || 0,
-          retentionItbisRate: Number(form.retentionItbisRate) || 0,
+          itbisRate: Number(form.itbisRate),
+          dutyRate: Number(form.dutyRate),
+          retentionIsrServicesRate: Number(form.retentionIsrServicesRate),
+          retentionItbisRate: Number(form.retentionItbisRate),
         },
       });
       setSavedAt(Date.now());
+    } catch (e) {
+      setErr(userMessageFor(e));
     } finally {
       setSaving(false);
     }
@@ -100,7 +122,7 @@ export default function AccountingSettings() {
   const rateInput = 'input w-24 text-right tabular-nums';
 
   return (
-    <>
+    <AccountingGate title="Configuración contable">
       <PageHeader
         title="Configuración contable"
         subtitle="Parámetros fiscales y credenciales que usan los asientos automáticos y la facturación electrónica"
@@ -111,6 +133,7 @@ export default function AccountingSettings() {
           </button>
         }
       />
+      {err && <p role="alert" className="text-sm text-rose-600 mb-3">{err}</p>}
       {savedAt > 0 && <p className="text-sm text-emerald-700 mb-3">Guardado.</p>}
 
       <div className="space-y-6">
@@ -189,6 +212,6 @@ export default function AccountingSettings() {
           </div>
         </div>
       </div>
-    </>
+    </AccountingGate>
   );
 }

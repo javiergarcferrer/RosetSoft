@@ -8,6 +8,7 @@ import { round2 } from '../../lib/accounting/ledger.js';
 import { tipo606For, DGII_606_TIPO_LABEL } from './expenses.js';
 import { costLabel } from '../../lib/accounting/expediente.js';
 import { taxPresetById } from '../../lib/accounting/taxPresets.js';
+import { inWindow, shapeExpedienteCost } from './_shared.js';
 
 /** The three natures of a supplier invoice. `gasto` covers expenses AND the
  *  legacy service purchases; `mercancía` lands in inventory; `activo` capitalizes
@@ -32,12 +33,6 @@ export function purchaseNature(kind) {
 /** Article count of a purchase — its multi-line count, else the legacy single item. */
 function articleCount(p) {
   return p.lines?.length ? p.lines.length : (p.kind === 'goods' && p.itemId ? 1 : 0);
-}
-
-function inWindow(t, start, end) {
-  if (start != null && t < start) return false;
-  if (end != null && t > end) return false;
-  return true;
 }
 
 /** A linked expediente's short label — `#number · BL`. */
@@ -119,8 +114,7 @@ export function resolvePurchasesExpenses({
   const fromExpedienteCost = (e) => {
     if (e.status !== 'posted' && !e.liquidatedAt) return [];
     return (e.costs || []).map((c, i) => {
-      const total = round2(c.amount || 0);
-      const itbis = round2(c.itbis || 0);
+      const { amount: total, itbis, base } = shapeExpedienteCost(c);
       const label = c.label || costLabel(c);
       return {
         id: `expcost-${e.id}-${c.id || i}`, source: 'expediente-cost', nature: 'expediente',
@@ -132,7 +126,7 @@ export function resolvePurchasesExpenses({
         destination: label, description: label,
         ncf: c.ncf || '', articles: 0,
         expedienteId: e.id, expedienteLabel: expLabel(e),
-        base: round2(total - itbis), itbis, retIsr: 0, retItbis: 0, total,
+        base, itbis, retIsr: 0, retItbis: 0, total,
         payment: c.paymentMethod || 'credit', paymentLabel: PAY_LABEL[c.paymentMethod] || c.paymentMethod || '',
       };
     });

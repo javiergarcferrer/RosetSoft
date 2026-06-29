@@ -187,7 +187,10 @@ export function computePayrollItem(salary: number, opts: PayrollOptions = {}): P
     sfsPat: round2((sfsBase * rates.sfsPat) / 100),
     afpPat: round2((afpBase * rates.afpPat) / 100),
     srlPat: round2((srlBase * (rates.srlPat || 0)) / 100),
-    infotepPat: round2((gross * rates.infotepPat) / 100),
+    // INFOTEP 1% patronal rides on the TSS salario cotizable (the same base the
+    // SFS/AFP/SRL aportes use), NOT the full gross — viáticos and other
+    // non-cotizable earnings are out of the contributory base.
+    infotepPat: round2((cotBase * rates.infotepPat) / 100),
   };
 }
 

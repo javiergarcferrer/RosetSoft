@@ -1,6 +1,6 @@
 import { supabase, publicImageUrl, IMAGES_BUCKET } from './supabaseClient.js';
 import { isSharedCatalogImage, sizedExternalUrl, DOWNLOAD_IMG_WIDTH } from '../lib/catalogImages.js';
-import { snake, toRow, fromRow, fromRows, type Row } from './rowMapping.js';
+import { snake, toRow, fromRow, fromRows, isAtField, type Row } from './rowMapping.js';
 import type {
   Profile,
   Settings,
@@ -263,6 +263,24 @@ interface Filter {
 }
 
 /**
+ * Numeric coercion for the sortBy comparator. A real number passes through;
+ * a non-empty, fully-numeric string (e.g. a bigint column PostgREST handed
+ * back as "1003") is parsed to a number. Anything else (a name, a UUID, a
+ * partly-numeric label like "A12") returns null so the caller falls back to
+ * a lexicographic compare — we only want NUMERIC strings to sort numerically.
+ */
+function asNumeric(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
  * `Query<T>` is the chainable builder returned by `Table<T>.where()` /
  * `Table<T>.orderBy()`. Each chain step returns `this` so call sites
  * can fluently compose: `db.X.where(...).equals(...).reverse().sortBy(...)`.
@@ -300,7 +318,16 @@ export class Query<T> implements PromiseLike<T[]> {
   }
   equals(value: unknown): this {
     if (this.pending == null) throw new Error('equals() called without where()');
-    this.filters.push({ field: this.pending, value });
+    // Coerce an *At filter value the same way toRow coerces it on write: a
+    // JS millisecond timestamp becomes the ISO-8601 string Postgres stores
+    // in the timestamptz column, so `.where('createdAt').equals(ms)` actually
+    // matches. Non-At fields (and already-string At values) pass through
+    // unchanged so every existing caller behaves identically.
+    let v = value;
+    if (isAtField(this.pending) && typeof v === 'number' && Number.isFinite(v)) {
+      v = new Date(v).toISOString();
+    }
+    this.filters.push({ field: this.pending, value: v });
     this.pending = null;
     return this;
   }
@@ -376,6 +403,12 @@ export class Query<T> implements PromiseLike<T[]> {
         if (av == null && bv == null) return 0;
         if (av == null) return 1;
         if (bv == null) return -1;
+        // Coerce numeric-looking strings (Supabase returns bigint columns as
+        // strings under some PostgREST configs) so sortBy('number') sorts
+        // numerically — otherwise "10" sorts before "9" lexicographically.
+        const na = asNumeric(av);
+        const nb = asNumeric(bv);
+        if (na != null && nb != null) return na - nb;
         if (typeof av === 'number' && typeof bv === 'number') return av - bv;
         return String(av).localeCompare(String(bv));
       });
@@ -390,21 +423,41 @@ export class Query<T> implements PromiseLike<T[]> {
     return this._execute();
   }
   async first(): Promise<T | null> {
-    this._limit = 1;
+    // Only push the limit down to SQL when there's no JS .filter() predicate.
+    // With a predicate, a SQL LIMIT 1 would slice the result set BEFORE the
+    // predicate runs — first() could return null while a matching row exists
+    // on page 2. Without a predicate the limit is a safe, cheap fast path.
+    if (!this.predicate) this._limit = 1;
     const rows = await this._execute();
     return rows[0] || null;
   }
   async count(): Promise<number> {
-    let q = supabase.from(this.t.db).select('*', { count: 'exact', head: !this.predicate });
-    for (const f of this.filters) q = q.eq(snake(f.field), f.value);
-    if (this.predicate) {
-      const { data, error } = await q;
+    // Fast path: no JS predicate → let Postgres count with a head request
+    // (no rows shipped). This is exact regardless of the 1000-row API cap.
+    if (!this.predicate) {
+      let q = supabase.from(this.t.db).select('*', { count: 'exact', head: true });
+      for (const f of this.filters) q = q.eq(snake(f.field), f.value);
+      const { count, error } = await q;
       if (error) throw error;
-      return fromRows<T>(data as unknown[] | null | undefined).filter(this.predicate).length;
+      return count || 0;
     }
-    const { count, error } = await q;
-    if (error) throw error;
-    return count || 0;
+    // Predicate path: the filter runs in JS, so we must materialize the rows
+    // and apply it ourselves. A single select() is capped at Supabase's
+    // 1000-row API limit and would undercount on a large table — page past
+    // it like _execute does (stable order by PK so pages don't overlap/skip).
+    const PAGE = 1000;
+    let matched = 0;
+    for (let from = 0; ; from += PAGE) {
+      let q = supabase.from(this.t.db).select('*');
+      for (const f of this.filters) q = q.eq(snake(f.field), f.value);
+      q = q.order(snake(this.t.pk), { ascending: true });
+      const { data, error } = await q.range(from, from + PAGE - 1);
+      if (error) throw error;
+      const page = (data as unknown[]) || [];
+      matched += fromRows<T>(page).filter(this.predicate).length;
+      if (page.length < PAGE) break;
+    }
+    return matched;
   }
 
   // Thenable, so `await db.X.where(...).equals(...).reverse().sortBy(...)` works.
@@ -453,12 +506,20 @@ export class Table<T> {
   }
 
   async put(record: T): Promise<T[keyof T] | undefined> {
+    // Validate the PK is actually present before upserting. Without this a
+    // record missing its conflict key upserts a NULL-PK row (or errors deep
+    // in PostgREST) and put() returns undefined — a silent no-op the caller
+    // mistakes for success. Fail fast with a readable error instead.
+    const pkVal = (record as Record<string, unknown> | null | undefined)?.[this.t.pk];
+    if (pkVal == null || pkVal === '') {
+      throw new Error(`put(${this.t.db}): missing primary key '${this.t.pk}'`);
+    }
     const row = toRow(record as unknown as Row);
     const { error } = await supabase
       .from(this.t.db).upsert(row, { onConflict: snake(this.t.pk) });
     if (error) throw error;
     invalidate();
-    return (record as Record<string, unknown>)[this.t.pk] as T[keyof T] | undefined;
+    return pkVal as T[keyof T] | undefined;
   }
 
   /**
@@ -572,7 +633,14 @@ export async function searchProducts(profileId: string, term: string, limit = 40
     // wildcard; strip the characters that would break that filter grammar, and
     // collapse whitespace runs so a single-spaced query matches regardless of
     // how the term was typed (the catalog data is normalized to single spaces).
-    const safe = needle.replace(/[%,()*]/g, ' ').replace(/\s+/g, ' ').trim();
+    // Strip every character that has meaning in PostgREST's or() grammar or in
+    // ilike: `,` and `()` delimit the or() list, `*` is PostgREST's ilike
+    // wildcard, `%` is SQL's, `:` introduces a cast/operator hint, and `\` is
+    // the escape char (a trailing one would swallow the next token). Removing
+    // them keeps a pasted reference like "ABC:123\" or "x*(y)" from breaking
+    // the filter. Then collapse whitespace so a single-spaced query matches
+    // the single-spaced catalog data regardless of how it was typed.
+    const safe = needle.replace(/[%,()*:\\]/g, ' ').replace(/\s+/g, ' ').trim();
     if (safe) {
       // Match EVERY whitespace-separated token (AND), each against any of the
       // searchable fields (OR) — so "pukka sofa" finds "PUKKA MEDIUM SOFA": the
@@ -1057,8 +1125,10 @@ export async function dedupeProfilesByEmail(): Promise<string[]> {
       // proof of life; fall back through updatedAt and createdAt so a
       // freshly-invited row (lastSignInAt null) still has a comparable
       // timestamp.
-      const ta = a.lastSignInAt || a.updatedAt || a.createdAt || 0;
-      const tb = b.lastSignInAt || b.updatedAt || b.createdAt || 0;
+      // Nullish chaining (not ||) so a legitimate epoch-0 timestamp isn't
+      // skipped as if it were absent — only null/undefined fall through.
+      const ta = a.lastSignInAt ?? a.updatedAt ?? a.createdAt ?? 0;
+      const tb = b.lastSignInAt ?? b.updatedAt ?? b.createdAt ?? 0;
       return tb - ta;
     });
     for (let i = 1; i < rows.length; i++) {

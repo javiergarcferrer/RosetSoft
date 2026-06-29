@@ -12,7 +12,10 @@ import Dropdown, { DropdownItem } from '../components/primitives/Dropdown.jsx';
 import Stepper from '../components/primitives/Stepper.jsx';
 import Modal from '../components/Modal.jsx';
 import { DebouncedInput } from '../components/DebouncedInput.jsx';
-import { useLiveQuery } from '../db/hooks.js';
+import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
+import EmptyState from '../components/EmptyState.jsx';
+import { SheetErrorBanner } from '../components/sheet/cells.jsx';
+import { useToast } from '../components/ConfirmProvider.jsx';
 import { db, newId, invalidate, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -58,7 +61,9 @@ export default function OrderDetail() {
   const { orderId } = useParams();
   const { profileId, settings, profiles, isAdmin } = useApp();
 
-  const order = useLiveQuery(() => db.orders.get(orderId), [orderId], null);
+  const { data: order, loaded: orderLoaded } = useLiveQueryStatus(
+    () => db.orders.get(orderId), [orderId], null,
+  );
 
   const containers = useLiveQuery(
     () => db.containers.where('orderId').equals(orderId).toArray(),
@@ -125,6 +130,11 @@ export default function OrderDetail() {
 
   const [picker, setPicker] = useState(false);
   const [registering, setRegistering] = useState(false);
+  // Last failed action, surfaced in an inline banner (no native alert). A
+  // mutating handler that throws sets this; the banner dismisses on its X or
+  // on the next successful action.
+  const [error, setError] = useState('');
+  const toast = useToast();
 
   // "Registro LR" — the simple reference·product·qty document (grouped per
   // quote with customer/decorator/seller) the dealer uses to register this
@@ -141,7 +151,7 @@ export default function OrderDetail() {
         order, quotes, lines: allLines, customers, professionals, profiles,
       });
       if (data.rowCount === 0) {
-        alert('No hay artículos para registrar — añade cotizaciones con líneas al pedido.');
+        setError('No hay artículos para registrar — añade cotizaciones con líneas al pedido.');
         return;
       }
       const blob = await generateOrderRegistrationPdf({
@@ -149,22 +159,37 @@ export default function OrderDetail() {
         ...data,
       });
       await downloadBlob(blob, `Registro LR Pedido ${order?.number ? `#${order.number}` : ''}`.trim() + '.pdf');
+      setError('');
     } catch (e) {
-      console.error('[OrderDetail] registration export failed:', e);
-      alert(userMessageFor(e));
+      setError(userMessageFor(e));
     } finally {
       setRegistering(false);
     }
   }
 
   if (!order) {
+    // Distinguish first-fetch-in-flight from a genuinely missing record: a
+    // deleted/bad id used to spin "Cargando pedido…" forever.
+    if (!orderLoaded) {
+      return (
+        <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
+          <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
+            <Package size={20} className="text-ink-300" />
+          </span>
+          <p className="text-sm text-ink-500">Cargando pedido…</p>
+        </div>
+      );
+    }
     return (
-      <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
-        <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
-          <Package size={20} className="text-ink-300" />
-        </span>
-        <p className="text-sm text-ink-500">Cargando pedido…</p>
-      </div>
+      <>
+        <BackLink to="/orders">Volver a pedidos</BackLink>
+        <EmptyState
+          icon={Package}
+          title="Pedido no encontrado"
+          description="Este pedido no existe o fue eliminado."
+          action={<Link to="/orders" className="btn-brand">Ver pedidos</Link>}
+        />
+      </>
     );
   }
 
@@ -199,13 +224,22 @@ export default function OrderDetail() {
 
   async function cancelOrder() {
     if (!confirm('¿Cancelar el pedido? Las cotizaciones quedarán libres pero no se eliminan.')) return;
-    await db.orders.update(orderId, {
-      status: 'cancelled',
-      cancelledAt: Date.now(),
-      updatedAt: Date.now(),
-    });
+    try {
+      await db.orders.update(orderId, {
+        status: 'cancelled',
+        cancelledAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+      return;
+    }
     // A cancelled order frees its quotes — add their LSG pieces back on Shopify.
-    reconcileOrderStock(orderId).catch(() => {});
+    // Best-effort sync: surface a non-blocking toast if it fails so a silent
+    // Shopify drift doesn't go unnoticed.
+    reconcileOrderStock(orderId).catch(() =>
+      toast('No se pudo sincronizar el stock en Shopify.', { tone: 'error' }));
   }
 
   async function uncancel() {
@@ -213,13 +247,20 @@ export default function OrderDetail() {
     // Reactivated orders go back to draft — the dealer re-drives the
     // lifecycle from there. The previous flow restored to 'accepted'
     // which is no longer a valid order status.
-    await db.orders.update(orderId, {
-      status: 'draft',
-      cancelledAt: null,
-      updatedAt: Date.now(),
-    });
+    try {
+      await db.orders.update(orderId, {
+        status: 'draft',
+        cancelledAt: null,
+        updatedAt: Date.now(),
+      });
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+      return;
+    }
     // Reactivating re-commits the accepted quotes — re-deduct their LSG pieces.
-    reconcileOrderStock(orderId).catch(() => {});
+    reconcileOrderStock(orderId).catch(() =>
+      toast('No se pudo sincronizar el stock en Shopify.', { tone: 'error' }));
   }
 
   async function addContainer() {
@@ -230,29 +271,40 @@ export default function OrderDetail() {
     // timestamps. The dealer marks each as packed when they pack it.
     // Race-safe assign — UNIQUE(profile_id, number) catches double-
     // tap or two-tab collisions and the helper retries.
-    await assignSequenceNumber({
-      table: 'containers',
-      profileId,
-      start: 101,
-      build: (number) => ({
-        id,
+    try {
+      await assignSequenceNumber({
+        table: 'containers',
         profileId,
-        orderId,
-        number,
-        name: '',
-        code: '',
-        filledAt: null,
-        notes: '',
-        createdAt: now,
-        updatedAt: now,
-      }),
-    });
-    invalidate();
+        start: 101,
+        build: (number) => ({
+          id,
+          profileId,
+          orderId,
+          number,
+          name: '',
+          code: '',
+          filledAt: null,
+          notes: '',
+          createdAt: now,
+          updatedAt: now,
+        }),
+      });
+      invalidate();
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+    }
   }
 
   async function attachQuote(quoteId) {
-    await db.quotes.update(quoteId, { orderId, updatedAt: Date.now() });
-    invalidate();
+    try {
+      await db.quotes.update(quoteId, { orderId, updatedAt: Date.now() });
+      invalidate();
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+      return;
+    }
     // Committing the quote to this order deducts its LSG pieces from Shopify.
     reconcileQuoteStock(quoteId).catch(() => {});
     setPicker(false);
@@ -260,8 +312,14 @@ export default function OrderDetail() {
 
   async function detachQuote(quoteId) {
     if (!confirm('¿Quitar la cotización de este pedido? La cotización seguirá existiendo.')) return;
-    await db.quotes.update(quoteId, { orderId: null, updatedAt: Date.now() });
-    invalidate();
+    try {
+      await db.quotes.update(quoteId, { orderId: null, updatedAt: Date.now() });
+      invalidate();
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+      return;
+    }
     // Freed from the order — add its LSG pieces back on Shopify.
     reconcileQuoteStock(quoteId).catch(() => {});
   }
@@ -304,6 +362,8 @@ export default function OrderDetail() {
           </>
         }
       />
+
+      <SheetErrorBanner message={error} onDismiss={() => setError('')} />
 
       <Stepper
         stages={ORDER_STAGES}
@@ -376,6 +436,7 @@ export default function OrderDetail() {
                     key={c.id}
                     container={c}
                     orderId={orderId}
+                    onError={setError}
                     arrivalAction={
                       // HL reports arrival but the order still says "En ruta" —
                       // suggest the next stage; the dealer confirms with a tap.
@@ -478,7 +539,7 @@ export default function OrderDetail() {
 // narrative that used to live per-container moved up to the order
 // (placed → confirmed → in_transit → in_customs → received).
 // ---------------------------------------------------------------------------
-function ContainerRow({ container, arrivalAction = null }) {
+function ContainerRow({ container, arrivalAction = null, onError }) {
   const filled = !!container.filledAt;
 
   // The container number lives in `code`. Validate it (ISO 6346 check
@@ -500,7 +561,12 @@ function ContainerRow({ container, arrivalAction = null }) {
 
   async function del() {
     if (!confirm(`¿Eliminar el contenedor #${container.number}?`)) return;
-    await db.containers.delete(container.id);
+    try {
+      await db.containers.delete(container.id);
+      onError?.('');
+    } catch (e) {
+      onError?.(userMessageFor(e));
+    }
   }
 
   return (
@@ -707,7 +773,6 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
           enabled={canMarkDelivered(quote, order) || delivered}
           disabledHint={deliveryBlockedReason(quote, order)}
           onToggle={() => setMilestone('deliveredAt', !delivered)}
-          tone="emerald"
         />
       </div>
     </li>
@@ -725,18 +790,15 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
 //   • enabled & not done — outlined white pill with the milestone icon.
 //   • disabled & not done — subdued gray pill, tooltip explains why.
 // ---------------------------------------------------------------------------
-function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint, onToggle, tone }) {
+function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint, onToggle }) {
   if (done) {
-    const doneClass = tone === 'emerald'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100';
     return (
       <button
         type="button"
         onClick={onToggle}
         title="Clic para desmarcar"
         aria-pressed={true}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium border transition-colors active:scale-[0.97] ${doneClass}`}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-8 coarse:min-h-11 rounded-md text-xs font-medium border transition-colors active:scale-[0.97] bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
       >
         <CheckCircle2 size={12} />
         <span>{label}</span>

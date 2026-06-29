@@ -11,23 +11,18 @@
  * so the View formats it with formatDop/formatMoney).
  */
 import { agoLabel } from './board.js';
+// `inLabel` lives in ONE place (social.js) — both surfaces format future
+// instants identically, so the copy that used to live here is gone (it took a
+// raw delta; the canonical takes an absolute ts + now, the call sites below pass
+// that). Keeps the "en N min/h/d" wording from drifting between the two.
+import { inLabel } from './social.js';
 
 const DAY = 86_400_000;
-const HOUR = 3_600_000;
 
 /** Severity → sort weight (danger floats to the front of the strip). */
 const SEVERITY = { danger: 0, warn: 1, info: 2 };
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-/** "en 3 d" / "hoy" / "en 5 h" — a short countdown for a future instant. */
-function inLabel(ms) {
-  if (ms == null) return '';
-  if (ms <= 0) return 'ahora';
-  if (ms < HOUR) return `en ${Math.max(1, Math.round(ms / 60_000))} min`;
-  if (ms < DAY) return `en ${Math.round(ms / HOUR)} h`;
-  return `en ${Math.round(ms / DAY)} d`;
-}
 
 /**
  * The cross-domain obligations strip — every time-sensitive thing the dealer
@@ -84,7 +79,7 @@ export function resolveObligations({
     let tone = 'warn';
     if (a.kind === 'none') { detail = 'sin secuencia utilizable'; tone = 'danger'; }
     else if (a.kind === 'low') { detail = plural(a.remaining ?? 0, 'e-NCF restante', 'e-NCF restantes'); tone = (a.remaining ?? 0) <= 5 ? 'danger' : 'warn'; }
-    else if (a.kind === 'expiring') { detail = `secuencia vence ${inLabel((a.expiresAt ?? now) - now)}`; tone = 'warn'; }
+    else if (a.kind === 'expiring') { detail = `secuencia vence ${inLabel(a.expiresAt ?? now, now)}`; tone = 'warn'; }
     push({
       id: `ecf-${a.type}`, kind: 'ecf', tone, to: '/accounting/ecf',
       label: `e-CF ${a.label || a.type}`, detail, amount: null, currency: null, sortKey: 0,
@@ -151,7 +146,7 @@ export function resolveObligations({
     } else if (comms.nextPostAt != null) {
       push({
         id: 'posts-next', kind: 'posts', tone: 'info', to: '/marketing',
-        label: 'Próxima publicación', detail: inLabel(comms.nextPostAt - now),
+        label: 'Próxima publicación', detail: inLabel(comms.nextPostAt, now),
         amount: null, currency: null, sortKey: 6,
       });
     }

@@ -437,9 +437,8 @@ export default function Facturacion() {
     }
     invalidate();
     setBulk(null);
-    setErr(failed
-      ? `Transmitidos ${done - failed}/${pending.length}. ${failed} con error — ${firstErr}`
-      : `✓ ${pending.length} e-CF transmitidos a la DGII.`);
+    if (failed) setErr(`Transmitidos ${done - failed}/${pending.length}. ${failed} con error — ${firstErr}`);
+    else flashSuccess(`${pending.length} e-CF transmitidos a la DGII.`);
   }
 
   // Core status check — resolve one transmitted e-CF's DGII estado and persist
@@ -494,7 +493,8 @@ export default function Facturacion() {
     invalidate();
     setBulk(null);
     const tail = `${accepted} aceptados, ${rejected} rechazados, ${pend} en proceso`;
-    setErr(rejected === 0 ? `✓ Consultados ${sent.length}: ${tail}.` : `Consultados ${sent.length}: ${tail}.`);
+    if (rejected === 0) flashSuccess(`Consultados ${sent.length}: ${tail}.`);
+    else setErr(`Consultados ${sent.length}: ${tail}.`);
   }
 
   // Auto-refresh DGII status: a transmitted e-CF sits in 'sent' until the DGII
@@ -647,6 +647,17 @@ export default function Facturacion() {
   const [posting, setPosting] = useState(null);
   const [lookingId, setLookingId] = useState(null);
   const [err, setErr] = useState('');
+  // Success feedback is a SEPARATE state from `err` (no more multiplexing a
+  // single string keyed by a leading ✓ glyph), and it auto-clears so a stale
+  // "transmitidos" banner doesn't linger over the next action.
+  const [successMsg, setSuccessMsg] = useState('');
+  useEffect(() => {
+    if (!successMsg) return undefined;
+    const t = setTimeout(() => setSuccessMsg(''), 6000);
+    return () => clearTimeout(t);
+  }, [successMsg]);
+  // Show a success line; clears any standing error so the two never stack.
+  const flashSuccess = (msg) => { setErr(''); setSuccessMsg(msg); };
   const [drawerRow, setDrawerRow] = useState(null); // posted factura whose detail briefing is open
   const [facturarQuote, setFacturarQuote] = useState(null); // por-facturar quote whose facturar modal is open
   const [depositConfirm, setDepositConfirm] = useState(null); // { quote, customer, usdTotal } whose confirm-cobro modal is open
@@ -663,7 +674,7 @@ export default function Facturacion() {
   // Clear the shared message when the drawer opens/closes so a stale page error
   // never leaks into the fiscal-action footer (the drawer covers the page banner,
   // so fiscalMsg is the only place transmit/imprimir feedback is visible there).
-  useEffect(() => { setErr(''); }, [drawerRow]);
+  useEffect(() => { setErr(''); setSuccessMsg(''); }, [drawerRow]);
   useEffect(() => {
     if (!kbdNav.current) return;
     kbdNav.current = false;
@@ -711,6 +722,18 @@ export default function Facturacion() {
     tableRef: tableRef607, tableStyle: tableStyle607, thProps: thProps607,
     ResizeHandle: ResizeHandle607, reset: resetWidths607,
   } = useColumnWidths(cols607, 'rs.facturacion.widths.v2');
+
+  // 607 footer layout: the label cell ("N facturas") spans every leading column
+  // up to the first visible total column; each total column then renders its own
+  // `foot`, and the fixed e-CF column closes with an empty cell. Derived from the
+  // visible columns so it tracks the user's show/hide choices.
+  const footLayout = useMemo(() => {
+    const labelSpan = cols607.findIndex((c) => c.foot);
+    return {
+      leadSpan: labelSpan === -1 ? cols607.length : labelSpan,
+      totalCols: labelSpan === -1 ? [] : cols607.slice(labelSpan),
+    };
+  }, [cols607]);
 
   const setDraft = (id, patch) => setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
 
@@ -1105,7 +1128,8 @@ export default function Facturacion() {
         { key: 'porfacturar', label: `Por facturar${deliverables.length ? ` (${deliverables.length})` : ''}` },
         { key: 'anuladas', label: `Anuladas${register.counts.anuladas ? ` (${register.counts.anuladas})` : ''}` },
       ]} active={tab} onChange={setTab} />
-      {err && <p className={`text-sm mb-3 ${err.startsWith('✓') ? 'text-emerald-700' : 'text-rose-600'}`}>{err}</p>}
+      {err && <p className="text-sm mb-3 text-rose-600">{err}</p>}
+      {successMsg && <p className="text-sm mb-3 text-emerald-700">{successMsg}</p>}
 
       {!loaded ? <ListLoading /> : (
         <>
@@ -1218,27 +1242,15 @@ export default function Facturacion() {
                       })}
                     </tbody>
                     <tfoot>
-                      {(() => {
-                        // The label cell ("N ventas") spans every leading column
-                        // up to the first visible total column; each total column
-                        // then renders its own `foot`, and the fixed e-CF column
-                        // closes with an empty cell.
-                        const footCtx = { totals: registerView.totals };
-                        const labelSpan = cols607.findIndex((c) => c.foot);
-                        const leadSpan = labelSpan === -1 ? cols607.length : labelSpan;
-                        const totalCols = labelSpan === -1 ? [] : cols607.slice(labelSpan);
-                        return (
-                          <tr className="border-t border-ink-200 font-semibold">
-                            <td className="whitespace-nowrap" colSpan={leadSpan}>{registerView.count} facturas</td>
-                            {totalCols.map((col) => (
-                              <td key={col.key} className={col.foot ? (col.tdClass || '') : ''}>
-                                {col.foot ? col.foot(footCtx) : null}
-                              </td>
-                            ))}
-                            <td></td>
-                          </tr>
-                        );
-                      })()}
+                      <tr className="border-t border-ink-200 font-semibold">
+                        <td className="whitespace-nowrap" colSpan={footLayout.leadSpan}>{registerView.count} facturas</td>
+                        {footLayout.totalCols.map((col) => (
+                          <td key={col.key} className={col.foot ? (col.tdClass || '') : ''}>
+                            {col.foot ? col.foot({ totals: registerView.totals }) : null}
+                          </td>
+                        ))}
+                        <td></td>
+                      </tr>
                     </tfoot>
                   </table>
                 </div>

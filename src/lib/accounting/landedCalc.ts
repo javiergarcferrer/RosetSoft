@@ -31,12 +31,7 @@
  * cost; it's surfaced separately. Pure: no React, no Supabase, no currency (the
  * View multiplies by the USD→DOP rate for display).
  */
-import { round2 } from './ledger.js';
-
-/** 4-dp round for a unit cost (matches the kardex IN precision). */
-function round4(n: number): number {
-  return Math.round((Number(n) || 0) * 10000) / 10000;
-}
+import { round2, round4 } from './ledger.js';
 
 // ───────────────────────────────────────────────────────────── Incoterms 2020
 /**

@@ -123,15 +123,18 @@ export function buildSalesBillEntry({
   sale: SalesBillPostInput;
   postedAt?: number;
 }): { entry: JournalEntry; lines: JournalLine[] } {
-  const itbis = round2(sale.lines.reduce((s, l) => s + round2(l.itbis || 0), 0));
-
-  // Credit each distinct revenue account once, with the line bases merged.
+  // Credit each distinct revenue account once, with the line bases merged. A line
+  // whose base is ≤ 0 is dropped (no revenue) — and its ITBIS is dropped WITH it,
+  // so a stray tax on a zero-base line can't be booked against revenue that was
+  // never recognized (which would leave the asiento off-balance).
   const byAccount = new Map<string, number>();
+  let itbis = 0;
   for (const l of sale.lines) {
     const amt = round2(Math.max(0, Number(l.base) || 0));
     if (amt <= 0) continue;
     if (!l.accountCode) throw new Error('Cada línea necesita una cuenta de ingreso.');
     byAccount.set(l.accountCode, round2((byAccount.get(l.accountCode) || 0) + amt));
+    itbis = round2(itbis + round2(l.itbis || 0));
   }
   if (byAccount.size === 0) throw new Error('La factura no tiene líneas con monto.');
   const base = round2([...byAccount.values()].reduce((s, v) => s + v, 0));

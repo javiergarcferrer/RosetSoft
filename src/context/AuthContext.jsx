@@ -140,8 +140,33 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  // Wipe every sb-* auth token from localStorage — the same nuclear key
+  // sweep forceReset() uses. Shared by signOut()'s fallback path.
+  function wipeAuthTokens() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  }
+
   async function signOut() {
-    await supabase.auth.signOut();
+    // supabase.auth.signOut() can hang (a dead network, an unreachable
+    // project) or reject (already-expired session). Either way the user
+    // expects to be logged out, so race it against a short timeout and, on
+    // a hang or error, fall back to wiping the stored tokens locally
+    // (mirrors forceReset) and clearing the in-memory session so the app
+    // routes to /login instead of stranding them signed-in.
+    try {
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timed out')), 4000)),
+      ]);
+    } catch (e) {
+      console.warn('[auth] signOut failed/hung — wiping local tokens', e);
+      wipeAuthTokens();
+      setSession(null);
+    }
   }
 
   /**
@@ -153,11 +178,7 @@ export function AuthProvider({ children }) {
    * request that never completes.
    */
   function forceReset() {
-    try {
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith('sb-'))
-        .forEach((k) => localStorage.removeItem(k));
-    } catch {}
+    wipeAuthTokens();
     window.location.reload();
   }
 

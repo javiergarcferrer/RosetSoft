@@ -236,7 +236,12 @@ export function commissionBreakdown(
   // so the commission is computed on the post-courtesy base — the courtesy is
   // NOT added back and NOT drawn out. Only the regular discount is added back
   // (preDiscountBase) and then drawn out of the net dollar-for-dollar.
-  const preDiscountBase = taxable + discount;
+  // A clearance quote can carry a NEGATIVE taxableBase (negative margin), which
+  // would make preDiscountBase — and the gross — negative. A negative gross has
+  // no meaning as a commission and breaks the displayed gross − discount = net
+  // reconciliation (net floors at 0 while gross prints below it). Floor the base
+  // at 0 so the three figures always reconcile: gross 0, net 0 on a clearance.
+  const preDiscountBase = Math.max(0, taxable + discount);
   const gross = preDiscountBase * (clampCommissionPct(pct) / 100);
   return { gross, discount, net: Math.max(0, gross - discount) };
 }

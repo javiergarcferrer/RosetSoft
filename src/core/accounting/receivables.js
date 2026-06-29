@@ -3,6 +3,7 @@
 import { round2 } from '../../lib/accounting/ledger.js';
 import { paymentNet } from '../../lib/accounting/payment.js';
 import { isCreditNote } from '../../lib/accounting/ecf.js';
+import { payableCharge } from './_shared.js';
 
 function ageBucket(days) {
   if (days <= 30) return 'd0_30';
@@ -121,7 +122,7 @@ export function resolvePayables({ purchases, expenses, payments, suppliersById, 
     .filter((d) => d.paymentMethod === 'credit')
     .map((d) => ({
       partyId: d.supplierId, docId: d.id, date: d[dateField], label: d.ncf || (dateField === 'purchaseAt' ? 'Compra' : 'Gasto'),
-      amount: round2((d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0)),
+      amount: payableCharge(d),
     }));
   const charges = [...credit(purchases, 'purchaseAt'), ...credit(expenses, 'expenseAt')].filter((c) => c.amount > 0.001);
   const pays = (payments || [])
@@ -183,7 +184,7 @@ export function resolveStatementFor({
     .filter((d) => d.paymentMethod === 'credit' && d.supplierId === selected.id)
     .map((d) => ({
       date: d[dateField],
-      amount: round2((d.base || 0) + (d.itbis || 0) - (d.retentionIsr || 0) - (d.retentionItbis || 0)),
+      amount: payableCharge(d),
       label, ref: d.ncf || '',
     }));
   const charges = [...credit(purchases, 'purchaseAt', 'Compra'), ...credit(expenses, 'expenseAt', 'Gasto')];

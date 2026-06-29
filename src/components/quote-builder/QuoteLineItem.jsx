@@ -16,7 +16,6 @@ import CatalogPicker from './CatalogPicker.jsx';
 import MultiAddPicker from './MultiAddPicker.jsx';
 import ModelLinkBar from './ModelLinkBar.jsx';
 import { carryModelLink, clearModelFabrics } from '../../lib/lrModelFabrics.js';
-import { applyCompanyDiscount } from '../../lib/pricing.js';
 import { FamiliesContext } from './FamiliesContext.js';
 import { HeldStockContext } from './HeldStockContext.js';
 import { MaterialsContext } from './MaterialsContext.js';
@@ -465,11 +464,11 @@ export default function QuoteLineItem({
         />
         {compound ? (
           <CompoundCalculatorBand
-            line={line}
             compound={vm.compound}
             rowTotal={rowTotal}
+            costLine={vm.costLine}
+            companyDiscountPct={vm.companyDiscountPct}
             fmt={fmt}
-            hasAdjustment={hasAdjustment}
             breakdownOpen={breakdownOpen}
             onToggleBreakdown={() => setBreakdownOpen((v) => !v)}
             onCloseBreakdown={() => setBreakdownOpen(false)}
@@ -482,6 +481,10 @@ export default function QuoteLineItem({
           <CalculatorBand
             line={line}
             unit={unit}
+            unitForEdit={vm.unitForEdit}
+            factor={vm.factor}
+            costLine={vm.costLine}
+            companyDiscountPct={vm.companyDiscountPct}
             lineTotal={rowTotal}
             fmt={fmt}
             hasAdjustment={hasAdjustment}
@@ -615,7 +618,8 @@ function TopStrip({
       onClick={onSelectAlternative}
       className="inline-flex items-center justify-center coarse:min-w-11 coarse:min-h-11 flex-shrink-0"
       title={isSelectedAlternative ? 'Alternativa seleccionada' : 'Seleccionar esta alternativa'}
-      aria-pressed={isSelectedAlternative}
+      role="radio"
+      aria-checked={isSelectedAlternative}
       aria-label="Seleccionar alternativa"
     >
       <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors ${
@@ -1654,19 +1658,18 @@ function PricingRow({
 // row (faint top divider via .qli-pricing), right-aligned equation. The
 // Total is a button — clicking it toggles the per-line breakdown popover.
 function CalculatorBand({
-  line, unit, lineTotal, fmt, hasAdjustment, breakdownOpen,
-  onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
+  line, unit, unitForEdit, factor, costLine, companyDiscountPct, lineTotal, fmt,
+  hasAdjustment, breakdownOpen, onChange, onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
-  const companyDiscountPct = useContext(CompanyDiscountContext);
-  // Company account: the Unitario READS at dealer cost (list × factor) so the
-  // whole equation is cost; edits divide back out so the STORED price stays the
-  // list value (the storefront's retail basis). factor 1 ⇒ a normal quote.
-  const factor = companyDiscountPct > 0 ? 1 - companyDiscountPct / 100 : 1;
+  // Company account: the Unitario READS at dealer cost (the VM's `unitForEdit` =
+  // list × factor) so the whole equation is cost; edits divide back out by the
+  // VM's `factor` so the STORED price stays the list value (the storefront's
+  // retail basis). On a normal quote factor is 1, so this is a no-op.
   return (
     <div className="qli-pricing">
       <PricingRow
         qty={line.qty}
-        unitPrice={factor !== 1 ? (Number(line.unitPrice) || 0) * factor : line.unitPrice}
+        unitPrice={unitForEdit}
         total={lineTotal}
         fmt={fmt}
         currency={currency}
@@ -1681,7 +1684,7 @@ function CalculatorBand({
         unitForCaption={unit}
         breakdown={(
           <LineBreakdownPopover
-            line={factor !== 1 ? applyCompanyDiscount([line], companyDiscountPct)[0] : line}
+            line={costLine}
             currency={currency}
             rates={rates}
             onClose={onCloseBreakdown}
@@ -1743,7 +1746,7 @@ function RangeBand({ line, totalRange, fmt, onChange }) {
 // line-level discount).
 // ---------------------------------------------------------------------------
 function CompoundCalculatorBand({
-  line, compound, rowTotal, fmt, hasAdjustment, breakdownOpen,
+  compound, rowTotal, costLine, companyDiscountPct, fmt, breakdownOpen,
   onToggleBreakdown, onCloseBreakdown, currency, rates,
 }) {
   // Compound roll-up resolved in the VM: component count, whether it shows a
@@ -1752,7 +1755,6 @@ function CompoundCalculatorBand({
   const count = compound.count;
   const ranged = compound.hasRange;
   const tr = compound.range;
-  const companyDiscountPct = useContext(CompanyDiscountContext);
   return (
     <div className="qli-pricing">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1781,7 +1783,7 @@ function CompoundCalculatorBand({
           </button>
           {breakdownOpen && (
             <LineBreakdownPopover
-              line={companyDiscountPct > 0 ? applyCompanyDiscount([line], companyDiscountPct)[0] : line}
+              line={costLine}
               currency={currency}
               rates={rates}
               onClose={onCloseBreakdown}
@@ -2162,14 +2164,13 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
   // the "Opción N de M" position, the range swap (a material-less sub-piece
   // shows a range like the standalone line), and whether copying this piece's
   // material to its siblings would change anything (canApplyToAll).
-  const { total, optional, inGroup, isSelected, dimmed, groupInfo, canApplyToAll } = vm;
+  const { total, unitForEdit, factor, optional, inGroup, isSelected, dimmed, groupInfo, canApplyToAll } = vm;
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const families = useContext(FamiliesContext);
-  // Component total (from the parent VM) is already at dealer cost on a company
-  // quote; show the Unitario at cost too so the equation reads consistently, and
-  // divide edits back out so the STORED price stays list. factor 1 ⇒ normal quote.
+  // Component total + Unitario (from the parent VM) already read at dealer cost
+  // on a company quote (vm.unitForEdit = list × factor); divide edits back out by
+  // vm.factor so the STORED price stays list. factor 1 ⇒ normal quote.
   const companyDiscountPct = useContext(CompanyDiscountContext);
-  const factor = companyDiscountPct > 0 ? 1 - companyDiscountPct / 100 : 1;
   // Fill THIS sub-piece from the catalog with the SAME flow as a product line:
   // pick a model, then a material + color OR "sin material · cotizar por rango".
   // The catalog seed is applied to the component (dropping the line-only family
@@ -2396,7 +2397,7 @@ function ComponentRow({ index, component, vm, currency, rates, fmt, nameFilter, 
         <div className="qli-pricing">
           <PricingRow
             qty={component.qty}
-            unitPrice={factor !== 1 ? (Number(component.unitPrice) || 0) * factor : component.unitPrice}
+            unitPrice={unitForEdit}
             total={total}
             fmt={fmt}
             currency={currency}

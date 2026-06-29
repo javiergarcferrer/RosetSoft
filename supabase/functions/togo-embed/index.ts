@@ -196,8 +196,16 @@ async function captureLead(admin: Admin, body: Row): Promise<Row> {
   // Keep only placements of CURRENTLY-known models, normalized to the exact shape
   // the dealer pane replays through the configurator VM. (camelCase keys survive
   // the JSONB round-trip — the app's rowMapping only converts top-level columns.)
-  const { models } = await loadContext(admin);
-  const known = new Set(models.map((m) => String(m.id)));
+  // The lead path only needs the set of valid (active, renderable) model ids —
+  // fetch just those, not the full catalog context (settings + materials +
+  // fabrics + the products sweep). Mirrors loadContext's model filter.
+  const { data: modelRows } = await admin
+    .from('togo_models').select('id, active, svg').eq('profile_id', TEAM_PROFILE_ID);
+  const known = new Set(
+    ((modelRows || []) as Row[])
+      .filter((m) => m.active !== false && m.svg)
+      .map((m) => String(m.id)),
+  );
   const items = rawItems
     .map((it) => {
       const base = { modelId: String(it.modelId || ''), x: num(it.x), y: num(it.y), rot: num(it.rot) };

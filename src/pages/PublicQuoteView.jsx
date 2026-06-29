@@ -38,6 +38,14 @@ export default function PublicQuoteView() {
   // only reconcile to the server bundle once the queue drains.
   const chainRef = useRef(Promise.resolve());
   const pendingRef = useRef(0);
+  // True while this component is mounted — the PDF generation is a long async
+  // task, so a reload/navigation mid-generate must not setState on a dead
+  // component (mirrors the fetch effect's `active` guard).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Show a bundle now — both in the ref (for the next optimistic pick) and on
   // screen.
@@ -146,10 +154,10 @@ export default function PublicQuoteView() {
         publicImages: true,
       });
       await downloadBlob(blob, `${quoteFileName(quote, bundle.customer || null)}.pdf`);
-      setPdf('idle');
+      if (mountedRef.current) setPdf('idle');
     } catch (e) {
       console.error('[PublicQuoteView] PDF download failed:', e);
-      setPdf('error');
+      if (mountedRef.current) setPdf('error');
     }
   }
 

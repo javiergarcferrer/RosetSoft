@@ -321,7 +321,9 @@ export function resolveConfigurator(placed, resolvedById, opts = {}) {
     count: tiles.length,
     overallCm,
     subtotalUsd: compoundSubtotal({ components }),
-    priced: tiles.every((t) => t.hasPrice),
+    // An EMPTY layout is not "priced" — `every` is vacuously true on [], which
+    // would let the View enable "Crear cotización" on a blank plan.
+    priced: tiles.length > 0 && tiles.every((t) => t.hasPrice),
   };
 }
 

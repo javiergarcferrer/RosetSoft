@@ -205,7 +205,11 @@ export function buildCustomSchedule(
     financedUsd: total,
     monthlyRatePct: 0,
     installmentCount: count,
-    monthlyUsd: installments[0]?.amount ?? 0,
+    // Custom staged mode has no single fixed cuota — each stage is its own %.
+    // Surface 0 here so the field can't be mistaken for a monthly amount (it
+    // previously leaked the FIRST stage's amount, which the staged renderer
+    // doesn't use anyway).
+    monthlyUsd: 0,
     installments,
     totalInterestUsd: 0,
     totalFinancedToPayUsd: total,

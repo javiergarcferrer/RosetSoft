@@ -72,7 +72,14 @@ export function stepPeriodRef(kind, ref, delta) {
   return new Date(d.getFullYear(), d.getMonth() + delta, 15).getTime();
 }
 
-function inWin(t, w) { return t != null && t >= w.start && t <= w.end; }
+// A missing start/end bound is OPEN on that side (else an unbounded window
+// silently drops every row instead of including it).
+function inWin(t, w) {
+  if (t == null || !w) return false;
+  if (w.start != null && t < w.start) return false;
+  if (w.end != null && t > w.end) return false;
+  return true;
+}
 function sumIn(rows, dateField, w, value) {
   return round2((rows || []).reduce((s, r) => (inWin(r[dateField], w) ? s + (Number(value(r)) || 0) : s), 0));
 }
@@ -171,7 +178,7 @@ export function resolveSalesSegmented({
     totalAll = round2(totalAll + (p.total || 0));
   }
 
-  const q = query.trim().toLowerCase();
+  const q = (query || '').trim().toLowerCase();
   const rows = [...segs.values()]
     .filter((s) => !q || s.label.toLowerCase().includes(q))
     .sort((a, b) => b.total - a.total)

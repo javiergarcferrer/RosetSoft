@@ -183,17 +183,11 @@ export default function Layout() {
   //                    (15rem pinned-open; 3.5rem = the w-14 icon rail when
   //                    collapsed — the rail sits in-flow, so the dock starts just
   //                    past it and never covers it).
-  //   --rs-dock-pad  : extra left padding that re-insets the dock's CONTENT under
-  //                    the page columns — 0 in both states, since the in-flow rail
-  //                    already reserves its own width.
-  // Consumed only via md:-gated utilities, so the mobile drawer layout ignores them.
+  // Consumed only via md:-gated utilities, so the mobile drawer layout ignores it.
   const dockLeft = collapsed ? '3.5rem' : '15rem';
-  const dockPad = '0px';
   useLayoutEffect(() => {
-    const root = document.documentElement.style;
-    root.setProperty('--rs-dock-left', dockLeft);
-    root.setProperty('--rs-dock-pad', dockPad);
-  }, [dockLeft, dockPad]);
+    document.documentElement.style.setProperty('--rs-dock-left', dockLeft);
+  }, [dockLeft]);
 
   return (
     <div className="h-full flex flex-col md:flex-row">
@@ -407,9 +401,6 @@ export default function Layout() {
 
         <ProfileMenu compact={showRailIcons} />
       </aside>
-
-      {/* (The old fixed "show sidebar" toggle is gone: the icon rail is always
-          visible, and the right-edge handle / ⌘\ toggles the pinned state.) */}
 
       {/* Single scroll container for the whole app shell. html/body are
           pinned in index.css so this is where momentum scrolling lives.

@@ -15,7 +15,7 @@ import { db } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.js';
 import {
   VAR_SOURCES, resolveBroadcastAudience, resolveEmailAudience, buildBroadcastRecipients,
-  fillTemplateBody, resolveCampaignsList, displayPhone,
+  fillTemplateBody, fillEmailTokens, escapeHtml, normalizeGroupRows, resolveCampaignsList, displayPhone,
   resolveGroupAudience, buildGroupBroadcastRecipients,
 } from '../core/crm/index.js';
 import {
@@ -290,16 +290,13 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
   }, [open]);
 
   const isGroups = kind === 'groups';
-  // Group audience rows are normalized to the same shape the picker renders
-  // (key/name), carrying `subject` + `isGroup` so send/preview can branch.
-  const groupRows = (g) => g.map((row) => ({ key: row.key, id: row.id, name: row.subject, subject: row.subject, participantCount: row.participantCount, isGroup: true }));
   const audience = useMemo(
-    () => (isGroups ? groupRows(resolveGroupAudience(groups, { needle })) : resolveBroadcastAudience(customers, professionals, { kind, needle })),
+    () => (isGroups ? normalizeGroupRows(resolveGroupAudience(groups, { needle })) : resolveBroadcastAudience(customers, professionals, { kind, needle })),
     [isGroups, groups, customers, professionals, kind, needle],
   );
   // The full (unsearched) audience for "select all" counts.
   const fullAudience = useMemo(
-    () => (isGroups ? groupRows(resolveGroupAudience(groups, {})) : resolveBroadcastAudience(customers, professionals, { kind })),
+    () => (isGroups ? normalizeGroupRows(resolveGroupAudience(groups, {})) : resolveBroadcastAudience(customers, professionals, { kind })),
     [isGroups, groups, customers, professionals, kind],
   );
   const selectedContacts = useMemo(
@@ -579,17 +576,6 @@ const EMAIL_KINDS = [
   { value: 'professionals', label: 'Profesionales', icon: UserSquare2 },
   { value: 'all', label: 'Todos', icon: Megaphone },
 ];
-
-/** Replace the {nombre}/{nombre_completo}/{empresa} tokens for one contact. */
-function fillEmailTokens(text, contact) {
-  return String(text || '')
-    .replace(/\{nombre_completo\}/gi, contact.name || '')
-    .replace(/\{nombre\}/gi, contact.firstName || contact.name || '')
-    .replace(/\{empresa\}/gi, contact.company || '');
-}
-function escapeHtml(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 /** Difusión → Correo: send a personalized email to a mailing-list audience via
  *  Gmail, one message per recipient, with a frozen send history. */
@@ -916,9 +902,12 @@ function TemplatesTab({ templates, templatesError, onReload }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [actionError, setActionError] = useState(null);
+  // Template pending deletion — drives the confirm Modal (the destructive
+  // confirm is the shared dialog, never a native confirm()).
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   async function remove(t) {
-    if (!confirm(`¿Eliminar la plantilla "${t.name}"? Se elimina en todos los idiomas, no se puede deshacer, y Meta reserva el nombre 30 días (no podrás reutilizarlo).`)) return;
+    setConfirmDelete(null);
     setDeleting(t.name);
     setActionError(null);
     const res = await deleteWaTemplate(t.name).catch((e) => ({ ok: false, error: e?.message }));
@@ -1005,7 +994,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
                 {!isMetaSample && (
                   <button
                     type="button"
-                    onClick={() => remove(t)}
+                    onClick={() => setConfirmDelete(t)}
                     disabled={deleting === t.name}
                     className="btn-ghost text-red-600 hover:bg-red-50 hover:text-red-700 shrink-0"
                     title="Eliminar plantilla"
@@ -1026,6 +1015,31 @@ function TemplatesTab({ templates, templatesError, onReload }) {
         onClose={() => setCreateOpen(false)}
         onCreated={() => { setCreateOpen(false); onReload(); }}
       />
+
+      <Modal
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="Eliminar plantilla"
+        size="sm"
+        footer={
+          <>
+            <button type="button" onClick={() => setConfirmDelete(null)} className="btn-ghost">Cancelar</button>
+            <button
+              type="button"
+              onClick={() => remove(confirmDelete)}
+              className="btn-primary !bg-red-600 hover:!bg-red-700 inline-flex items-center gap-1.5"
+            >
+              <Trash2 size={14} /> Eliminar
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-600">
+          ¿Eliminar la plantilla <span className="font-medium text-ink-900">{confirmDelete?.name}</span>?
+          Se elimina en todos los idiomas, no se puede deshacer, y Meta reserva el nombre 30 días
+          (no podrás reutilizarlo).
+        </p>
+      </Modal>
     </div>
   );
 }

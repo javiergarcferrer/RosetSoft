@@ -93,7 +93,7 @@ function resolveModules(components) {
 // position map resolved once for the whole panel (componentAlternativeGroupInfo,
 // keyed by component id). Components keep their own id so the view can still key
 // rows and look each derived entry up; handlers/state/pickers stay in the view.
-function resolveComponents(components) {
+function resolveComponents(components, factor) {
   const list = Array.isArray(components) ? components : [];
   const altInfo = componentAlternativeGroupInfo(list);
   return list.map((c) => {
@@ -105,6 +105,14 @@ function resolveComponents(components) {
       // Pricing: a material-less sub-piece shows a range, else a single total —
       // the same swap the standalone line makes, one level down.
       total: componentSubtotal(c),
+      // The unit price shown in the editable Unitario cell. This component is
+      // ALREADY cost-scaled (applyCompanyDiscount ran over the parent), so its
+      // unitPrice == list × factor — exactly the dealer-cost figure the cell
+      // shows. The View divides edits back out by `factor` so the STORED price
+      // stays at list. factor 1 ⇒ a normal quote, so this is just the list unit.
+      unitForEdit: Number(c.unitPrice) || 0,
+      // The cost multiplier so the View can divide an edit back out to list.
+      factor,
       hasRange,
       range: hasRange ? componentSubtotalRange(c) : null,
       // Option flags + the resulting "off" (dimmed) state — an excluded optional
@@ -148,6 +156,12 @@ export function resolveLineItem(line, companyDiscountPct = 0) {
   // and derive every figure below from it, so the displayed unit/subtotal/range/
   // compound roll-up/module subtotals all read at cost. pct 0 ⇒ no change.
   const pct = clampPct(companyDiscountPct);
+  // The cost multiplier the editor applies to the LIST unit price so the
+  // Unitario cell reads at dealer cost while the stored value stays at list (the
+  // View divides edits back out by this factor). 1 ⇒ a normal customer quote.
+  // Mirrors applyCompanyDiscount's own `1 - p/100` so the input and the derived
+  // totals can't drift.
+  const factor = pct > 0 ? 1 - pct / 100 : 1;
   const l = pct > 0 ? applyCompanyDiscount([line || {}], pct)[0] : (line || {});
   const isCompound = isCompoundLine(l);
 
@@ -156,6 +170,12 @@ export function resolveLineItem(line, companyDiscountPct = 0) {
   // components (lineTotal handles that branch); a normal line is unit × qty.
   const unitNet = applyLineAdjustments(l.unitPrice, l.lineMarginPct, l.lineDiscountPct);
   const subtotal = isCompound ? lineTotal(l) : unitNet * (l.qty || 0);
+
+  // The unit price the editable Unitario cell shows: the raw LIST unit scaled to
+  // dealer cost on a company account (list × factor). Derived from the raw input
+  // `line` (not the cost-scaled `l`) so the math lives in ONE place — the View
+  // reads this and divides edits back out by `factor`.
+  const unitForEdit = (Number((line || {}).unitPrice) || 0) * factor;
 
   // Material-less RANGE line — priced cheapest→priciest grade until a fabric is
   // picked. Shows a range band instead of the qty × unit = total calculator.
@@ -193,6 +213,7 @@ export function resolveLineItem(line, companyDiscountPct = 0) {
     isRange,
     dimmed,
     unitNet,
+    unitForEdit,
     subtotal,
     range,
     hasAdjustment,
@@ -201,8 +222,14 @@ export function resolveLineItem(line, companyDiscountPct = 0) {
     // The company-account cost discount baked into the figures above (0 for a
     // normal quote), so the card can badge each total as "−N%".
     companyDiscountPct: pct,
+    // The cost multiplier applied to the editable Unitario (1 ⇒ normal quote);
+    // the View divides edits back out by it so the stored price stays at list.
+    factor,
+    // The whole line scaled to dealer cost (=== the raw line on a normal quote),
+    // for the breakdown popover so the View doesn't re-scale it inline.
+    costLine: l,
     compound,
     modules: isModular ? resolveModules(l.components) : [],
-    components: isCompound ? resolveComponents(l.components) : [],
+    components: isCompound ? resolveComponents(l.components, factor) : [],
   };
 }

@@ -11,7 +11,7 @@ import ProfessionalChip from './ProfessionalChip.jsx';
 import SaveIndicator from './SaveIndicator.jsx';
 import InvoiceChip from '../InvoiceChip.jsx';
 import { useApp } from '../../context/AppContext.jsx';
-import { termsPatchForOrderType } from '../../core/quote/index.js';
+import { termsPatchForOrderType, resolveQuoteHeader, sellerName } from '../../core/quote/index.js';
 import { shortcutLabel } from '../../lib/useKeyboardShortcut.js';
 
 /**
@@ -41,36 +41,18 @@ export default function QuoteHeader({
   saving,
 }) {
   const goBack = useGoBack();
-  const customer = quote?.customerId ? customers.find((c) => c.id === quote.customerId) : null;
-  // Look up the quote's creator from the AppContext profiles list. The
-  // user who clicked "Nueva cotización" has their auth.uid() stamped
-  // on the row at materialize time. Admins can re-assign the seller
-  // via the inline picker below — useful when a quote was built on a
-  // shared workstation, an employee left and an admin needs to credit
-  // a different seller, or to fix legacy quotes that predate user
-  // attribution. Falls back silently to "—" when unset; the rest of
-  // the app (commissions report) skips quotes with no creator.
+  // Look up the quote's related entities (customer / professional / creator) and
+  // the assignable-seller list in the quote Model's header ViewModel — the View
+  // derives nothing itself. Admins can re-assign the seller via the inline picker
+  // below — useful when a quote was built on a shared workstation, an employee
+  // left and an admin needs to credit a different seller, or to fix legacy
+  // quotes that predate user attribution. Falls back silently to "—" when unset;
+  // the rest of the app (commissions report) skips quotes with no creator.
   const { profiles: allProfiles, currentProfile, settings } = useApp();
   const isAdmin = currentProfile?.role === 'admin';
-  const creator = quote?.createdByUserId
-    ? allProfiles.find((p) => p.id === quote.createdByUserId)
-    : null;
-  const creatorLabel = creator
-    ? (creator.name?.trim() || creator.email?.split('@')[0] || '')
-    : '';
-  // Only real, active team members are eligible to be a seller.
-  // Tombstoned / pending profiles would attribute commissions to
-  // ineligible accounts; surface them only when they're the CURRENT
-  // creator so the admin can see who's there and change them.
-  const assignableSellers = (allProfiles || []).filter(
-    (p) =>
-      p.id !== 'team' &&
-      (p.role === 'admin' || p.role === 'employee') &&
-      (p.active || p.id === quote?.createdByUserId),
-  );
-  const professional = quote?.professionalId
-    ? professionals.find((p) => p.id === quote.professionalId)
-    : null;
+  const { customer, professional, creatorLabel, assignableSellers } = resolveQuoteHeader({
+    quote, customers, professionals, profiles: allProfiles,
+  });
   const [pickerOpen, setPickerOpen] = useState(false);
   // Inline edit of the assigned customer — the same modal the Customers list /
   // detail page use, opened from a small pencil beside the chip. Saves a trip
@@ -177,11 +159,6 @@ export default function QuoteHeader({
       />
     </div>
   );
-}
-
-/** Display name for a seller profile, with a graceful e-mail/id fallback. */
-function sellerName(p) {
-  return p?.name?.trim() || p?.email?.split('@')[0] || p?.id || '';
 }
 
 /**

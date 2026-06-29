@@ -40,7 +40,7 @@ export default function OrdenesCompra() {
 
   async function setStatus(po, status) { await db.purchaseOrders.update(po.id, { status, updatedAt: Date.now() }); }
   async function remove(po) {
-    const ok = await confirm({ title: 'Eliminar orden', message: `La orden #${po.number ?? ''} se eliminará.`, confirmLabel: 'Eliminar', tone: 'danger' });
+    const ok = await confirm({ title: 'Eliminar orden', message: `La orden${po.number != null ? ` #${po.number}` : ''} se eliminará.`, confirmLabel: 'Eliminar', tone: 'danger' });
     if (!ok) return;
     await db.purchaseOrders.delete(po.id);
   }

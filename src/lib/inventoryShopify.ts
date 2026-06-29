@@ -70,7 +70,7 @@ export function resolvePieceSync(
       title: (item.name || item.sku || 'Artículo').trim(),
       sku: (item.sku || '').trim(),
       price: money(price),
-      quantity: Math.max(0, Math.floor(qty)),
+      quantity: Math.floor(qty),   // qty > 0 here (guarded above) → no Math.max needed
       imageUrl: imageUrl || null,
     },
   };

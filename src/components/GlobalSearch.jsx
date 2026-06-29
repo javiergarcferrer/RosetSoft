@@ -120,9 +120,18 @@ function SearchOverlay({ onClose }) {
 
   // Quick actions (commands). Role-gated by reusing the already-role-gated
   // `pages`: "Nueva cotización" only when this role's nav exposes Cotizaciones.
-  // Theme toggle is universal. The label reflects the current theme; toggling
-  // closes the palette, so it never goes stale mid-open.
-  const isDark = resolveIsDark();
+  // Theme toggle is universal. The label reflects the current theme. The overlay
+  // mounts only while open, so this reads fresh on each open; a MutationObserver
+  // on the document's class list keeps it correct if the theme is flipped
+  // elsewhere (e.g. another tab/window) while the palette stays open.
+  const [isDark, setIsDark] = useState(() => resolveIsDark());
+  useEffect(() => {
+    setIsDark(resolveIsDark());
+    if (typeof MutationObserver === 'undefined') return undefined;
+    const obs = new MutationObserver(() => setIsDark(resolveIsDark()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
   const actions = useMemo(() => {
     const list = [];
     if (pages.some((p) => p.to === '/quotes')) {

@@ -58,6 +58,10 @@ export function useQuoteExport({
   // Passes *all* lines to the generator — including section breaks, which its
   // groupBySection() consumes as headings (matching the on-screen ClientPreview).
   async function generatePdf() {
+    // The quote may still be loading (the live query hasn't resolved) when a
+    // double-tapped export trigger fires — guard before dereferencing it so we
+    // surface a clean message instead of a "cannot read customerId of null".
+    if (!quote) throw new Error('La cotización aún se está cargando; inténtalo de nuevo.');
     const customer = quote.customerId
       ? customers.find((c) => c.id === quote.customerId)
       : null;
@@ -142,6 +146,7 @@ export function useQuoteExport({
     setExportError(null);
     setWarehousing(true);
     try {
+      if (!quote) throw new Error('La cotización aún se está cargando; inténtalo de nuevo.');
       const customer = quote.customerId
         ? customers.find((c) => c.id === quote.customerId)
         : null;

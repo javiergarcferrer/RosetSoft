@@ -20,6 +20,18 @@
  * contract test on fromRow would have caught — reading
  * `profile.commission_pct` on an object that had just been
  * camelCased through here.
+ *
+ * TOP-LEVEL ONLY (load-bearing contract): both converters walk ONLY the
+ * own enumerable keys of the object handed in — they do NOT recurse into
+ * nested objects/arrays. A value stored as `jsonb` (a `settings` blob, an
+ * `exchangeRate` snapshot, a `components[]` array) is passed through
+ * verbatim: its inner keys keep whatever casing the app uses (camelCase),
+ * and a nested `*At` field is NOT coerced (it stays a number on the way
+ * in and out). This is deliberate — jsonb columns round-trip their own
+ * shape through Postgres unchanged, so recursing here would silently
+ * rename keys inside a dealer's settings blob and break reads. Blind
+ * recursion is the risky path; keep the contract flat and let jsonb own
+ * its interior. (Pinned by tests/rowMapping.test.js.)
  */
 
 /** Generic dictionary type — what Supabase returns / accepts in JSON. */

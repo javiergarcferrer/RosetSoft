@@ -6,7 +6,10 @@ import {
 import BackLink from '../../components/BackLink.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
+import Modal from '../../components/Modal.jsx';
+import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { useApp } from '../../context/AppContext.jsx';
+import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
 import { formatMoney } from '../../lib/format.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import {
@@ -105,8 +108,8 @@ function Waterfall({ steps, landed, rates }) {
  * expediente. Self-gates on accounting/admin.
  */
 export default function LandedCalculator() {
-  const { currentProfile, settings } = useApp();
-  const allowed = currentProfile?.role === 'accounting' || currentProfile?.role === 'admin';
+  const { settings } = useApp();
+  useSetBreadcrumb('Calculadora');
 
   const [draft, setDraft] = useState(loadDraft);
   const { incoterm, regime, margin, lines, costs } = draft;
@@ -143,35 +146,31 @@ export default function LandedCalculator() {
     try { return JSON.parse(localStorage.getItem(SCENARIOS_KEY) || '[]'); } catch { return []; }
   });
   const persistScenarios = (next) => { setScenarios(next); try { localStorage.setItem(SCENARIOS_KEY, JSON.stringify(next)); } catch { /* ignore */ } };
-  const saveScenario = () => {
-    const name = window.prompt('Nombre del escenario (p. ej. "Contenedor 40HC sofás · Francia")');
+  // Save-as: an inline Modal prompt (never the native window.prompt).
+  const [nameModal, setNameModal] = useState(false);
+  const [scenarioName, setScenarioName] = useState('');
+  const confirmSaveScenario = () => {
+    const name = scenarioName.trim();
     if (!name) return;
     persistScenarios([{ id: uid(), name, savedAt: Date.now(), draft }, ...scenarios.filter((s) => s.name !== name)].slice(0, 24));
+    setNameModal(false);
+    setScenarioName('');
   };
   const loadScenario = (s) => { if (s?.draft) setDraft({ ...s.draft, lines: s.draft.lines.map((l) => ({ ...l })), costs: s.draft.costs.map((c) => ({ ...c })) }); };
   const delScenario = (id) => persistScenarios(scenarios.filter((s) => s.id !== id));
-
-  if (!allowed) {
-    return (
-      <>
-        <PageHeader title="Calculadora de costo en destino" subtitle=" " />
-        <EmptyState icon={Calculator} title="Acceso restringido" description="Sólo el equipo de Contabilidad puede ver esta página." />
-      </>
-    );
-  }
 
   const t = vm.totals;
   const incotermDef = vm.incoterm;
 
   return (
-    <>
+    <AccountingGate title="Calculadora de costo en destino">
       <BackLink to="/accounting/importaciones">Volver a importaciones</BackLink>
       <PageHeader
         title="Calculadora de costo en destino"
         subtitle="Aterriza tu costo CIF → gravamen → ITBIS → servicio → costo unitario y precio de venta, en vivo"
         actions={(
           <div className="flex items-center gap-2">
-            <button type="button" onClick={saveScenario} className="btn-secondary"><Save size={15} /><span className="hidden sm:inline">Guardar</span></button>
+            <button type="button" onClick={() => { setScenarioName(''); setNameModal(true); }} className="btn-secondary"><Save size={15} /><span className="hidden sm:inline">Guardar</span></button>
             <button type="button" onClick={() => setDraft(seedDraft())} className="btn-ghost" title="Reiniciar"><RotateCcw size={15} /></button>
           </div>
         )}
@@ -483,6 +482,31 @@ export default function LandedCalculator() {
           )}
         </div>
       </div>
-    </>
+
+      <Modal
+        open={nameModal}
+        onClose={() => setNameModal(false)}
+        title="Guardar escenario"
+        size="sm"
+        footer={(
+          <>
+            <button type="button" className="btn-ghost" onClick={() => setNameModal(false)}>Cancelar</button>
+            <button type="button" className="btn-primary" onClick={confirmSaveScenario} disabled={!scenarioName.trim()}>Guardar</button>
+          </>
+        )}
+      >
+        <label className="text-sm block">
+          Nombre del escenario
+          <input
+            autoFocus
+            className="input w-full mt-1"
+            value={scenarioName}
+            onChange={(e) => setScenarioName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') confirmSaveScenario(); }}
+            placeholder="Contenedor 40HC sofás · Francia"
+          />
+        </label>
+      </Modal>
+    </AccountingGate>
   );
 }

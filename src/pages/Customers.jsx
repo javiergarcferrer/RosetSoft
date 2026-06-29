@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, Users, ArrowRight, ChevronDown, ExternalLink, FileText, Mail, MessageCircle,
-  Phone, SearchX, Trash2, Megaphone, ArrowUp, ArrowDown, ArrowUpDown,
+  Phone, SearchX, Trash2, Megaphone,
 } from 'lucide-react';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import PageHeader from '../components/PageHeader.jsx';
@@ -17,6 +17,7 @@ import {
   Cell, PanelField, PanelTextArea, RncPanelField, SortableTh, ContactGapDot, SheetErrorBanner,
   Monogram, ContactCell,
 } from '../components/sheet/cells.jsx';
+import { ColumnTh, NoMatchesCard, QuickAction, STATUS_LABELS } from '../components/sheet/shared.jsx';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
@@ -33,16 +34,6 @@ const SORT_OPTIONS = [
   { key: 'lifetime', label: 'Compras' },
   { key: 'created', label: 'Fecha de alta' },
 ];
-
-// Section labels for the per-row quote dropdown — plural, mirroring
-// CustomerDetail's sections so the two surfaces read the same way.
-const STATUS_LABELS = {
-  draft: 'Borradores',
-  sent: 'Enviadas',
-  accepted: 'Aceptadas',
-  declined: 'Rechazadas',
-  archived: 'Archivadas',
-};
 
 /**
  * Desktop sheet columns (Shopify-orders-style customizable list). ONE ordered
@@ -259,7 +250,12 @@ export default function Customers() {
 
   async function removeCustomer(c) {
     if (!confirm(`¿Eliminar el cliente "${c.name}"? Sus cotizaciones se conservan pero pierden la referencia.`)) return;
-    await db.customers.delete(c.id);
+    try {
+      await db.customers.delete(c.id);
+      setWriteError('');
+    } catch (e) {
+      setWriteError(`No se pudo eliminar el cliente: ${userMessageFor(e)}`);
+    }
   }
 
   const noMatches = loaded && customers.length > 0 && rows.length === 0;
@@ -396,62 +392,6 @@ export default function Customers() {
   );
 }
 
-/** The "nothing survived the filters" hint, card-shaped for the mobile stack. */
-function NoMatchesCard() {
-  return (
-    <div className="card p-3 flex items-center gap-2 text-sm text-ink-400">
-      <SearchX size={15} className="flex-shrink-0" aria-hidden />
-      Sin resultados — ajusta la búsqueda o los filtros.
-    </div>
-  );
-}
-
-/**
- * Renders one sortable header from a column definition. It mirrors SortableTh's
- * sort affordance but owns its own <th> so the resize hook can spread thProps
- * (data-col-key + persisted width) onto it and render the drag handle as its
- * last child — SortableTh's <th> isn't ours to augment. Non-sortable columns
- * (no `col.sortKey`) fall back to a plain resizable header.
- */
-function ColumnTh({ col, sort, onSort, thProps, ResizeHandle }) {
-  if (!col.sortKey) {
-    return (
-      <th className={col.thClass || ''} {...thProps(col.key)}>
-        {col.label}
-        {ResizeHandle(col.key)}
-      </th>
-    );
-  }
-  const active = sort.key === col.sortKey;
-  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <th
-      className={col.thClass || ''}
-      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-      {...thProps(col.key)}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(active
-          ? { key: col.sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
-          : { key: col.sortKey, dir: col.numeric ? 'desc' : 'asc' })}
-        className={`group/th inline-flex items-center gap-1 transition-colors hover:text-ink-900 ${
-          col.numeric ? 'w-full justify-end' : ''
-        } ${active ? 'text-ink-900' : ''}`}
-        title={`Ordenar por ${col.label}`}
-      >
-        {col.label}
-        <Icon
-          size={11}
-          className={active ? 'text-brand-600' : 'text-ink-200 group-hover/th:text-ink-400 transition-colors'}
-          aria-hidden
-        />
-      </button>
-      {ResizeHandle(col.key)}
-    </th>
-  );
-}
-
 /** One client as a sheet row + (when open) the full-record dropdown row. */
 function SheetRow({ c, row, cols, colSpan, rollup, isOpen, onToggle, onCommit, onRemove }) {
   // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
@@ -568,28 +508,6 @@ function MobileRow({ c, rollup, isOpen, onToggle, onCommit, onRemove }) {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Contact quick action — contacting the client IS the job. `to` renders an
- * in-app Link (WhatsApp goes to OUR inbox, /chats?chat=<phone>, never out to
- * wa.me — the business chats from the Cloud API number, logged in the CRM);
- * `href` covers the native tel:/mailto: handoffs that have no in-app pane.
- */
-function QuickAction({ href, to, icon: Icon, label }) {
-  const cls = 'inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-600 transition-colors hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 active:scale-[0.98]';
-  if (to) {
-    return (
-      <Link to={to} className={cls}>
-        <Icon size={13} aria-hidden /> {label}
-      </Link>
-    );
-  }
-  return (
-    <a href={href} className={cls}>
-      <Icon size={13} aria-hidden /> {label}
-    </a>
   );
 }
 

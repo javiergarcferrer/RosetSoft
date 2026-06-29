@@ -77,7 +77,7 @@ export function ConfirmProvider({ children }) {
           {o.message && <p className="text-sm text-ink-700 whitespace-pre-line leading-relaxed">{o.message}</p>}
         </Modal>
         {toasts.length > 0 && createPortal(
-          <div className="fixed inset-x-0 bottom-4 z-[90] flex flex-col items-center gap-2 px-4 pointer-events-none">
+          <div className="fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[90] flex flex-col items-center gap-2 px-4 pointer-events-none">
             {toasts.map((t) => {
               const Icon = t.tone === 'error' ? AlertCircle : t.tone === 'info' ? Info : CheckCircle2;
               const cls = t.tone === 'error' ? 'text-rose-600' : t.tone === 'info' ? 'text-ink-500' : 'text-emerald-600';

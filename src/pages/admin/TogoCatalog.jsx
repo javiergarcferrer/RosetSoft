@@ -192,7 +192,7 @@ function AddModelCard({ families, catalogLoading, onNeedCatalog, profileId, next
       </div>
 
       {error && (
-        <div role="alert" className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800 flex items-start gap-2">
+        <div role="alert" className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 px-3 py-2 text-xs text-red-800 dark:text-red-200 flex items-start gap-2">
           <AlertCircle size={14} className="mt-0.5 flex-shrink-0" /> {error}
         </div>
       )}
@@ -247,7 +247,7 @@ function EmbedCard() {
   return (
     <div className="card card-pad mt-4 space-y-2.5">
       <h2 className="font-display font-semibold text-sm flex items-center gap-2"><Code2 size={15} className="text-brand-500" /> Embeber en tu web</h2>
-      <p className="text-[11px] text-ink-500">Pega este código en tu sitio: muestra un card que abre el configurador a pantalla completa. Los clientes arman su Togo y te llega como cotización borrador para dar seguimiento.</p>
+      <p className="text-[11px] text-ink-500">Pega este código en tu sitio: muestra un card que abre el configurador en una nueva pestaña. Los clientes arman su Togo y te llega como cotización borrador para dar seguimiento.</p>
       <div className="rounded-lg bg-ink-900 text-ink-100 text-[11px] font-mono p-3 overflow-x-auto whitespace-pre-wrap break-all">{snippet}</div>
       <div className="flex items-center gap-2">
         <button type="button" onClick={copy} className="btn-ghost text-xs">{copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />} {copied ? 'Copiado' : 'Copiar código'}</button>

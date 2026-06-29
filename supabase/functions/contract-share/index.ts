@@ -141,6 +141,9 @@ Deno.serve(async (req: Request) => {
 
   const token = (new URL(req.url).searchParams.get('token') || '').trim();
   if (!token) return json({ error: 'missing token' }, 400);
+  // A real share token is a long random string; a short/garbage value can't be
+  // one, so reject it before hitting the DB (cheap abuse/enumeration guard).
+  if (token.length < 20) return json({ error: 'not found' }, 404);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -172,6 +175,15 @@ Deno.serve(async (req: Request) => {
     if (!signerName) return json({ error: 'signer name required' }, 400);
     if (!body.signatureDataUrl) return json({ error: 'signature required' }, 400);
 
+    // Cap the uploads BEFORE decoding/uploading so a hostile payload can't pin
+    // the function on a giant base64 string or fill the bucket. A drawn PNG
+    // signature is a few KB; the rendered contract PDF a few MB. Base64 inflates
+    // ~4/3, so cap the encoded string length (a cheap, pre-decode bound).
+    const MAX_SIGNATURE_CHARS = 1_400_000;  // ~1 MB decoded
+    const MAX_PDF_CHARS = 14_000_000;       // ~10 MB decoded
+    if (body.signatureDataUrl.length > MAX_SIGNATURE_CHARS) return json({ error: 'signature too large' }, 413);
+    if (body.signedPdfBase64 && body.signedPdfBase64.length > MAX_PDF_CHARS) return json({ error: 'signed PDF too large' }, 413);
+
     const signatureImageId = `sig-${plan.id}`;
     const sigPath = `${signatureImageId}.png`;
 
@@ -199,6 +211,8 @@ Deno.serve(async (req: Request) => {
       if (!upPdf.error) signedPdfPath = path;
     }
 
+    // Advisory only: x-forwarded-for is client-spoofable, so signed_ip is a
+    // best-effort breadcrumb for the audit trail, NOT a trusted identifier.
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
     const patch: Row = {
       signed_at: new Date().toISOString(),

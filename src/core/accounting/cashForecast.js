@@ -37,11 +37,18 @@ export function resolveCashForecast({
     const amt = round2((t.payload?.base || 0) + (t.payload?.itbis || 0));
     if (amt <= 0) continue;
     let occ = nextOccurrence(t, at - 1); // first occurrence on/after now
+    // The horizon (occ <= horizonEnd) is the real cap, NOT a per-bucket count:
+    // a short cadence (weekly) fires more times than there are weeks, so the old
+    // `guard < weeks + 4` truncated those occurrences. The strict-advance break
+    // (nextOccurrence must move forward) keeps the loop finite for a degenerate
+    // template; the daily-resolution guard is just a defensive backstop.
     let guard = 0;
-    while (occ <= horizonEnd && guard++ < weeks + 4) {
+    while (occ <= horizonEnd && guard++ < weeks * 7 + 2) {
       const b = bucketOf(occ);
       if (b >= 0) buckets[b].outflow = round2(buckets[b].outflow + amt);
-      occ = nextOccurrence(t, occ);
+      const next = nextOccurrence(t, occ);
+      if (!(next > occ)) break; // nextOccurrence must strictly advance
+      occ = next;
     }
   }
 

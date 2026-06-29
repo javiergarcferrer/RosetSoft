@@ -44,6 +44,9 @@ Deno.serve(async (req: Request) => {
 
   const token = (new URL(req.url).searchParams.get('token') || '').trim();
   if (!token) return json({ error: 'missing token' }, 400);
+  // A real statement token is a long random string; a short/garbage value can't
+  // be one, so reject it before hitting the DB (cheap abuse/enumeration guard).
+  if (token.length < 20) return json({ error: 'not found' }, 404);
 
   const admin: Admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -58,7 +61,10 @@ Deno.serve(async (req: Request) => {
 
   const [salesRes, paysRes, settingsRes] = await Promise.all([
     admin.from('sales_postings').select('*').eq('customer_id', customer.id),
-    admin.from('payments').select('*').eq('party_id', customer.id).eq('direction', 'in'),
+    // party_id alone can collide with a supplier sharing the same id space, so
+    // pin party_type='customer' at the query — a supplier's cobro can never leak
+    // onto a customer statement.
+    admin.from('payments').select('*').eq('party_id', customer.id).eq('party_type', 'customer').eq('direction', 'in'),
     admin.from('settings').select('*').eq('profile_id', customer.profile_id).maybeSingle(),
   ]);
   const sales = (salesRes.data as Row[]) || [];

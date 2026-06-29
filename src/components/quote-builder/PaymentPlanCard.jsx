@@ -9,6 +9,7 @@ import { contractLinkUrl, newShareToken } from '../../lib/contractShare.js';
 import { quoteSlug } from '../../lib/quoteNaming.js';
 import { formatMoney } from '../../lib/format.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { useConfirm } from '../ConfirmProvider.jsx';
 
 const DOWN_PCT = 50; // Default down payment for the financed (amortized) mode.
 
@@ -48,6 +49,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
   const [uncollecting, setUncollecting] = useState(0); // installment n being undone (0 = none)
   const [collectErr, setCollectErr] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const confirm = useConfirm();
 
   const rate = effectiveDopRate(settings);
   const scope = quote?.profileId || 'team';
@@ -115,22 +117,24 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
   const usd = (v) => formatMoney(v, 'USD');
   const dop = (v) => (rate ? formatMoney(v, 'DOP', { DOP: rate }) : '');
 
-  function defaultBody() {
-    if (form.contractBody) return form.contractBody;
+  function defaultBody(srcForm = form) {
+    if (srcForm.contractBody) return srcForm.contractBody;
     const head = `El cliente acuerda adquirir los bienes detallados en la cotización Nº ${quote?.number ?? ''} `;
     const tail = `conforme al calendario de pagos detallado en este contrato. La entrega de los bienes se `
       + `realizará según las condiciones acordadas. El atraso en el pago de cualquier cuota podrá generar `
       + `cargos por mora.`;
-    if (form.mode === 'custom') {
-      const pcts = (form.splits || []).map((s) => `${Number(s.pct) || 0}%`).join(' / ');
+    if (srcForm.mode === 'custom') {
+      const pcts = (srcForm.splits || []).map((s) => `${Number(s.pct) || 0}%`).join(' / ');
       return `${head}y pagar su valor total en ${preview.installmentCount} pagos por etapas (${pcts}), ${tail}`;
     }
     return `${head}y pagar su valor total mediante un pago inicial del ${DOWN_PCT}% y ${preview.installmentCount} `
       + `cuotas mensuales con una tasa de interés del ${preview.monthlyRatePct}% mensual, ${tail}`;
   }
 
-  async function persist(patch = {}) {
-    const schedule = buildScheduleFor(form, totalUsd);
+  // `srcForm` lets a caller (handleSave) pass the just-computed form so the
+  // write never reads a stale `form` from a setForm queued in the same tick.
+  async function persist(patch = {}, srcForm = form) {
+    const schedule = buildScheduleFor(srcForm, totalUsd);
     // Preserve any per-row paid marks (+ the linked cobro id) across a re-save,
     // matched by index so editing the plan doesn't drop collected cuotas.
     const prior = Array.isArray(plan?.schedule) ? plan.schedule : [];
@@ -144,17 +148,17 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
       quoteId: quote.id,
       customerId: quote.customerId || null,
       number: quote.number ?? null,
-      scheduleMode: form.mode,
+      scheduleMode: srcForm.mode,
       totalUsd: schedule.totalUsd,
       downPaymentPct: schedule.downPaymentPct,
       downPaymentUsd: schedule.downPaymentUsd,
       financedUsd: schedule.financedUsd,
       monthlyRatePct: schedule.monthlyRatePct,
       installmentCount: schedule.installmentCount,
-      firstDueAt: form.firstDueAt,
+      firstDueAt: srcForm.firstDueAt,
       schedule: installments,
       status: plan?.status || 'draft',
-      contractBody: form.contractBody || defaultBody(),
+      contractBody: srcForm.contractBody || defaultBody(srcForm),
       shareToken: plan?.shareToken ?? null,
       shareEnabled: plan?.shareEnabled ?? false,
       signedAt: plan?.signedAt ?? null,
@@ -177,8 +181,12 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
     setSave('saving');
     try {
       // Default the contract body on first save so the dealer has editable text.
-      if (!form.contractBody) setForm((f) => ({ ...f, contractBody: defaultBody() }));
-      await persist();
+      // Build the body-filled form up front and persist THAT — reading `form`
+      // back after a queued setForm would be stale (same-tick render batch).
+      const body = form.contractBody || defaultBody();
+      const next = body === form.contractBody ? form : { ...form, contractBody: body };
+      if (next !== form) setForm(next);
+      await persist({}, next);
       setSave('saved');
       setTimeout(() => setSave('idle'), 1800);
     } catch (e) {
@@ -215,7 +223,19 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
     }
     setPdf('working');
     try {
-      const view = resolvePaymentPlanView(plan || { ...preview, scheduleMode: form.mode, schedule: preview.installments, status: 'draft' }, { rate });
+      // The unsigned preview-plan must carry the same identity fields persist()
+      // writes (customerId / number / contractBody) — otherwise the rendered
+      // PDF drops the client/quote number and the contract text.
+      const previewPlan = {
+        ...preview,
+        customerId: quote?.customerId || null,
+        number: quote?.number ?? null,
+        scheduleMode: form.mode,
+        schedule: preview.installments,
+        contractBody: form.contractBody || defaultBody(),
+        status: 'draft',
+      };
+      const view = resolvePaymentPlanView(plan || previewPlan, { rate });
       const { generateContractPdf, downloadBlob } = await safeDynamicImport(() => import('../../pdf/contract/index.js'));
       const blob = await generateContractPdf({
         emisor: { name: settings?.companyName || '', rnc: settings?.companyRnc || '', address: settings?.companyAddress || '' },
@@ -255,7 +275,13 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
   // + payment row) and clears the paid mark. See db/paymentPlans.
   async function uncollectCuota(n) {
     if (!plan || uncollecting) return;
-    if (!confirm('¿Deshacer este cobro? Se eliminarán el pago y su asiento contable.')) return;
+    const ok = await confirm({
+      title: 'Deshacer cobro',
+      message: '¿Deshacer este cobro? Se eliminarán el pago y su asiento contable.',
+      confirmLabel: 'Deshacer',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setUncollecting(n);
     setCollectErr('');
     try {
@@ -277,7 +303,13 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
     const msg = hasPaid
       ? 'Este plan tiene cobros registrados. Al eliminarlo, esos cobros y sus asientos NO se revierten (deshazlos antes si hace falta). ¿Eliminar el plan de pago?'
       : '¿Eliminar el plan de pago de este presupuesto? Esta acción no se puede deshacer.';
-    if (!confirm(msg)) return;
+    const ok = await confirm({
+      title: 'Eliminar plan de pago',
+      message: msg,
+      confirmLabel: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await db.paymentPlans.delete(plan.id);
@@ -400,12 +432,12 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
               </p>
             ) : null}
 
-            <div className="inline-flex rounded-lg border border-ink-200 p-0.5 text-sm">
-              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
+            <div className="inline-flex rounded-lg border border-ink-200 p-0.5 text-sm" role="radiogroup" aria-label="Modo del plan de pago">
+              <button type="button" role="radio" aria-checked={!isCustom} onClick={() => setForm((f) => ({ ...f, mode: 'amortized' }))}
                 className={`px-3 py-1.5 rounded-md transition-colors ${!isCustom ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
                 Financiado (cuotas + interés)
               </button>
-              <button type="button" onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
+              <button type="button" role="radio" aria-checked={isCustom} onClick={() => setForm((f) => ({ ...f, mode: 'custom' }))}
                 className={`px-3 py-1.5 rounded-md transition-colors ${isCustom ? 'bg-brand-grad text-white shadow-glow' : 'text-ink-600'}`}>
                 Pagos por etapas (%)
               </button>
@@ -428,11 +460,22 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
                 <Field label="Tasa mensual %">
                   <input type="number" min="0" step="0.01" value={form.monthlyRatePct}
                     onChange={(e) => setForm((f) => ({ ...f, monthlyRatePct: e.target.value }))}
+                    onBlur={(e) => {
+                      // Clamp on blur so a cleared field reads back as 0 rather
+                      // than the empty string the input briefly holds.
+                      const n = Math.max(0, Number(e.target.value) || 0);
+                      setForm((f) => ({ ...f, monthlyRatePct: n }));
+                    }}
                     className="input w-full" />
                 </Field>
                 <Field label="Nº de cuotas">
                   <input type="number" min="1" step="1" value={form.installmentCount}
                     onChange={(e) => setForm((f) => ({ ...f, installmentCount: e.target.value }))}
+                    onBlur={(e) => {
+                      // At least one cuota; round a stray decimal to a whole count.
+                      const n = Math.max(1, Math.round(Number(e.target.value) || 0));
+                      setForm((f) => ({ ...f, installmentCount: n }));
+                    }}
                     className="input w-full" />
                 </Field>
                 <Field label="Primera cuota">

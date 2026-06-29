@@ -113,6 +113,18 @@ test('asiento balances and books the right debits', () => {
   assert.equal(fda.accountCode, accountFor(config, 'accountsPayable'));
 });
 
+test('asiento: a costs-only expediente (no product line) throws clearly, never an unbalanced asiento', () => {
+  // Costs exist but there is no product line to capitalize them onto → the cost
+  // CREDITS would have no matching inventory debit. Fail loud (and pointedly).
+  const costsOnly = {
+    id: 'expX', profileId: 'team', bl: 'BL-NO-LINES', liquidatedAt: 0, paymentMethod: 'bank',
+    embarques: [{ id: 'e1', bl: 'BL-NO-LINES', flete: 0, seguro: 0, facturas: [{ id: 'f1', supplierId: 'roset', lines: [] }] }],
+    costs: [{ id: 'c1', concept: 'puerto', amount: 500, itbis: 0, paymentMethod: 'bank' }],
+  };
+  let i = 0;
+  assert.throws(() => buildExpedienteEntry({ newId: () => `id${i++}`, config, expediente: costsOnly, postedAt: 0 }), /ninguna línea de producto/);
+});
+
 test('tax check flags a gravamen/ITBIS mismatch vs the configured rates', () => {
   const ok = expedienteTaxCheck({ cif: 10000, duty: 2000, importItbis: 2160, config });
   assert.equal(ok.matches, true);

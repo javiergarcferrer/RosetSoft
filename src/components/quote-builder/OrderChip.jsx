@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, ArrowRight, Plus } from 'lucide-react';
 import { useLiveQuery } from '../../db/hooks.js';
@@ -109,13 +109,15 @@ function AttachCta({ quote, profileId, onAttach, inline = false }) {
 
   // Same-customer orders bubble to the top (the most likely target — it
   // usually already holds this client's other quotes); within a group,
-  // most-recently-touched first.
-  const sorted = [...orders].sort((a, b) => {
+  // most-recently-touched first. (`updatedAt` is JS-ms post-rowMapping, so the
+  // numeric subtract is sound.) Memoized so the list isn't re-sorted on every
+  // unrelated render.
+  const sorted = useMemo(() => [...orders].sort((a, b) => {
     const am = a.customerId && a.customerId === quote.customerId ? 0 : 1;
     const bm = b.customerId && b.customerId === quote.customerId ? 0 : 1;
     if (am !== bm) return am - bm;
     return (b.updatedAt || 0) - (a.updatedAt || 0);
-  });
+  }), [orders, quote.customerId]);
 
   function assignTo(orderId) {
     setOpen(false);

@@ -42,24 +42,40 @@ export default function ModelLinkBar({ root, record }) {
     }
   }
 
+  async function unlink() {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await clearModelFabrics(root);
+    } catch (e) {
+      setErr(userMessageFor(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (record?.sourceUrl && !editing) {
     return (
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 my-2 text-[11px]">
-        <a
-          href={record.sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-brand-700 hover:underline font-medium shrink-0"
-        >
-          <ExternalLink size={12} /> Ver en Ligne Roset
-        </a>
-        {record.patternNames?.length > 0 && (
-          <span className="text-ink-400 shrink-0">· {record.patternNames.length} telas disponibles</span>
-        )}
-        <span className="inline-flex items-center gap-1 sm:ml-auto flex-shrink-0">
-          <button type="button" onClick={() => setEditing(true)} className="inline-flex items-center rounded-md px-1.5 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors">Actualizar</button>
-          <button type="button" onClick={() => clearModelFabrics(root)} className="inline-flex items-center rounded-md px-1.5 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors">Quitar</button>
-        </span>
+      <div className="my-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <a
+            href={record.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-brand-700 hover:underline font-medium shrink-0"
+          >
+            <ExternalLink size={12} /> Ver en Ligne Roset
+          </a>
+          {record.patternNames?.length > 0 && (
+            <span className="text-ink-400 shrink-0">· {record.patternNames.length} telas disponibles</span>
+          )}
+          <span className="inline-flex items-center gap-1 sm:ml-auto flex-shrink-0">
+            <button type="button" onClick={() => setEditing(true)} disabled={busy} className="inline-flex items-center rounded-md px-1.5 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-40">Actualizar</button>
+            <button type="button" onClick={unlink} disabled={busy} className="inline-flex items-center rounded-md px-1.5 min-h-7 coarse:min-h-11 text-ink-500 hover:text-ink-900 hover:bg-ink-100 active:bg-ink-200 transition-colors disabled:opacity-40">{busy ? 'Quitando…' : 'Quitar'}</button>
+          </span>
+        </div>
+        {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
       </div>
     );
   }

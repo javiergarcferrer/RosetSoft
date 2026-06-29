@@ -60,12 +60,16 @@ export default function WhatsAppChip({ customer }) {
     // Watertight WhatsApp-number relation: refuse a number already held by
     // another contact (the inbox links a thread by phone — duplicates
     // misattribute it, the "Carmen had Alcover's number" bug).
-    if (next) {
-      const owner = await phoneOwner({ phone: next, excludeId: customer.id, profileId });
-      if (owner) { setPhoneErr(phoneInUseMessage(owner)); return; }
+    try {
+      if (next) {
+        const owner = await phoneOwner({ phone: next, excludeId: customer.id, profileId });
+        if (owner) { setPhoneErr(phoneInUseMessage(owner)); return; }
+      }
+      await db.customers.update(customer.id, { phone: next || null });
+      setEditing(false);
+    } catch (e) {
+      setPhoneErr(userMessageFor(e));
     }
-    await db.customers.update(customer.id, { phone: next || null });
-    setEditing(false);
   }
 
   if (editing) {

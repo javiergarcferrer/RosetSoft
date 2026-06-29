@@ -1,12 +1,7 @@
 // Expense ViewModels — the Gastos list and the DGII 606 (compras de bienes y
 // servicios) projection. Pure: no React, no db.
 import { round2 } from '../../lib/accounting/ledger.js';
-
-function inWindow(t, start, end) {
-  if (start != null && t < start) return false;
-  if (end != null && t > end) return false;
-  return true;
-}
+import { inWindow, shapeExpedienteCost } from './_shared.js';
 
 /**
  * The Gastos list joined with supplier + account names, newest-first, plus
@@ -30,13 +25,17 @@ export function resolveExpensesList({ expenses, suppliers, accounts, start, end,
       .some((v) => (v || '').toLowerCase().includes(q)))
     .sort((a, b) => (b.expense.expenseAt || 0) - (a.expense.expenseAt || 0));
 
+  // Sum the per-row ROUNDED fields so the footer reconciles to the rows shown
+  // (summing raw values then rounding can drift by a cent). `net` = total net of
+  // the retenciones (what actually leaves the bank).
   const totals = rows.reduce((acc, r) => ({
-    base: acc.base + (r.expense.base || 0),
-    itbis: acc.itbis + (r.expense.itbis || 0),
-    retIsr: acc.retIsr + (r.expense.retentionIsr || 0),
-    retItbis: acc.retItbis + (r.expense.retentionItbis || 0),
+    base: acc.base + round2(r.expense.base || 0),
+    itbis: acc.itbis + round2(r.expense.itbis || 0),
+    retIsr: acc.retIsr + round2(r.expense.retentionIsr || 0),
+    retItbis: acc.retItbis + round2(r.expense.retentionItbis || 0),
     total: acc.total + r.total,
-  }), { base: 0, itbis: 0, retIsr: 0, retItbis: 0, total: 0 });
+    net: acc.net + r.net,
+  }), { base: 0, itbis: 0, retIsr: 0, retItbis: 0, total: 0, net: 0 });
   for (const k of Object.keys(totals)) totals[k] = round2(totals[k]);
 
   return { rows, totals, count: rows.length };
@@ -112,16 +111,15 @@ function expedienteCostDocs(expedientes) {
   for (const e of expedientes || []) {
     for (const c of e.costs || []) {
       if (!c?.ncf) continue;
-      const amount = Math.max(0, Number(c.amount) || 0);
-      const itbis = Math.min(Math.max(0, Number(c.itbis) || 0), amount);
+      const { base, itbis } = shapeExpedienteCost(c);
       out.push({
         id: `${e.id}:${c.id}`,
         supplierId: c.supplierId || null,
         costAt: e.liquidatedAt,
         ncf: c.ncf,
         concept: c.concept,
-        base: round2(amount - itbis),
-        itbis: round2(itbis),
+        base,
+        itbis,
         retentionIsr: 0,
         retentionItbis: 0,
         paymentMethod: c.paymentMethod || 'bank',

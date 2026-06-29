@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Undo2 } from 'lucide-react';
+import { Undo2, X } from 'lucide-react';
 
 /**
  * Inline undo toast — the answer to "did I just delete the wrong thing?".
@@ -53,7 +53,7 @@ export function useUndoToast() {
           aria-label="Cerrar"
           className="inline-flex items-center justify-center px-2 py-1 min-h-8 coarse:min-h-11 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/25 text-xs font-medium transition-colors"
         >
-          ✕
+          <X size={14} />
         </button>
       )}
     </div>

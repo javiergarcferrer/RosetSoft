@@ -155,6 +155,42 @@ export function buildBroadcastRecipients(contacts, varSpecs = []) {
   return out;
 }
 
+/** Replace the {nombre}/{nombre_completo}/{empresa} tokens for one contact, for
+ *  an EMAIL campaign body or subject (the Difusión → Correo personalization).
+ *  Falls back to the full name when there's no first name, and to '' for an
+ *  unknown token target so nothing renders a literal placeholder. */
+export function fillEmailTokens(text, contact = {}) {
+  return String(text || '')
+    .replace(/\{nombre_completo\}/gi, contact.name || '')
+    .replace(/\{nombre\}/gi, contact.firstName || contact.name || '')
+    .replace(/\{empresa\}/gi, contact.company || '');
+}
+
+/** Escape the four HTML-significant chars so a plain-text email body can be
+ *  safely interpolated into the HTML wrapper. */
+export function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Normalize WhatsApp group audience rows to the same shape the campaign picker
+ * renders for contacts ({ key, name }), carrying `subject` + `isGroup` so the
+ * send/preview path can branch on a group vs a 1:1 contact.
+ *
+ *   normalizeGroupRows([{ key, id, subject, participantCount }])
+ *     → [{ key, id, name, subject, participantCount, isGroup: true }]
+ */
+export function normalizeGroupRows(groups) {
+  return (groups || []).map((row) => ({
+    key: row.key,
+    id: row.id,
+    name: row.subject,
+    subject: row.subject,
+    participantCount: row.participantCount,
+    isGroup: true,
+  }));
+}
+
 /** Fill a template body's {{1}}, {{2}}… with params for a preview. */
 export function fillTemplateBody(bodyText, params = []) {
   return String(bodyText || '').replace(/\{\{(\d+)\}\}/g, (_, n) => {

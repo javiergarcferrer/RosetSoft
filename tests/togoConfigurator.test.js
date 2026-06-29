@@ -232,6 +232,11 @@ test('resolveConfigurator mirrors compoundSubtotal and lays tiles out in px', ()
   );
   assert.equal(vm2.priced, false);
   assert.equal(vm2.subtotalUsd, 0);
+
+  // An EMPTY layout is not priced (every() is vacuously true on []).
+  const vmEmpty = resolveConfigurator([], resolved, { scale: 1 });
+  assert.equal(vmEmpty.priced, false);
+  assert.equal(vmEmpty.count, 0);
 });
 
 // ---- assembled dimensions: the union footprint of every placed piece ----

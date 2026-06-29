@@ -11,7 +11,7 @@
 // in place), then the PDF merge runs ON TOP and is authoritative — it also
 // consolidates any stale "/FR"-vs-clean duplicates into one row.
 import type { Material } from '../types/domain';
-import { mergeCatalog, type LrPattern } from './lrCatalog.js';
+import { mergeCatalog, type ImportSummary, type LrPattern } from './lrCatalog.js';
 import { mergePriceList, type ParsedPdfMaterial } from './materialsPdf.js';
 
 export interface SyncSummary {
@@ -66,9 +66,13 @@ export function syncCatalog(
   // 1) Website first — colors / photos / notes only. We DON'T let it flag
   // "no en sitio": the price-list PDF is the roster now, and the site scraper
   // has coverage gaps (it can miss a current fabric like ARDA). So complete:false.
+  const emptySummary = (): ImportSummary => ({
+    newMaterials: 0, updatedMaterials: 0, unchangedMaterials: 0,
+    newColors: 0, removedColors: 0, flaggedMissing: 0, restored: 0,
+  });
   const site = sitePatterns
     ? mergeCatalog(existing, sitePatterns, { ...base, complete: false })
-    : { rows: [] as Material[], summary: { newColors: 0 } };
+    : { rows: [] as Material[], summary: emptySummary() };
 
   const afterSite = new Map(existing.map((m) => [m.id, m]));
   for (const r of site.rows) afterSite.set(r.id, r);

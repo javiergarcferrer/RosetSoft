@@ -88,9 +88,10 @@ export default function TogoWorkspace() {
 /**
  * The Configurador tab previews the public LAUNCHER exactly as customers meet it
  * on the dealer's site: an attractive "Configura tu Togo" card that opens the
- * configurator in a FULLSCREEN modal. Same card + popup the embed snippet ships,
- * so the in-app preview can never drift from what's deployed. What a visitor
- * builds in the modal lands in Solicitudes (a pending request) to promote.
+ * configurator in a NEW TAB (`?ctx=modal` → straight to the build, full screen).
+ * Same card the embed snippet ships, so the in-app preview can never drift from
+ * what's deployed. What a visitor builds lands in Solicitudes (a pending
+ * request) to promote.
  */
 function TogoLivePreview() {
   const [copied, setCopied] = useState(false);

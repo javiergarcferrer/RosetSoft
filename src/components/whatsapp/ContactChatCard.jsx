@@ -39,6 +39,20 @@ import {
  */
 const POLL_MS = 10000;
 
+// Does a server-logged outbound row reconcile this optimistic draft? wa-send
+// doesn't yet echo a client id, so we pair on phone + body + a near-coincident
+// timestamp. The window is symmetric ±10s (clock skew can stamp the server row
+// slightly before the local createdAt; the old one-sided `>= createdAt - 1000`
+// check would then strand the bubble on "Enviando"). Mirrors Chats.jsx.
+const OPTIMISTIC_MATCH_MS = 10000;
+function optimisticMatch(p, messages) {
+  return (messages || []).some((m) =>
+    m.direction === 'out'
+    && phoneKey(m.phone) === phoneKey(p.phone)
+    && (m.body || '') === (p.body || '')
+    && Math.abs((m.createdAt || 0) - p.createdAt) <= OPTIMISTIC_MATCH_MS);
+}
+
 export default function ContactChatCard({ contact, contactKind, quoteId = null, variant = 'card' }) {
   const { profileId, settings } = useApp();
   const connected = !!settings?.whatsappConnectedAt;
@@ -71,13 +85,11 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null, 
     [messages, key],
   );
 
-  // Server rows landed → drop the optimistic copies they replace.
+  // Server rows landed → drop the optimistic copies they replace (heuristic —
+  // see optimisticMatch above; the exact fix needs a client id from wa-send).
   useEffect(() => {
     if (!pending.length) return;
-    setPending((rows) => rows.filter((p) => !messages.some(
-      (m) => m.direction === 'out' && phoneKey(m.phone) === phoneKey(p.phone)
-        && (m.body || '') === (p.body || '') && (m.createdAt || 0) >= p.createdAt - 1000,
-    )));
+    setPending((rows) => rows.filter((p) => !optimisticMatch(p, messages)));
   }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Expanding the conversation clears its unread badge — locally AND on the
@@ -128,6 +140,10 @@ export default function ContactChatCard({ contact, contactKind, quoteId = null, 
         setPending((rows) => [...rows, draft]);
         const res = await sendWhatsappText({ to: contact.phone, text, replyTo, ...link })
           .catch((e) => ({ ok: false, error: e?.message }));
+        // On failure no server row will ever arrive to reconcile the optimistic
+        // copy, so it would hang forever as "Enviando" — drop it here and let
+        // ChatThread surface the error banner (mirrors the inbox in Chats.jsx).
+        if (!res?.ok) setPending((rows) => rows.filter((p) => p.id !== draft.id));
         invalidate();
         return res;
       }}

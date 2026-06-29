@@ -13,10 +13,12 @@ import { formatDop, formatDate } from '../../lib/format.js';
 
 // Severity skins (danger → warn → info), shared so the dashboard list and the
 // Facturación strip read the same color language.
+// Alpha backgrounds + a dark: text variant so the skins read on BOTH canvases
+// (flat rose-50/amber-50 glare on the dark canvas — mirrors MetaReceiptsQueue).
 export const SEV_SKIN = {
-  danger: 'bg-rose-50 text-rose-800 border-rose-200',
-  warn: 'bg-amber-50 text-amber-800 border-amber-200',
-  info: 'bg-ink-50 text-ink-700 border-ink-200',
+  danger: 'bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/20',
+  warn: 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/20',
+  info: 'bg-ink-500/10 text-ink-700 border-ink-500/20',
 };
 
 // Icon per action kind; AlertTriangle is the fallback for an unknown kind.

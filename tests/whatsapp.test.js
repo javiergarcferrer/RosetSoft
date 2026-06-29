@@ -242,6 +242,7 @@ test('resolveNewChatContacts — phone-bearing contacts not already in a thread'
  */
 import {
   resolveBroadcastAudience, buildBroadcastRecipients, fillTemplateBody, resolveCampaignsList,
+  fillEmailTokens, normalizeGroupRows,
 } from '../src/core/crm/index.js';
 
 test('resolveBroadcastAudience — dedupes by phone across lists, skips phone-less', () => {
@@ -286,6 +287,31 @@ test('fillTemplateBody — fills {{n}}, leaves missing params visible', () => {
   assert.equal(fillTemplateBody('Hola {{1}}, oferta {{2}}', ['Ana', '10%']), 'Hola Ana, oferta 10%');
   assert.equal(fillTemplateBody('Hola {{1}}, oferta {{2}}', ['Ana']), 'Hola Ana, oferta {{2}}');
   assert.equal(fillTemplateBody('', []), '');
+});
+
+test('fillEmailTokens — fills {nombre}/{nombre_completo}/{empresa}, case-insensitive, safe fallbacks', () => {
+  const c = { name: 'Ana Pérez García', firstName: 'Ana', company: 'Estudio AP' };
+  assert.equal(
+    fillEmailTokens('Hola {nombre}, de {empresa} ({NOMBRE_COMPLETO})', c),
+    'Hola Ana, de Estudio AP (Ana Pérez García)',
+  );
+  // {nombre} falls back to the full name when there's no first name.
+  assert.equal(fillEmailTokens('Hola {nombre}', { name: 'Berta' }), 'Hola Berta');
+  // Unknown/empty fields render empty, never a literal placeholder.
+  assert.equal(fillEmailTokens('De {empresa}.', { name: 'Carla' }), 'De .');
+  assert.equal(fillEmailTokens('', {}), '');
+  assert.equal(fillEmailTokens(null, {}), '');
+});
+
+test('normalizeGroupRows — maps group rows to the picker shape with subject as name', () => {
+  const rows = normalizeGroupRows([
+    { key: 'g1', id: 'g1', subject: 'Clientes VIP', participantCount: 12 },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0], {
+    key: 'g1', id: 'g1', name: 'Clientes VIP', subject: 'Clientes VIP', participantCount: 12, isGroup: true,
+  });
+  assert.deepEqual(normalizeGroupRows(null), []);
 });
 
 test('resolveCampaignsList — live rollup with stage precedence; frozen fallback', () => {

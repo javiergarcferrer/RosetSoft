@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db, newId } from '../../db/database.js';
 import { LINE_KIND_ITEM, LINE_KIND_SECTION } from '../../lib/constants.js';
 import { effectiveRates } from '../../lib/exchangeRate.js';
@@ -52,7 +52,13 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
   const [focusLineId, setFocusLineId] = useState(null);
 
   // -------- undo toast --------
+  // One toast surface, two semantic channels: `showUndo(msg, undoFn)` for the
+  // delete → "Deshacer" affordance, and `showStockError(msg)` for a NON-undoable
+  // Shopify stock-sync failure (a plain message + close button — never an undo
+  // button, since there's nothing to undo). Sharing the element keeps the single
+  // toast slot the page renders; the named wrapper keeps the intent honest.
   const { show: showUndo, element: undoToast } = useUndoToast();
+  const showStockError = (msg) => showUndo(msg);
 
   /* ---------------------------- undo / redo --------------------------
    * The builder writes every edit straight to the DB, so undo is a stack
@@ -66,12 +72,22 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
    * hoisted function declarations defined below the effects that list them. */
   const undoRef = useRef([]);
   const redoRef = useRef([]);
-  const [, bumpHistory] = useReducer((x) => x + 1, 0);
+  // The stacks live in refs (authoritative, no stale-closure surprises) but the
+  // toolbar's enabled/disabled state is driven by STATE — the stack DEPTHS,
+  // mirrored from the refs after every change via `syncHistory()`. Reading
+  // ref.current.length during render would be fragile (a mutable read in render);
+  // these depths re-render the buttons deterministically instead.
+  const [undoDepth, setUndoDepth] = useState(0);
+  const [redoDepth, setRedoDepth] = useState(0);
+  function syncHistory() {
+    setUndoDepth(undoRef.current.length);
+    setRedoDepth(redoRef.current.length);
+  }
 
   useEffect(() => {
     undoRef.current = [];
     redoRef.current = [];
-    bumpHistory();
+    syncHistory();
   }, [quoteId]);
 
   useEffect(() => {
@@ -90,7 +106,11 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
+    // undo/redo are hoisted function declarations recreated each render but only
+    // touch refs + state setters (stable), so binding once on mount is correct
+    // and avoids re-subscribing the global listener on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Deep copy of the current quote + lines — the unit of undo. structuredClone
   // is safe here: rows are plain JSON-ish objects (numbers, strings, nested
@@ -102,7 +122,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
   function pushUndo(snap) {
     undoRef.current = boundedPush(undoRef.current, snap, HISTORY_LIMIT);
     redoRef.current = [];   // a fresh edit invalidates the redo branch
-    bumpHistory();
+    syncHistory();
   }
 
   // Write a snapshot back to the DB, making the quote + its lines match it
@@ -124,8 +144,16 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
       // Undo/redo can restore a different accept/order state — re-reconcile LSG
       // Shopify stock to the restored snapshot. The committed ledger lives in
       // its own table (untouched by the snapshot), so this restocks/deducts the
-      // exact difference and never rewinds the reservation.
-      reconcileQuoteStock(quoteId).catch(() => {});
+      // exact difference and never rewinds the reservation. Surface a failure the
+      // same way updateQuote does — a missed restock on undo must not be silent.
+      // 'not-connected' is expected when LSG isn't linked → quiet.
+      reconcileQuoteStock(quoteId)
+        .then((r) => {
+          if (r?.status === 'error') {
+            showStockError(`No se pudo actualizar el stock en Shopify: ${(r.errors || []).join(' · ') || 'inténtalo de nuevo.'}`);
+          }
+        })
+        .catch(() => {});
     } finally {
       markSaved();
     }
@@ -136,7 +164,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     const prev = undoRef.current[undoRef.current.length - 1];
     undoRef.current = undoRef.current.slice(0, -1);
     redoRef.current = boundedPush(redoRef.current, snapshotNow(), HISTORY_LIMIT);
-    bumpHistory();
+    syncHistory();
     await applySnapshot(prev);
   }
 
@@ -145,7 +173,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     const next = redoRef.current[redoRef.current.length - 1];
     redoRef.current = redoRef.current.slice(0, -1);
     undoRef.current = boundedPush(undoRef.current, snapshotNow(), HISTORY_LIMIT);
-    bumpHistory();
+    syncHistory();
     await applySnapshot(next);
   }
 
@@ -160,8 +188,8 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
     };
   }
 
-  const canUndo = undoRef.current.length > 0;
-  const canRedo = redoRef.current.length > 0;
+  const canUndo = undoDepth > 0;
+  const canRedo = redoDepth > 0;
 
   /* ---------------------------- mutations ---------------------------- */
 
@@ -179,16 +207,16 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
       const next = (patch.status === 'accepted' && patch.acceptedAt)
         ? { ...patch, rates: effectiveRates(settings) }
         : patch;
-      // ensurePersisted() may have just materialized a brand-new draft and
-      // assigned its sequence number. `quote` is the pre-persist render
-      // value (number: null) — the live query hasn't refreshed yet — so
-      // re-read the row and keep the freshly assigned number instead of
-      // clobbering it back to null.
+      // Spread the PERSISTED row, not the stale render `quote`: ensurePersisted()
+      // may have just materialized a brand-new draft (assigning its sequence
+      // number), and a concurrent edit may have written other fields the live
+      // query hasn't fed back yet. Re-reading and spreading {...persisted, ...next}
+      // keeps the freshly assigned number AND any concurrent writes, so this patch
+      // only changes the fields it actually carries.
       const persisted = await db.quotes.get(quoteId);
       await db.quotes.put({
-        ...quote,
+        ...(persisted || quote),
         ...next,
-        number: persisted?.number ?? quote.number,
         updatedAt: Date.now(),
       });
       // A status, order-attachment, or deposit change is exactly what flips
@@ -204,7 +232,7 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         reconcileQuoteStock(quoteId)
           .then((r) => {
             if (r?.status === 'error') {
-              showUndo(`No se pudo actualizar el stock en Shopify: ${(r.errors || []).join(' · ') || 'inténtalo de nuevo.'}`);
+              showStockError(`No se pudo actualizar el stock en Shopify: ${(r.errors || []).join(' · ') || 'inténtalo de nuevo.'}`);
             }
           })
           .catch(() => {});
@@ -490,9 +518,16 @@ export function useQuoteController({ quoteId, quote, lines, groups, settings, en
         });
       }
       // Insert position: directly after the last member of this group
-      // currently in the lines list. Keeps siblings contiguous.
-      const groupMembers = lines.filter((l) => l.alternativeGroup === groupId || l.id === line.id);
-      const lastIdx = Math.max(...groupMembers.map((l) => lines.findIndex((x) => x.id === l.id)));
+      // currently in the lines list. Keeps siblings contiguous. A FRESH group
+      // (the source line not yet in `lines`, e.g. just materialized) yields no
+      // indices, so guard the spread: fall back to the source line's own index
+      // rather than letting Math.max(...[]) collapse to -Infinity.
+      const memberIdxs = lines
+        .filter((l) => l.alternativeGroup === groupId || l.id === line.id)
+        .map((l) => lines.findIndex((x) => x.id === l.id))
+        .filter((i) => i >= 0);
+      const srcIdx = lines.findIndex((x) => x.id === line.id);
+      const lastIdx = memberIdxs.length ? Math.max(...memberIdxs) : srcIdx;
       const newSortOrder = (lines[lastIdx]?.sortOrder ?? line.sortOrder ?? 0) + 1;
       const newId_ = newId();
       const components = Array.isArray(line.components)

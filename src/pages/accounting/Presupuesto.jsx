@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { resolveBudgetVariance } from '../../core/accounting/index.js';
 
 const CLASS_LABEL = { 4: 'Ingresos', 5: 'Costos', 6: 'Gastos' };
@@ -40,11 +41,19 @@ export default function Presupuesto() {
   }, [accountsQ.data]);
 
   const [draft, setDraft] = useState({}); // accountCode -> string while editing
+  const [saveErr, setSaveErr] = useState('');
 
   async function saveBudget(code, value) {
+    setSaveErr('');
     const amount = Math.round((Number(value) || 0) * 100) / 100;
-    await db.budgets.put({ id: `budget-${year}-${code}`, profileId: scope, year, accountCode: code, amount, updatedAt: Date.now() });
-    setDraft((d) => { const n = { ...d }; delete n[code]; return n; });
+    try {
+      await db.budgets.put({ id: `budget-${year}-${code}`, profileId: scope, year, accountCode: code, amount, updatedAt: Date.now() });
+      setDraft((d) => { const n = { ...d }; delete n[code]; return n; });
+    } catch (e) {
+      // A denied/blocked write must surface — never let the budget silently
+      // fail to save while the field shows the typed value.
+      setSaveErr(userMessageFor(e));
+    }
   }
 
   const years = [];
@@ -67,14 +76,17 @@ export default function Presupuesto() {
             <div className="card p-3 min-w-0"><div className="eyebrow-xs text-ink-500 mb-1">Variación</div><div className={`font-display text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto ${variance.netVariance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{formatDop(variance.netVariance)}</div></div>
           </div>
 
+          {saveErr && <p className="text-sm text-rose-600 mb-3">{saveErr}</p>}
+
           <div className="card p-4 overflow-x-auto min-w-0">
             <table className="w-full">
+              <caption className="sr-only">Presupuesto anual vs. real por cuenta de ingresos, costos y gastos</caption>
               <thead>
                 <tr className="border-b border-ink-200">
-                  <th className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Cuenta</th>
-                  <th className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Presupuesto</th>
-                  <th className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Real</th>
-                  <th className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-500">Variación</th>
+                  <th scope="col" className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Cuenta</th>
+                  <th scope="col" className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Presupuesto</th>
+                  <th scope="col" className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Real</th>
+                  <th scope="col" className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-500">Variación</th>
                 </tr>
               </thead>
               <tbody>

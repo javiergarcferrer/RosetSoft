@@ -28,15 +28,20 @@ export default function PublicAccountStatement() {
   }, [state.data]);
 
   if (state.status === 'loading') {
-    return <div className="min-h-screen bg-neutral-100 flex items-center justify-center text-neutral-500"><Loader2 className="animate-spin" /></div>;
+    return (
+      <div role="status" aria-live="polite" className="h-full flex flex-col items-center justify-center gap-3 bg-ink-50 text-ink-500">
+        <Loader2 className="animate-spin text-brand-500" size={24} aria-hidden />
+        <span className="text-sm">Cargando…</span>
+      </div>
+    );
   }
   if (state.status === 'error') {
     return (
-      <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-sm p-8 max-w-md text-center">
+      <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 flex items-center justify-center p-6">
+        <div className="bg-surface rounded-2xl shadow-sm p-8 max-w-md text-center">
           <AlertCircle className="mx-auto text-rose-500 mb-3" />
-          <p className="text-neutral-700 font-medium">No pudimos abrir el estado de cuenta.</p>
-          <p className="text-neutral-400 text-sm mt-1">{state.error}</p>
+          <p className="text-ink-700 font-medium">No pudimos abrir el estado de cuenta.</p>
+          <p className="text-ink-400 text-sm mt-1">{state.error}</p>
         </div>
       </div>
     );
@@ -44,8 +49,8 @@ export default function PublicAccountStatement() {
 
   const { company, customer, rows, balance } = state.data;
   return (
-    <div className="min-h-screen bg-neutral-100 py-8 px-4">
-      <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div className="h-full overflow-y-auto overscroll-contain bg-ink-50 py-8 px-4">
+      <div className="max-w-2xl mx-auto bg-surface rounded-2xl shadow-sm overflow-hidden">
         <div className="px-6 sm:px-8 py-6 border-b border-neutral-100">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -71,7 +76,7 @@ export default function PublicAccountStatement() {
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={i} className="border-b border-neutral-50">
+                <tr key={r.ref || `${r.at ?? ''}-${i}`} className="border-b border-neutral-50">
                   <td className="py-2 pr-3 text-neutral-500 whitespace-nowrap">{formatDate(r.at)}</td>
                   <td className="py-2 pr-3 text-neutral-700">{r.label}{r.ref ? <span className="text-neutral-400 tabular-nums"> · {r.ref}</span> : null}</td>
                   <td className="py-2 px-3 text-right tabular-nums whitespace-nowrap">{r.charge ? formatDop(r.charge) : ''}</td>

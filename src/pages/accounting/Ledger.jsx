@@ -269,6 +269,7 @@ export default function Ledger() {
   const [showForm, setShowForm] = useState(false);
   const [mayorCode, setMayorCode] = useState('');
   const [reversing, setReversing] = useState(null);
+  const [reverseErr, setReverseErr] = useState('');
   const [renameErr, setRenameErr] = useState('');
   // Deep-link: /accounting/ledger?cuenta=<code> opens the Mayor for that account
   // (account drill-down from the Balanza and the financial statements).
@@ -359,12 +360,17 @@ export default function Ledger() {
       tone: 'danger',
     });
     if (!ok) return;
+    setReverseErr('');
     setReversing(entry.id);
     try {
       const built = buildReversalEntry({ newId, original: entry, originalLines: lines });
       await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
       await db.journalLines.bulkPut(built.lines);
       await db.journalEntries.update(entry.id, { reversedById: built.entry.id });
+    } catch (e) {
+      // A denied write (e.g. the asiento falls in a closed period) must surface,
+      // not fail silently — the reversal didn't happen.
+      setReverseErr(userMessageFor(e));
     } finally {
       setReversing(null);
     }
@@ -416,6 +422,8 @@ export default function Ledger() {
         <NewEntryForm accounts={accountsQ.data} profileId={scope} userId={currentProfile?.id}
           onClose={() => setShowForm(false)} />
       )}
+
+      {reverseErr && <p className="text-sm text-rose-600 mt-2">{reverseErr}</p>}
 
       {!loaded ? <ListLoading /> : tab === 'diario' ? (
         journal.length === 0 ? (

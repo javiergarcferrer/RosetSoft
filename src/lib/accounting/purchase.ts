@@ -10,7 +10,7 @@
  * Mirrors the expense posting but debits the inventory/asset account. A goods
  * purchase also yields a kardex IN (handled by the caller). Pure.
  */
-import { round2, buildJournalEntry, type DraftLine } from './ledger.js';
+import { round2, round4, buildJournalEntry, type DraftLine } from './ledger.js';
 import { requireAccount, type ResolvedAccountingConfig } from './config.js';
 import { applyLineTaxes } from './taxPresets.js';
 import type { JournalEntry, JournalLine, PaymentMethod, PurchaseKind } from '../../types/domain.ts';
@@ -101,7 +101,7 @@ export function resolvePurchaseLines(
         cost,
         itbis,
         taxIds,
-        unitCost: qty > 0 ? Math.round((cost / qty) * 10000) / 10000 : 0,
+        unitCost: qty > 0 ? round4(cost / qty) : 0,
       };
     })
     .filter((l) => l.itemId || l.name || l.qty > 0 || l.cost > 0);

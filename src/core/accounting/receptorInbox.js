@@ -9,7 +9,10 @@
 import { ecfTypeLabel } from '../../lib/accounting/ecf.js';
 
 const RECEIVED_ESTADO = { 0: 'Recibido', 1: 'No recibido' };
-const ACECF_ESTADO = { 1: 'Aprobado', 2: 'Rechazado' };
+// Display labels for the commercial-approval estado codes. Named *_LABEL to NOT
+// collide with the barrel-exported ACECF_ESTADO (ecfCommercial.js), which is the
+// OPPOSITE shape — { APROBADO: 1, RECHAZADO: 2 } (label→code, not code→label).
+const ACECF_ESTADO_LABEL = { 1: 'Aprobado', 2: 'Rechazado' };
 
 const lc = (v) => String(v || '').toLowerCase();
 
@@ -36,7 +39,7 @@ export function resolveReceptorInbox({ received = [], approvals = [], query = ''
         codigoNoRecibido: r.codigoNoRecibido || '',
         // OUR commercial approval (ACECF) of this doc, if we've sent one.
         commercialEstado,
-        commercialLabel: ACECF_ESTADO[commercialEstado] || '',
+        commercialLabel: ACECF_ESTADO_LABEL[commercialEstado] || '',
         commercialMotivo: r.commercialMotivo || '',
         // A received (not "no recibido") e-CF we haven't yet answered commercially.
         canApprove: estado === '0' && !commercialEstado,
@@ -56,7 +59,7 @@ export function resolveReceptorInbox({ received = [], approvals = [], query = ''
         rncEmisor: r.rncEmisor || '',
         rncComprador: r.rncComprador || '',
         estado,
-        estadoLabel: ACECF_ESTADO[estado] || '—',
+        estadoLabel: ACECF_ESTADO_LABEL[estado] || '—',
         rejected: estado === '2',
         motivoRechazo: r.motivoRechazo || '',
         receivedAt: r.receivedAt || r.createdAt || null,

@@ -264,6 +264,24 @@ test('computeTotals: null lines argument behaves like empty', () => {
   assert.equal(t.grandTotal, 0);
 });
 
+test('computeTotals: a steep negative margin can drive grandTotal NEGATIVE (clearance) — PINNED, NOT clamped', () => {
+  // AMBIGUOUS by design: a margin below −100% takes the taxable base negative and
+  // the grand total with it. This MAY be an intentional clearance/credit document
+  // OR a data-entry slip — pricing.ts deliberately does NOT clamp it (negative
+  // margin is a legitimate dealer lever; see applyLineAdjustments). This test pins
+  // the current pass-through so a future change is a conscious decision, not drift.
+  // Flagged for owner: decide whether the UI should warn/floor at the surface.
+  const t = computeTotals(
+    [{ qty: 1, basePrice: 100, lineMarginPct: 0, lineDiscountPct: 0 }],
+    { marginPct: -150 },
+  );
+  assert.ok(t.taxableBase < 0);
+  assert.ok(t.grandTotal < 0);
+  // -50 base, ITBIS -9 ⇒ -59 (passes straight through, finite).
+  assert.equal(Math.round(t.grandTotal * 100) / 100, -59);
+  assert.ok(Number.isFinite(t.grandTotal));
+});
+
 /* ------------------------------ setSubtotal --------------------------- */
 
 test('setSubtotal: sums lineTotal over members of the set', () => {
@@ -576,6 +594,47 @@ test('computeTotalsRange — runs the full pipeline on both ends; collapses when
   assert.equal(flat.min, flat.max);
   const scalar = computeTotals(flatLines.map((l) => ({ qty: l.qty, basePrice: l.unitPrice })), {});
   assert.equal(Math.round(flat.min), Math.round(scalar.grandTotal));
+});
+
+test('computeTotalsRange — at a single point equals computeTotals.grandTotal (all levers together)', () => {
+  // A fully-specified (non-range) quote: the range total must collapse to one
+  // number identical to the scalar grand total, with margin + discount +
+  // courtesy + shipping ALL engaged. Pins the two pipelines equivalent so they
+  // can't drift (computeTotalsRange runs the same margin→discount→courtesy→tax→
+  // shipping order computeTotals does).
+  const rawLines = [
+    { id: 'a', kind: 'item', qty: 2, unitPrice: 300, lineMarginPct: 5, lineDiscountPct: 0 },
+    { id: 'b', kind: 'item', qty: 1, unitPrice: 450, lineDiscountPct: 10 },
+  ];
+  const quote = { marginPct: 12, discountPct: 8, courtesyDiscountPct: 5, shipping: 75 };
+
+  const range = computeTotalsRange(rawLines, quote);
+  assert.equal(range.min, range.max); // no range component → a point
+
+  const scalar = computeTotals(
+    rawLines.map((l) => ({
+      qty: l.qty,
+      basePrice: l.unitPrice,
+      lineMarginPct: l.lineMarginPct,
+      lineDiscountPct: l.lineDiscountPct,
+    })),
+    quote,
+  );
+  // Bit-for-bit (both run the identical float pipeline).
+  assert.equal(range.min, scalar.grandTotal);
+});
+
+test('computeTotalsRange — parity holds tax-exempt too', () => {
+  const rawLines = [{ id: 'a', kind: 'item', qty: 1, unitPrice: 1000, lineMarginPct: 7 }];
+  const quote = { marginPct: 10, discountPct: 15, courtesyDiscountPct: 3, shipping: 40 };
+  const range = computeTotalsRange(rawLines, quote, { taxExempt: true });
+  const scalar = computeTotals(
+    rawLines.map((l) => ({ qty: l.qty, basePrice: l.unitPrice, lineMarginPct: l.lineMarginPct })),
+    quote,
+    { taxExempt: true },
+  );
+  assert.equal(range.min, range.max);
+  assert.equal(range.min, scalar.grandTotal);
 });
 
 test('computeTotalsRange — only the selected alternative / non-optional lines count', () => {

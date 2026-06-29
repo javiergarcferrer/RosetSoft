@@ -189,7 +189,10 @@ export default function ImageCropper({ file, mode = 'feed', lockedRatioId = null
       }
       const cropped = new File([blob], `ig-${ratio.id}.jpg`, { type: 'image/jpeg' });
       onConfirm?.(cropped, ratio.id);
-    } catch {
+    } finally {
+      // Always clear busy — on success the parent unmounts us, but if it keeps
+      // the overlay open (or onConfirm throws) the button would otherwise stay
+      // stuck spinning and disabled.
       setBusy(false);
     }
   }, [img, busy, ratio, zoom, center.cx, center.cy, onConfirm]);

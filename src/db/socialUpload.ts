@@ -116,7 +116,8 @@ export async function uploadSocialImage(blob: Blob): Promise<SocialMedia> {
 }
 
 /** Best-effort cleanup of a staged file (e.g. the user removed it before publishing). */
-export async function removeSocialMedia(url: string): Promise<void> {
+export async function removeSocialMedia(url: string | null | undefined): Promise<void> {
+  if (!url) return;
   const marker = `/${SOCIAL_BUCKET}/`;
   const i = url.indexOf(marker);
   if (i < 0) return;

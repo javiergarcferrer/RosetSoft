@@ -51,6 +51,24 @@ test('buildSalesBillEntry: a deposit clears the liability before the receivable'
   assert.equal(lines.find((l) => l.accountCode === M.accountsReceivable).debit, 3900); // 5900 − 2000
 });
 
+test('buildSalesBillEntry: a zero-base line drops its ITBIS too (stays balanced)', () => {
+  // The second line has no revenue (base 0) but a stray ITBIS — it must be skipped
+  // entirely, or the ITBIS-payable credit would have no revenue/receivable behind
+  // it and the asiento would not balance.
+  const { lines } = buildSalesBillEntry({
+    newId: ids(), config,
+    sale: {
+      id: 's5', paymentMethod: 'cash',
+      lines: [{ accountCode: '4-01', base: 1000, itbis: 180 }, { accountCode: '4-02', base: 0, itbis: 90 }],
+    },
+  });
+  assert.equal(debitTotal(lines), creditTotal(lines));
+  // Only the live line's ITBIS is booked (180), not 180 + 90.
+  assert.equal(lines.find((l) => l.accountCode === M.itbisPayable).credit, 180);
+  // The zero-base line contributes no revenue account.
+  assert.equal(lines.find((l) => l.accountCode === '4-02'), undefined);
+});
+
 test('buildSalesBillEntry: a line without an account throws', () => {
   assert.throws(() => buildSalesBillEntry({
     newId: ids(), config, sale: { id: 's4', paymentMethod: 'cash', lines: [{ accountCode: '', base: 100, itbis: 0 }] },

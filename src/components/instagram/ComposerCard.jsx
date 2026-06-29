@@ -39,8 +39,22 @@ export default function ComposerCard({ publishLimit, onPublished }) {
   // Drop extra media when switching from carousel to a single-item mode.
   useEffect(() => { setPubMedia((prev) => (maxMedia === 1 ? prev.slice(0, 1) : prev)); }, [maxMedia]);
 
-  // Enough to publish: any caption, a single media, or a carousel of ≥2.
-  const canPublish = !!(pubText.trim() || (pubMode === 'carousel' ? pubMedia.length >= 2 : pubMedia.length >= 1));
+  // The first media item must match the chosen mode — switching feed→reel can
+  // leave a non-video first item (or reel→feed a video that IG would treat as a
+  // reel), which the publish call would reject. Gate Publicar on it and tell the
+  // dealer why. Story takes either; carousel is mixed (its own ≥2 gate below).
+  const firstType = pubMedia[0]?.type || null;
+  const mediaTypeError = (() => {
+    if (pubMedia.length === 0) return null; // count gate / caption-only handles this
+    if (pubMode === 'reel' && firstType !== 'video') return 'Un Reel necesita un video.';
+    if (pubMode === 'feed' && firstType !== 'image') return 'El feed necesita una imagen (usa Reel para video).';
+    return null;
+  })();
+
+  // Enough to publish: any caption, a single media, or a carousel of ≥2 — and,
+  // when there IS media, its first item's type must fit the mode.
+  const canPublish = !mediaTypeError
+    && !!(pubText.trim() || (pubMode === 'carousel' ? pubMedia.length >= 2 : pubMedia.length >= 1));
 
   const resetComposer = () => {
     setPubText(''); setPubMedia([]); setAltText(''); setCollaborators(''); setFirstComment('');
@@ -83,9 +97,18 @@ export default function ComposerCard({ publishLimit, onPublished }) {
           id: newId(), profileId: 'team', status: 'queued', scheduledAt: at,
           payload: pubBody, kind, preview, attempts: 0, createdAt: Date.now(), updatedAt: Date.now(),
         });
-        // Best-effort: ensure the worker's per-minute cron is registered.
-        supabase.functions.invoke('ig-publish-worker', { body: { ensureCron: true } }).catch(() => {});
-        setPubNote({ ok: true, text: `Programado para ${new Date(at).toLocaleString('es-DO')}` });
+        // Ensure the worker's per-minute cron is registered — without it nothing
+        // ever fires the queued post. The post IS saved regardless, so a cron
+        // failure doesn't abort scheduling; it surfaces a soft warning so the
+        // dealer knows the post won't auto-publish (instead of failing silently).
+        let cronOk = true;
+        try {
+          const { data, error } = await supabase.functions.invoke('ig-publish-worker', { body: { ensureCron: true } });
+          if (error || data?.ok === false) cronOk = false;
+        } catch { cronOk = false; }
+        setPubNote(cronOk
+          ? { ok: true, text: `Programado para ${new Date(at).toLocaleString('es-DO')}` }
+          : { ok: false, text: `Programado para ${new Date(at).toLocaleString('es-DO')}, pero no se pudo activar el publicador automático — reintenta programar o publícalo manualmente a esa hora.` });
         resetComposer();
         loadAgenda();
       } catch (e) {
@@ -207,6 +230,7 @@ export default function ComposerCard({ publishLimit, onPublished }) {
           elementos. Deja la fecha vacía para publicar al momento, o elígela para programarlo.
           {publishLimit?.remaining != null && ` · ${publishLimit.remaining}/${publishLimit.total} disponibles hoy.`}
         </p>
+        {mediaTypeError && <div className="text-sm text-amber-700">{mediaTypeError}</div>}
         {pendingIg && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-ink-600">
             <span>El video de Instagram sigue procesando.</span>

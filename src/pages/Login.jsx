@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { userMessageFor } from '../lib/errorMessages.js';
@@ -55,6 +55,32 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  // "Continuar con Google" only works once the dealer has connected Google
+  // (the google-api function holds the OAuth client creds + a login domain).
+  // Login renders OUTSIDE AppProvider, so it can't read the RLS-protected
+  // settings to know that up front. What it CAN observe: when the feature
+  // isn't configured, the function bounces the round-trip back to /login with
+  // gl_error="Acceso con Google no disponible…". We persist that verdict so a
+  // user who already hit the dead-end (or anyone after them, on this device)
+  // doesn't see a button that only leads to the same error. The button shows
+  // by default (the happy path stays one tap) and self-disables once we've
+  // learned the feature is off.
+  const [googleDisabled, setGoogleDisabled] = useState(() => {
+    try { return localStorage.getItem('rs.googleLogin.unavailable') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    if (!googleLoginError) return;
+    // The function's not-configured message is the one stable signal we get.
+    if (/no disponible|no está habilitado|not? (available|enabled)/i.test(googleLoginError)) {
+      setGoogleDisabled(true);
+      try { localStorage.setItem('rs.googleLogin.unavailable', '1'); } catch { /* private mode */ }
+    } else {
+      // A different error (wrong domain, expired link) means Google login IS
+      // configured — clear any stale "unavailable" verdict so the button returns.
+      setGoogleDisabled(false);
+      try { localStorage.removeItem('rs.googleLogin.unavailable'); } catch { /* ignore */ }
+    }
+  }, [googleLoginError]);
 
   async function submit(e) {
     e.preventDefault();
@@ -143,22 +169,27 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="flex items-center gap-3 my-5" aria-hidden>
-          <div className="h-px flex-1 bg-ink-100" />
-          <span className="text-[11px] uppercase tracking-wider text-ink-400">o</span>
-          <div className="h-px flex-1 bg-ink-100" />
-        </div>
-
-        {/* Sign in with Google — for team members on the allowed domain. */}
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          className="w-full inline-flex items-center justify-center gap-2.5 rounded-xl border border-ink-200 bg-surface px-4 py-2.5 text-sm font-medium text-ink-700 shadow-soft hover:bg-ink-50 active:scale-[0.98] transition"
-        >
-          <GoogleMark />
-          Continuar con Google
-        </button>
+        {/* Sign in with Google — for team members on the allowed domain. Hidden
+            entirely when the dealer hasn't configured Google login, so it never
+            leads to a dead-end "no disponible" redirect. The divider rides with
+            it so a lone "o" separator doesn't dangle when it's gone. */}
+        {!googleDisabled && (
+          <>
+            <div className="flex items-center gap-3 my-5" aria-hidden>
+              <div className="h-px flex-1 bg-ink-100" />
+              <span className="text-[11px] uppercase tracking-wider text-ink-400">o</span>
+              <div className="h-px flex-1 bg-ink-100" />
+            </div>
+            <button
+              type="button"
+              onClick={signInWithGoogle}
+              className="w-full inline-flex items-center justify-center gap-2.5 rounded-xl border border-ink-200 bg-surface px-4 py-2.5 text-sm font-medium text-ink-700 shadow-soft hover:bg-ink-50 active:scale-[0.98] transition"
+            >
+              <GoogleMark />
+              Continuar con Google
+            </button>
+          </>
+        )}
 
         <p className="mt-7 text-center text-[11px] text-ink-400 max-w-xs mx-auto leading-relaxed">
           El acceso es solo por invitación de tu administrador.

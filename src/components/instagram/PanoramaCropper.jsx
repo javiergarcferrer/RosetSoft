@@ -207,7 +207,10 @@ export default function PanoramaCropper({ file, maxSlices = MAX_SLICES, onConfir
         files.push(new File([blob], `ig-pano-${i + 1}.jpg`, { type: 'image/jpeg' }));
       }
       onConfirm?.(files, tile.id);
-    } catch {
+    } finally {
+      // Always clear busy — on success the parent unmounts us, but if it keeps
+      // the overlay open (or onConfirm throws) the button would otherwise stay
+      // stuck spinning and disabled.
       setBusy(false);
     }
   }, [img, busy, status, frameAspect, zoom, center.cx, center.cy, slices, tile, onConfirm]);

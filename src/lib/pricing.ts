@@ -45,19 +45,34 @@ export function materialOptionDeltas(
   family: CatalogFamily | null | undefined,
 ): MaterialOptionDelta[] {
   if (!mo || !mo.options || !mo.options.length) return [];
-  const priceOf = (grade: string): number => safeNum(family ? productForGrade(family, grade)?.priceUsd : 0);
+  // Resolve a grade's list price, or null when the family doesn't carry it (a
+  // stale/missing SKU). priceOf must distinguish "missing" from "$0" so a missing
+  // option doesn't read as a full price-DROP to the base — it should yield no
+  // number (delta 0) and degrade gracefully (label shows, no figure).
+  const priceOf = (grade: string): number | null => {
+    if (!family) return null;
+    const p = productForGrade(family, grade);
+    return p ? safeNum(p.priceUsd) : null;
+  };
   const base = priceOf(mo.baseGrade);
-  return mo.options.map((o) => ({
-    grade: o.grade,
-    label: o.label,
-    code: o.code ?? null,
-    swatchImageId: o.swatchImageId ?? null,
-    delta: priceOf(o.grade) - base,
-  }));
+  return mo.options.map((o) => {
+    const optPrice = priceOf(o.grade);
+    return {
+      grade: o.grade,
+      label: o.label,
+      code: o.code ?? null,
+      swatchImageId: o.swatchImageId ?? null,
+      // Missing the option's grade (or the base grade) → no comparable price, so
+      // skip the delta (0) rather than report -base / +option.
+      delta: optPrice == null || base == null ? 0 : optPrice - base,
+    };
+  });
 }
 
-/** Coerce to a finite number, falling back to a default if not. */
-function safeNum(v: unknown, fallback = 0): number {
+/** Coerce to a finite number, falling back to a default if not. Exported so the
+ *  Model's other pure modules (lib/modules) share ONE coercion instead of
+ *  re-declaring it and drifting. */
+export function safeNum(v: unknown, fallback = 0): number {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -244,16 +259,20 @@ export function viewerCompanySettings(
  *                       (taxPct is intentionally ignored — ITBIS is fixed)
  * @returns {Object} { subtotal, marginAmt, discountAmt, courtesyDiscountAmt, taxableBase, taxAmt, shipping, grandTotal, taxPct }
  */
-export function computeTotals(
-  lines: readonly PricingLine[] | null | undefined,
-  quote: PricingQuote = {},
-  opts: { taxExempt?: boolean } = {},
-): Totals {
-  const subtotal = (lines || []).reduce((acc, l) => {
-    const unit = applyLineAdjustments(l?.basePrice, l?.lineMarginPct, l?.lineDiscountPct);
-    return acc + unit * safeNum(l?.qty, 0);
-  }, 0);
-
+/**
+ * The scalar money pipeline from a subtotal to a grand total — the SINGLE
+ * implementation of margin → discount → courtesy → ITBIS → shipping, shared by
+ * computeTotals (the scalar total) and computeTotalsRange (run once per range
+ * end). Factoring it here guarantees the two surfaces can't diverge — not even
+ * by float-op ordering — and is pinned by tests/pricing.test.js' parity test.
+ * Returns every intermediate the Totals object needs; the range path reads only
+ * `grandTotal`. Pure: clamps inputs the same way both callers always did.
+ */
+function quoteScalarPipeline(
+  subtotal: number,
+  quote: PricingQuote,
+  taxExempt: boolean,
+) {
   const marginPct = safeNum(quote.marginPct, 0);
   const discountPct = clampPct(quote.discountPct);
   const courtesyPct = clampPct(quote.courtesyDiscountPct);
@@ -264,13 +283,28 @@ export function computeTotals(
   const afterDiscount = afterMargin - discountAmt;
   const courtesyDiscountAmt = afterDiscount * (courtesyPct / 100);
   const taxableBase = afterDiscount - courtesyDiscountAmt;
+  const taxAmt = taxExempt ? 0 : taxableBase * (ITBIS_PCT / 100);
+  const shipping = Math.max(0, safeNum(quote.shipping, 0));
+  const grandTotal = taxableBase + taxAmt + shipping;
+  return { marginAmt, discountAmt, courtesyDiscountAmt, taxableBase, taxAmt, shipping, grandTotal };
+}
+
+export function computeTotals(
+  lines: readonly PricingLine[] | null | undefined,
+  quote: PricingQuote = {},
+  opts: { taxExempt?: boolean } = {},
+): Totals {
+  const subtotal = (lines || []).reduce((acc, l) => {
+    const unit = applyLineAdjustments(l?.basePrice, l?.lineMarginPct, l?.lineDiscountPct);
+    return acc + unit * safeNum(l?.qty, 0);
+  }, 0);
+
   // A company-account quote is an internal cost / order document, not a taxable
   // customer sale → ITBIS is suppressed (opts.taxExempt). Every other quote
   // taxes the post-courtesy base at the fixed ITBIS rate.
   const taxExempt = !!opts.taxExempt;
-  const taxAmt = taxExempt ? 0 : taxableBase * (ITBIS_PCT / 100);
-  const shipping = Math.max(0, safeNum(quote.shipping, 0));
-  const grandTotal = taxableBase + taxAmt + shipping;
+  const { marginAmt, discountAmt, courtesyDiscountAmt, taxableBase, taxAmt, shipping, grandTotal } =
+    quoteScalarPipeline(subtotal, quote, taxExempt);
 
   return {
     subtotal: safeNum(subtotal),
@@ -809,18 +843,13 @@ export function computeTotalsRange(
     subMin += r.min;
     subMax += r.max;
   }
-  const marginPct = safeNum(quote.marginPct, 0);
-  const discountPct = clampPct(quote.discountPct);
-  const courtesyPct = clampPct(quote.courtesyDiscountPct);
-  const shipping = Math.max(0, safeNum(quote.shipping, 0));
+  // Run the SAME scalar pipeline computeTotals uses, once per range end — so a
+  // single-point range collapses to exactly computeTotals.grandTotal (parity is
+  // pinned). Reusing the one helper is what keeps them from drifting by float-op
+  // ordering, not just by formula.
   const taxExempt = !!opts.taxExempt;
-  const grand = (subtotal: number): number => {
-    const afterMargin = subtotal * (1 + marginPct / 100);
-    const afterDiscount = afterMargin * (1 - discountPct / 100);
-    const taxable = afterDiscount * (1 - courtesyPct / 100);
-    const tax = taxExempt ? 0 : taxable * (ITBIS_PCT / 100);
-    return taxable + tax + shipping;
-  };
+  const grand = (subtotal: number): number =>
+    quoteScalarPipeline(subtotal, quote, taxExempt).grandTotal;
   return { min: safeNum(grand(subMin)), max: safeNum(grand(subMax)) };
 }
 

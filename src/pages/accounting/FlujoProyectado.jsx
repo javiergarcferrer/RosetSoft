@@ -67,13 +67,14 @@ export default function FlujoProyectado() {
 
           <div className="card p-4 overflow-x-auto min-w-0">
             <table className="w-full">
+              <caption className="sr-only">Proyección de flujo de caja a 13 semanas — valores en RD$</caption>
               <thead>
                 <tr className="border-b border-ink-200">
-                  <th className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Semana</th>
-                  <th className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Cobros</th>
-                  <th className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Pagos</th>
-                  <th className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Neto</th>
-                  <th className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-500">Balance</th>
+                  <th scope="col" className="py-2 pr-3 text-left eyebrow-xs font-semibold text-ink-500">Semana</th>
+                  <th scope="col" className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Cobros</th>
+                  <th scope="col" className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Pagos</th>
+                  <th scope="col" className="py-2 px-3 text-right eyebrow-xs font-semibold text-ink-500">Neto</th>
+                  <th scope="col" className="py-2 pl-3 text-right eyebrow-xs font-semibold text-ink-500">Balance</th>
                 </tr>
               </thead>
               <tbody>

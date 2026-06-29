@@ -162,6 +162,15 @@ test('assertBalanced requires an account on every line', () => {
   ]), /necesita una cuenta/);
 });
 
+test('assertBalanced validates on ROUNDED amounts — a sub-cent line is rejected', () => {
+  // 0.004 rounds to 0 cents on persist, so it carries no real debit: it must be
+  // rejected here (it would otherwise pass and write a phantom-account line).
+  assert.throws(() => assertBalanced([
+    { accountCode: 'a', debit: 0.004 },
+    { accountCode: 'b', credit: 0.004 },
+  ]), /débito o un crédito/);
+});
+
 test('naturalBalance re-signs by nature', () => {
   assert.equal(naturalBalance(50, 'debit'), 50);    // asset up on debit
   assert.equal(naturalBalance(50, 'credit'), -50);  // a credit account with net debit is negative

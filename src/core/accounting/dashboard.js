@@ -169,7 +169,7 @@ export function resolveAccountingDashboard({
     .reduce((s, p) => s + (Number(p.amount) || 0), 0));
 
   const ecfPending = (salesPostings || [])
-    .filter((s) => /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
+    .filter((s) => !s.voidedAt && /^E\d{2}/.test(s.ncf || '') && s.ecfStatus !== 'sent' && s.ecfStatus !== 'accepted').length;
 
   const ecfSeqAlerts = resolveEcfSequenceAlerts(ecfSequences, { now: end });
 

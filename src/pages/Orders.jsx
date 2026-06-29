@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Package, Trash2 } from 'lucide-react';
+import { userMessageFor } from '../lib/errorMessages.js';
+import { useToast } from '../components/ConfirmProvider.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import { useLiveQuery } from '../db/hooks.js';
@@ -87,6 +89,8 @@ const ORDER_COLS_STORAGE_KEY = 'rs.orders.cols.v1';
 
 export default function Orders() {
   const { profileId, settings, isAdmin } = useApp();
+  const navigate = useNavigate();
+  const toast = useToast();
 
   // Gate the empty state on `loaded` — same reason as Customers / Quotes:
   // don't flash "Sin pedidos" on every navigation, only once we know it's
@@ -150,24 +154,29 @@ export default function Orders() {
     const now = Date.now();
     // Race-safe assign: retries on the UNIQUE(profile_id, number)
     // constraint if another tab took our slot in flight.
-    await assignSequenceNumber({
-      table: 'orders',
-      profileId,
-      start: 101,
-      build: (number) => ({
-        id,
+    try {
+      await assignSequenceNumber({
+        table: 'orders',
         profileId,
-        number,
-        name: '',
-        customerId: null,
-        status: 'draft',
-        notes: '',
-        deliveryAddress: '',
-        createdAt: now,
-        updatedAt: now,
-      }),
-    });
-    window.location.hash = `#/orders/${id}`;
+        start: 101,
+        build: (number) => ({
+          id,
+          profileId,
+          number,
+          name: '',
+          customerId: null,
+          status: 'draft',
+          notes: '',
+          deliveryAddress: '',
+          createdAt: now,
+          updatedAt: now,
+        }),
+      });
+    } catch (e) {
+      toast(userMessageFor(e), { tone: 'error' });
+      return;
+    }
+    navigate(`/orders/${id}`);
   }
 
   async function del(order) {
@@ -184,10 +193,14 @@ export default function Orders() {
     // orderId at the DB level — a by-orderId lookup afterwards finds nothing.
     // With the ids in hand, reconcile each freed quote (now order-less, so it
     // holds no stock) to add its LSG pieces back on Shopify.
-    const freed = await db.quotes.where('orderId').equals(order.id).toArray();
-    await db.orders.delete(order.id);
-    invalidate();
-    for (const q of freed) reconcileQuoteStock(q.id).catch(() => {});
+    try {
+      const freed = await db.quotes.where('orderId').equals(order.id).toArray();
+      await db.orders.delete(order.id);
+      invalidate();
+      for (const q of freed) reconcileQuoteStock(q.id).catch(() => {});
+    } catch (e) {
+      toast(userMessageFor(e), { tone: 'error' });
+    }
   }
 
   if (!loaded) {
@@ -318,11 +331,25 @@ function OrderCard({ o, customerLabel, quoteCount, containerCount, total, onDele
 }
 
 function OrderRow({ o, cols, customerLabel, quoteCount, containerCount, total, onDelete }) {
+  const navigate = useNavigate();
   const stg = currentOrderStage(o);
   // One bag of row data; each column's pure `cell(ctx)` reads what it needs.
   const ctx = { o, stg, customerLabel, quoteCount, containerCount, total };
+  const open = () => navigate(`/orders/${o.id}`);
   return (
-    <tr className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100" onClick={() => (window.location.hash = `#/orders/${o.id}`)}>
+    <tr
+      className="cursor-pointer transition-all hover:bg-ink-50/80 active:bg-ink-100"
+      onClick={open}
+      tabIndex={0}
+      role="button"
+      aria-label={`Abrir pedido #${o.number || ''}`}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault();
+          open();
+        }
+      }}
+    >
       {cols.map((col) => (
         <td key={col.key} className={col.tdClass || ''}>{col.cell(ctx)}</td>
       ))}

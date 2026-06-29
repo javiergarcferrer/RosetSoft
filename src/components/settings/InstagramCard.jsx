@@ -36,7 +36,7 @@ export default function InstagramCard() {
   useEffect(() => { setAppId(settings?.metaSocialIgAppId || ''); }, [settings?.metaSocialIgAppId]);
 
   // Read the OAuth round-trip result the function appended to the hash
-  // (#/settings?ig=connected | ?ig_error=…), surface it, then clean the URL.
+  // (#/integraciones?ig=connected | ?ig_error=…), surface it, then clean the URL.
   useEffect(() => {
     const hash = window.location.hash || '';
     const qIndex = hash.indexOf('?');
@@ -47,7 +47,7 @@ export default function InstagramCard() {
     if (!ok && !err) return;
     if (ok === 'connected') { setMsg({ ok: true, text: 'Instagram conectado ✓' }); refreshSettings?.(); }
     else if (err) setMsg({ ok: false, text: `No se pudo conectar: ${decodeURIComponent(err)}` });
-    const clean = `${window.location.href.split('#')[0]}#/settings`;
+    const clean = `${window.location.href.split('#')[0]}#/integraciones`;
     window.history.replaceState(null, '', clean);
   }, [refreshSettings]);
 
@@ -78,7 +78,7 @@ export default function InstagramCard() {
     setState('connecting');
     setMsg(null);
     try {
-      const returnTo = `${window.location.origin}${window.location.pathname}#/settings`;
+      const returnTo = `${window.location.origin}${window.location.pathname}#/integraciones`;
       const { data, error } = await supabase.functions.invoke('meta-social', {
         body: { authorize: { returnTo } },
       });

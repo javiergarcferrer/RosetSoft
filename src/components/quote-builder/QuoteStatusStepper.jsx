@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { Check, CheckCircle2, ChevronRight, ChevronDown, Undo2, X, Archive } from 'lucide-react';
+import { Check, CheckCircle2, ChevronRight, Undo2, X, Archive } from 'lucide-react';
 import {
   QUOTE_STAGES, QUOTE_STAGE_BY_KEY, QUOTE_TERMINAL_STAGES,
   quoteStageIndex, nextQuoteStage, currentQuoteStage, isTerminalStage,
 } from '../../lib/quoteStages.js';
 import OrderChip from './OrderChip.jsx';
+import Dropdown, { DropdownItem } from '../primitives/Dropdown.jsx';
 
 /**
  * The quote lifecycle stepper — same visual language as the container
@@ -225,50 +225,29 @@ export default function QuoteStatusStepper({ quote, onTransition, profileId, onA
 }
 
 function TerminalMenu({ stage, terminal, onPick }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
-    function onKey(e) { if (e.key === 'Escape') setOpen(false); }
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
+  // The shared Dropdown owns the portal/flip/click-outside/Escape/keyboard
+  // machinery; it auto-flips above the trigger when there isn't room below, so
+  // it still clears the phone bottom-nav the way the old hand-rolled "opens
+  // upward" menu did.
   return (
-    <div className="relative flex-1 sm:flex-none" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="btn-secondary text-xs w-full justify-center"
-        aria-expanded={open}
-        aria-haspopup="menu"
+    <div className="flex-1 sm:flex-none">
+      <Dropdown
+        align="right"
+        triggerClassName="btn-secondary text-xs w-full justify-center"
+        panelClassName="w-52 max-w-[calc(100vw-1rem)]"
+        label="Más"
       >
-        Más <ChevronDown size={12} className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        // Opens upward so the menu never collides with the bottom nav bar on
-        // phones (the stepper sits low on the screen).
-        <div className="absolute right-0 bottom-full mb-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-lg border border-ink-200 bg-surface shadow-pop py-1 z-30 overflow-hidden" role="menu">
-          {QUOTE_TERMINAL_STAGES.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="menuitem"
-              disabled={t.key === stage}
-              onClick={() => { onPick(t.key); setOpen(false); }}
-              className="w-full text-left px-3 py-2 coarse:min-h-11 text-sm hover:bg-ink-50 active:bg-ink-100 disabled:text-ink-300 disabled:bg-ink-50 disabled:cursor-default inline-flex items-center gap-2 transition-colors"
-            >
-              {t.key === 'declined' ? <X size={13} className="text-red-400 flex-shrink-0" /> : <Archive size={13} className="text-ink-400 flex-shrink-0" />}
-              Marcar {t.label.toLowerCase()}
-            </button>
-          ))}
-        </div>
-      )}
+        {({ close }) => QUOTE_TERMINAL_STAGES.map((t) => (
+          <DropdownItem
+            key={t.key}
+            disabled={t.key === stage}
+            onSelect={() => { onPick(t.key); close(); }}
+          >
+            {t.key === 'declined' ? <X size={13} className="text-red-400 flex-shrink-0 mt-0.5" /> : <Archive size={13} className="text-ink-400 flex-shrink-0 mt-0.5" />}
+            Marcar {t.label.toLowerCase()}
+          </DropdownItem>
+        ))}
+      </Dropdown>
     </div>
   );
 }

@@ -671,7 +671,7 @@ function CatalogRow({ settings, saveSettings }) {
         setResult({ ok: false, msg: res?.error || 'No se pudo ver el catálogo.' });
       }
     } catch (e) {
-      setResult({ ok: false, msg: e?.message || 'No se pudo ver el catálogo.' });
+      setResult({ ok: false, msg: userMessageFor(e) });
     } finally {
       setTesting(false);
     }
@@ -787,7 +787,7 @@ function QuickRepliesRow({ settings, saveSettings }) {
                   onSave={save} onCancel={cancel} saving={saving}
                 />
               ) : (
-                <div className="flex items-start gap-2 rounded-lg border border-ink-200 bg-white px-3 py-2">
+                <div className="flex items-start gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium text-ink-800 truncate">{qr.label}</div>
                     <div className="text-[11px] text-ink-500 line-clamp-2 whitespace-pre-wrap">{qr.text}</div>
@@ -881,7 +881,7 @@ function ConversationalRow() {
         setMsg(res?.error || 'No se pudo leer el menú de inicio.');
       }
     } catch (e) {
-      setMsg(e?.message || 'No se pudo leer el menú de inicio.');
+      setMsg(userMessageFor(e));
     } finally {
       setLoading(false);
     }
@@ -905,7 +905,7 @@ function ConversationalRow() {
       }
     } catch (e) {
       setState('error');
-      setMsg(e?.message || 'No se pudo guardar.');
+      setMsg(userMessageFor(e));
     }
   }
 
@@ -1038,7 +1038,7 @@ function QrCodesRow() {
       if (res?.ok) { setCodes(res.codes || []); setLoaded(true); }
       else setMsg(res?.error || 'No se pudieron cargar los códigos.');
     } catch (e) {
-      setMsg(e?.message || 'No se pudieron cargar los códigos.');
+      setMsg(userMessageFor(e));
     } finally {
       setLoading(false);
     }
@@ -1055,7 +1055,7 @@ function QrCodesRow() {
       if (res?.ok && res.code) { setCodes((c) => [res.code, ...c]); setDraft(''); }
       else setMsg(res?.error || 'No se pudo crear el código.');
     } catch (e) {
-      setMsg(e?.message || 'No se pudo crear el código.');
+      setMsg(userMessageFor(e));
     } finally {
       setBusy(false);
     }
@@ -1069,7 +1069,7 @@ function QrCodesRow() {
       if (res?.ok) setCodes((c) => c.filter((x) => x.code !== code));
       else setMsg(res?.error || 'No se pudo eliminar.');
     } catch (e) {
-      setMsg(e?.message || 'No se pudo eliminar.');
+      setMsg(userMessageFor(e));
     } finally {
       setBusy(false);
     }
@@ -1118,7 +1118,7 @@ function QrCodesRow() {
       ) : codes.length ? (
         <ul className="space-y-2">
           {codes.map((c) => (
-            <li key={c.code} className="flex items-start gap-3 rounded-lg border border-ink-200 bg-white p-2.5">
+            <li key={c.code} className="flex items-start gap-3 rounded-lg border border-ink-200 bg-surface p-2.5">
               {c.imageUrl && <img src={c.imageUrl} alt={`QR ${c.code}`} className="h-16 w-16 shrink-0 rounded border border-ink-100" />}
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-ink-800 truncate">{c.prefilledMessage || '(sin mensaje)'}</div>

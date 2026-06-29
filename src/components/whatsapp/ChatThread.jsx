@@ -1,5 +1,5 @@
 import { userMessageFor } from '../../lib/errorMessages.js';
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Send, ArrowLeft, Loader2, Check, CheckCheck,
@@ -96,6 +96,13 @@ function ComposerAttachPanel({ actions, onClose }) {
 
 export default function ChatThread({ contact, thread, connected, onBack, onSend, onSendMedia, onSendTemplate, onReact, onSendInteractive, onSendLocation, onSendContact, onSendProducts, onSendCatalog, onSaveContact, onCreateQuote, onSuggestReply, onManageGroup = null, convState = null, allLabels = [], onSaveState = null, showHeader = true, contextQuoteId = null }) {
   const isGroup = contact.contactKind === 'group';
+  // Coarse pointer (touch) → Enter inserts a newline and the send button is the
+  // only way out; fine pointer (desktop) → Enter sends. Probed once: matchMedia
+  // was being evaluated on every keydown, which is needless work in the hot path.
+  const isCoarsePointer = useMemo(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches,
+    [],
+  );
   const [text, setText] = useState('');
   // Attachment tray (the "+" grid) open state — mutually exclusive with the
   // keyboard, WhatsApp-style: opening it blurs the box (keyboard down), and
@@ -851,8 +858,7 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
                 // Desktop: Enter sends, Shift+Enter newlines. Touch keyboards
                 // have no easy Shift, so there Enter inserts a newline and the
                 // send button is the only way out (the WhatsApp-mobile rule).
-                const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing && !coarse) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing && !isCoarsePointer) {
                   e.preventDefault();
                   submit();
                 }
@@ -1359,6 +1365,7 @@ function SaveContactModal({ target, onClose, onSave }) {
  * one-tap.
  */
 function TemplateSendModal({ open, onClose, contact, onSend }) {
+  const uid = useId();
   const [templates, setTemplates] = useState(null); // null = loading
   const [loadError, setLoadError] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -1429,8 +1436,9 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
         <div className="space-y-3">
           {Array.from({ length: selected.varCount }, (_, i) => (
             <div key={i}>
-              <div className="label">Variable {'{{'}{i + 1}{'}}'}</div>
+              <label className="label" htmlFor={`${uid}-var-${i}`}>Variable {'{{'}{i + 1}{'}}'}</label>
               <input
+                id={`${uid}-var-${i}`}
                 className="input text-sm"
                 value={params[i] || ''}
                 onChange={(e) => setParams((ps) => ps.map((p, j) => (j === i ? e.target.value : p)))}
@@ -1467,6 +1475,7 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
  * message carrying the option they tapped.
  */
 function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
+  const uid = useId();
   const [mode, setMode] = useState('buttons'); // buttons | list | cta
   const [text, setText] = useState('');
   const [buttons, setButtons] = useState(['', '', '']);
@@ -1535,8 +1544,9 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
           ))}
         </div>
         <div>
-          <div className="label">Mensaje</div>
+          <label className="label" htmlFor={`${uid}-msg`}>Mensaje</label>
           <textarea
+            id={`${uid}-msg`}
             className="input text-sm min-h-[72px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -1545,8 +1555,9 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
         </div>
         {mode === 'buttons' && buttons.map((b, i) => (
           <div key={i}>
-            <div className="label">Botón {i + 1}{i > 0 ? ' (opcional)' : ''}</div>
+            <label className="label" htmlFor={`${uid}-btn-${i}`}>Botón {i + 1}{i > 0 ? ' (opcional)' : ''}</label>
             <input
+              id={`${uid}-btn-${i}`}
               className="input text-sm"
               maxLength={20}
               value={b}
@@ -1557,8 +1568,9 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
         {mode === 'list' && (
           <>
             <div>
-              <div className="label">Botón del menú</div>
+              <label className="label" htmlFor={`${uid}-listbtn`}>Botón del menú</label>
               <input
+                id={`${uid}-listbtn`}
                 className="input text-sm"
                 maxLength={20}
                 value={listButton}
@@ -1598,8 +1610,9 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
         {mode === 'cta' && (
           <>
             <div>
-              <div className="label">Texto del botón</div>
+              <label className="label" htmlFor={`${uid}-cta-text`}>Texto del botón</label>
               <input
+                id={`${uid}-cta-text`}
                 className="input text-sm"
                 maxLength={20}
                 value={ctaText}
@@ -1608,8 +1621,9 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
               />
             </div>
             <div>
-              <div className="label">Enlace</div>
+              <label className="label" htmlFor={`${uid}-cta-url`}>Enlace</label>
               <input
+                id={`${uid}-cta-url`}
                 className="input text-sm"
                 type="url"
                 inputMode="url"

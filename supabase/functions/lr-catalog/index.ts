@@ -67,6 +67,11 @@ async function fetchText(url: string): Promise<{ ok: boolean; status: number; te
     const r = await fetch(url, {
       headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest' },
       signal: ctrl.signal,
+      // Don't auto-follow redirects: a 3xx off ligne-roset.com would otherwise
+      // let the host lock (ALLOWED_HOSTS) be bypassed to an arbitrary origin.
+      // A redirect from these AJAX/sitemap endpoints isn't expected, so treat it
+      // as a non-ok response (its body is discarded) rather than chasing it.
+      redirect: 'manual',
     });
     return { ok: r.ok, status: r.status, text: r.ok ? await r.text() : '' };
   } catch {

@@ -1,12 +1,12 @@
 import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertCircle, Store as StoreIcon, Search } from 'lucide-react';
+import { Loader2, AlertCircle, Store as StoreIcon, Search, MessageCircle, Phone } from 'lucide-react';
 import FilterPopover from '../components/search/FilterPopover.jsx';
 import SortMenu from '../components/search/SortMenu.jsx';
 import { DebouncedInput } from '../components/DebouncedInput.jsx';
 import ImageView from '../components/ImageView.jsx';
 import { formatMoney } from '../lib/format.js';
-import { fetchStoreCatalog } from '../lib/storefront.js';
+import { fetchStoreCatalog, contactLinkFor } from '../lib/storefront.js';
 import { resolveStore } from '../core/store/index.js';
 
 /**
@@ -118,6 +118,12 @@ export default function PublicStore() {
   const storeName = bundle.storeName || 'Tienda';
   const totalProducts = tabs.find((t) => t.key === 'all')?.count || 0;
   const notReady = !bundle.configured || totalProducts === 0;
+  // Public contact CTA — a WhatsApp (or tel:) deep-link built from the dealer's
+  // public phone the `store` function returns. Absent number ⇒ no button.
+  const contact = contactLinkFor(
+    bundle.contactPhone,
+    `Hola ${storeName}, vi su catálogo y quisiera más información.`,
+  );
 
   return (
     <div className={`h-full overflow-y-auto overscroll-contain ${PAPER} text-ink-900`}>
@@ -126,7 +132,7 @@ export default function PublicStore() {
         className={`sticky top-0 z-20 border-b border-ink-200/50 backdrop-blur-sm ${PAPER_GLASS}`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-center px-4 sm:px-8">
+        <div className="relative mx-auto flex h-14 max-w-7xl items-center justify-center px-4 sm:px-8">
           {bundle.logoImageId ? (
             <ImageView
               id={bundle.logoImageId}
@@ -136,6 +142,22 @@ export default function PublicStore() {
             />
           ) : (
             <div className="font-wordmark text-xl tracking-wide text-ink-900">{storeName}</div>
+          )}
+          {contact && (
+            <a
+              href={contact.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute right-4 sm:right-8 inline-flex items-center gap-1.5 rounded-full border border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700 transition-colors hover:border-ink-900 hover:text-ink-900"
+              aria-label={contact.kind === 'whatsapp' ? 'Escríbenos por WhatsApp' : 'Llámanos'}
+            >
+              {contact.kind === 'whatsapp'
+                ? <MessageCircle size={14} aria-hidden />
+                : <Phone size={14} aria-hidden />}
+              <span className="hidden sm:inline">
+                {contact.kind === 'whatsapp' ? 'WhatsApp' : 'Llamar'}
+              </span>
+            </a>
           )}
         </div>
       </header>

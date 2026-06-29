@@ -490,7 +490,8 @@ export default function TogoStage({
         disposeGroup(l.group);
         l.disposeStage?.();
         l.quilt?.dispose?.();
-        l.colorCache?.forEach?.(() => {});
+        // colorCache holds plain hex numbers (sampleSwatchColor) — nothing to
+        // dispose; just drop the reference with the rest of `l`.
         l.modelCache?.forEach?.((m) => disposeGroup(m.object || m));
         l.renderer?.dispose?.();
         l.renderer?.domElement?.remove?.();

@@ -28,14 +28,8 @@
  */
 
 import { isPricedComponent } from './constants.js';
-import { applyLineAdjustments } from './pricing.js';
+import { applyLineAdjustments, safeNum } from './pricing.js';
 import type { LineComponent, QuoteLine } from '../types/domain.ts';
-
-/** Coerce to a finite number, else a fallback. Mirrors lib/pricing. */
-function safeNum(v: unknown, fallback = 0): number {
-  const n = typeof v === 'number' ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 /** Generates a fresh id for a new module group — the app passes `newId`. */
 export type IdFactory = () => string;
@@ -354,7 +348,7 @@ export function absorbLineAsComponents(
     if (!v) { v = newId(); m.set(key, v); }
     return v;
   };
-  return comps.map((c) => {
+  const absorbed = comps.map((c) => {
     const next: LineComponent = {
       ...c,
       id: newId(),
@@ -373,6 +367,11 @@ export function absorbLineAsComponents(
     if (line.isOptional) next.moduleOptional = true;
     return next;
   });
+  // Heal component-level alternative groups exactly as the extract path does, so
+  // an absorbed pick-one group never lands without a selected member (a source
+  // group left with 0 selected, or dissolved to a lone survivor, would silently
+  // drop from / corrupt the compound total otherwise).
+  return healComponentAlternatives(absorbed);
 }
 
 /** Seed for a line extracted out of a compound (consumed by the controller's

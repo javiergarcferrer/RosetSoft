@@ -23,6 +23,13 @@ export function round2(n: number | null | undefined): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+/** Round to 4 decimals — the kardex/landed UNIT-cost precision (finer than money
+ *  cents, because a unit cost divides a total by quantity). One canonical copy:
+ *  inventory/purchase/expediente/importLiquidation/landedCalc all reuse this. */
+export function round4(n: number | null | undefined): number {
+  return Math.round((Number(n) || 0) * 10000) / 10000;
+}
+
 /** A line shape loose enough to accept both persisted lines and form drafts. */
 export type LineLike = Pick<JournalLine, 'accountCode'> & {
   debit?: number | null;
@@ -57,8 +64,12 @@ export function assertBalanced(lines: LineLike[] | null | undefined): true {
     throw new Error('Un asiento necesita al menos dos líneas.');
   }
   for (const l of lines) {
-    const d = Number(l.debit) || 0;
-    const c = Number(l.credit) || 0;
+    // Validate the ROUNDED amounts — these are what actually persist (buildJournalEntry
+    // stores round2(debit)/round2(credit)). A sub-cent line (e.g. debit 0.004) would
+    // otherwise pass the ">0" gate here and then be written as 0, leaving a phantom
+    // account on a line that books nothing.
+    const d = round2(l.debit);
+    const c = round2(l.credit);
     if (!l.accountCode) throw new Error('Cada línea necesita una cuenta.');
     if (d < 0 || c < 0) throw new Error('Débitos y créditos no pueden ser negativos.');
     if (d > 0 && c > 0) throw new Error('Una línea no puede tener débito y crédito a la vez.');

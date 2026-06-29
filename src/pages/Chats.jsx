@@ -35,6 +35,23 @@ import {
  */
 const POLL_MS = 10000;
 
+// Does a server-logged outbound row reconcile this optimistic draft? wa-send
+// doesn't yet echo a client id (the exact fix — see the report), so we pair on
+// target + body + a near-coincident timestamp. The window is widened to ±10s
+// and made SYMMETRIC: a server row can be stamped slightly BEFORE the local
+// optimistic createdAt (clock skew between the device and Supabase), which the
+// old `>= createdAt - 1000` one-sided check would miss, stranding the bubble on
+// "Enviando" forever. Still conservative enough that a genuinely different
+// later message with the same text isn't swallowed.
+const OPTIMISTIC_MATCH_MS = 10000;
+function optimisticMatch(p, messages) {
+  return (messages || []).some((m) =>
+    m.direction === 'out'
+    && (p.groupId ? m.groupId === p.groupId : (!m.groupId && phoneKey(m.phone) === phoneKey(p.phone)))
+    && (m.body || '') === (p.body || '')
+    && Math.abs((m.createdAt || 0) - p.createdAt) <= OPTIMISTIC_MATCH_MS);
+}
+
 export default function Chats() {
   const { profileId, settings } = useApp();
   const navigate = useNavigate();
@@ -85,10 +102,25 @@ export default function Chats() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [convStates]);
 
-  // Near-live: refetch on an interval while the inbox is open.
+  // Near-live: refetch on an interval while the inbox is open — but only while
+  // the tab is actually visible. A backgrounded tab keeps no socket and the
+  // user sees nothing, so polling it just burns the device/Supabase for
+  // nothing; pause it and resume (with an immediate refetch) on focus.
   useEffect(() => {
-    const id = setInterval(() => invalidate(), POLL_MS);
-    return () => clearInterval(id);
+    let id = null;
+    const start = () => {
+      if (id == null) id = setInterval(() => invalidate(), POLL_MS);
+    };
+    const stop = () => {
+      if (id != null) { clearInterval(id); id = null; }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') { invalidate(); start(); }
+      else stop();
+    };
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { document.removeEventListener('visibilitychange', onVisibility); stop(); };
   }, []);
 
   const [needle, setNeedle] = useState('');
@@ -170,14 +202,13 @@ export default function Chats() {
     setSelectedKey(hit.key);
   }, [chatParam, loaded, customersLoaded, professionalsLoaded, customers, professionals, allConversations]);
 
-  // Server rows landed → drop the optimistic copies they replace.
+  // Server rows landed → drop the optimistic copies they replace. The match is
+  // a heuristic (same target + same body, server row stamped at ~the same
+  // moment) because wa-send doesn't yet echo back a client id we could pair
+  // on exactly — see optimisticMatch for the widened, single-claim logic.
   useEffect(() => {
     if (!pending.length) return;
-    setPending((rows) => rows.filter((p) => !messages.some(
-      (m) => m.direction === 'out'
-        && (p.groupId ? m.groupId === p.groupId : (!m.groupId && phoneKey(m.phone) === phoneKey(p.phone)))
-        && (m.body || '') === (p.body || '') && (m.createdAt || 0) >= p.createdAt - 1000,
-    )));
+    setPending((rows) => rows.filter((p) => !optimisticMatch(p, messages)));
   }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opening a thread clears its unread badge — locally AND on the customer's

@@ -21,6 +21,30 @@ export function storeLinkUrl() {
   return `${origin}/p/tienda.html`;
 }
 
+/**
+ * Build a contact deep-link from the dealer's public phone number. Returns a
+ * WhatsApp `wa.me` link when the number cleans to a plausible international
+ * number (the dealer's default channel), else a `tel:` link, else null when
+ * there's no usable number. `message` (optional) pre-fills the WhatsApp chat.
+ */
+export function contactLinkFor(phone, message) {
+  const raw = String(phone || '').trim();
+  if (!raw) return null;
+  // Keep the leading + only as an intl marker; wa.me wants digits only.
+  const hasPlus = raw.startsWith('+');
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+  // wa.me needs a country code. Assume DR (+1) for the local 10-digit form
+  // (809/829/849) when no explicit + / country code was given.
+  let waDigits = digits;
+  if (!hasPlus && digits.length === 10) waDigits = `1${digits}`;
+  if (waDigits.length >= 11) {
+    const q = message ? `?text=${encodeURIComponent(message)}` : '';
+    return { kind: 'whatsapp', href: `https://wa.me/${waDigits}${q}` };
+  }
+  return { kind: 'tel', href: `tel:${hasPlus ? '+' : ''}${digits}` };
+}
+
 // The function endpoint, with the public anon key as a query param (not a
 // header) so the request stays gateway-acceptable without forcing a custom
 // header. The anon key is already public in the bundle.
@@ -31,7 +55,7 @@ function endpoint() {
 
 /**
  * Fetch the public store catalog. Returns the bundle the storefront renders:
- *   { configured, storeName, logoImageId, rates, quotes[], lines[], orders[] }
+ *   { configured, storeName, logoImageId, contactPhone, rates, quotes[], lines[], orders[] }
  * Throws on a network / server error so the page can show its error state.
  */
 export async function fetchStoreCatalog() {

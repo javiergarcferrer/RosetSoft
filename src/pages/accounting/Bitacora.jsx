@@ -44,14 +44,19 @@ export default function Bitacora() {
       {!loaded ? <ListLoading /> : (
         <>
           <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-end gap-3 mb-4">
-            <label className="text-sm">Buscar<br /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="usuario, campo, id…" className="input w-full sm:w-56" /></label>
-            <label className="text-sm">Tabla<br />
+            <label className="text-sm">
+              <span className="label block">Buscar</span>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="usuario, campo, id…" className="input w-full sm:w-56" />
+            </label>
+            <label className="text-sm">
+              <span className="label block">Tabla</span>
               <select value={tableFilter} onChange={(e) => setTableFilter(e.target.value)} className="input w-full sm:w-44">
                 <option value="">Todas</option>
                 {trail.tables.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </label>
-            <label className="text-sm">Acción<br />
+            <label className="text-sm">
+              <span className="label block">Acción</span>
               <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} className="input w-full sm:w-36">
                 <option value="">Todas</option><option value="insert">Creó</option><option value="update">Modificó</option><option value="delete">Eliminó</option>
               </select>

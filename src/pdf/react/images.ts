@@ -89,26 +89,34 @@ async function resolveOne(src: Src, publicUrls: boolean): Promise<string | null>
       const url = rec?.externalUrl
         ? sizedExternalUrl(rec.externalUrl, DOWNLOAD_IMG_WIDTH)
         : rec?.storagePath ? publicImageUrl(rec.storagePath) : null;
-      const bytes = url ? await fetchUrlBytes(url) : null;
-      return bytes ? bytesToDataUri(bytes, '') : null;
+      const fetched = url ? await fetchUrlBytes(url) : null;
+      return fetched ? bytesToDataUri(fetched.bytes, fetched.contentType) : null;
     }
     const res = await downloadImageBytes(src.imageId);
     return res?.bytes ? bytesToDataUri(res.bytes, res.contentType) : null;
   }
   if (src.url) {
-    const bytes = await fetchUrlBytes(src.url);
-    return bytes ? bytesToDataUri(bytes, '') : null;
+    const fetched = await fetchUrlBytes(src.url);
+    return fetched ? bytesToDataUri(fetched.bytes, fetched.contentType) : null;
   }
   return null;
 }
 
-async function fetchUrlBytes(url: string): Promise<Uint8Array | null> {
+// Return the bytes AND the CDN-reported content-type so the JPEG/PNG fast path
+// in bytesToDataUri can fire (the magic-byte check is still the final arbiter,
+// but a truthful image/jpeg|png type avoids a needless canvas re-encode).
+async function fetchUrlBytes(
+  url: string,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
     const r = await fetch(url, { signal: ctrl.signal });
     if (!r.ok) return null;
-    return new Uint8Array(await r.arrayBuffer());
+    return {
+      bytes: new Uint8Array(await r.arrayBuffer()),
+      contentType: r.headers.get('content-type') || '',
+    };
   } catch {
     return null;
   } finally {

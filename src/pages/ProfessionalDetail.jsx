@@ -5,7 +5,8 @@ import BackLink from '../components/BackLink.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import ProfessionalModal from '../components/ProfessionalModal.jsx';
 import StatCard from '../components/StatCard.jsx';
-import { useLiveQuery } from '../db/hooks.js';
+import EmptyState from '../components/EmptyState.jsx';
+import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
@@ -44,7 +45,7 @@ export default function ProfessionalDetail() {
   // deleting the row they were just looking at.
   const [editing, setEditing] = useState(null);
 
-  const pro = useLiveQuery(
+  const { data: pro, loaded: proLoaded } = useLiveQueryStatus(
     () => db.professionals.get(professionalId),
     [professionalId],
     null,
@@ -92,13 +93,28 @@ export default function ProfessionalDetail() {
   );
 
   if (!pro) {
+    // Distinguish first-fetch-in-flight from a genuinely missing record: a
+    // deleted/bad id used to spin "Cargando profesional…" forever.
+    if (!proLoaded) {
+      return (
+        <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
+          <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
+            <UserSquare2 size={20} className="text-ink-300" />
+          </span>
+          <p className="text-sm text-ink-500">Cargando profesional…</p>
+        </div>
+      );
+    }
     return (
-      <div className="card card-pad py-16 flex flex-col items-center gap-3 text-center">
-        <span className="w-11 h-11 rounded-full bg-ink-50 flex items-center justify-center">
-          <UserSquare2 size={20} className="text-ink-300" />
-        </span>
-        <p className="text-sm text-ink-500">Cargando profesional…</p>
-      </div>
+      <>
+        <BackLink to="/professionals">Volver a profesionales</BackLink>
+        <EmptyState
+          icon={UserSquare2}
+          title="Profesional no encontrado"
+          description="Este profesional no existe o fue eliminado."
+          action={<Link to="/professionals" className="btn-brand">Ver profesionales</Link>}
+        />
+      </>
     );
   }
 

@@ -36,6 +36,7 @@ import {
 } from '../core/accounting/index.js';
 import { resolveConversations, resolveIgConversations } from '../core/crm/index.js';
 import { formatMoney, formatDop } from '../lib/format.js';
+import { integrationProbes, readSocialSnapshot } from '../lib/integrations.js';
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut.js';
 import './jarvis.css';
 
@@ -284,79 +285,13 @@ export default function Jarvis() {
   const runDiagnostics = useCallback(async () => {
     if (scanning) return;
     setScanning(true);
-
-    const timed = async (fn) => {
-      const t0 = performance.now();
-      const out = await fn();
-      return { ms: Math.round(performance.now() - t0), ...(out || {}) };
-    };
-    const invoke = async (name, body) => {
-      const { data, error } = await supabase.functions.invoke(name, body ? { body } : undefined);
-      if (error) {
-        let msg = error.message || 'sin respuesta';
-        try {
-          const detail = await error.context?.json?.();
-          if (detail?.error) msg = String(detail.error).slice(0, 120);
-        } catch { /* not JSON */ }
-        throw new Error(msg);
-      }
-      return data;
-    };
-
-    const checks = [
-      ['supabase', () => timed(async () => {
-        await db.settings.get(profileId || '');
-        return { note: 'Postgres responde' };
-      })],
-      ['claude', () => timed(async () => {
-        const data = await invoke('claude-chat', { test: true });
-        if (data?.configured === false) return { soft: true, note: 'Sin llave API' };
-        if (!data?.ok) throw new Error(data?.error || 'llave rechazada');
-        return { note: data.model };
-      })],
-      ['bpd', () => timed(async () => {
-        const data = await invoke('bpd-rate');
-        if (!data?.usd || (!data.usd.compra && !data.usd.venta)) {
-          throw new Error(data?.error || 'el banco no devolvió tasa');
-        }
-        await refreshSettings();
-        const dop = Number(data.usd.venta) || Number(data.usd.compra);
-        return { note: `1 USD ≈ RD$ ${dop.toFixed(2)}` };
-      })],
-      ['shopify', () => timed(async () => {
-        const data = await invoke('shopify-sync', { test: true, store: 'alcover' });
-        if (data?.configured === false) return { soft: true, note: 'Sin credenciales' };
-        if (!data?.ok) throw new Error(data?.error || (data?.missingScopes?.length ? `faltan scopes: ${data.missingScopes.join(', ')}` : 'token rechazado'));
-        return { note: data.shop || data.domain || 'Token válido' };
-      })],
-      ['shopifyLsg', () => timed(async () => {
-        const data = await invoke('shopify-sync', { test: true, store: 'lifestylegarden' });
-        if (data?.configured === false) return { soft: true, note: 'Sin credenciales' };
-        if (!data?.ok) throw new Error(data?.error || 'token rechazado');
-        return { note: data.shop || data.domain || 'Token válido' };
-      })],
-      ['whatsapp', () => timed(async () => {
-        const data = await invoke('wa-send', { test: true });
-        if (data?.configured === false) return { soft: true, note: 'Sin credenciales' };
-        if (!data?.ok) throw new Error(data?.error || 'token rechazado');
-        return { note: 'Meta Graph responde' };
-      })],
-      ['metaSocial', () => timed(async () => {
-        const data = await invoke('meta-social', { test: true });
-        if (data?.configured === false) return { soft: true, note: 'Sin token de Meta' };
-        if (!data?.ok) throw new Error(data?.error || 'token rechazado');
-        return { note: data.page || 'Graph responde' };
-      })],
-    ];
-
+    // The probe LOGIC (what each integration counts as healthy/soft/down) lives
+    // in lib/integrations; the View just paints each verdict as a status dot.
+    const checks = integrationProbes({ supabase, db, profileId, refreshSettings });
     await Promise.all(checks.map(async ([key, run]) => {
       setProbe(key, { state: 'scanning' });
-      try {
-        const r = await run();
-        setProbe(key, { state: 'ok', ...r });
-      } catch (e) {
-        setProbe(key, { state: 'fail', note: userMessageFor(e) });
-      }
+      const v = await run(); // verdict never throws → { ok, soft, note, ms }
+      setProbe(key, { state: v.ok ? 'ok' : 'fail', soft: v.soft, note: v.note, ms: v.ms });
     }));
     setScanning(false);
   }, [scanning, profileId, refreshSettings, setProbe]);
@@ -375,12 +310,7 @@ export default function Jarvis() {
     setSocialLoading(true);
     setSocialError(null);
     try {
-      const { data, error } = await supabase.functions.invoke('meta-social', {
-        body: { snapshot: true },
-      });
-      if (error) throw new Error(error.message || 'sin respuesta');
-      if (data?.configured === false || data?.error) throw new Error(data?.error || 'sin respuesta');
-      setSocialRaw(data);
+      setSocialRaw(await readSocialSnapshot(supabase));
     } catch (e) {
       setSocialError(userMessageFor(e));
     } finally {
@@ -388,8 +318,21 @@ export default function Jarvis() {
       setSocialLoading(false);
     }
   }, []);
+  // Keep the Social·Meta snapshot fresh all session — load on link, poll every
+  // 60 s while visible, and refetch on tab return/focus (mirrors Instagram.jsx).
+  // Without this the panel froze on its first read and went stale by mid-session.
   useEffect(() => {
-    if (socialLinked) loadSocial();
+    if (!socialLinked) return undefined;
+    loadSocial();
+    const onVisible = () => { if (document.visibilityState === 'visible') loadSocial(); };
+    const poll = setInterval(onVisible, 60_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [socialLinked, loadSocial]);
 
   // Connecting Instagram is done from Configuración → Instagram (the OAuth

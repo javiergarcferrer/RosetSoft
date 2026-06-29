@@ -5,10 +5,11 @@
 // drill-down reads/acts straight through the meta-social Edge Function.
 import { useCallback, useState } from 'react';
 import {
-  Images, Heart, MessageCircle, Eye, EyeOff, Trash2, X, Film,
-  Sparkles, ExternalLink, RefreshCw, Send, Plus,
+  Images, Heart, MessageCircle, Eye, EyeOff, Trash2, Film,
+  ExternalLink, RefreshCw, Send, Plus,
 } from 'lucide-react';
 import ImageView from '../ImageView.tsx';
+import Modal from '../Modal.jsx';
 import StoryViewer from './StoryViewer.jsx';
 import { supabase } from '../../db/supabaseClient.js';
 import { resolveMediaInsights, resolveMediaComments } from '../../core/jarvis/index.js';
@@ -185,16 +186,16 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [], pr
         )}
       </div>
 
-      {/* selected-post drill-down — bottom sheet on mobile, modal on desktop */}
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setSelected(null)} />
-          <div className="relative max-h-[88vh] w-full overflow-auto rounded-t-2xl bg-surface shadow-2xl sm:max-w-3xl sm:rounded-2xl">
-            <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-ink-100 bg-surface px-5 py-3">
-              <span className="flex items-center gap-2 font-medium"><Sparkles size={15} /> Rendimiento de la publicación</span>
-              <button type="button" className="ml-auto grid h-9 w-9 place-items-center rounded-full text-ink-400 hover:bg-ink-50 hover:text-ink-700" onClick={() => setSelected(null)} aria-label="Cerrar"><X size={18} /></button>
-            </div>
-            <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2 [padding-bottom:calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+      {/* selected-post drill-down — the shared Modal (Esc + focus/backdrop,
+          sheet-on-mobile) instead of a hand-rolled inset-0 overlay. */}
+      <Modal
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title="Rendimiento de la publicación"
+        size="lg"
+      >
+        {selected && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
                 <div className="aspect-square w-full overflow-hidden rounded-lg bg-ink-100">
                   <ImageView id={null} fallbackUrl={selected.thumb} alt={selected.excerpt} className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
@@ -255,9 +256,8 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [], pr
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {storyAt != null && (
         <StoryViewer

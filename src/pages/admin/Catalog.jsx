@@ -153,8 +153,8 @@ export default function Catalog() {
       {(result || error) && (
         <div role={error ? 'alert' : 'status'} className={`mb-4 rounded-lg px-3 py-2.5 text-xs flex items-center gap-2 shadow-xs ${
           error
-            ? 'bg-red-50 border border-red-200 text-red-800'
-            : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+            ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'
+            : 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-200'
         }`}>
           {error ? <AlertTriangle size={14} className="flex-shrink-0" /> : <Check size={14} className="flex-shrink-0" />}
           {error || result}

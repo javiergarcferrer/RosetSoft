@@ -6,9 +6,9 @@ import {
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db, newId } from '../../db/database.js';
-import { supabase } from '../../db/supabaseClient.js';
 import { syncCatalog } from '../../lib/catalogSync.js';
 import { mergeCatalog } from '../../lib/lrCatalog.js';
+import { fetchLrPatterns, fetchLrPatternsOptional, ensureLrCron } from '../../lib/lrCatalogSync.js';
 import { parsePriceListPdfs } from '../../lib/loadMaterialsPdf.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
@@ -60,7 +60,7 @@ const MATERIAL_COLUMNS = [
         {m.name}
         {m.discontinuedAt && (
           <span
-            className="ml-2 chip bg-amber-50 text-amber-700 border border-amber-200 align-middle"
+            className="ml-2 chip bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-200 border border-amber-200 dark:border-amber-900/40 align-middle"
             title="Ya no se ofrece en el sitio de Ligne Roset"
           >
             <AlertTriangle size={10} /> No en sitio
@@ -68,7 +68,7 @@ const MATERIAL_COLUMNS = [
         )}
         {m.notInPricelistAt && (
           <span
-            className="ml-2 chip bg-red-50 text-red-700 border border-red-200 align-middle"
+            className="ml-2 chip bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-900/40 align-middle"
             title="No aparece en la lista de precios (PDF) de Ligne Roset"
           >
             <AlertTriangle size={10} /> No en lista
@@ -144,6 +144,8 @@ export default function Materials() {
   const [editing, setEditing] = useState(null); // material being edited, or 'new'
   const [importing, setImporting] = useState(false); // PDF price-list import modal open?
   const [syncing, setSyncing] = useState(false);     // website-only sync modal open?
+  const [confirmDelete, setConfirmDelete] = useState(null); // material pending delete confirm
+  const [deleting, setDeleting] = useState(false);
 
   // Column visibility (Shopify "edit columns") — persisted per browser. The
   // table renders `cols` (photo anchor + the toggled-on columns, in order);
@@ -163,7 +165,7 @@ export default function Materials() {
   // as the Shopify LSG refresh + IG publisher crons.
   useEffect(() => {
     if (!isAdmin) return;
-    supabase.functions.invoke('lr-catalog', { body: { ensureCron: true } }).catch(() => {});
+    ensureLrCron();
   }, [isAdmin]);
 
   // Category tabs (the primary dimension). Counts ride the full materials
@@ -251,9 +253,15 @@ export default function Materials() {
     );
   }
 
-  async function remove(material) {
-    if (!confirm(`¿Eliminar “${material.name}” del catálogo?`)) return;
-    await db.materials.delete(material.id);
+  async function confirmRemove() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      await db.materials.delete(confirmDelete.id);
+      setConfirmDelete(null);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -344,17 +352,17 @@ export default function Materials() {
                   <GradePill grade={m.grade} />
                   <span className="tabular-nums">{m.colors?.length || 0} colores</span>
                   {m.discontinuedAt && (
-                    <span className="chip bg-amber-50 text-amber-700 border border-amber-200"><AlertTriangle size={10} /> No en sitio</span>
+                    <span className="chip bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-200 border border-amber-200 dark:border-amber-900/40"><AlertTriangle size={10} /> No en sitio</span>
                   )}
                   {m.notInPricelistAt && (
-                    <span className="chip bg-red-50 text-red-700 border border-red-200"><AlertTriangle size={10} /> No en lista</span>
+                    <span className="chip bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-900/40"><AlertTriangle size={10} /> No en lista</span>
                   )}
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
                   <button type="button" onClick={() => setEditing(m)} className="btn-ghost text-xs" title="Editar">
                     <Pencil size={14} /> Editar
                   </button>
-                  <button type="button" onClick={() => remove(m)} className="btn-icon-danger"
+                  <button type="button" onClick={() => setConfirmDelete(m)} className="btn-icon-danger"
                     title="Eliminar" aria-label={`Eliminar ${m.name}`}>
                     <Trash2 size={14} />
                   </button>
@@ -397,7 +405,7 @@ export default function Materials() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => remove(m)}
+                        onClick={() => setConfirmDelete(m)}
                         className="btn-icon-danger"
                         title="Eliminar"
                         aria-label={`Eliminar ${m.name}`}
@@ -443,6 +451,22 @@ export default function Materials() {
           profileId={profileId}
           onClose={() => setSyncing(false)}
         />
+      )}
+
+      {confirmDelete && (
+        <Modal open onClose={() => !deleting && setConfirmDelete(null)} title="Eliminar material">
+          <div className="space-y-4">
+            <p className="text-sm text-ink-600">
+              ¿Eliminar <span className="font-medium text-ink-900">“{confirmDelete.name}”</span> del catálogo? Esta acción no se puede deshacer.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-ink-100">
+              <button type="button" onClick={() => setConfirmDelete(null)} className="btn-ghost" disabled={deleting}>Cancelar</button>
+              <button type="button" onClick={confirmRemove} className="btn-danger" disabled={deleting}>
+                {deleting ? <><Loader2 size={14} className="animate-spin" /> Eliminando…</> : <><Trash2 size={14} /> Eliminar</>}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </>
   );
@@ -563,7 +587,7 @@ function MaterialEditor({ material, profileId, onClose }) {
     <Modal open onClose={onClose} title={isNew ? 'Nuevo material' : `Editar ${material.name}`}>
       <div className="space-y-4">
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          <div role="alert" className="text-sm text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 rounded-md px-3 py-2">
             {error}
           </div>
         )}
@@ -845,20 +869,10 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
 
       // 2) Website colors/photos — best-effort; the import still works without it.
       setStep('Sincronizando colores con Ligne Roset… (~1 min)');
-      let sitePatterns = null;
-      let siteComplete = true;
-      let siteFailed = false;
-      try {
-        const { data, error: fnError } = await supabase.functions.invoke('lr-catalog', { body: { all: true } });
-        if (fnError || data?.error || !Array.isArray(data?.patterns) || !data.patterns.length) {
-          siteFailed = true;
-        } else {
-          sitePatterns = data.patterns;
-          siteComplete = !data.source?.partial;
-        }
-      } catch {
-        siteFailed = true;
-      }
+      const site = await fetchLrPatternsOptional();
+      const sitePatterns = site?.patterns ?? null;
+      const siteComplete = site?.complete ?? true;
+      const siteFailed = !site;
 
       // 3) Stack both into one set of writes + deletes.
       setStep('Combinando el catálogo…');
@@ -897,14 +911,14 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
     <Modal open onClose={onClose} title="Importar precios (PDF)">
       <div className="space-y-4">
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          <div role="alert" className="text-sm text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 rounded-md px-3 py-2">
             {error}
           </div>
         )}
 
         {done ? (
           <>
-            <div className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+            <div className="flex items-start gap-2 text-sm text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 rounded-md px-3 py-2">
               <Check size={16} className="flex-shrink-0 mt-0.5" />
               <span>Catálogo actualizado.</span>
             </div>
@@ -922,7 +936,7 @@ function ImportCatalogModal({ materials, profileId, onClose }) {
                 : null}.
             </p>
             {preview.siteFailed && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+              <p className="text-xs text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 rounded-md px-2 py-1">
                 No se pudo leer ligne-roset.com — se importan los precios del PDF, pero no se actualizaron colores ni fotos esta vez.
               </p>
             )}
@@ -1014,17 +1028,13 @@ function SyncWebsiteModal({ materials, profileId, onClose }) {
     setError(null);
     setBusy('sync');
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('lr-catalog', { body: { all: true } });
-      if (fnError || data?.error || !Array.isArray(data?.patterns) || !data.patterns.length) {
-        throw new Error('No se pudo leer ligne-roset.com en este momento. Inténtalo de nuevo en un minuto.');
-      }
       // A partial sweep (we saw more fabrics than we could read) must NOT flag
       // a still-offered fabric as discontinued — same guard the cron uses.
-      const complete = !data.source?.partial;
-      const { rows, summary } = mergeCatalog(materials, data.patterns, {
+      const { patterns, complete } = await fetchLrPatterns();
+      const { rows, summary } = mergeCatalog(materials, patterns, {
         profileId, now: Date.now(), newId, complete,
       });
-      setPreview({ rows, summary, complete, siteCount: data.patterns.length });
+      setPreview({ rows, summary, complete, siteCount: patterns.length });
     } catch (e) {
       setError(userMessageFor(e));
     } finally {
@@ -1059,14 +1069,14 @@ function SyncWebsiteModal({ materials, profileId, onClose }) {
     <Modal open onClose={onClose} title="Sincronizar con el sitio">
       <div className="space-y-4">
         {error && (
-          <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          <div role="alert" className="text-sm text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 rounded-md px-3 py-2">
             {error}
           </div>
         )}
 
         {done ? (
           <>
-            <div className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+            <div className="flex items-start gap-2 text-sm text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 rounded-md px-3 py-2">
               <Check size={16} className="flex-shrink-0 mt-0.5" />
               <span>Catálogo sincronizado con ligne-roset.com.</span>
             </div>
@@ -1081,7 +1091,7 @@ function SyncWebsiteModal({ materials, profileId, onClose }) {
               {preview.siteCount} telas en el sitio de Ligne Roset.
             </p>
             {!preview.complete && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+              <p className="text-xs text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 rounded-md px-2 py-1">
                 Solo se pudo leer parte del catálogo esta vez — se añaden colores y telas nuevas, pero no se marcará ninguna como “no en sitio”.
               </p>
             )}

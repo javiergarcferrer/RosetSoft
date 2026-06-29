@@ -150,8 +150,8 @@ export default function LifestyleGarden() {
       {(result || error) && (
         <div role={error ? 'alert' : 'status'} className={`mb-4 rounded-lg px-3 py-2.5 text-xs flex items-center gap-2 shadow-xs ${
           error
-            ? 'bg-red-50 border border-red-200 text-red-800'
-            : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+            ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 text-red-800 dark:text-red-200'
+            : 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-200'
         }`}>
           {error ? <AlertTriangle size={14} className="flex-shrink-0" /> : <Check size={14} className="flex-shrink-0" />}
           {error || result}
@@ -393,8 +393,8 @@ const ModelCard = memo(function ModelCard({ model }) {
         {stock.tracked && (
           <span className="mt-0.5">
             {stock.qty > 0
-              ? <span className="chip bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">{stock.qty} en stock</span>
-              : <span className="chip bg-red-50 text-red-700 border border-red-200">Agotado</span>}
+              ? <span className="chip bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-900/40 tabular-nums">{stock.qty} en stock</span>
+              : <span className="chip bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-900/40">Agotado</span>}
           </span>
         )}
         <div className="mt-auto pt-1 flex items-baseline justify-between gap-2">

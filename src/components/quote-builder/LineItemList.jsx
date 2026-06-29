@@ -16,8 +16,7 @@ import {
 } from '../../lib/pricing.js';
 import { resolveLineList } from '../../core/quote/views/editor.js';
 import { isGroupOptional } from '../../lib/quoteGroups.js';
-import { composeSubtype } from '../../lib/subtype.js';
-import { splitSkuGrade, productForGrade } from '../../lib/catalog.js';
+import { repriceComponentsAtGrade } from '../../lib/catalog.js';
 import { formatMoney } from '../../lib/format.js';
 
 /**
@@ -96,32 +95,28 @@ export default function LineItemList({ lines, groups, quote, focusLineId }) {
   function applyMaterialToSet(groupId, picked) {
     if (!groupId || !picked) return;
     const { grade, fabric, swatchImageId } = picked;
-    const subtype = composeSubtype(grade, fabric);
-    const swatch = swatchImageId ?? null;
+    const pick = { grade, fabric, swatchImageId: swatchImageId ?? null };
     const members = lines.filter((l) => l.setGroup === groupId && l.kind !== LINE_KIND_SECTION);
     for (const m of members) {
       if (isCompoundLine(m)) {
         // Apply to every component of a compound member (its own material lives
-        // per-component, not on the parent line).
-        const components = (m.components || []).map((c) => {
-          const patch = { subtype, swatchImageId: swatch };
-          if ((c.priceMin != null || c.priceMax != null) && grade) {
-            const fam = families?.get(splitSkuGrade(c.reference).root) || null;
-            const p = fam ? productForGrade(fam, grade) : null;
-            if (p) patch.unitPrice = Number(p.priceUsd) || 0;
-            patch.priceMin = null;
-            patch.priceMax = null;
-          }
-          return { ...c, ...patch };
-        });
-        onChangeLine(m.id, { components });
+        // per-component, not on the parent line) — the SAME shared reprice-at-
+        // grade Model helper applyMaterialToAllComponents uses, so the two paths
+        // can't drift (each component repriced to its own model at the grade).
+        onChangeLine(m.id, { components: repriceComponentsAtGrade(m.components, pick, families) });
         continue;
       }
-      const patch = { subtype, swatchImageId: swatch };
-      if ((m.priceMin != null || m.priceMax != null) && grade) {
-        const fam = families?.get(splitSkuGrade(m.reference).root) || null;
-        const p = fam ? productForGrade(fam, grade) : null;
-        if (p) patch.unitPrice = Number(p.priceUsd) || 0;
+      // A simple line is repriced like a one-element component list, so it goes
+      // through the identical Model rule (subtype + swatch + reference/price +
+      // range drop) as a compound's pieces and GradeFabricRow.commit.
+      const [next] = repriceComponentsAtGrade([m], pick, families);
+      const patch = {
+        subtype: next.subtype,
+        swatchImageId: next.swatchImageId,
+        reference: next.reference,
+        unitPrice: next.unitPrice,
+      };
+      if (grade && (m.priceMin != null || m.priceMax != null)) {
         patch.priceMin = null;
         patch.priceMax = null;
       }

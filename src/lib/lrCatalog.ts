@@ -260,8 +260,10 @@ export function mergeCatalog(
       for (const c of siteColors) if (!existingByCode.has(c.code)) added += 1;
     }
 
-    // Composition is the price list's to own — only fill it when ours is empty.
-    const nextComposition = trimmed(current.composition) ? (current.composition ?? null) : composition;
+    // Composition is the price list's to own — only fill it from the site when
+    // ours is UNSET (null/undefined). An intentionally-blanked composition ('')
+    // is a deliberate choice and must NOT be refilled from the site each sync.
+    const nextComposition = current.composition == null ? composition : current.composition;
 
     const wasFlagged = current.discontinuedAt != null;
     const changed =
