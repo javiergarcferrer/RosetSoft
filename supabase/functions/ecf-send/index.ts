@@ -99,6 +99,36 @@ const ENV_MAP: Record<string, unknown> = {
   prod: (dgii as any).ENVIRONMENT?.PROD,
 };
 
+// dgii-ecf funnels EVERY DGII call (semilla, validar-semilla, recepción) through
+// one shared axios instance it exports as `restClient`. Tap its error channel
+// ONCE so we capture the raw rejection — HTTP status, the endpoint that failed
+// (so we know authenticate vs transmit), and the DGII response body (the real
+// validation message) — straight from the wire, before the library can re-wrap
+// the error and drop `.response`. The bearer token lives in request headers,
+// which we never read, so it can't leak. `lastHttpError` is reset per request.
+let lastHttpError = '';
+(function installHttpTap() {
+  try {
+    const rc = (dgii as any).restClient;
+    if (rc?.interceptors?.response?.use && !rc.__ecfTap) {
+      rc.__ecfTap = true;
+      rc.interceptors.response.use(
+        (r: any) => r,
+        (err: any) => {
+          const status = err?.response?.status ?? err?.status;
+          const url = err?.config?.url || err?.request?.path || '';
+          const data = err?.response?.data;
+          let bodyStr = '';
+          try { bodyStr = data == null ? '' : (typeof data === 'string' ? data : JSON.stringify(data)); } catch { bodyStr = String(data); }
+          const crumbs = [status ? `HTTP ${status}` : '', url ? `@ ${url}` : '', bodyStr ? bodyStr.slice(0, 1500) : ''].filter(Boolean);
+          if (crumbs.length) lastHttpError = crumbs.join(' · ');
+          return Promise.reject(err);
+        },
+      );
+    }
+  } catch { /* tap is best-effort diagnostics — never block a transmission */ }
+})();
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ ok: false, error: 'method not allowed' }, 405);
@@ -112,6 +142,7 @@ Deno.serve(async (req: Request) => {
   const { data: auth } = await authClient.auth.getUser();
   if (!auth?.user) return json({ ok: false, error: 'No autorizado.' }, 401);
 
+  lastHttpError = ''; // fresh capture per request (isolate is reused across calls)
   let body: { op?: string; payload?: any; eNcf?: string; trackId?: string; profileId?: string; xml?: string } = {};
   try { body = await req.json(); } catch { return json({ ok: false, error: 'invalid body' }, 400); }
 
@@ -231,7 +262,10 @@ Deno.serve(async (req: Request) => {
     // 400". describeError walks the whole cause chain to recover the status,
     // the DGII body, and WHICH endpoint failed (authenticate vs transmit).
     const msg = e?.message || String(e);
-    const detail = describeError(e);
+    // Combine the thrown-error walk with the wire-level tap and de-dupe the
+    // crumbs — whichever the library left intact, the DGII reason surfaces.
+    const detail = [...new Set([describeError(e), lastHttpError].filter(Boolean).join(' · ').split(' · '))]
+      .filter(Boolean).join(' · ');
     // Server-side breadcrumb for `get_logs` — curated crumbs only (no headers),
     // so the next failed envío is diagnosable from the function logs too.
     console.error('ecf-send failure', JSON.stringify({ op, eNcf, ecfType, envKey, msg, detail }));
