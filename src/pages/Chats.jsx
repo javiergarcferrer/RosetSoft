@@ -241,17 +241,17 @@ export default function Chats() {
           title="WhatsApp"
           subtitle={settings?.whatsappDisplayNumber ? `Número del negocio · ${settings.whatsappDisplayNumber}` : 'Conversaciones con clientes y profesionales'}
           actions={
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setChannel('instagram')} className="btn-secondary text-sm inline-flex items-center gap-1.5" title="Mensajes directos de Instagram">
-                <Instagram size={15} /> Instagram
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setChannel('instagram')} className="btn-secondary text-sm inline-flex items-center gap-1.5" title="Mensajes directos de Instagram" aria-label="Instagram">
+                <Instagram size={15} /> <span className="hidden sm:inline">Instagram</span>
               </button>
-              <Link to="/chats/difusion" className="btn-secondary text-sm inline-flex items-center gap-1.5">
-                <Megaphone size={15} /> Difusión
+              <Link to="/chats/difusion" className="btn-secondary text-sm inline-flex items-center gap-1.5" title="Difusión" aria-label="Difusión">
+                <Megaphone size={15} /> <span className="hidden sm:inline">Difusión</span>
               </Link>
-              <button type="button" onClick={() => { setGroupsFocus(null); setGroupsOpen(true); }} className="btn-secondary text-sm inline-flex items-center gap-1.5">
-                <Users size={15} /> Grupos
+              <button type="button" onClick={() => { setGroupsFocus(null); setGroupsOpen(true); }} className="btn-secondary text-sm inline-flex items-center gap-1.5" title="Grupos" aria-label="Grupos">
+                <Users size={15} /> <span className="hidden sm:inline">Grupos</span>
               </button>
-              <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm inline-flex items-center gap-1.5">
+              <button type="button" onClick={() => setPickerOpen(true)} className="btn-primary text-sm inline-flex items-center gap-1.5 ml-auto sm:ml-0">
                 <Plus size={15} /> Nuevo chat
               </button>
             </div>
