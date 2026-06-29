@@ -71,7 +71,7 @@ export default function TogoStage({
   const poseFor = useCallback((m, center, radius, aspect) => {
     const halfFov = (33 * Math.PI / 180) / 2;
     const fit = Math.max(0.4, Math.min(1, aspect || 1));     // the tighter axis
-    const dist = (radius * 1.35) / (Math.tan(halfFov) * fit);
+    const dist = (radius * 1.18) / (Math.tan(halfFov) * fit); // ~18% margin — fills the view, never clips
     return m === '2d'
       // DEAD straight-down. The top-down basis is supplied by camera.up=(0,0,-1)
       // (see UP_2D) — NOT a positional nudge, which would tilt/rotate the plan.
@@ -127,11 +127,31 @@ export default function TogoStage({
       colorFor: (c) => (l.colorCache.has(c) ? l.colorCache.get(c) : null),
       modelFor: loaded.modelFor,
     });
-    // Tag every object with its piece uid (raycast → selection/drag).
+    // Tag every object with its piece uid (raycast → selection/drag), and give
+    // each piece an INVISIBLE full-footprint grab pad so the WHOLE tile is
+    // draggable — not just where the raycast happens to land on upholstery. The
+    // channeled Togo has gaps between cushions; tapping a groove would otherwise
+    // miss the mesh, hit the floor, and feel like "the piece won't move". The pad
+    // sits flat just above the floor, sized to the catalogue footprint, and rides
+    // inside the (already-rotated) piece group so it always matches the tile.
+    const { THREE } = l;
     group.children.forEach((pg, i) => {
-      const uid = scene.pieces[i]?.uid;
+      const sp = scene.pieces[i];
+      const uid = sp?.uid;
       pg.userData.uid = uid;
       pg.traverse((o) => { o.userData.uid = uid; });
+      const w = Number(sp?.widthCm) || 0, d = Number(sp?.depthCm) || 0;
+      if (w > 0 && d > 0) {
+        const pad = new THREE.Mesh(
+          new THREE.PlaneGeometry(w, d),
+          new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+        );
+        pad.rotation.x = -Math.PI / 2;     // lie flat on the floor
+        pad.position.y = 2;                // just above ground, under the cushions
+        pad.userData.uid = uid;
+        pad.userData.pad = true;
+        pg.add(pad);
+      }
     });
     l.group = group;
     l.scene.add(group);
@@ -261,7 +281,7 @@ export default function TogoStage({
         if (!pg || !fp) return;
         l.drag = { uid, offX: fp.x - pg.position.x, offZ: fp.z - pg.position.z, pg, moved: false };
         controls.enabled = false;
-        renderer.domElement.setPointerCapture?.(e.pointerId);
+        try { renderer.domElement.setPointerCapture?.(e.pointerId); } catch { /* iOS can refuse — moves still arrive on the element */ }
         e.preventDefault();
       };
       const onMovePtr = (e) => {
