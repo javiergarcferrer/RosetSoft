@@ -222,8 +222,7 @@ export default function ComprasGastos() {
 
   return (
     <AccountingGate title="Compras y gastos">
-      <PageHeader title="Compras y gastos" subtitle="Toda factura de proveedor — mercancía, activos y gastos — en un solo lugar · se asienta sola · 606"
-        actions={<button type="button" onClick={() => navigate('/accounting/compras-gastos/nuevo')} className="btn-primary"><Plus size={15} /> Nuevo</button>} />
+      <PageHeader title="Compras y gastos" subtitle="Toda factura de proveedor — mercancía, activos y gastos — en un solo lugar · se asienta sola · 606" />
 
       <TabPills tabs={[{ key: 'list', label: 'Movimientos' }, { key: '606', label: '606' }]} active={tab} onChange={setTab} />
 
@@ -241,18 +240,23 @@ export default function ComprasGastos() {
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
               <input value={listQuery} onChange={(e) => setListQuery(e.target.value)} placeholder="Buscar proveedor, NCF, cuenta…" className="input py-1.5 pl-8 text-sm w-56" />
             </div>
+            {/* Create sits with the controls (not stranded in the header) so it's
+                in reach right where you filter the list — brand CTA, on-theme. */}
+            <button type="button" onClick={() => navigate('/accounting/compras-gastos/nuevo')} className="btn-brand text-sm shrink-0 whitespace-nowrap">
+              <Plus size={15} /> Nuevo
+            </button>
           </>
         )}
       </div>
 
       {tab === 'list' && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
+        <div className="flex gap-1.5 mt-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {natureChips.map((c) => {
             const active = nature === c.key;
             const n = c.key === 'all' ? list.counts.all : (list.counts[c.key] || 0);
             return (
               <button key={c.key} type="button" onClick={() => setNature(c.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm border transition-colors ${active ? 'bg-ink-900 text-ink-50 border-ink-900' : 'bg-surface text-ink-600 border-ink-200 hover:border-ink-300'}`}>
+                className={`inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-3 py-1 text-sm border transition-colors ${active ? 'bg-ink-900 text-ink-50 border-ink-900' : 'bg-surface text-ink-600 border-ink-200 hover:border-ink-300'}`}>
                 {c.label}<span className={`tabular-nums text-xs ${active ? 'text-ink-50/70' : 'text-ink-400'}`}>{n}</span>
               </button>
             );
