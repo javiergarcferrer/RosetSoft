@@ -34,16 +34,28 @@ const SCALE = PX_PER_CM;
 // — far cleaner than the dealer's stored thumbnails. togo_gb is the hero import.
 const TOGO_WIRES = { a: togoWireA, chauf: togoWireChauf, gb: togoHeroSvg, mc: togoWireMc, lounge: togoWireLounge };
 const WIRE_BY_FOOTPRINT = new Map(TOGO_PIECES.map((p) => [`${p.widthCm}x${p.depthCm}`, p.id]));
+// Dealer pieces with no canonical wireframe of their own → the closest-shaped one.
+const WIRE_FOOTPRINT_ALIAS = new Map([
+  ['131x102', 'gb'],   // Loveseat → the 2-seat sofa silhouette
+  ['87x80', 'a'],      // Ottoman → the armchair body
+]);
+const WIRE_NAME_ALIAS = [
+  [/love|biplaza|2\s*plaz/, 'gb'],
+  [/ottoman|pouf|puff|repos|tabur/, 'a'],
+  [/corner|angle|esquina|rincon/, 'lounge'],
+];
 
 // The wireframe that best fits a catalog model — by exact footprint first (the
-// shape), then by a name keyword, else null (caller falls back to the model's
-// own svg). Renders thin → callers crisp it with non-scaling strokes.
+// shape), then an alias, then a name keyword; else null (caller falls back to the
+// model's own svg). Renders thin → callers crisp it with non-scaling strokes.
 function wireframeFor(model) {
   if (!model) return null;
-  let id = WIRE_BY_FOOTPRINT.get(`${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`);
+  const fp = `${Math.round(model.widthCm)}x${Math.round(model.depthCm)}`;
+  let id = WIRE_BY_FOOTPRINT.get(fp) || WIRE_FOOTPRINT_ALIAS.get(fp);
   if (!id) {
     const name = String(model.name || '').toLowerCase();
-    id = TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id;
+    id = TOGO_PIECES.find((p) => p.match.some((k) => k !== 'togo' && name.includes(k)))?.id
+      || WIRE_NAME_ALIAS.find(([re]) => re.test(name))?.[1];
   }
   return (id && TOGO_WIRES[id]) || null;
 }

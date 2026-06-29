@@ -6,6 +6,7 @@
  * `safeDynamicImport`, so a scene with no real models pulls in no loader at all.
  */
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { stripLabelMeshes } from '../../lib/togo/meshClean.js';
 import { glbForPiece } from '../../assets/togo/togoModels3d.js';
 
 /** File extension of a model URL (query-stripped, lowercased). */
@@ -51,7 +52,11 @@ export async function loadTogoModels(scene3d, cache = new Map()) {
       const loader = await loaderFor(ext);
       if (!loader) return;
       const object = normalizeLoaded(ext, await loader.loadAsync(desc.url));
-      if (object) cache.set(desc.url, { object, desc });
+      if (object) {
+        const THREE = await safeDynamicImport(() => import('three'));
+        stripLabelMeshes(THREE, object);   // drop baked-in text labels
+        cache.set(desc.url, { object, desc });
+      }
     } catch { /* missing/unreadable → procedural */ }
   }));
   const modelFor = (piece) => { const d = descForPiece(piece); return d ? (cache.get(d.url) || null) : null; };

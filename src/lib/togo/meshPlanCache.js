@@ -12,6 +12,7 @@
  */
 import { safeDynamicImport } from '../dynamicImport.js';
 import { meshPlanFromTriangles } from './meshToPlan.js';
+import { stripLabelMeshes } from './meshClean.js';
 import { autoUnitScale } from './togoModel.js';
 
 const extOf = (url) => String(url || '').split('?')[0].split('.').pop().toLowerCase();
@@ -30,6 +31,7 @@ async function loadObject(url) {
   }
   const res = await loader.loadAsync(url);
   const obj = (ext === 'glb' || ext === 'gltf' || ext === 'dae') ? (res.scene || res.scenes?.[0] || res) : res;
+  if (obj) stripLabelMeshes(THREE, obj);   // drop baked-in text labels → clean footprint + render
   return obj ? { THREE, obj } : null;
 }
 
