@@ -56,6 +56,42 @@ function fechaFirmaNow(): string {
   return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')}:${get('second')}`;
 }
 
+/**
+ * Harvest the REAL reason out of an error the dgii-ecf/axios stack throws. The
+ * library usually re-wraps the axios error and DROPS `.response`, so a bare
+ * `e.message` ("Request failed with status code 400") tells the dealer nothing.
+ * Walk the cause chain and pull, from whichever link still carries it, the HTTP
+ * status, the DGII response body (the actual validation message), and WHICH
+ * endpoint failed (authenticate semilla/token vs transmit) — never headers, so
+ * the bearer token can't leak into the message or the function logs.
+ */
+function describeError(e: any): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let cur: any = e;
+  for (let depth = 0; cur && typeof cur === 'object' && !seen.has(cur) && depth < 6; depth++) {
+    seen.add(cur);
+    const status = cur?.response?.status ?? cur?.status;
+    if (status) parts.push(`HTTP ${status}`);
+    const data = cur?.response?.data;
+    if (data != null) {
+      let body = '';
+      try { body = typeof data === 'string' ? data : JSON.stringify(data); } catch { body = String(data); }
+      body = body.trim();
+      if (body && body !== '""' && body !== '{}' && body !== 'null') parts.push(body);
+    }
+    const url = cur?.config?.url || cur?.request?.path;
+    if (url) {
+      const method = cur?.config?.method ? `${String(cur.config.method).toUpperCase()} ` : '';
+      parts.push(`@ ${method}${url}`);
+    }
+    if (cur?.code) parts.push(String(cur.code));
+    cur = cur.cause;
+  }
+  // The chain often repeats the same crumb at each link — de-dupe, keep order.
+  return [...new Set(parts)].join(' · ');
+}
+
 const ENV_MAP: Record<string, unknown> = {
   // dgii-ecf's ENVIRONMENT enum: DEV (TesteCF), CERT (CerteCF), PROD (eCF).
   dev: (dgii as any).ENVIRONMENT?.DEV,
@@ -189,14 +225,17 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, trackId, securityCode, fechaFirma, status: 'sent', response });
   } catch (e: any) {
     // dgii-ecf talks to the DGII via axios; an HTTP rejection (e.g. 400 schema
-    // validation, or an auth failure) carries the REAL reason in e.response.data
-    // — surface it (+ the status) so the user sees WHAT the DGII rejected, not
-    // just "Request failed with status code 400".
-    const status = e?.response?.status;
-    const data = e?.response?.data;
-    const detail = data == null ? '' : (typeof data === 'string' ? data : JSON.stringify(data));
+    // validation, or an auth failure) carries the REAL reason in the response
+    // body — but the library frequently re-wraps the error and drops
+    // `.response`, leaving only the opaque "Request failed with status code
+    // 400". describeError walks the whole cause chain to recover the status,
+    // the DGII body, and WHICH endpoint failed (authenticate vs transmit).
     const msg = e?.message || String(e);
-    return json({ ok: false, error: `firma/transmisión: ${msg}${status ? ` [HTTP ${status}]` : ''}${detail ? ` — ${detail}` : ''}` }, 502);
+    const detail = describeError(e);
+    // Server-side breadcrumb for `get_logs` — curated crumbs only (no headers),
+    // so the next failed envío is diagnosable from the function logs too.
+    console.error('ecf-send failure', JSON.stringify({ op, eNcf, ecfType, envKey, msg, detail }));
+    return json({ ok: false, error: `firma/transmisión: ${msg}${detail ? ` — ${detail}` : ''}` }, 502);
   } finally {
     if (p12Path) await Deno.remove(p12Path).catch(() => {});
   }
