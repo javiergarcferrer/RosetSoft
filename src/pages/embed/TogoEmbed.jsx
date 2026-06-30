@@ -581,7 +581,7 @@ export default function TogoEmbed() {
 
       <QuoteSheet
         open={quoteOpen} onClose={() => setQuoteOpen(false)}
-        placed={placed} resolvedById={resolvedById} thumbById={thumbById} rates={rates}
+        placed={placed} resolvedById={resolvedById} thumbById={thumbById} renderThumbById={renderThumbById} rates={rates}
         subtotalUsd={pricedUsd} pending={pendingFabric} overallCm={vm.overallCm}
         onRequest={() => { setQuoteOpen(false); setStep('form'); }}
       />
@@ -794,7 +794,7 @@ function CanvasArea({
  *  a swatch to see it big), unit price, the assembled size, the running total,
  *  and the "request a quote" CTA. Read-only over `placed` (the same data the
  *  lead submission and the estimate dock use). */
-function QuoteSheet({ open, onClose, placed, resolvedById, thumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
+function QuoteSheet({ open, onClose, placed, resolvedById, thumbById = {}, renderThumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
   const [preview, setPreview] = useState(null); // hovered swatch → big centered preview
   useEffect(() => { if (!open) setPreview(null); }, [open]);
   const rows = placed.map((p) => {
@@ -811,7 +811,7 @@ function QuoteSheet({ open, onClose, placed, resolvedById, thumbById = {}, rates
             <ul className="divide-y divide-ink-100 -my-1">
               {rows.map((row) => (
                 <li key={row.uid} className="flex items-center gap-3 py-2.5">
-                  <span className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 text-ink-700 p-1.5 grid place-items-center [&>svg]:w-full [&>svg]:h-full [&_*]:[vector-effect:non-scaling-stroke] [&_*]:[stroke-width:1.1px]" dangerouslySetInnerHTML={{ __html: thumbById[row.pieceId] || '' }} />
+                  <ModelThumb id={row.pieceId} render={renderThumbById} svg={thumbById[row.pieceId]} alt={row.label} className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 p-1" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{row.label}</div>
                     <div className="text-[11px] text-ink-500 tabular-nums">{row.w}×{row.d} cm</div>
