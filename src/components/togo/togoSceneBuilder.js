@@ -296,7 +296,7 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
  * footprint-rectangle fallback). The scene's world is y-up and the group only
  * rotates about Y + translates, so local Y is still the vertical axis here.
  */
-export function floorContourLoops(THREE, group, { cutFrac = 1, grid = 150, smooth = 3 } = {}) {
+export function floorContourLoops(THREE, group, { cutFrac = 1, grid = 150, smooth = 3, inflate = 0 } = {}) {
   if (!group) return [];
   group.updateMatrixWorld(true);
   const inv = group.matrixWorld.clone().invert();
@@ -336,8 +336,27 @@ export function floorContourLoops(THREE, group, { cutFrac = 1, grid = 150, smoot
   }
   const { loops } = meshLoopsFromTriangles(tris, { grid });
   // The rasteriser normalises to its own bbox; shift loops back into local cm,
-  // then round the grid staircase into a smooth curve.
-  return loops.map((poly) => chaikinClosed(poly.map((p) => ({ x: p.x + minX, y: p.y + minZ })), smooth));
+  // round the grid staircase into a smooth curve, then nudge outward so the line
+  // clears the cushion bulge (and undoes Chaikin's slight corner inset).
+  return loops.map((poly) => inflateClosed(chaikinClosed(poly.map((p) => ({ x: p.x + minX, y: p.y + minZ })), smooth), inflate));
+}
+
+// Push a CLOSED polygon outward by `margin` cm: each vertex slides along its
+// (smoothed) outward normal — the perpendicular of the chord through its two
+// neighbours, flipped to point away from the centroid. Keeps the curve's shape,
+// just a hair larger, so the highlight wraps OUTSIDE the seat instead of cutting
+// through it. A no-op for margin ≤ 0.
+function inflateClosed(pts, margin) {
+  if (!(margin > 0) || pts.length < 3) return pts;
+  const n = pts.length;
+  let cx = 0, cy = 0; for (const p of pts) { cx += p.x; cy += p.y; } cx /= n; cy /= n;
+  return pts.map((c, i) => {
+    const p = pts[(i - 1 + n) % n], q = pts[(i + 1) % n];
+    let nx = -(q.y - p.y), ny = q.x - p.x;            // chord normal (rotate +90°)
+    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+    if (nx * (c.x - cx) + ny * (c.y - cy) < 0) { nx = -nx; ny = -ny; }  // point outward
+    return { x: c.x + nx * margin, y: c.y + ny * margin };
+  });
 }
 
 // Chaikin corner-cutting on a CLOSED polygon: each pass replaces every vertex
@@ -389,26 +408,27 @@ export function setupTogoStage(deps, renderer, scene, radius) {
   // valley — the contrast that makes the quilting read plush instead of flat. A
   // steep top-down key (what we had) lit the fold crests and floors equally and
   // flattened them. Slightly warm + a touch stronger to deepen those shadows.
-  const key = new THREE.DirectionalLight(0xfff4e8, 1.25);
+  const key = new THREE.DirectionalLight(0xfff4e8, 1.55);
   key.position.set(radius * 1.2, radius * 0.95, radius * 0.5);   // low & to the side → grazes the folds
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   const d = radius * 2.2;
   Object.assign(key.shadow.camera, { left: -d, right: d, top: d, bottom: -d, near: 1, far: radius * 6 });
   key.shadow.bias = -0.0004;
-  key.shadow.radius = 5;
+  key.shadow.radius = 3.5;     // a touch crisper → the channel/contact shadows read
   scene.add(key);
   // A dim, low rim from the opposite side carves the shadow-side folds (so they
   // don't go to mush) WITHOUT lifting the body — keeps the deep-crease contrast.
-  const rim = new THREE.DirectionalLight(0xe8f0ff, 0.4);
+  const rim = new THREE.DirectionalLight(0xe8f0ff, 0.34);
   rim.position.set(-radius * 0.95, radius * 0.45, -radius * 0.85);
   scene.add(rim);
-  // Lower hemisphere fill so the channel valleys stay genuinely shadowed.
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 0.16));
+  // Lower hemisphere fill so the channel valleys stay genuinely shadowed — drives
+  // most of the seat's depth (a high fill is what flattened the quilting).
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a6, 0.1));
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(radius * 12, radius * 12),
-    new THREE.ShadowMaterial({ opacity: 0.22 }),
+    new THREE.ShadowMaterial({ opacity: 0.34 }),   // deeper ground-contact shadow under each seat
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;

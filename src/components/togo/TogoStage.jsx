@@ -12,6 +12,13 @@ const PLAN_W = 760, PLAN_H = 540;
 const CONTOUR_GOLD = 0xeab308, CONTOUR_SEL = 0xfbbf24;   // warm yellow-gold highlight, brighter when selected
 const FILL_OPACITY = 0.12, FILL_OPACITY_SEL = 0.22;     // the soft silhouette body
 const EDGE_OPACITY = 0.95, EDGE_OPACITY_SEL = 1;
+// Raise the edge line to the cushion's widest band: under the perspective
+// top-down camera a contour at floor level reads SMALLER than the bulge above it
+// (which is closer to the lens), so it cut through the seat. At the seat's own
+// height it shares the cushion's magnification and wraps it. A small outward
+// nudge (cm) clears the last of the bulge + undoes the smoothing's slight inset.
+const CONTOUR_LIFT = TOGO_HEIGHT_CM * 0.5;
+const CONTOUR_INFLATE_CM = 2;
 
 /**
  * The 2D contour for a piece, lying flat on the floor under the top-down camera —
@@ -24,7 +31,7 @@ const EDGE_OPACITY = 0.95, EDGE_OPACITY_SEL = 1;
  * Returned group sits at the footprint centre; it rides the piece's placement
  * rotation because it's added as a child of the (rotated) piece group.
  */
-function buildSilhouetteContour(THREE, loops, { color = CONTOUR_GOLD } = {}) {
+function buildSilhouetteContour(THREE, loops, { color = CONTOUR_GOLD, lift = 0 } = {}) {
   const holder = new THREE.Group();
   // Largest |area| loop is the body; the rest are holes punched into the fill.
   const area = (poly) => { let s = 0; for (let i = 0, n = poly.length; i < n; i++) { const p = poly[i], q = poly[(i + 1) % n]; s += p.x * q.y - q.x * p.y; } return Math.abs(s) / 2; };
@@ -50,6 +57,7 @@ function buildSilhouetteContour(THREE, loops, { color = CONTOUR_GOLD } = {}) {
     // floor-level outline (the fill keeps depth-test, so it just peeks at the rim).
     const line = new THREE.LineLoop(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: EDGE_OPACITY, depthWrite: false, depthTest: false }));
     line.userData.contourEdge = true;
+    line.position.z = -lift;   // holder is rotated +90° about X, so local -z → world +y (height)
     line.renderOrder = 3;
     holder.add(line);
   }
@@ -246,8 +254,8 @@ export default function TogoStage({
         const realUrl = loaded.modelFor(sp)?.object ? sp?.mesh?.url : null;
         const key = `${realUrl || 'proc'}|${sp?.form || ''}|${Math.round(w)}x${Math.round(d)}`;
         let loops = l.contourCache.get(key);
-        if (loops === undefined) { loops = floorContourLoops(THREE, pg); l.contourCache.set(key, loops); }
-        const contour = (loops && loops.length) ? buildSilhouetteContour(THREE, loops) : buildFootprintRing(THREE, w, d);
+        if (loops === undefined) { loops = floorContourLoops(THREE, pg, { inflate: CONTOUR_INFLATE_CM }); l.contourCache.set(key, loops); }
+        const contour = (loops && loops.length) ? buildSilhouetteContour(THREE, loops, { lift: CONTOUR_LIFT }) : buildFootprintRing(THREE, w, d);
         contour.userData.uid = uid;
         contour.userData.contour = true;
         contour.visible = stateRef.current.mode === '2d';
