@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 import {
   classifyBrand, isInvoiceEmail, parseInvoiceAmount,
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices,
-  resolveReplyDraft, replySubject, forwardSubject, isEmailAddress, resolveEmailRecipients,
+  resolveReplyDraft, replySubject, forwardSubject, resolveForwardDraft,
+  isEmailAddress, resolveEmailRecipients,
   GMAIL_BRAND_OTHER,
 } from '../src/core/crm/views/gmailInbox.js';
 
@@ -156,6 +157,31 @@ test('isEmailAddress validates a single address', () => {
   assert.equal(isEmailAddress('not-an-email'), false);
   assert.equal(isEmailAddress('a@b'), false);
   assert.equal(isEmailAddress(''), false);
+});
+
+// ── resolveForwardDraft ─────────────────────────────────────────────────────
+test('resolveForwardDraft quotes the latest message with a Fwd: subject', () => {
+  const thread = {
+    subject: 'Pedido #101',
+    items: [
+      msg({ id: 'a', direction: 'in', fromName: 'Lola', fromEmail: 'lola@correo.com', toEmail: 'us@alcover.do', subject: 'Pedido #101', bodyText: 'Hola, adjunto el pedido.', receivedAt: NOW }),
+    ],
+  };
+  const d = resolveForwardDraft(thread);
+  assert.equal(d.subject, 'Fwd: Pedido #101');
+  assert.match(d.body, /Mensaje reenviado/);
+  assert.match(d.body, /De: Lola <lola@correo\.com>/);
+  assert.match(d.body, /Hola, adjunto el pedido\./);
+});
+
+test('resolveForwardDraft strips HTML when there is no plain text', () => {
+  const thread = { subject: 'X', items: [msg({ id: 'a', fromEmail: 'a@b.com', bodyHtml: '<p>Línea uno<br>Línea dos</p>' })] };
+  const d = resolveForwardDraft(thread);
+  assert.match(d.body, /Línea uno\nLínea dos/);
+});
+
+test('resolveForwardDraft returns null for an empty thread', () => {
+  assert.equal(resolveForwardDraft({ items: [] }), null);
 });
 
 // ── resolveEmailRecipients ──────────────────────────────────────────────────

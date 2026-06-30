@@ -33,6 +33,7 @@ export {
   resolveReplyDraft,
   replySubject,
   forwardSubject,
+  resolveForwardDraft,
   isEmailAddress,
   resolveEmailRecipients,
 } from './views/gmailInbox.js';

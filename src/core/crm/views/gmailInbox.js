@@ -261,6 +261,47 @@ export function forwardSubject(subject) {
   return /^fwd?:/i.test(s) ? s : `Fwd: ${s}`;
 }
 
+/** Minimal HTML→text for quoting (no DOM — runs in the VM/tests). */
+function _htmlToText(html) {
+  return String(html || '')
+    .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<br\s*\/?>(?=)/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Seed a Forward from a thread — the composer opens with a "Fwd:" subject and the
+ * latest message quoted (Gmail-style header block + body). Recipients are left
+ * empty for the dealer to fill.
+ *
+ *   resolveForwardDraft(thread) → { subject, body } | null
+ */
+export function resolveForwardDraft(thread) {
+  const items = thread?.items || [];
+  if (!items.length) return null;
+  const m = items[items.length - 1];
+  const when = m.receivedAt || m.createdAt;
+  let dateStr = '';
+  if (when) { try { dateStr = new Date(when).toLocaleString('es-DO'); } catch { dateStr = ''; } }
+  const sender = m.fromName ? `${m.fromName} <${m.fromEmail || ''}>` : (m.fromEmail || '');
+  const bodyText = (m.bodyText || _htmlToText(m.bodyHtml) || m.snippet || '').trim();
+  const body = [
+    '', '',
+    '---------- Mensaje reenviado ----------',
+    `De: ${sender}`,
+    dateStr ? `Fecha: ${dateStr}` : null,
+    `Asunto: ${m.subject || ''}`,
+    m.toEmail ? `Para: ${m.toEmail}` : null,
+    '',
+    bodyText,
+  ].filter((l) => l !== null).join('\n');
+  return { subject: forwardSubject(thread.subject || m.subject), body };
+}
+
 const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Whether a string is a syntactically valid single email address. */
 export function isEmailAddress(s) {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
   X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
-  Reply, Send, PenLine, PenSquare, Star, Archive, Trash2, MailOpen,
+  Reply, Forward, Send, PenLine, PenSquare, Star, Archive, Trash2, MailOpen,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -14,7 +14,7 @@ import { useLiveQueryStatus } from '../db/hooks.ts';
 import {
   GMAIL_BRAND_TABS, GMAIL_BRAND_OTHER,
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices, parseInvoiceAmount,
-  resolveReplyDraft,
+  resolveReplyDraft, resolveForwardDraft,
 } from '../core/crm/index.js';
 import {
   syncGmail, markGmailThreadRead, markGmailThreadUnread, setGmailThreadBrand,
@@ -74,6 +74,10 @@ export default function Gmail() {
 
   const [tab, setTab] = useState(GMAIL_BRAND_TABS[0].id);
   const [composeOpen, setComposeOpen] = useState(false);
+  // Seed for the compose window: null for a blank "Redactar", or { subject, body }
+  // when forwarding the open thread.
+  const [composeInitial, setComposeInitial] = useState(null);
+  const openCompose = useCallback((initial = null) => { setComposeInitial(initial); setComposeOpen(true); }, []);
   const [needle, setNeedle] = useState('');
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -172,6 +176,9 @@ export default function Gmail() {
     trashGmailThread(selectedThread.items);
     setSelectedThreadId(null);
   };
+  const onForward = () => {
+    if (selectedThread?.items?.length) openCompose(resolveForwardDraft(selectedThread));
+  };
 
   const actions = (
     <div className="flex items-center gap-2">
@@ -186,7 +193,7 @@ export default function Gmail() {
       </button>
       <button
         type="button"
-        onClick={() => setComposeOpen(true)}
+        onClick={() => openCompose(null)}
         className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 text-sm font-medium text-white hover:bg-ink-700"
       >
         <PenSquare size={16} /> Redactar
@@ -301,6 +308,7 @@ export default function Gmail() {
               onMarkUnread={onMarkUnread}
               onArchive={onArchive}
               onTrash={onTrash}
+              onForward={onForward}
               selfEmail={settings?.googleEmail || ''}
               signatureEs={settings?.gmailSignature || ''}
               signatureEn={settings?.gmailSignatureEn || ''}
@@ -325,6 +333,7 @@ export default function Gmail() {
         customers={customers}
         professionals={professionals}
         messages={messages}
+        initial={composeInitial}
         signatureEs={settings?.gmailSignature || ''}
         signatureEn={settings?.gmailSignatureEn || ''}
         fromName={settings?.companyName || ''}
@@ -409,7 +418,7 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
 }
 
 function ReadingPane({
-  thread, onReassign, onPreview, onBack, starred, onToggleStar, onMarkUnread, onArchive, onTrash,
+  thread, onReassign, onPreview, onBack, starred, onToggleStar, onMarkUnread, onArchive, onTrash, onForward,
   selfEmail, signatureEs, signatureEn, fromName,
 }) {
   if (!thread) {
@@ -438,6 +447,7 @@ function ReadingPane({
           <IconAction label={starred ? 'Quitar estrella' : 'Destacar'} onClick={onToggleStar}>
             <Star size={16} className={starred ? 'fill-amber-400 text-amber-400' : ''} />
           </IconAction>
+          <IconAction label="Reenviar" onClick={onForward}><Forward size={16} /></IconAction>
           <IconAction label="Archivar" onClick={onArchive}><Archive size={16} /></IconAction>
           <IconAction label="Marcar no leído" onClick={onMarkUnread}><MailOpen size={16} /></IconAction>
           <IconAction label="Mover a papelera" onClick={onTrash}><Trash2 size={16} /></IconAction>
