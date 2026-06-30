@@ -5,7 +5,7 @@
 // view carries no integration cards, so there's no link-out and no duplication.
 // Gmail + Drive are shown as "coming soon" placeholders so the roadmap is clear.
 import { useState } from 'react';
-import { MessageCircle, Instagram as InstagramIcon, ShoppingBag, Mail, HardDrive, ChevronDown } from 'lucide-react';
+import { MessageCircle, Instagram as InstagramIcon, ShoppingBag, Mail, HardDrive, Sparkles, ChevronDown } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import WhatsAppCard from '../components/settings/WhatsAppCard.jsx';
@@ -13,6 +13,7 @@ import InstagramCard from '../components/settings/InstagramCard.jsx';
 import ShopifyCard from '../components/settings/ShopifyCard.jsx';
 import GmailCard from '../components/settings/GmailCard.jsx';
 import GoogleDriveCard from '../components/settings/GoogleDriveCard.jsx';
+import ImageStudioCard from '../components/settings/ImageStudioCard.jsx';
 import BusinessProfileCard from '../components/whatsapp/BusinessProfileCard.jsx';
 import { SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 
@@ -63,6 +64,12 @@ export default function Integrations() {
           <ShopifyCard settings={settings} store={SHOPIFY_STORE_LSG} />
         </div>
       ),
+    },
+    {
+      id: 'openai', icon: Sparkles, name: 'OpenAI',
+      desc: 'Genera anuncios y artes con DALL·E 3 desde el Studio.',
+      connected: !!settings?.openaiConnectedAt,
+      config: <ImageStudioCard settings={settings} saveSettings={saveSettings} />,
     },
     {
       id: 'gmail', icon: Mail, name: 'Gmail',

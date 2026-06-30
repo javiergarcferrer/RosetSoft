@@ -90,6 +90,12 @@ export function integrationProbes({ supabase, db, profileId, refreshSettings }) 
       if (!data?.ok) throw new Error(data?.error || 'token rechazado');
       return { note: data.page || 'Graph responde' };
     })],
+    ['openai', () => verdict(async () => {
+      const data = await invoke(supabase, 'dalle-image', { test: true });
+      if (data?.configured === false) return { soft: true, note: 'Sin llave API' };
+      if (!data?.ok) throw new Error(data?.error || 'llave rechazada');
+      return { note: 'OpenAI responde' };
+    })],
   ];
 }
 
