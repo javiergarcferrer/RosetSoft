@@ -134,7 +134,7 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
       t = {
         threadId: key, subject: '', fromName: '', fromEmail: '', snippet: '',
         lastAt: 0, lastDirection: null, count: 0, unread: 0, hasInvoice: false,
-        brand: GMAIL_BRAND_OTHER, _msgs: [],
+        starred: false, brand: GMAIL_BRAND_OTHER, _msgs: [],
       };
       threads.set(key, t);
     }
@@ -142,6 +142,7 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
     t._msgs.push(m);
     if (m.direction === 'in' && !m.isRead) t.unread += 1;
     if (isInvoiceEmail(m)) t.hasInvoice = true;
+    if ((m.labelIds || []).includes('STARRED')) t.starred = true;
     const at = m.receivedAt || m.createdAt || 0;
     if (at >= t.lastAt) {
       t.lastAt = at;
@@ -176,6 +177,7 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
       count: t.count,
       unread: t.unread,
       hasInvoice: t.hasInvoice,
+      starred: t.starred,
     });
   }
   out.sort((a, b) => b.lastAt - a.lastAt);

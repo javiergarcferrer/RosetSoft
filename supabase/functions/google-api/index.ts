@@ -133,6 +133,13 @@ type Body = {
     attachments?: Attachment[];
   };
   gmailSync?: { query?: string; maxResults?: number };
+  // Add/remove Gmail labels on a batch of messages — read/unread (UNREAD),
+  // star (STARRED), archive (remove INBOX), etc. — so an action in our inbox
+  // reflects in the dealer's actual Gmail.
+  gmailModify?: { ids?: string[]; addLabelIds?: string[]; removeLabelIds?: string[] };
+  // Move messages to Trash (Gmail requires the dedicated trash endpoint — TRASH
+  // can't be applied via batchModify).
+  gmailTrash?: { ids?: string[] };
   gmailAttachment?: { messageId?: string; attachmentId?: string };
   driveEnsureRoot?: { name?: string };
   driveCreateFolder?: { name?: string; parentId?: string };
@@ -792,6 +799,45 @@ Deno.serve(async (req) => {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) return json({ ok: false, error: d?.error?.message || `Gmail ${r.status}` }, 502);
       return json({ ok: true, id: d.id, threadId: d.threadId });
+    }
+
+    // ── Gmail modify (labels: read/unread, star, archive) ─────────────────────
+    // batchModify adds/removes labels on up to 1000 messages in one call (204 No
+    // Content on success). Used for mark read/unread (UNREAD), star (STARRED) and
+    // archive (remove INBOX) — so the action taken in our inbox lands in Gmail.
+    if (body.gmailModify) {
+      const ids = (body.gmailModify.ids || []).filter(Boolean).slice(0, 1000);
+      if (!ids.length) return json({ ok: true, modified: 0 });
+      const r = await fetch(`${GMAIL}/messages/batchModify`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids,
+          addLabelIds: body.gmailModify.addLabelIds || [],
+          removeLabelIds: body.gmailModify.removeLabelIds || [],
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        return json({ ok: false, error: d?.error?.message || `Gmail ${r.status}` }, 502);
+      }
+      return json({ ok: true, modified: ids.length });
+    }
+
+    // ── Gmail trash ───────────────────────────────────────────────────────────
+    // TRASH is special in Gmail — it can't be set via batchModify, so each id
+    // goes through the dedicated trash endpoint. Best-effort per id.
+    if (body.gmailTrash) {
+      const ids = (body.gmailTrash.ids || []).filter(Boolean).slice(0, 200);
+      let trashed = 0;
+      for (const id of ids) {
+        const r = await fetch(`${GMAIL}/messages/${id}/trash`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (r.ok) trashed += 1;
+      }
+      return json({ ok: true, trashed });
     }
 
     // ── Gmail sync ────────────────────────────────────────────────────────────

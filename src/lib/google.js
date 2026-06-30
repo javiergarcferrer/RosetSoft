@@ -106,6 +106,20 @@ export async function syncGmail({ query, maxResults } = {}) {
 }
 
 /**
+ * Add/remove Gmail labels on a batch of message ids (mark read/unread via
+ * UNREAD, star via STARRED, archive by removing INBOX) so an action in our
+ * inbox reflects in the dealer's actual Gmail.
+ */
+export async function gmailModify({ ids, addLabelIds = [], removeLabelIds = [] } = {}) {
+  return invokeGoogle({ gmailModify: { ids, addLabelIds, removeLabelIds } });
+}
+
+/** Move a batch of message ids to Gmail's Trash. */
+export async function gmailTrash(ids) {
+  return invokeGoogle({ gmailTrash: { ids } });
+}
+
+/**
  * Fetch one attachment's bytes on demand (the sync stores only metadata).
  * Returns { base64, size }; the caller turns the base64 into a Blob for preview
  * or download. `messageId` is the Gmail message id (gmail_messages.id).

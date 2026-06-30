@@ -11,7 +11,14 @@
 // either core.
 
 import { db, invalidate } from '../db/database.js';
-import { syncGmail, sendGmail, gmailReply, gmailAttachment } from './google.js';
+import { syncGmail, sendGmail, gmailReply, gmailAttachment, gmailModify, gmailTrash } from './google.js';
+
+/** Add/remove a label string on a local labelIds array (order-stable, deduped). */
+function withLabels(labelIds, add = [], remove = []) {
+  const set = new Set([...(labelIds || []), ...add]);
+  for (const r of remove) set.delete(r);
+  return [...set];
+}
 
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
@@ -210,11 +217,62 @@ export function expenseDeepLink({ proveedor = '', monto = '', fecha = '', concep
   return `/accounting/compras-gastos/nuevo${qs ? `?${qs}` : ''}`;
 }
 
-/** Mark every unread inbound message in a thread as read (local read state). */
+/** Mark every unread inbound message in a thread as read — locally AND in Gmail
+ *  (drops the UNREAD label, best-effort) so opening it here clears it there too. */
 export async function markGmailThreadRead(messages) {
   const unread = (messages || []).filter((m) => m.direction === 'in' && !m.isRead);
   if (!unread.length) return;
-  await Promise.all(unread.map((m) => db.gmailMessages.update(m.id, { isRead: true }).catch(() => {})));
+  await Promise.all(unread.map((m) => db.gmailMessages.update(m.id, {
+    isRead: true, labelIds: withLabels(m.labelIds, [], ['UNREAD']),
+  }).catch(() => {})));
+  invalidate();
+  gmailModify({ ids: unread.map((m) => m.id), removeLabelIds: ['UNREAD'] }).catch(() => {});
+}
+
+/** Mark a whole thread UNREAD again — locally + re-add Gmail's UNREAD label. */
+export async function markGmailThreadUnread(messages) {
+  const rows = (messages || []).filter((m) => m.direction === 'in');
+  if (!rows.length) return;
+  await Promise.all(rows.map((m) => db.gmailMessages.update(m.id, {
+    isRead: false, labelIds: withLabels(m.labelIds, ['UNREAD'], []),
+  }).catch(() => {})));
+  invalidate();
+  gmailModify({ ids: rows.map((m) => m.id), addLabelIds: ['UNREAD'] }).catch(() => {});
+}
+
+/** Star / unstar a thread — toggles Gmail's STARRED label on every message. */
+export async function setGmailThreadStarred(messages, starred) {
+  const rows = messages || [];
+  if (!rows.length) return;
+  await Promise.all(rows.map((m) => db.gmailMessages.update(m.id, {
+    labelIds: withLabels(m.labelIds, starred ? ['STARRED'] : [], starred ? [] : ['STARRED']),
+  }).catch(() => {})));
+  invalidate();
+  await gmailModify({
+    ids: rows.map((m) => m.id),
+    addLabelIds: starred ? ['STARRED'] : [],
+    removeLabelIds: starred ? [] : ['STARRED'],
+  }).catch(() => {});
+}
+
+/** Archive a thread — remove it from the Inbox (Gmail drops INBOX; we drop the
+ *  rows from our mirror so it leaves this inbox too, staying in Gmail's All Mail). */
+export async function archiveGmailThread(messages) {
+  const rows = messages || [];
+  if (!rows.length) return;
+  const ids = rows.map((m) => m.id);
+  await gmailModify({ ids, removeLabelIds: ['INBOX'] }).catch(() => {});
+  await Promise.all(ids.map((id) => db.gmailMessages.delete(id).catch(() => {})));
+  invalidate();
+}
+
+/** Trash a thread — move it to Gmail's Trash and drop it from our mirror. */
+export async function trashGmailThread(messages) {
+  const rows = messages || [];
+  if (!rows.length) return;
+  const ids = rows.map((m) => m.id);
+  await gmailTrash(ids).catch(() => {});
+  await Promise.all(ids.map((id) => db.gmailMessages.delete(id).catch(() => {})));
   invalidate();
 }
 

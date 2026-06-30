@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
   X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
-  Reply, Send, PenLine, PenSquare,
+  Reply, Send, PenLine, PenSquare, Star, Archive, Trash2, MailOpen,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -17,7 +17,9 @@ import {
   resolveReplyDraft,
 } from '../core/crm/index.js';
 import {
-  syncGmail, markGmailThreadRead, setGmailThreadBrand, gmailWebUrl, expenseDeepLink,
+  syncGmail, markGmailThreadRead, markGmailThreadUnread, setGmailThreadBrand,
+  setGmailThreadStarred, archiveGmailThread, trashGmailThread,
+  gmailWebUrl, expenseDeepLink,
   loadGmailAttachment, isPreviewable, sendGmailReply, sanitizeSignatureHtml, buildReplyContent,
 } from '../lib/gmail.js';
 
@@ -148,6 +150,28 @@ export default function Gmail() {
     if (!selectedThread?.items?.length) return;
     await setGmailThreadBrand(selectedThread.items, brand === GMAIL_BRAND_OTHER ? null : brand);
   };
+  // Thread-level mailbox actions (sync to Gmail). Archive/trash drop the thread
+  // from the inbox, so they close the reading pane.
+  const threadStarred = useMemo(
+    () => (selectedThread?.items || []).some((m) => (m.labelIds || []).includes('STARRED')),
+    [selectedThread],
+  );
+  const onToggleStar = () => selectedThread?.items?.length && setGmailThreadStarred(selectedThread.items, !threadStarred);
+  const onMarkUnread = () => {
+    if (!selectedThread?.items?.length) return;
+    markGmailThreadUnread(selectedThread.items);
+    setSelectedThreadId(null);
+  };
+  const onArchive = () => {
+    if (!selectedThread?.items?.length) return;
+    archiveGmailThread(selectedThread.items);
+    setSelectedThreadId(null);
+  };
+  const onTrash = () => {
+    if (!selectedThread?.items?.length) return;
+    trashGmailThread(selectedThread.items);
+    setSelectedThreadId(null);
+  };
 
   const actions = (
     <div className="flex items-center gap-2">
@@ -272,6 +296,11 @@ export default function Gmail() {
               onReassign={reassignBrand}
               onPreview={openPreview}
               onBack={() => setSelectedThreadId(null)}
+              starred={threadStarred}
+              onToggleStar={onToggleStar}
+              onMarkUnread={onMarkUnread}
+              onArchive={onArchive}
+              onTrash={onTrash}
               selfEmail={settings?.googleEmail || ''}
               signatureEs={settings?.gmailSignature || ''}
               signatureEn={settings?.gmailSignatureEn || ''}
@@ -322,6 +351,21 @@ function TabButton({ active, onClick, label, badge = 0, count = 0, icon: Icon })
   );
 }
 
+/** A compact square icon button for the reading-pane action bar. */
+function IconAction({ label, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-50 hover:text-ink-800"
+    >
+      {children}
+    </button>
+  );
+}
+
 function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   if (!threads.length) {
     return (
@@ -348,6 +392,7 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
             <div className={`truncate text-sm ${t.unread ? 'font-medium text-ink-800' : 'text-ink-600'}`}>{t.subject}</div>
             <div className="truncate text-xs text-ink-400">{t.snippet}</div>
             <div className="mt-1 flex items-center gap-2">
+              {t.starred && <Star size={11} className="shrink-0 fill-amber-400 text-amber-400" aria-label="destacado" />}
               {t.count > 1 && <span className="text-[0.65rem] text-ink-400">{t.count} mensajes</span>}
               {t.hasInvoice && (
                 <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[0.65rem] font-medium text-amber-700">
@@ -363,7 +408,10 @@ function ThreadList({ threads, selectedId, onOpen, brandTab }) {
   );
 }
 
-function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signatureEs, signatureEn, fromName }) {
+function ReadingPane({
+  thread, onReassign, onPreview, onBack, starred, onToggleStar, onMarkUnread, onArchive, onTrash,
+  selfEmail, signatureEs, signatureEn, fromName,
+}) {
   if (!thread) {
     return (
       <div className="hidden md:flex flex-1 items-center justify-center text-sm text-ink-400">
@@ -385,6 +433,15 @@ function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signatu
           <ArrowLeft size={18} />
         </button>
         <h2 className="min-w-0 flex-1 font-display text-base font-semibold text-ink-900 truncate">{thread.subject}</h2>
+        {/* Mailbox actions — star / archive / trash / mark unread (sync to Gmail). */}
+        <div className="flex items-center gap-0.5">
+          <IconAction label={starred ? 'Quitar estrella' : 'Destacar'} onClick={onToggleStar}>
+            <Star size={16} className={starred ? 'fill-amber-400 text-amber-400' : ''} />
+          </IconAction>
+          <IconAction label="Archivar" onClick={onArchive}><Archive size={16} /></IconAction>
+          <IconAction label="Marcar no leído" onClick={onMarkUnread}><MailOpen size={16} /></IconAction>
+          <IconAction label="Mover a papelera" onClick={onTrash}><Trash2 size={16} /></IconAction>
+        </div>
         <div className="flex items-center gap-2">
           <select
             value={(last?.brand) || ''}
