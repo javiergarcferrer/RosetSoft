@@ -48,33 +48,33 @@ const RAUSCHEN = b64(join(FONTS, 'RauschenB-Semibold.woff2'));
 // the Meta link cache and the WhatsApp template button base; leave it be.
 const CARDS = [
   {
-    file: 'og-contrato-v4.jpg',
+    file: 'og-contrato-v5.jpg',
     accent: '#19A06B', // emerald — agreement / money
-    glow: 'rgba(25,160,107,0.30)',
+    glow: 'rgba(25,160,107,0.42)',
     head: 'Su plan de pago,',
     line: 'claro y firmable.',
     sub: 'Revíselo y fírmelo en línea.',
   },
   {
-    file: 'og-togo-v4.jpg',
+    file: 'og-togo-v5.jpg',
     accent: '#C76B29', // ALCOVER terracotta (current brand)
-    glow: 'rgba(199,107,41,0.34)',
+    glow: 'rgba(199,107,41,0.46)',
     head: 'Diseñe su Togo',
     line: 'a su medida.',
     sub: 'Combine módulos y telas en vivo.',
   },
   {
-    file: 'og-tienda-v4.jpg',
+    file: 'og-tienda-v5.jpg',
     accent: '#5B5BD6', // indigo
-    glow: 'rgba(91,91,214,0.32)',
+    glow: 'rgba(91,91,214,0.44)',
     head: 'La colección ALCOVER,',
     line: 'disponible ahora.',
     sub: 'Explore la tienda en línea.',
   },
   {
-    file: 'og-cuenta-v4.jpg',
+    file: 'og-cuenta-v5.jpg',
     accent: '#2F6BF0', // blue
-    glow: 'rgba(47,107,240,0.30)',
+    glow: 'rgba(47,107,240,0.42)',
     head: 'Su estado de cuenta,',
     line: 'al día.',
     sub: 'Saldos, cargos y pagos en un lugar.',
@@ -91,12 +91,17 @@ const html = (c) => `<!doctype html><html><head><meta charset="utf-8"><style>
    A full-bleed gradient (top to bottom) means there is NEVER a flat black band —
    the bottom is part of the same wash as the top. position:fixed + inset:0 pins
    the card to the exact 1200x630 viewport so it always fills, edge to edge. */
-html,body{width:1200px;height:630px;background:#100f0d}
+html,body{width:1200px;height:630px;background:#15110d}
+/* A lit charcoal surface, NOT a black void: a lifted base gradient plus a large
+   accent wash filling the upper-right and a faint light in the lower-left means
+   the areas the text doesn't cover still read as an intentional gradient — no
+   flat near-black "null space". Fills the whole 1200x630 frame, edge to edge. */
 .card{position:fixed;inset:0;overflow:hidden;
-  background:linear-gradient(157deg,#0c0b09 0%,#15120e 58%,#0f0e0c 100%);
+  background:linear-gradient(152deg,#1a1611 0%,#141009 58%,#11100c 100%);
   font-family:Lausanne,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .glow{position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(840px 520px at 87% 4%, ${c.glow}, transparent 62%)}
+  background:radial-gradient(1300px 820px at 97% -6%, ${c.glow}, transparent 60%),
+             radial-gradient(820px 600px at 2% 104%, rgba(255,255,255,0.05), transparent 58%)}
 .top{position:absolute;left:96px;top:86px;right:80px;display:flex;gap:34px}
 .rule{width:6px;border-radius:3px;background:${c.accent};flex:none}
 .head{font-family:Sohne,system-ui,sans-serif;font-size:74px;line-height:1.06;letter-spacing:-1.6px;color:#fbfaf8}
@@ -104,12 +109,13 @@ html,body{width:1200px;height:630px;background:#100f0d}
 .sub{display:flex;align-items:center;gap:16px;margin-top:32px;
   font-family:Lausanne,system-ui,sans-serif;font-size:30px;letter-spacing:-0.2px;color:#cbc8c0}
 .dot{width:14px;height:14px;border-radius:50%;background:${c.accent};flex:none}
-/* ALCOVER (Rauschen) pinned to the bottom edge. Rauschen carries a tall built-in
-   descent, so a normal line box would leave a fat empty band beneath the caps;
-   line-height:0.72 crops the box down to ~cap height and overflow:hidden trims
-   the residual descent, so the VISIBLE letters sit ~30px off the bottom edge. */
-.mark{position:absolute;left:96px;bottom:34px;height:46px;overflow:hidden;
-  font-family:Rauschen,system-ui,sans-serif;font-size:64px;line-height:0.72;
+/* ALCOVER (Rauschen) sits flush at the bottom edge. Rauschen carries a tall
+   built-in descent, so a normal line box leaves a fat empty band beneath the
+   caps (the "black bar" below the logo). height = cap height + overflow:hidden
+   trims that descent away, and bottom:22px leaves only a hair of padding, so the
+   visible letters hug the bottom edge with no dead space under them. */
+.mark{position:absolute;left:96px;bottom:22px;height:47px;overflow:hidden;
+  font-family:Rauschen,system-ui,sans-serif;font-size:64px;line-height:0.74;
   letter-spacing:0.5px;color:#fbfaf8}
 </style></head><body><div class="card">
   <div class="glow"></div>
