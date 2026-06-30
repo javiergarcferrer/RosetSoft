@@ -15,9 +15,20 @@
  * blows up.
  *
  * Resolution: detect the shape of the failure, set a sessionStorage
- * flag so a permanent outage doesn't loop reloads, then `location.
- * reload()`. The reload picks up the fresh index.html (with the new
+ * flag so a permanent outage doesn't loop reloads, then hard cache-bust
+ * to a NEW versioned URL. That pulls the fresh index.html (with the new
  * hashed chunk URLs) and a second tap succeeds.
+ *
+ * Why navigate to a versioned URL instead of `location.reload()`? Same
+ * reason `startVersionWatcher` (lib/liveReload.js) does: an installed iOS
+ * PWA serves its start_url shell (index.html) from the WebKit app-shell
+ * cache, and a plain `reload()` can hand back that SAME stale HTML — so
+ * the tab reloads, re-requests the very chunk hash that just 404'd, fails
+ * again, and the second failure surfaces to the user as the dreaded
+ * "Failed to fetch dynamically imported module" crash. Navigating to a
+ * brand-new `?cb=` URL has no cache entry, so the browser MUST hit the
+ * network and pull the fresh index.html + hashed bundle. HashRouter keeps
+ * the route in the hash, so the search param is inert for routing.
  *
  * Why not just retry the import inline? Because the browser caches
  * the failed module-record by URL — re-asking for the same hashed
@@ -58,7 +69,18 @@ export async function safeDynamicImport<T>(loader: () => Promise<T>): Promise<T>
       throw err;
     }
     try { sessionStorage.setItem(STALE_CHUNK_KEY, '1'); } catch {}
-    window.location.reload();
+    // Hard cache-bust to a NEW URL (see header) — a plain reload() can
+    // return the stale app-shell HTML in an installed iOS PWA and never
+    // recover. A fresh search param has no cache entry, forcing a network
+    // fetch of the new index.html + hashed chunks. `replace` so we don't
+    // grow the history stack on every recovery.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('cb', String(Date.now()));
+      window.location.replace(url.toString());
+    } catch {
+      window.location.reload();
+    }
     // Hang the promise — the reload tears down the JS context
     // before this ever resolves, so callers don't continue with a
     // half-loaded module.
