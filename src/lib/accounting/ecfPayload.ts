@@ -26,6 +26,8 @@ export interface EcfItemInput {
   amount: number;
   /** DGII-required item classifier: 1 = bien (default), 2 = servicio. */
   indicadorBienoServicio?: number;
+  /** DGII unit-of-measure code; 43 = "Unidad" (default for furniture sold by piece). */
+  unidadMedida?: number;
 }
 
 export interface EcfReferenceInput {
@@ -159,6 +161,9 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
     // between NombreItem and CantidadItem per the e-CF XSD field order.
     IndicadorBienoServicio: it.indicadorBienoServicio ?? 1,
     CantidadItem: it.qty,
+    // UnidadMedida sits between CantidadItem and PrecioUnitarioItem (XSD order);
+    // 43 = "Unidad". DGII rejects the line as "XML Inválido" when it's absent.
+    UnidadMedida: it.unidadMedida ?? 43,
     PrecioUnitarioItem: round2(it.unitPrice),
     MontoItem: round2(it.amount),
   }));

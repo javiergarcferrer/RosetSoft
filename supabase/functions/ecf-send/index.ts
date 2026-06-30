@@ -314,14 +314,17 @@ Deno.serve(async (req: Request) => {
 
     const fileName = `${rncEmisor}${eNcf}.xml`;
 
-    // Type 32 (consumo) transmits as an RFCE summary; 31 sends the full e-CF.
-    // The security code (QR) is the signature's first 6 chars for EVERY type.
+    // Type 32 (consumo) transmits as an RFCE summary to the SUMMARY service
+    // (recepcionfc/…, via ecf.sendSummary) — NOT the full-invoice endpoint
+    // (recepcion/api/FacturasElectronicas, via sendElectronicDocument), which
+    // rejects an RFCE as "XML Inválido". Type 31 sends the full e-CF. The
+    // security code (QR) is the signature's first 6 chars for EVERY type.
     let securityCode = securityCodeFrom(signedXml);
     let response: any;
     if (ecfType === '32' && typeof (dgii as any).convertECF32ToRFCE === 'function') {
       const rfce = (dgii as any).convertECF32ToRFCE(signedXml);
       securityCode = rfce?.securityCode || securityCode;
-      response = await ecf.sendElectronicDocument(rfce?.xml || signedXml, fileName);
+      response = await ecf.sendSummary(rfce?.xml || signedXml, fileName);
     } else {
       response = await ecf.sendElectronicDocument(signedXml, fileName);
     }
