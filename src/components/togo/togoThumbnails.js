@@ -15,10 +15,9 @@ import { useEffect, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { inferTogoForm } from '../../lib/togo/togoModel.js';
 import { loadTogoModels } from './togoModelLoader.js';
-import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, STANDARD_TOGO_FINISH } from './togoSceneBuilder.js';
 
 const SIZE = 320;                         // px (square) before DPR
-const THUMB_COLOR = 0xC9BCA9;             // a warm neutral Togo beige — shape over colour
 const cache = new Map();                  // model id → data URL (session-lived)
 
 let enginePromise = null;
@@ -62,9 +61,12 @@ export async function renderTogoThumb(model) {
   let group = null;
   try {
     const loaded = await loadTogoModels({ pieces: [piece] }, modelCache);
+    // Render the preview EXACTLY as a placed piece reads: the standard velvet
+    // (terciopelo) finish over the materialless oatmeal body (colorFor → null),
+    // so the hotbar previews match what lands on the plan and read their shape.
     group = buildTogoGroup(deps, { pieces: [piece] }, {
-      normalMap: quilt, repeat: 3, normalScale: 0.45,
-      colorFor: () => THUMB_COLOR, modelFor: loaded.modelFor,
+      ...STANDARD_TOGO_FINISH, normalMap: quilt,
+      colorFor: () => null, modelFor: loaded.modelFor,
     });
     scene.add(group);
 

@@ -32,6 +32,16 @@ const L2S = (l) => { const c = l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.
 const DEFAULT_COLOR = 0xA28F71;
 const DEG = Math.PI / 180;
 
+// The ONE Togo upholstery finish — a standard velvet (terciopelo). The per-finish
+// editor (Mate/Lino/Terciopelo/Cuero) is gone: every piece, in every preview and
+// the live stage, wears this same plush velvet so the configurator reads
+// consistent and the only choice left to the customer is the FABRIC (colour). A
+// low roughness + a strong, tight sheen lobe is what gives Togo velvet its glow.
+export const STANDARD_TOGO_FINISH = {
+  roughness: 0.6, sheen: 1.0, sheenRoughness: 0.3,
+  clearcoat: 0, clearcoatRoughness: 0.4, repeat: 3, normalScale: 0.5,
+};
+
 /**
  * Procedural fabric GRAIN normal map — the fine woven micro-relief that keeps
  * the upholstery from reading as smooth plastic (the big quilt CHANNELS are real

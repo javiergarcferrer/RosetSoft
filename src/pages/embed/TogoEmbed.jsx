@@ -7,7 +7,7 @@ import { productForGrade } from '../../lib/catalog.js';
 import { composeSubtype, composeFabricLabel } from '../../lib/subtype.js';
 import { downloadText } from '../../lib/csv.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
-import { buildTogoGroup, disposeGroup } from '../../components/togo/togoSceneBuilder.js';
+import { buildTogoGroup, disposeGroup, STANDARD_TOGO_FINISH } from '../../components/togo/togoSceneBuilder.js';
 import { loadTogoModels } from '../../components/togo/togoModelLoader.js';
 import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
 import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
@@ -102,17 +102,6 @@ function useCountUp(target) {
 // earns colour, because a sent request is the reward moment.
 const CONFETTI_COLORS = ['#e2725b', '#2f6f6b', '#d9a441', '#3b5f8a', '#b8553f', '#6c8c5a'];
 
-// The material editor's finish presets — physically-based fabric looks that
-// re-skin the 3D visualizer live (roughness + the sheen lobe that makes fabric
-// read as fabric). Fabric/colour stay per-piece (the swatch picker); the finish
-// is the configuration-wide surface character.
-const FINISHES = [
-  { key: 'mate', label: 'Mate', roughness: 0.95, sheen: 0.12, sheenRoughness: 0.85 },
-  { key: 'lino', label: 'Lino', roughness: 0.82, sheen: 0.5, sheenRoughness: 0.55 },
-  { key: 'terciopelo', label: 'Terciopelo', roughness: 0.6, sheen: 1.0, sheenRoughness: 0.3 },
-  { key: 'cuero', label: 'Cuero', roughness: 0.4, sheen: 0.08, sheenRoughness: 0.4, clearcoat: 0.5, clearcoatRoughness: 0.35 },
-];
-
 /**
  * PUBLIC, no-login Togo configurator — embedded in the dealer's website via an
  * <iframe>, and shown back IN the app (Togo workspace → Configurador tab) as a
@@ -179,8 +168,6 @@ export default function TogoEmbed() {
   const [arOpen, setArOpen] = useState(false);   // "Ver en tu espacio" (WebAR)
   const [matMode, setMatMode] = useState('one'); // 'one' (selected piece) | 'all'
   const [view, setView] = useState('2d');        // '2d' plan editor | '3d' preview
-  const [finishKey, setFinishKey] = useState('lino'); // material editor: surface finish
-  const [weave, setWeave] = useState(3);              // material editor: weave/quilt scale
   const [hoveredPieceId, setHoveredPieceId] = useState(null); // hover-link plan ⇄ hotbar
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const [dlOpen, setDlOpen] = useState(false);   // the download format chooser
@@ -196,14 +183,9 @@ export default function TogoEmbed() {
     document.body.classList.add('togo-rams');
     return () => document.body.classList.remove('togo-rams');
   }, []);
-  const material = useMemo(() => {
-    const f = FINISHES.find((x) => x.key === finishKey) || FINISHES[1];
-    return {
-      roughness: f.roughness, sheen: f.sheen, sheenRoughness: f.sheenRoughness,
-      clearcoat: f.clearcoat ?? 0, clearcoatRoughness: f.clearcoatRoughness ?? 0.4,
-      repeat: weave, normalScale: 1.0,
-    };
-  }, [finishKey, weave]);
+  // ONE standard velvet (terciopelo) for every piece — no per-finish editor. The
+  // only customer choice left is the FABRIC (colour) via the swatch picker.
+  const material = STANDARD_TOGO_FINISH;
 
   useEffect(() => {
     let active = true;
@@ -490,11 +472,6 @@ export default function TogoEmbed() {
     );
   }
 
-  // The 3D finish editor — floated over the scene only while in 3D.
-  const materialEditor = (
-    <MaterialEditor finishKey={finishKey} setFinishKey={setFinishKey} weave={weave} setWeave={setWeave} />
-  );
-
   // The configurator is ONE full-bleed window into the build. The canvas fills
   // the frame edge-to-edge; every tool floats over it as a glass HUD cluster —
   // no header bar, no sidebar, no dropdown. Top corners hold view + tools; a
@@ -556,11 +533,10 @@ export default function TogoEmbed() {
       <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none">
         <div className="mx-auto w-full max-w-5xl flex flex-col items-stretch gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
 
-          {/* The build tool: piece hotbar (2D) or the finish editor (3D). */}
-          {view === '2d' ? (
+          {/* The build tool: the piece hotbar (add pieces). Shown in 2D where the
+              plan is editable; 3D is a look-only preview, so no tool here. */}
+          {view === '2d' && (
             <PieceHotbar models={models} thumbById={thumbById} renderThumbById={renderThumbById} onAdd={addPiece} hoveredPieceId={hoveredPieceId} onHover={setHoveredPieceId} />
-          ) : (
-            <div className="pointer-events-auto self-center max-w-full">{materialEditor}</div>
           )}
 
           {/* Live estimate + the single primary CTA. */}
@@ -670,28 +646,6 @@ function PieceHotbar({ models, thumbById = {}, renderThumbById = {}, onAdd, hove
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/** Material editor — surface finish chips (Mate/Lino/Terciopelo/Cuero) + the
- *  weave/quilt ("Trama") slider. The finish re-skins every piece in the 3D
- *  visualizer live; fabric/colour stay per-piece via the swatch picker. Shared
- *  by the desktop strip and the mobile Material sheet. */
-function MaterialEditor({ finishKey, setFinishKey, weave, setWeave }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-surface px-3 py-2.5">
-      <span className="text-[11px] font-medium text-ink-600 inline-flex items-center gap-1"><Palette size={13} /> Material</span>
-      <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
-        {FINISHES.map((f, i) => (
-          <button key={f.key} type="button" onClick={() => setFinishKey(f.key)} aria-pressed={finishKey === f.key}
-            className={`px-2.5 py-1 text-[11px] ${i ? 'border-l border-ink-200' : ''} ${finishKey === f.key ? 'bg-brand-500 text-white' : 'bg-surface text-ink-600 hover:bg-ink-50'}`}>{f.label}</button>
-        ))}
-      </div>
-      <label className="inline-flex items-center gap-1.5 text-[11px] text-ink-500 ml-1">
-        Trama
-        <input type="range" min="1.5" max="5" step="0.5" value={weave} onChange={(e) => setWeave(Number(e.target.value))} className="w-24 accent-brand-500" />
-      </label>
     </div>
   );
 }
