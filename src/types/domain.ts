@@ -1233,7 +1233,12 @@ export interface PaymentPlan {
    *  50/20/20/10, interest-free). */
   scheduleMode?: 'amortized' | 'custom';
   status: 'draft' | 'active' | 'completed' | 'cancelled';
+  /** The contract description. Auto-derived from the plan (so it stays congruent
+   *  with the schedule) unless the dealer typed their own — `contractBodyCustom`
+   *  flags that override; when false the stored text is ignored in favor of the
+   *  live derived default. See `defaultContractBody` (core/quote). */
   contractBody?: string | null;
+  contractBodyCustom?: boolean;
 
   shareToken?: string | null;
   shareEnabled?: boolean;

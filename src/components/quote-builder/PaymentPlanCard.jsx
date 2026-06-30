@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Link2, Download, Check, FileSignature, Save, Plus, Trash2, ChevronDown, Undo2, FileText, AlertTriangle } from 'lucide-react';
 import { db, newId } from '../../db/database.js';
 import { collectInstallment, uncollectInstallment } from '../../db/paymentPlans.js';
-import { buildPlanSchedule, buildCustomSchedule, SPLIT_PRESETS, resolvePaymentPlanView } from '../../core/quote/index.js';
+import { buildPlanSchedule, buildCustomSchedule, SPLIT_PRESETS, resolvePaymentPlanView, defaultContractBody } from '../../core/quote/index.js';
 import { resolveAccountingConfig } from '../../core/accounting/index.js';
 import { effectiveDopRate } from '../../lib/exchangeRate.js';
 import { contractLinkUrl, newShareToken } from '../../lib/contractShare.js';
@@ -41,6 +41,9 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
     firstDueAt: defaultFirstDue(),
     splits: defaultSplits(),
     contractBody: '',
+    // false ⇒ the description is auto-derived from the plan (always congruent);
+    // true ⇒ the dealer typed their own text, which is then stored verbatim.
+    contractBodyCustom: false,
   });
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
   const [copy, setCopy] = useState('idle'); // idle | done
@@ -67,6 +70,10 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
         setPlan(row);
         if (row) {
           const isCustom = row.scheduleMode === 'custom';
+          // Only honor stored contract text when the dealer actually overrode it;
+          // otherwise leave it empty so the live, derived default shows (and any
+          // legacy frozen text that drifted from the schedule is ignored).
+          const custom = !!row.contractBodyCustom;
           setForm({
             mode: isCustom ? 'custom' : 'amortized',
             monthlyRatePct: row.monthlyRatePct ?? 0,
@@ -76,7 +83,8 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
             splits: isCustom && Array.isArray(row.schedule) && row.schedule.length
               ? row.schedule.map((r) => ({ pct: r.pct ?? 0, dueAt: r.dueAt ?? defaultFirstDue(), label: r.label ?? '' }))
               : defaultSplits(),
-            contractBody: row.contractBody ?? '',
+            contractBody: custom ? (row.contractBody ?? '') : '',
+            contractBodyCustom: custom,
           });
         }
       })
@@ -102,7 +110,13 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
   const dirty = useMemo(() => {
     if (!plan) return false;
     if (form.mode !== (plan.scheduleMode === 'custom' ? 'custom' : 'amortized')) return true;
-    if ((form.contractBody || '') !== (plan.contractBody || '')) return true;
+    // Compare the EFFECTIVE contract text (custom override or empty ⇒ derived),
+    // so a legacy frozen body that differs from the now-derived default doesn't
+    // light up the "unsaved changes" hint forever.
+    const formCustom = !!form.contractBodyCustom;
+    const planCustom = !!plan.contractBodyCustom;
+    if (formCustom !== planCustom) return true;
+    if ((formCustom ? form.contractBody || '' : '') !== (planCustom ? plan.contractBody || '' : '')) return true;
     if (form.mode === 'amortized') {
       return Number(form.monthlyRatePct) !== Number(plan.monthlyRatePct)
         || Number(form.installmentCount) !== Number(plan.installmentCount)
@@ -117,18 +131,19 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
   const usd = (v) => formatMoney(v, 'USD');
   const dop = (v) => (rate ? formatMoney(v, 'DOP', { DOP: rate }) : '');
 
-  function defaultBody(srcForm = form) {
-    if (srcForm.contractBody) return srcForm.contractBody;
-    const head = `El cliente acuerda adquirir los bienes detallados en la cotización Nº ${quote?.number ?? ''} `;
-    const tail = `conforme al calendario de pagos detallado en este contrato. La entrega de los bienes se `
-      + `realizará según las condiciones acordadas. El atraso en el pago de cualquier cuota podrá generar `
-      + `cargos por mora.`;
-    if (srcForm.mode === 'custom') {
-      const pcts = (srcForm.splits || []).map((s) => `${Number(s.pct) || 0}%`).join(' / ');
-      return `${head}y pagar su valor total en ${preview.installmentCount} pagos por etapas (${pcts}), ${tail}`;
-    }
-    return `${head}y pagar su valor total mediante un pago inicial del ${DOWN_PCT}% y ${preview.installmentCount} `
-      + `cuotas mensuales con una tasa de interés del ${preview.monthlyRatePct}% mensual, ${tail}`;
+  // The live, auto-derived contract description for the current form — shown as
+  // the placeholder and used wherever a body is needed but none was overridden.
+  // Derived by the Model (core/quote) off the live preview so it stays congruent
+  // with the schedule the dealer is editing.
+  function defaultBody() {
+    return defaultContractBody({
+      number: quote?.number ?? '',
+      scheduleMode: form.mode,
+      schedule: preview.installments,
+      installmentCount: preview.installmentCount,
+      downPaymentPct: preview.downPaymentPct,
+      monthlyRatePct: preview.monthlyRatePct,
+    });
   }
 
   // `srcForm` lets a caller (handleSave) pass the just-computed form so the
@@ -158,7 +173,10 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
       firstDueAt: srcForm.firstDueAt,
       schedule: installments,
       status: plan?.status || 'draft',
-      contractBody: srcForm.contractBody || defaultBody(srcForm),
+      // Store the dealer's text only when they overrode it; otherwise store empty
+      // and let every surface derive the description from the plan (congruent).
+      contractBody: srcForm.contractBodyCustom ? (srcForm.contractBody || '') : '',
+      contractBodyCustom: !!srcForm.contractBodyCustom,
       shareToken: plan?.shareToken ?? null,
       shareEnabled: plan?.shareEnabled ?? false,
       signedAt: plan?.signedAt ?? null,
@@ -180,13 +198,10 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
     if (form.mode === 'custom' && !splitsValid) { setSave('error'); return; }
     setSave('saving');
     try {
-      // Default the contract body on first save so the dealer has editable text.
-      // Build the body-filled form up front and persist THAT — reading `form`
-      // back after a queued setForm would be stale (same-tick render batch).
-      const body = form.contractBody || defaultBody();
-      const next = body === form.contractBody ? form : { ...form, contractBody: body };
-      if (next !== form) setForm(next);
-      await persist({}, next);
+      // No need to freeze a default body anymore — when the dealer hasn't typed
+      // their own text, every surface derives the description from the plan, so
+      // it stays congruent with the schedule.
+      await persist({}, form);
       setSave('saved');
       setTimeout(() => setSave('idle'), 1800);
     } catch (e) {
@@ -232,7 +247,8 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
         number: quote?.number ?? null,
         scheduleMode: form.mode,
         schedule: preview.installments,
-        contractBody: form.contractBody || defaultBody(),
+        contractBody: form.contractBodyCustom ? (form.contractBody || '') : '',
+        contractBodyCustom: !!form.contractBodyCustom,
         status: 'draft',
       };
       const view = resolvePaymentPlanView(plan || previewPlan, { rate });
@@ -321,6 +337,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
         firstDueAt: defaultFirstDue(),
         splits: defaultSplits(),
         contractBody: '',
+        contractBodyCustom: false,
       });
     } catch (e) {
       console.error('[PaymentPlanCard] delete failed:', e);
@@ -511,7 +528,7 @@ export default function PaymentPlanCard({ quote, customer, settings, totalUsd, s
             <ContractDisclosure
               value={form.contractBody}
               placeholder={defaultBody()}
-              onChange={(v) => setForm((f) => ({ ...f, contractBody: v }))}
+              onChange={(v) => setForm((f) => ({ ...f, contractBody: v, contractBodyCustom: v.trim().length > 0 }))}
             />
           </section>
 
