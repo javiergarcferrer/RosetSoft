@@ -164,6 +164,16 @@ verify_jwt = false
 [functions.meta-social]
 verify_jwt = false
 
+# dalle-image backs the JARVIS image-generation pane: it relays a prompt (with
+# optional reference images + target size) to OpenAI DALL·E 3, renders the
+# results and stores them in the public `social` bucket. Verifies the caller
+# ITSELF (auth.getUser on the Authorization header) — gateway check off so the
+# CORS preflight (which carries no JWT) passes, same as wa-send. The OpenAI key
+# is read write-only from openai_config via the service role; it never reaches
+# the browser.
+[functions.dalle-image]
+verify_jwt = false
+
 # google-api — Gmail (send) + Google Drive (folders/upload/list) on ONE Google
 # OAuth account. Verifies the caller ITSELF (auth.getUser on the Authorization
 # header) — gateway check off so the CORS preflight passes, same as wa-send. The
