@@ -141,6 +141,18 @@ function isModalContext() {
   } catch { return false; }
 }
 
+// The clean standalone configurator page (soft.alcover.do/configurator) is a
+// full-screen, top-level document — NOT a small iframe — so it skips the launch
+// card and drops straight into the configurator. The launch card exists only to
+// give the IFRAME embed a tap-to-open-fullscreen affordance; main.jsx mounts this
+// component at /configurator, while the iframe embed loads #/embed/togo (where
+// the card still shows). Without this, /configurator showed the card and a tap
+// bounced the user out to the hash URL #/embed/togo.
+function isStandaloneConfigurator() {
+  if (typeof window === 'undefined') return false;
+  return /^\/configurator\/?$/.test(window.location.pathname || '');
+}
+
 // material + color → the { grade, fabric, code } shape a placement carries. Mirrors
 // SwatchPicker.toPick; `code` lets us render the LR swatch (swatchUrl) with no DB.
 function toPick(material, color) {
@@ -175,7 +187,8 @@ export default function TogoEmbed() {
   const [objBusy, setObjBusy] = useState(false); // building the 3D OBJ (loads three on demand)
   // false → show the launch card; the card opens the configurator in a NEW TAB
   // (?ctx=modal → straight to the build), so it always gets the full screen.
-  const launched = isModalContext();
+  // The clean /configurator page launches straight in (it's already full-screen).
+  const launched = isModalContext() || isStandaloneConfigurator();
 
   // Dieter Rams skin: while the configurator is mounted, flag <body> so the
   // monochrome variable remap (index.css) reaches the portalled modals too.
