@@ -74,20 +74,33 @@ export function sanitizeSignatureHtml(html) {
 
 /**
  * A branded starter signature in the app's aesthetic (Lausanne, ink + muted
- * grey, brand-blue contact line, wordmark) — a starting point the dealer edits
- * with their own name/RNC/address/phone. `lang` only swaps the role line.
+ * grey, brand-blue contact line, wordmark), matching the dealer's letterhead
+ * block. Pre-filled from the company's real data (name, RNC, address, phone,
+ * website) when available so "Plantilla" lands their exact signature ready to
+ * edit; blanks fall back to obvious placeholders. `lang` swaps the role line and
+ * placeholder copy.
  */
-export function defaultSignatureHtml(lang = 'es', { company = 'ALCOVER' } = {}) {
-  const title = lang === 'en' ? 'President' : 'Presidente';
-  const wordmark = String(company || 'ALCOVER').toUpperCase();
+export function defaultSignatureHtml(lang = 'es', {
+  company = 'ALCOVER', name = '', title = '', rnc = '', address = '', phone = '', website = '',
+} = {}) {
+  const en = lang === 'en';
+  const co = String(company || 'ALCOVER').trim();
+  const nm = String(name || '').trim() || (en ? 'Full Name' : 'Nombre Apellido');
+  const role = String(title || '').trim() || (en ? 'President' : 'Presidente');
+  const id = String(rnc || '').trim() || '0-00-00000-0';
+  const addr = String(address || '').trim() || (en ? '000 Street' : 'C/ Dirección 000');
+  const tel = String(phone || '').trim() || '+1 000 000 0000';
+  const site = String(website || '').trim().replace(/^https?:\/\//i, '').replace(/\/$/, '') || 'alcover.do';
+  const wordmark = co.toUpperCase();
+  const e = escapeForHtml;
   return [
-    '<div style="font-family:Lausanne,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1b1b1b;font-size:13px;line-height:1.5">',
-    '<div style="font-weight:700;font-size:15px">Nombre Apellido</div>',
-    `<div style="font-weight:700;margin-bottom:10px">${title}</div>`,
-    `<div style="color:#8a8a8a">${company} S.R.L. RNC: 0-00-00000-0</div>`,
-    '<div style="color:#8a8a8a">C/ Dirección 000</div>',
-    '<div style="color:#8a8a8a;margin-bottom:10px"><span style="color:#2563eb;font-weight:700">M</span> +1 000 000 0000 &nbsp;/&nbsp; <a href="https://alcover.do" style="color:#2563eb;text-decoration:none">alcover.do</a></div>',
-    `<div style="font-weight:800;letter-spacing:.08em;font-size:20px">${wordmark}</div>`,
+    '<div style="font-family:Lausanne,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1b1b1b;font-size:13px;line-height:1.45">',
+    `<div style="font-weight:700;font-size:15px">${e(nm)}</div>`,
+    `<div style="font-weight:700;margin-bottom:12px">${e(role)}</div>`,
+    `<div style="color:#8a8a8a">${e(co)} S.R.L. RNC: ${e(id)}</div>`,
+    `<div style="color:#8a8a8a">${e(addr)}</div>`,
+    `<div style="color:#8a8a8a;margin-bottom:12px"><span style="color:#2563eb;font-weight:700">M</span> ${e(tel)} &nbsp;/&nbsp; <a href="https://${e(site)}" style="color:#2563eb;text-decoration:none">${e(site)}</a></div>`,
+    `<div style="font-weight:800;letter-spacing:.04em;font-size:22px;color:#111">${e(wordmark)}</div>`,
     '</div>',
   ].join('');
 }

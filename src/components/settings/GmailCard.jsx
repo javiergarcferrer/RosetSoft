@@ -21,7 +21,7 @@ import { userMessageFor } from '../../lib/errorMessages.js';
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/google-api`;
 
 export default function GmailCard() {
-  const { settings, refreshSettings, saveSettings, isAdmin } = useApp();
+  const { settings, currentProfile, refreshSettings, saveSettings, isAdmin } = useApp();
   const connected = !!settings?.googleConnectedAt;
   const email = settings?.googleEmail || '';
   const appConfigured = !!settings?.googleClientId;
@@ -61,12 +61,21 @@ export default function GmailCard() {
     }
   }, [signature, signatureEn, saveSettings]);
 
-  // Seed a language slot with the branded starter signature, ready to edit.
+  // Seed a language slot with the branded starter signature, pre-filled from the
+  // company's real letterhead (Configuración → Empresa) + the signed-in user's
+  // name, so it lands as the dealer's actual signature ready to edit.
   const company = settings?.companyName || 'ALCOVER';
   const useTemplate = useCallback((lang) => {
-    const html = defaultSignatureHtml(lang, { company });
+    const html = defaultSignatureHtml(lang, {
+      company,
+      name: currentProfile?.name || '',
+      rnc: settings?.companyRnc || '',
+      address: settings?.companyAddress || '',
+      phone: settings?.companyPhone || '',
+      website: (settings?.companyEmail || '').split('@')[1] || '',
+    });
     if (lang === 'en') setSignatureEn(html); else setSignature(html);
-  }, [company]);
+  }, [company, currentProfile?.name, settings?.companyRnc, settings?.companyAddress, settings?.companyPhone, settings?.companyEmail]);
 
   const saveLoginDomain = useCallback(async () => {
     setDomainState('saving');
