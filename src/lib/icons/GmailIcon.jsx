@@ -16,6 +16,10 @@ export default function GmailIcon({ size = 24, className = '', ...rest }) {
       aria-hidden="true"
       {...rest}
     >
+      {/* White envelope body so the mark reads correctly on the dark sidebar
+          (the colour segments only draw the borders; the interior is negative
+          space that would otherwise show the dark chrome through). */}
+      <rect x="3" y="8" width="42" height="32" rx="4.5" fill="#fff" />
       <path fill="#4caf50" d="M45 16.2l-5 2.75-5 4.75L35 40h7c1.657 0 3-1.343 3-3V16.2z" />
       <path fill="#1e88e5" d="M3 16.2l3.614 1.71L13 23.7V40H6c-1.657 0-3-1.343-3-3V16.2z" />
       <polygon fill="#e53935" points="35,11.2 24,19.45 13,11.2 12,17 13,23.7 24,31.95 35,23.7 36,17" />
