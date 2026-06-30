@@ -21,9 +21,15 @@ import { meshLoopsFromTriangles } from '../../lib/togo/meshToPlan.js';
 const S2L = (b) => { const c = b / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 const L2S = (l) => { const c = l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055; return Math.round(Math.min(1, Math.max(0, c)) * 255); };
 
-// Default Togo upholstery when no fabric is picked — a warm, mid neutral that
-// reads as fabric under the studio IBL (not flat plastic).
-const DEFAULT_COLOR = 0xB8AFA3;
+// Default Togo upholstery when no fabric is picked — a warm OATMEAL, deeper and
+// more saturated than the old near-grey. A materialless piece has no swatch
+// colour to shade against, so a pale base (the old 0xB8AFA3) lifted almost to
+// white under the studio IBL + tone-mapping and the quilted channels washed out
+// to a flat cream blob — exactly the "undistinctive shape" that made arranging
+// the modular hard. A mid oatmeal keeps tonal headroom so the raking key can
+// carve every channel/roll and the iconic ribbed silhouette reads. (A fabricked
+// piece always read fine because its sampled swatch tone supplied that range.)
+const DEFAULT_COLOR = 0xA28F71;
 const DEG = Math.PI / 180;
 
 /**
@@ -76,6 +82,12 @@ export function makeQuiltNormalMap(THREE, { size = 256, channels = 0, weave = 15
  * normal map. `tex` is an already-loaded THREE.Texture or null.
  */
 export function makeFabricMaterial(THREE, tex, opts = {}) {
+  // Materialless = the default-colour fallback (no swatch tex, no resolved colour).
+  // It gets a FORM-FIRST finish: a lower IBL fill so the directional key throws
+  // real shadow into every channel valley (a high fill flattened the quilting to
+  // a blob), and a gentler sheen so the pale oatmeal body isn't glazed back over
+  // by a velvet film. A fabricked piece keeps the full soft-velvet rig.
+  const materialless = !tex && opts.color == null;
   const base = new THREE.Color(opts.color ?? (tex ? 0xffffff : DEFAULT_COLOR));
   const mat = new THREE.MeshPhysicalMaterial({
     color: base,
@@ -84,14 +96,16 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
     // A moderate sheen lobe tinted to the FABRIC's own hue (NOT white): velvet
     // glow at grazing angles without washing the colour to a pale film. Kept
     // moderate (not maxed) so it reads as velvet but doesn't lighten the body.
-    sheen: opts.sheen ?? 0.7,
+    sheen: opts.sheen ?? (materialless ? 0.35 : 0.7),
     sheenRoughness: opts.sheenRoughness ?? 0.6,
     sheenColor: new THREE.Color(opts.sheenColor ?? base),
     // A thin clearcoat lobe for coated finishes (leather) — off by default so
     // matte/cloth finishes pay nothing. Layers on top of the sheen.
     clearcoat: opts.clearcoat ?? 0,
     clearcoatRoughness: opts.clearcoatRoughness ?? 0.4,
-    envMapIntensity: opts.envMapIntensity ?? 0.7,
+    // Lower the IBL fill when materialless so the raking key carves the channels
+    // (form reads); the full 0.7 keeps a fabricked body from going pale.
+    envMapIntensity: opts.envMapIntensity ?? (materialless ? 0.42 : 0.7),
   });
   if (tex) {
     tex.colorSpace = THREE.SRGBColorSpace;        // base colour is sRGB
