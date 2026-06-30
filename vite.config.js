@@ -140,6 +140,16 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       chunkSizeWarningLimit: 2000,
       rollupOptions: {
+        // Two HTML entries that load the SAME bundle: index.html (every route)
+        // and configurator.html. The latter is a clone of index.html whose only
+        // difference is the link-preview (og) tags — Vercel rewrites the clean
+        // /configurator URL to it so a shared configurator link previews the TOGO
+        // card instead of index.html's quote card, while the app still boots
+        // (main.jsx keys off the /configurator pathname the rewrite preserves).
+        input: {
+          main: join(process.cwd(), 'index.html'),
+          configurator: join(process.cwd(), 'configurator.html'),
+        },
         output: {
           manualChunks: {
             // react-pdf is the quote PDF renderer; the quote-builder +

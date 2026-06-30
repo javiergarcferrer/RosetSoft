@@ -66,6 +66,18 @@ test('index.html references the quote og image that exists', () => {
   assert.ok(!/property="og:url"/.test(html), 'og:url canonical collapses the preview cache — keep it out');
 });
 
+test('configurator.html carries the togo card (clean /configurator URL)', () => {
+  const html = readFileSync(root('configurator.html'), 'utf8');
+  // Vercel rewrites /configurator → this file; it must preview the TOGO card,
+  // not index.html's quote card. Uses the %VITE_PUBLIC_ORIGIN% placeholder
+  // (substituted at build), and the SAME no-og:url rule as index.html.
+  assert.match(html, /og:image" content="%VITE_PUBLIC_ORIGIN%\/og-togo-v8\.jpg"/);
+  assert.ok(!/og-card-v2\.jpg/.test(html), 'configurator.html must not point at the quote card');
+  assert.ok(!/property="og:url"/.test(html), 'og:url canonical collapses the preview cache — keep it out');
+  // Still boots the SPA (same entry script as index.html).
+  assert.match(html, /src="\/src\/main\.jsx"/);
+});
+
 for (const { img, launcher, hash } of CARDS) {
   if (!launcher) continue;
   const name = img.replace('public/', '');

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es-DO">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#171612" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Anti-FOUC theme boot — MUST mirror index.html / lib/theme.js exactly. The
+         clean configurator URL is a public surface, forced light (path check). -->
+    <script>
+      (function () {
+        try {
+          var hash = location.hash || '';
+          var path = location.pathname || '';
+          var isPublic = path === '/configurator' || path === '/configurator/' || hash.indexOf('#/q/') === 0 || hash.indexOf('#/contrato/') === 0 || hash.indexOf('#/cuenta/') === 0 || hash.indexOf('#/tienda') === 0 || hash.indexOf('#/embed') === 0 || hash.indexOf('#/eliminar-datos') === 0;
+          var pref = null;
+          try { pref = localStorage.getItem('rs.theme'); } catch (e) {}
+          var dark =
+            !isPublic &&
+            (pref === 'dark' ||
+              ((pref === null || pref === 'system') &&
+                window.matchMedia('(prefers-color-scheme: dark)').matches));
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {}
+      })();
+    </script>
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="ALCOVER" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <title>Diseñe su Togo · ALCOVER</title>
+    <meta name="description" content="Combine módulos y telas y véalo en vivo." />
+
+    <!-- Link preview for the CLEAN configurator URL (soft.alcover.do/configurator).
+         Vercel rewrites /configurator → this file, so a crawler that fetches the
+         clean URL reads the TOGO card here instead of index.html's quote card,
+         while the app still boots the configurator (main.jsx keys off the
+         /configurator pathname, which the rewrite preserves). Same rules as
+         index.html: absolute og:image via %VITE_PUBLIC_ORIGIN% (substituted at
+         build), baseline jpeg, version-bumped filename, no og:url. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ALCOVER" />
+    <meta property="og:locale" content="es_DO" />
+    <meta property="og:title" content="Diseñe su Togo · ALCOVER" />
+    <meta property="og:description" content="Combine módulos y telas y véalo en vivo." />
+    <meta property="og:image" content="%VITE_PUBLIC_ORIGIN%/og-togo-v8.jpg" />
+    <meta property="og:image:secure_url" content="%VITE_PUBLIC_ORIGIN%/og-togo-v8.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ALCOVER — Diseñe su Togo a su medida." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Diseñe su Togo · ALCOVER" />
+    <meta name="twitter:description" content="Combine módulos y telas y véalo en vivo." />
+    <meta name="twitter:image" content="%VITE_PUBLIC_ORIGIN%/og-togo-v8.jpg" />
+
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+  </head>
+  <body class="bg-ink-50 text-ink-900 font-sans antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

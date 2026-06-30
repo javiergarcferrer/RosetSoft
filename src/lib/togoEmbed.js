@@ -28,8 +28,11 @@ export function togoEmbedUrl() {
  */
 export function togoShareUrl() {
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  // `pv` busts WhatsApp's per-URL preview cache when the card is re-rendered.
-  return `${origin}/p/togo.html?pv=${PREVIEW_VERSION}`;
+  // The clean public configurator URL. Vercel rewrites /configurator to
+  // configurator.html, which carries the TOGO link-preview card (so a shared
+  // configurator link previews correctly), then boots the app. `pv` busts
+  // WhatsApp's per-URL preview cache when the card is re-rendered.
+  return `${origin}/configurator?pv=${PREVIEW_VERSION}`;
 }
 
 /** Same widget, flagged as ALREADY inside a fullscreen container (a host-page

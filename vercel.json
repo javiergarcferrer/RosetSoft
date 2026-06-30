@@ -6,6 +6,8 @@
     { "source": "/fe/autenticacion/api/:path*", "destination": "https://jwgrjrjlhaedfathltxc.supabase.co/functions/v1/fe-autenticacion/:path*" },
     { "source": "/fe/recepcion/api/:path*", "destination": "https://jwgrjrjlhaedfathltxc.supabase.co/functions/v1/fe-recepcion/:path*" },
     { "source": "/fe/aprobacioncomercial/api/:path*", "destination": "https://jwgrjrjlhaedfathltxc.supabase.co/functions/v1/fe-aprobacioncomercial/:path*" },
+    { "source": "/configurator", "destination": "/configurator.html" },
+    { "source": "/configurator/", "destination": "/configurator.html" },
     { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
   ],
   "headers": [
