@@ -9,4 +9,4 @@
 //
 // BUMP THIS in lockstep with the og-*-vN.jpg image version every time the cards
 // change, so re-copied links always pull the latest card.
-export const PREVIEW_VERSION = 7;
+export const PREVIEW_VERSION = 8;

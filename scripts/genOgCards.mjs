@@ -23,7 +23,8 @@ import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -48,7 +49,7 @@ const RAUSCHEN = b64(join(FONTS, 'RauschenB-Semibold.woff2'));
 // the Meta link cache and the WhatsApp template button base; leave it be.
 const CARDS = [
   {
-    file: 'og-contrato-v7.jpg',
+    file: 'og-contrato-v8.jpg',
     accent: '#19A06B', // emerald — agreement / money
     glow: 'rgba(25,160,107,0.42)',
     head: 'Su plan de pago,',
@@ -56,7 +57,7 @@ const CARDS = [
     sub: 'Revíselo y fírmelo en línea.',
   },
   {
-    file: 'og-togo-v7.jpg',
+    file: 'og-togo-v8.jpg',
     accent: '#C76B29', // ALCOVER terracotta (current brand)
     glow: 'rgba(199,107,41,0.46)',
     head: 'Diseñe su Togo',
@@ -64,7 +65,7 @@ const CARDS = [
     sub: 'Combine módulos y telas en vivo.',
   },
   {
-    file: 'og-tienda-v7.jpg',
+    file: 'og-tienda-v8.jpg',
     accent: '#5B5BD6', // indigo
     glow: 'rgba(91,91,214,0.44)',
     head: 'La colección ALCOVER,',
@@ -72,7 +73,7 @@ const CARDS = [
     sub: 'Explore la tienda en línea.',
   },
   {
-    file: 'og-cuenta-v7.jpg',
+    file: 'og-cuenta-v8.jpg',
     accent: '#2F6BF0', // blue
     glow: 'rgba(47,107,240,0.42)',
     head: 'Su estado de cuenta,',
@@ -95,9 +96,14 @@ html,body{width:1200px;height:630px;background:#15110d}
 /* A lit charcoal surface, NOT a black void: a lifted base gradient plus a large
    accent wash filling the upper-right and a faint light in the lower-left means
    the areas the text doesn't cover still read as an intentional gradient — no
-   flat near-black "null space". Fills the whole 1200x630 frame, edge to edge. */
-.card{position:fixed;inset:0;overflow:hidden;display:flex;flex-direction:column;
-  justify-content:space-between;padding:84px 90px 16px;
+   flat near-black "null space".
+   The size MUST be explicit (width/height), NOT position:fixed;inset:0 — with a
+   flex column the inset version sized the card to its CONTENT (~423px tall),
+   leaving the body background showing as a ~200px dead band at the bottom (the
+   bug behind every "dead space below ALCOVER"). Explicit 1200x630 fills the
+   whole picture, so ALCOVER seats against the real bottom edge. */
+.card{position:absolute;top:0;left:0;width:1200px;height:630px;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:space-between;padding:84px 90px 16px;
   background:linear-gradient(152deg,#1a1611 0%,#141009 58%,#11100c 100%);
   font-family:Lausanne,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .glow{position:absolute;inset:0;pointer-events:none;
@@ -133,26 +139,59 @@ html,body{width:1200px;height:630px;background:#15110d}
   <div class="mark">ALCOVER</div>
 </div></body></html>`;
 
+// Render via the DevTools Protocol (NOT chrome --screenshot). The one-shot
+// --screenshot path renders with a layout viewport that doesn't match the
+// 1200x630 output, so a strip at the bottom falls outside it and the body
+// background shows through there as a dead band below the wordmark. CDP's
+// Emulation.setDeviceMetricsOverride pins the viewport to EXACTLY 1200x630 and
+// captureScreenshot with an explicit clip grabs exactly that region — pixel-exact,
+// no viewport guesswork.
 const tmp = mkdtempSync(join(tmpdir(), 'ogcards-'));
+const PORT = 9444;
+const chrome = spawn(CHROME, [
+  '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+  '--force-color-profile=srgb', `--remote-debugging-port=${PORT}`, 'about:blank',
+], { stdio: ['ignore', 'ignore', 'ignore'] });
+
+// Wait for the debugging endpoint, then open one reusable page tab.
+let target;
+for (let i = 0; i < 50; i++) {
+  try {
+    const tabs = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
+    target = tabs.find((t) => t.type === 'page');
+    if (target) break;
+  } catch { /* not up yet */ }
+  await sleep(100);
+}
+const ws = new WebSocket(target.webSocketDebuggerUrl);
+await new Promise((r) => ws.addEventListener('open', r, { once: true }));
+let msgId = 0;
+const pending = new Map();
+ws.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data);
+  if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
+});
+const cdp = (method, params = {}) => new Promise((res) => {
+  const id = ++msgId; pending.set(id, res);
+  ws.send(JSON.stringify({ id, method, params }));
+});
+
+await cdp('Page.enable');
+await cdp('Emulation.setDeviceMetricsOverride', { width: 1200, height: 630, deviceScaleFactor: 1, mobile: false });
+
 for (const c of CARDS) {
   const htmlPath = join(tmp, c.file.replace(/\.jpg$/, '.html'));
-  const outPath = join(OUT, c.file);
   writeFileSync(htmlPath, html(c));
-  execFileSync(
-    CHROME,
-    [
-      '--headless',
-      '--no-sandbox',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      '--force-color-profile=srgb',
-      '--window-size=1200,630',
-      `--screenshot=${outPath}`,
-      `file://${htmlPath}`,
-    ],
-    { stdio: ['ignore', 'ignore', 'ignore'] },
-  );
-  const size = readFileSync(outPath).length;
-  console.log(`${c.file}  ${(size / 1024).toFixed(0)} KB`);
+  await cdp('Page.navigate', { url: `file://${htmlPath}` });
+  await sleep(400); // load + data-URI fonts settle (they're inline, so fast)
+  const { data } = await cdp('Page.captureScreenshot', {
+    format: 'jpeg', quality: 90,
+    clip: { x: 0, y: 0, width: 1200, height: 630, scale: 1 },
+    captureBeyondViewport: true,
+  });
+  writeFileSync(join(OUT, c.file), Buffer.from(data, 'base64'));
+  console.log(`${c.file}  ${(Buffer.from(data, 'base64').length / 1024).toFixed(0)} KB`);
 }
+ws.close();
+chrome.kill();
 console.log('done');

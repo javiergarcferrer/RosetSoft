@@ -20,10 +20,10 @@ const root = (p) => new URL(`../${p}`, import.meta.url);
 // per launcher. `launcher` is the static page that carries it (null = index.html).
 const CARDS = [
   { img: 'public/og-card-v2.jpg', launcher: null },
-  { img: 'public/og-contrato-v7.jpg', launcher: 'public/p/contrato.html', hash: '#/contrato/' },
-  { img: 'public/og-togo-v7.jpg', launcher: 'public/p/togo.html', hash: 'configurator' },
-  { img: 'public/og-tienda-v7.jpg', launcher: 'public/p/tienda.html', hash: '#/tienda' },
-  { img: 'public/og-cuenta-v7.jpg', launcher: 'public/p/cuenta.html', hash: '#/cuenta/' },
+  { img: 'public/og-contrato-v8.jpg', launcher: 'public/p/contrato.html', hash: '#/contrato/' },
+  { img: 'public/og-togo-v8.jpg', launcher: 'public/p/togo.html', hash: 'configurator' },
+  { img: 'public/og-tienda-v8.jpg', launcher: 'public/p/tienda.html', hash: '#/tienda' },
+  { img: 'public/og-cuenta-v8.jpg', launcher: 'public/p/cuenta.html', hash: '#/cuenta/' },
 ];
 
 function assertBaselineJpeg(bytes, label) {
