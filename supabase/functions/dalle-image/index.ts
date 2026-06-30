@@ -169,9 +169,13 @@ Deno.serve(async (req) => {
     const targetHeight = posInt(body.targetHeight);
 
     try {
-      // gpt-image-1 only does n=1 → fan out `count` parallel calls. It returns
-      // base64 inline by default, so we pass NO response_format — that param is
-      // rejected on this endpoint ("Unknown parameter: 'response_format'").
+      // gpt-image-1 supports n=1..10, but we fan out `count` parallel calls so a
+      // single failure can't sink the whole batch and so they generate
+      // concurrently (each render is slow). We pass NO `response_format` — gpt
+      // image models reject it and always return base64 inline. We DO ask for
+      // `jpeg` (not the PNG default) + `output_compression` so the bytes already
+      // match the `.jpg`/`image/jpeg` we store, even when no resize re-encodes
+      // them, and so generation is faster/lighter (per OpenAI's guidance).
       const results = await Promise.all(
         Array.from({ length: count }, () =>
           openai.images.generate({
@@ -179,6 +183,8 @@ Deno.serve(async (req) => {
             n: 1,
             size,
             quality,
+            output_format: 'jpeg',
+            output_compression: 90,
             prompt: fullPrompt,
           }),
         ),
@@ -205,7 +211,7 @@ Deno.serve(async (req) => {
           let height = nativeHeight(size);
 
           // Resize to the dealer's chosen dimensions when they differ from the
-          // native DALL·E size: center-crop to the target aspect, then resize.
+          // native gpt-image-1 size: center-crop to the target aspect, then resize.
           if (targetWidth && targetHeight && (targetWidth !== width || targetHeight !== height)) {
             const img = await Image.decode(bytes);
             const cropped = centerCropToAspect(img, targetWidth / targetHeight);
@@ -292,7 +298,10 @@ function apiErrorMessage(e: unknown): string {
   if (status === 429 || /rate limit|quota/i.test(message)) {
     return 'Límite de uso de OpenAI alcanzado';
   }
-  if (code === 'content_policy_violation' || /content_policy|content policy|safety system/i.test(message)) {
+  if (
+    code === 'content_policy_violation' || code === 'moderation_blocked' ||
+    /content_policy|content policy|moderation_blocked|safety system/i.test(message)
+  ) {
     return 'El contenido viola la política de OpenAI; ajusta el prompt';
   }
   return String(message).trim().slice(0, 300);
