@@ -8,6 +8,7 @@ import {
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ComposeModal from '../components/gmail/ComposeModal.jsx';
+import { renderPdfToImages } from '../lib/loadPdfjs.js';
 import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.ts';
@@ -765,7 +766,11 @@ function AttachmentChip({ attachment, onClick }) {
 function AttachmentModal({ messageId, attachments, index, onClose }) {
   const list = Array.isArray(attachments) ? attachments : [];
   const [i, setI] = useState(() => Math.min(Math.max(index || 0, 0), Math.max(list.length - 1, 0)));
-  const [state, setState] = useState({ loading: true, error: '', url: '' });
+  const [state, setState] = useState({ loading: true, error: '', url: '', blob: null });
+  // PDF pages rasterized by pdfjs (data URLs) — the reliable way to preview a
+  // blob PDF on every engine (the browser's own iframe/object viewer shows a
+  // bare "Open" placeholder for blob URLs in many contexts, incl. the PWA).
+  const [pdf, setPdf] = useState({ loading: false, error: '', pages: null });
   const a = list[i] || {};
   const mime = String(a.mimeType || '').toLowerCase();
   const isImg = mime.startsWith('image/');
@@ -776,15 +781,15 @@ function AttachmentModal({ messageId, attachments, index, onClose }) {
   useEffect(() => {
     let url = '';
     let alive = true;
-    setState({ loading: true, error: '', url: '' });
+    setState({ loading: true, error: '', url: '', blob: null });
     loadGmailAttachment(messageId, a)
       .then((res) => {
         url = res.url;
-        if (alive) setState({ loading: false, error: '', url });
+        if (alive) setState({ loading: false, error: '', url, blob: res.blob });
         else URL.revokeObjectURL(url);
       })
       .catch((e) => {
-        if (alive) setState({ loading: false, error: e?.message || 'No se pudo abrir el archivo.', url: '' });
+        if (alive) setState({ loading: false, error: e?.message || 'No se pudo abrir el archivo.', url: '', blob: null });
       });
     return () => {
       alive = false;
@@ -792,6 +797,17 @@ function AttachmentModal({ messageId, attachments, index, onClose }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messageId, a.attachmentId, i]);
+
+  // Rasterize a PDF blob to page images once it's loaded.
+  useEffect(() => {
+    if (!isPdf || !state.blob) { setPdf({ loading: false, error: '', pages: null }); return undefined; }
+    let alive = true;
+    setPdf({ loading: true, error: '', pages: null });
+    renderPdfToImages(state.blob)
+      .then((pages) => { if (alive) setPdf({ loading: false, error: '', pages }); })
+      .catch((e) => { if (alive) setPdf({ loading: false, error: e?.message || 'No se pudo mostrar el PDF.', pages: null }); });
+    return () => { alive = false; };
+  }, [isPdf, state.blob]);
 
   // Escape closes; ←/→ page between this message's attachments.
   useEffect(() => {
@@ -872,32 +888,40 @@ function AttachmentModal({ messageId, attachments, index, onClose }) {
           ) : isImg ? (
             <img src={state.url} alt={a.filename || 'adjunto'} className="mx-auto max-h-full max-w-full rounded object-contain" />
           ) : isPdf ? (
-            // <object> (not <iframe>) renders blob PDFs inline reliably — the
-            // iframe shows Chrome's "Open" placeholder for blob URLs. Mirrors the
-            // accounting comprobante viewer. Falls back to an open/download link.
-            <object data={`${state.url}#toolbar=1&navpanes=0&view=FitH`} type="application/pdf" className="h-full min-h-[60vh] w-full rounded bg-white">
+            // PDF: rasterized to page images by pdfjs (engine-independent — no
+            // browser PDF plugin, so it works in the PWA where blob iframes show
+            // only an "Open" placeholder). Falls back to open/download on error.
+            pdf.loading ? (
+              <div className="flex h-full items-center justify-center gap-2 text-sm text-ink-400">
+                <Loader2 size={16} className="animate-spin" /> Procesando PDF…
+              </div>
+            ) : pdf.pages?.length ? (
+              <div className="mx-auto flex max-w-3xl flex-col items-center gap-3">
+                {pdf.pages.map((p, idx) => (
+                  <img
+                    key={idx}
+                    src={p.src}
+                    width={p.width}
+                    height={p.height}
+                    alt={`Página ${idx + 1}`}
+                    className="block h-auto w-full rounded bg-white shadow-soft"
+                  />
+                ))}
+              </div>
+            ) : (
               <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center text-sm text-ink-500">
                 <FileText size={40} className="text-ink-300" />
-                <p>No se pudo mostrar la vista previa.</p>
+                <p>{pdf.error || 'No se pudo mostrar la vista previa.'}</p>
                 <div className="flex items-center gap-2">
-                  <a
-                    href={state.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-ink-900 px-3 py-2 text-xs font-medium text-white hover:bg-ink-700"
-                  >
+                  <a href={state.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-ink-900 px-3 py-2 text-xs font-medium text-white hover:bg-ink-700">
                     <ExternalLink size={14} /> Abrir en pestaña
                   </a>
-                  <a
-                    href={state.url}
-                    download={a.filename || 'archivo'}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
-                  >
+                  <a href={state.url} download={a.filename || 'archivo'} className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50">
                     <Download size={14} /> Descargar
                   </a>
                 </div>
               </div>
-            </object>
+            )
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center text-sm text-ink-500">
               <FileIcon size={40} className="text-ink-300" />
