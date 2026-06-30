@@ -264,7 +264,7 @@ export interface Settings {
   googleEmail?: string;
   /** Last time the Gmail inbox pulled new mail (google-api `gmailSync`). */
   gmailSyncedAt?: number | null;
-  /** Plain-text signatures seeded into the Gmail inbox reply composer — the
+  /** Rich-HTML signatures seeded into the Gmail inbox reply composer — the
    *  dealer picks Spanish or English per reply. `gmailSignature` is the
    *  Spanish/default; `gmailSignatureEn` is the English variant. */
   gmailSignature?: string;

@@ -77,15 +77,13 @@ const ALL_DRIVES = 'includeItemsFromAllDrives=true&supportsAllDrives=true';
 // One consent covers all surfaces. gmail.send (send quotes/files/mail),
 // gmail.readonly (read INBOUND mail — the `meta-receipts` job searches the
 // inbox for Meta Ads payment receipts to file as gastos with the receipt
-// attached), gmail.settings.basic (READ the account's configured signature so
-// the inbox reply composer can import it), full drive (browse + create +
-// upload — drive.file alone can't see files the app didn't create, which "add
-// from Drive" needs), and the account email. Adding a scope is why a connected
-// account must RE-CONNECT once (Google forces re-consent for a new scope).
+// attached), full drive (browse + create + upload — drive.file alone can't see
+// files the app didn't create, which "add from Drive" needs), and the account
+// email. Adding a scope is why a connected account must RE-CONNECT once (Google
+// forces re-consent for a new scope).
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.settings.basic',
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/userinfo.email',
   'openid',
@@ -135,9 +133,6 @@ type Body = {
     attachments?: Attachment[];
   };
   gmailSync?: { query?: string; maxResults?: number };
-  // Read the connected account's configured signature (settings.sendAs) so the
-  // inbox can import it into the reply composer.
-  gmailSignature?: boolean;
   gmailAttachment?: { messageId?: string; attachmentId?: string };
   driveEnsureRoot?: { name?: string };
   driveCreateFolder?: { name?: string; parentId?: string };
@@ -834,28 +829,6 @@ Deno.serve(async (req) => {
       }
       await admin.from('settings').update({ gmail_synced_at: new Date().toISOString() }).eq('profile_id', TEAM);
       return json({ ok: true, scanned: ids.length, synced: toUpsert.length });
-    }
-
-    // ── Gmail signature (import into the reply composer) ──────────────────────
-    // Read the account's send-as settings and hand back the PRIMARY address's
-    // configured signature (HTML, as Gmail stores it). Needs gmail.settings.basic
-    // — a 403 here means the account hasn't re-consented to the new scope yet.
-    if (body.gmailSignature) {
-      const r = await fetch(`${GMAIL}/settings/sendAs`, { headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        const needsScope = r.status === 403 || r.status === 401;
-        return json({
-          ok: false,
-          needsReconnect: needsScope,
-          error: needsScope
-            ? 'Reconecta Google para autorizar la lectura de la firma.'
-            : (d?.error?.message || `Gmail ${r.status}`),
-        }, 502);
-      }
-      const list = (d.sendAs || []) as Array<{ sendAsEmail?: string; isPrimary?: boolean; isDefault?: boolean; signature?: string; displayName?: string }>;
-      const primary = list.find((x) => x.isPrimary) || list.find((x) => x.isDefault) || list[0] || {};
-      return json({ ok: true, signature: primary.signature || '', sendAsEmail: primary.sendAsEmail || '', displayName: primary.displayName || '' });
     }
 
     // ── Gmail attachment fetch (preview/download) ─────────────────────────────

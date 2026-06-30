@@ -97,16 +97,6 @@ export async function gmailReply({ messageId, threadId, to, cc, bcc, subject, ht
 }
 
 /**
- * Read the connected account's configured Gmail signature (the primary
- * send-as). Returns { signature (HTML), sendAsEmail, displayName }. Throws a
- * clean error (with needsReconnect surfaced) when the gmail.settings.basic
- * scope hasn't been granted yet.
- */
-export async function fetchGmailSignature() {
-  return invokeGoogle({ gmailSignature: true });
-}
-
-/**
  * Pull recent inbox + sent mail into gmail_messages (server-side, service role)
  * so the Gmail inbox can read it. Returns { scanned, synced }. `query` overrides
  * the default Gmail search; `maxResults` caps the scan (server clamps to 250).

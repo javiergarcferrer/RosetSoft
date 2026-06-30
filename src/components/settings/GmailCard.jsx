@@ -7,13 +7,13 @@
 // with ?google=connected. Tokens never touch the browser. This single grant
 // also powers the Google Drive card.
 import { useCallback, useEffect, useState } from 'react';
-import { Mail, RefreshCw, Check, Copy, ExternalLink, Download } from 'lucide-react';
+import { Mail, RefreshCw, Check, Copy, ExternalLink, Sparkles } from 'lucide-react';
 import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { supabase, SUPABASE_URL } from '../../db/supabaseClient.js';
 import { saveGoogleConfig, connectGoogle, disconnectGoogle, saveGoogleLoginDomain } from '../../lib/google.js';
-import { pullGmailSignature } from '../../lib/gmail.js';
+import { sanitizeSignatureHtml, defaultSignatureHtml } from '../../lib/gmail.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
 // The OAuth redirect URI the admin must register in the Google Cloud OAuth
@@ -61,31 +61,12 @@ export default function GmailCard() {
     }
   }, [signature, signatureEn, saveSettings]);
 
-  // Import the signature configured in the connected Gmail account (flattened to
-  // plain text) into one language slot and save it. Gmail's API only exposes the
-  // ONE default signature, so the dealer imports it into whichever slot, then
-  // edits/translates the other. A missing-scope error tells them to reconnect.
-  const importSignature = useCallback(async (lang) => {
-    setSigState('importing');
-    setMsg(null);
-    try {
-      const { text } = await pullGmailSignature();
-      if (!text.trim()) {
-        setSigState('idle');
-        setMsg({ ok: false, text: 'Tu cuenta de Gmail no tiene una firma configurada.' });
-        return;
-      }
-      const patch = lang === 'en' ? { gmailSignatureEn: text } : { gmailSignature: text };
-      if (lang === 'en') setSignatureEn(text); else setSignature(text);
-      await saveSettings?.(patch);
-      setSigState('saved');
-      setMsg({ ok: true, text: 'Firma importada de Gmail ✓' });
-      setTimeout(() => setSigState((s) => (s === 'saved' ? 'idle' : s)), 2000);
-    } catch (e) {
-      setSigState('idle');
-      setMsg({ ok: false, text: userMessageFor(e) });
-    }
-  }, [saveSettings]);
+  // Seed a language slot with the branded starter signature, ready to edit.
+  const company = settings?.companyName || 'ALCOVER';
+  const useTemplate = useCallback((lang) => {
+    const html = defaultSignatureHtml(lang, { company });
+    if (lang === 'en') setSignatureEn(html); else setSignature(html);
+  }, [company]);
 
   const saveLoginDomain = useCallback(async () => {
     setDomainState('saving');
@@ -219,46 +200,22 @@ export default function GmailCard() {
           )}
         </div>
 
-        {/* Reply signatures — seeded into the Gmail inbox reply composer; the
-            dealer keeps one per language and picks when replying. */}
+        {/* Reply signatures — rich HTML seeded into the inbox reply composer;
+            the dealer keeps one per language and picks when replying. Edit the
+            HTML and see it rendered live; "Plantilla" drops in a branded
+            starter. Paste your existing email signature's HTML to match it. */}
         {connected && (
           <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
             <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Firmas de respuestas</div>
-            <p className="text-xs text-ink-500 mb-2">
-              Al responder desde la bandeja eliges cuál usar. Tráelas de tu cuenta de Gmail (solo trae la
-              firma predeterminada — luego ajusta la otra) o escríbelas aquí; deja una vacía para no ofrecerla.
+            <p className="text-xs text-ink-500 mb-3">
+              Al responder desde la bandeja eliges cuál usar. Edita el HTML (o pega tu firma actual) y velo
+              renderizado abajo; deja una vacía para no ofrecerla.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-ink-600">Español</span>
-                  <button type="button" className="inline-flex items-center gap-1 text-[11px] text-brand-700 hover:underline disabled:opacity-50" onClick={() => importSignature('es')} disabled={sigState === 'importing'}>
-                    <Download size={11} /> Traer de Gmail
-                  </button>
-                </div>
-                <textarea
-                  className="input w-full min-h-[88px] resize-y font-mono text-xs leading-relaxed"
-                  placeholder={'Juan Pérez\nALCOVER · Ligne Roset\n+1 809 000 0000'}
-                  value={signature}
-                  onChange={(e) => setSignature(e.target.value)}
-                />
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-ink-600">English</span>
-                  <button type="button" className="inline-flex items-center gap-1 text-[11px] text-brand-700 hover:underline disabled:opacity-50" onClick={() => importSignature('en')} disabled={sigState === 'importing'}>
-                    <Download size={11} /> Import from Gmail
-                  </button>
-                </div>
-                <textarea
-                  className="input w-full min-h-[88px] resize-y font-mono text-xs leading-relaxed"
-                  placeholder={'Juan Pérez\nALCOVER · Ligne Roset\n+1 809 000 0000'}
-                  value={signatureEn}
-                  onChange={(e) => setSignatureEn(e.target.value)}
-                />
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <SignatureField label="Español" value={signature} onChange={setSignature} onTemplate={() => useTemplate('es')} />
+              <SignatureField label="English" value={signatureEn} onChange={setSignatureEn} onTemplate={() => useTemplate('en')} />
             </div>
-            <div className="mt-2 flex justify-end">
+            <div className="mt-3 flex justify-end">
               <button type="button" className="btn-ghost min-h-[44px]" onClick={saveSignature} disabled={sigState === 'saving'}>
                 {sigState === 'saving' ? <RefreshCw size={14} className="animate-spin" /> : sigState === 'saved' ? <Check size={14} /> : null}
                 {sigState === 'saved' ? 'Guardadas' : 'Guardar firmas'}
@@ -317,5 +274,33 @@ export default function GmailCard() {
         {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</div>}
       </div>
     </SettingsSection>
+  );
+}
+
+/** One language's signature: an HTML source box + a live rendered preview. */
+function SignatureField({ label, value, onChange, onTemplate }) {
+  const preview = sanitizeSignatureHtml(value);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-ink-600">{label}</span>
+        <button type="button" className="inline-flex items-center gap-1 text-[11px] text-brand-700 hover:underline" onClick={onTemplate}>
+          <Sparkles size={11} /> Plantilla
+        </button>
+      </div>
+      <textarea
+        className="input w-full min-h-[120px] resize-y font-mono text-[11px] leading-relaxed"
+        placeholder="<div>Tu firma… (HTML)</div>"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+      />
+      <div className="mt-1.5 text-[10px] uppercase tracking-wider text-ink-400">Vista previa</div>
+      <div className="mt-1 min-h-[60px] rounded-lg border border-ink-100 bg-surface p-3 overflow-auto">
+        {preview
+          ? <div dangerouslySetInnerHTML={{ __html: preview }} />
+          : <span className="text-xs text-ink-300">Sin firma</span>}
+      </div>
+    </div>
   );
 }

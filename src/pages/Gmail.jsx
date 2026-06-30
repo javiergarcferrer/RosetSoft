@@ -17,7 +17,7 @@ import {
 } from '../core/crm/index.js';
 import {
   syncGmail, markGmailThreadRead, setGmailThreadBrand, gmailWebUrl, expenseDeepLink,
-  loadGmailAttachment, isPreviewable, sendGmailReply,
+  loadGmailAttachment, isPreviewable, sendGmailReply, sanitizeSignatureHtml, buildReplyContent,
 } from '../lib/gmail.js';
 
 /**
@@ -397,26 +397,22 @@ function ReadingPane({ thread, onReassign, onPreview, onBack, selfEmail, signatu
 /**
  * The Gmail-style reply bar pinned to the bottom of the reading pane. Collapsed
  * it's a single "Responder" pill; expanded it's a compact composer (To / Asunto
- * / body) with a send action bar. The body is seeded from the dealer's saved
- * signature; when both a Spanish and an English signature exist a selector lets
- * them switch the appended block per reply. The reply threads into the
- * conversation server-side (gmailReply). Keyed by threadId in the parent so it
- * resets when you switch mails.
+ * / body) with a live, rendered signature beneath the text — like Gmail — and a
+ * selector to switch Spanish / English / none. The reply is sent as a real HTML
+ * email (body in Lausanne + the branded signature) and threads into the
+ * conversation server-side. Keyed by threadId in the parent so it resets when
+ * you switch mails.
  */
 function ReplyComposer({ thread, selfEmail, signatureEs, signatureEn, fromName }) {
   const draft = useMemo(() => resolveReplyDraft(thread, { selfEmail }), [thread, selfEmail]);
   // The configured signatures, in selector order; 'none' is always available.
   const sigOptions = useMemo(() => {
     const opts = [];
-    if (signatureEs?.trim()) opts.push({ lang: 'es', label: 'Español', text: signatureEs });
-    if (signatureEn?.trim()) opts.push({ lang: 'en', label: 'English', text: signatureEn });
-    opts.push({ lang: 'none', label: 'Sin firma', text: '' });
+    if (signatureEs?.trim()) opts.push({ lang: 'es', label: 'Español', html: signatureEs });
+    if (signatureEn?.trim()) opts.push({ lang: 'en', label: 'English', html: signatureEn });
+    opts.push({ lang: 'none', label: 'Sin firma', html: '' });
     return opts;
   }, [signatureEs, signatureEn]);
-  const sigBlockFor = (lang) => {
-    const t = sigOptions.find((o) => o.lang === lang)?.text || '';
-    return t ? `\n\n--\n${t}` : '';
-  };
 
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState('');
@@ -427,40 +423,21 @@ function ReplyComposer({ thread, selfEmail, signatureEs, signatureEn, fromName }
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const bodyRef = useRef(null);
-  // The signature block currently appended to the body, so switching languages
-  // (or editing the body) can strip the old one before adding the new.
-  const appliedBlock = useRef('');
+
+  const chosenSigHtml = sigOptions.find((o) => o.lang === sigLang)?.html || '';
+  const sigPreview = useMemo(() => sanitizeSignatureHtml(chosenSigHtml), [chosenSigHtml]);
+  // A real signature exists (something other than just "Sin firma").
+  const hasSignatures = sigOptions.length > 1;
 
   const startReply = () => {
-    const lang = sigOptions[0].lang;
-    const block = sigBlockFor(lang);
-    appliedBlock.current = block;
     setTo(draft?.to || '');
     setSubject(draft?.subject || '');
-    setSigLang(lang);
-    setBody(block);
+    setSigLang(sigOptions[0].lang);
+    setBody('');
     setError('');
     setSent(false);
     setOpen(true);
-    // Land the cursor at the very top, above the signature, ready to type.
-    requestAnimationFrame(() => {
-      const el = bodyRef.current;
-      if (el) { el.focus(); try { el.setSelectionRange(0, 0); } catch { /* noop */ } }
-    });
-  };
-
-  // Swap the appended signature for the chosen language's, preserving whatever
-  // the dealer typed above it.
-  const chooseSignature = (lang) => {
-    setBody((b) => {
-      const prev = appliedBlock.current;
-      const base = prev && b.endsWith(prev) ? b.slice(0, b.length - prev.length) : b;
-      const block = sigBlockFor(lang);
-      appliedBlock.current = block;
-      return base + block;
-    });
-    setSigLang(lang);
-    bodyRef.current?.focus();
+    requestAnimationFrame(() => bodyRef.current?.focus());
   };
 
   const send = async () => {
@@ -468,10 +445,12 @@ function ReplyComposer({ thread, selfEmail, signatureEs, signatureEn, fromName }
     setSending(true);
     setError('');
     try {
+      const { html, text } = buildReplyContent({ body, signatureHtml: chosenSigHtml });
       await sendGmailReply({
         to: to.trim(),
         subject: subject.trim(),
-        text: body,
+        html,
+        text,
         fromName,
         messageId: draft?.inReplyToId,
         threadId: draft?.threadId,
@@ -521,16 +500,26 @@ function ReplyComposer({ thread, selfEmail, signatureEs, signatureEn, fromName }
           className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ink-300"
         />
       </div>
-      <textarea
-        ref={bodyRef}
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={5}
-        placeholder="Escribe tu respuesta…"
-        className="w-full resize-none rounded-lg border border-ink-200 bg-surface px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-ink-300"
-      />
+      {/* Body + the rendered signature beneath it, inside one framed box so it
+          reads like the message it'll become. */}
+      <div className="rounded-lg border border-ink-200 focus-within:ring-2 focus-within:ring-ink-300">
+        <textarea
+          ref={bodyRef}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={5}
+          placeholder="Escribe tu respuesta…"
+          className="w-full resize-none rounded-t-lg bg-surface px-3 py-2 text-sm leading-relaxed focus:outline-none"
+          style={{ fontFamily: 'Lausanne, system-ui, sans-serif' }}
+        />
+        {sigPreview && (
+          <div className="border-t border-dashed border-ink-100 px-3 py-2.5">
+            <div dangerouslySetInnerHTML={{ __html: sigPreview }} />
+          </div>
+        )}
+      </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      {/* Gmail-style action bar: primary Send + signature insert + cancel. */}
+      {/* Action bar: primary Send + signature selector + discard. */}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -541,14 +530,12 @@ function ReplyComposer({ thread, selfEmail, signatureEs, signatureEn, fromName }
           {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
           Enviar
         </button>
-        {/* Signature picker — only when there's more than one option besides
-            "Sin firma" (one signature needs no chooser, it's already seeded). */}
-        {sigOptions.length > 2 && (
+        {hasSignatures && (
           <label className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface pl-2.5 pr-1.5 py-1.5 text-xs font-medium text-ink-600">
             <PenLine size={14} className="shrink-0 text-ink-400" />
             <select
               value={sigLang}
-              onChange={(e) => chooseSignature(e.target.value)}
+              onChange={(e) => setSigLang(e.target.value)}
               className="bg-transparent text-xs text-ink-700 focus:outline-none"
               aria-label="Firma"
             >
@@ -584,7 +571,7 @@ function MessageBubble({ message, onPreview }) {
       {message.bodyHtml ? (
         <HtmlBody html={message.bodyHtml} />
       ) : (
-        <p className="text-sm text-ink-700 whitespace-pre-wrap break-words">
+        <p className="font-sans text-sm text-ink-800 leading-relaxed whitespace-pre-wrap break-words">
           {(message.bodyText || message.snippet || '').slice(0, 8000)}
         </p>
       )}
@@ -614,9 +601,21 @@ function HtmlBody({ html }) {
   const [height, setHeight] = useState(120);
   const srcDoc = useMemo(() => (
     `<!doctype html><html><head><meta charset="utf-8"><base target="_blank">`
-    + `<style>html,body{margin:0;padding:0}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;`
-    + `font-size:14px;line-height:1.5;color:#1a1a1a;word-break:break-word;overflow-wrap:anywhere}`
-    + `img{max-width:100%;height:auto}table{max-width:100%}a{color:#1d4ed8}</style></head>`
+    // Load the app's Lausanne face inside the frame (the iframe shares our
+    // origin, so the absolute /fonts path resolves) so mail renders in our type.
+    + `<style>`
+    + `@font-face{font-family:'Lausanne';src:url('/fonts/Lausanne-400.woff2') format('woff2');font-weight:400;font-display:swap}`
+    + `@font-face{font-family:'Lausanne';src:url('/fonts/Lausanne-500.woff2') format('woff2');font-weight:500;font-display:swap}`
+    + `@font-face{font-family:'Lausanne';src:url('/fonts/Lausanne-700.woff2') format('woff2');font-weight:700;font-display:swap}`
+    + `html,body{margin:0;padding:0}`
+    + `body{font-family:'Lausanne',-apple-system,'Segoe UI',sans-serif;`
+    + `font-size:14px;line-height:1.6;color:#1b1b1b;word-break:break-word;overflow-wrap:anywhere;`
+    + `-webkit-font-smoothing:antialiased}`
+    + `img{max-width:100%;height:auto}table{max-width:100%}`
+    + `a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}`
+    + `blockquote{margin:0 0 0 .25rem;padding:0 0 0 .9rem;border-left:2px solid #e5e5e5;color:#6b6b6b}`
+    + `p{margin:0 0 .65em}`
+    + `</style></head>`
     + `<body>${html}</body></html>`
   ), [html]);
   const onLoad = () => {

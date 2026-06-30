@@ -11,16 +11,15 @@
 // either core.
 
 import { db, invalidate } from '../db/database.js';
-import { syncGmail, gmailReply, gmailAttachment, fetchGmailSignature } from './google.js';
+import { syncGmail, gmailReply, gmailAttachment } from './google.js';
 
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
 
 /**
- * Flatten a Gmail signature's HTML into the plain text the composer uses —
- * line/block boundaries (<br>, <p>, <div>, list/table rows…) become newlines,
- * everything else is stripped and entities decoded. Gmail stores signatures as
- * rich HTML; our reply body is plain text, so we import the readable text.
+ * Flatten a rich-HTML signature into plain text for the email's text/plain
+ * alternative (what text-only clients show) — line/block boundaries become
+ * newlines, tags are stripped and entities decoded.
  */
 export function gmailSignatureToText(html) {
   const s = String(html || '');
@@ -47,13 +46,75 @@ export function gmailSignatureToText(html) {
 }
 
 /**
- * Import the connected account's Gmail signature as plain text for the composer.
- * Returns { text, signature (raw HTML), sendAsEmail }. Surfaces the server's
- * needsReconnect flag via the thrown error when the scope is missing.
+ * Strip a self-authored signature's HTML of anything executable before we render
+ * it inside the app (the live preview in settings / the composer). The signature
+ * is the dealer's own content, but we still drop <script>/<style>, inline event
+ * handlers and javascript: URLs so a bad paste can't run in our DOM. The RAW
+ * html is what we SEND — email clients sandbox it themselves.
  */
-export async function pullGmailSignature() {
-  const res = await fetchGmailSignature();
-  return { ...res, text: gmailSignatureToText(res?.signature || '') };
+export function sanitizeSignatureHtml(html) {
+  const s = String(html || '');
+  if (!s.trim()) return '';
+  if (typeof DOMParser === 'undefined') {
+    return s.replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+  }
+  const doc = new DOMParser().parseFromString(s, 'text/html');
+  doc.querySelectorAll('script, style, iframe, object, embed, link, meta').forEach((el) => el.remove());
+  doc.querySelectorAll('*').forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on')) el.removeAttribute(attr.name);
+      else if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(String(attr.value || ''))) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  });
+  return doc.body?.innerHTML || '';
+}
+
+/**
+ * A branded starter signature in the app's aesthetic (Lausanne, ink + muted
+ * grey, brand-blue contact line, wordmark) — a starting point the dealer edits
+ * with their own name/RNC/address/phone. `lang` only swaps the role line.
+ */
+export function defaultSignatureHtml(lang = 'es', { company = 'ALCOVER' } = {}) {
+  const title = lang === 'en' ? 'President' : 'Presidente';
+  const wordmark = String(company || 'ALCOVER').toUpperCase();
+  return [
+    '<div style="font-family:Lausanne,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1b1b1b;font-size:13px;line-height:1.5">',
+    '<div style="font-weight:700;font-size:15px">Nombre Apellido</div>',
+    `<div style="font-weight:700;margin-bottom:10px">${title}</div>`,
+    `<div style="color:#8a8a8a">${company} S.R.L. RNC: 0-00-00000-0</div>`,
+    '<div style="color:#8a8a8a">C/ Dirección 000</div>',
+    '<div style="color:#8a8a8a;margin-bottom:10px"><span style="color:#2563eb;font-weight:700">M</span> +1 000 000 0000 &nbsp;/&nbsp; <a href="https://alcover.do" style="color:#2563eb;text-decoration:none">alcover.do</a></div>',
+    `<div style="font-weight:800;letter-spacing:.08em;font-size:20px">${wordmark}</div>`,
+    '</div>',
+  ].join('');
+}
+
+/** Escape a plain string for safe interpolation into HTML. */
+function escapeForHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Assemble a reply email from the typed plain-text body + the chosen signature
+ * HTML. Returns `{ html, text }`: the HTML wraps the body in the app's Lausanne
+ * type (newlines → <br>) and appends the signature; the text alternative is the
+ * body plus the signature flattened to text. Both go to gmailReply (multipart).
+ */
+export function buildReplyContent({ body = '', signatureHtml = '' } = {}) {
+  const sig = String(signatureHtml || '').trim();
+  const bodyHtml = escapeForHtml(body).replace(/\r?\n/g, '<br>');
+  const html =
+    '<div style="font-family:Lausanne,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;'
+    + 'font-size:14px;line-height:1.55;color:#1b1b1b">'
+    + bodyHtml
+    + (sig ? `<br><br>${sig}` : '')
+    + '</div>';
+  const text = sig ? `${body}\n\n${gmailSignatureToText(sig)}` : body;
+  return { html, text };
 }
 
 /**
