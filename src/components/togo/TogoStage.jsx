@@ -94,6 +94,7 @@ export default function TogoStage({
   // path every framing call goes through (mount, rebuild, resize, tween-end).
   const placeCamera = useCallback((l, pose, m) => {
     const { camera, controls } = l;
+    if (l.renderer?.domElement && !l.pan) l.renderer.domElement.style.cursor = m === '2d' ? 'grab' : '';
     if (m === '2d') {
       camera.up.set(0, 0, -1);                 // world -z is "up" on the plan
       camera.position.set(pose.px, pose.py, pose.pz);
@@ -371,7 +372,7 @@ export default function TogoStage({
         group: null, scene3d: { pieces: [], center: { x: PLAN_W / 2, z: PLAN_H / 2 }, radius: 170 },
         framedCount: -1, colorCache: new Map(), modelCache: new Map(), requestRender,
         raycaster: new THREE.Raycaster(), floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-        drag: null, tween: null, selTris: null, selTrisUid: null,
+        drag: null, pan: null, tween: null, selTris: null, selTrisUid: null,
       };
 
       await rebuild();
@@ -398,43 +399,81 @@ export default function TogoStage({
         if (stateRef.current.mode !== '2d') return;       // 3D → orbit owns the pointer
         setNdc(e);
         const uid = pieceUidAt();
-        stateRef.current.onSelect?.(uid);
-        if (uid == null) return;
-        const pg = l.group.children.find((g) => g.userData.uid === uid);
-        const fp = floorHit();
-        if (!pg || !fp) return;
-        l.drag = { uid, offX: fp.x - pg.position.x, offZ: fp.z - pg.position.z, pg, moved: false };
-        controls.enabled = false;
-        try { renderer.domElement.setPointerCapture?.(e.pointerId); } catch { /* iOS can refuse — moves still arrive on the element */ }
+        if (uid != null) {
+          // On a piece → select + start moving it.
+          stateRef.current.onSelect?.(uid);
+          const pg = l.group.children.find((g) => g.userData.uid === uid);
+          const fp = floorHit();
+          if (!pg || !fp) return;
+          l.drag = { uid, offX: fp.x - pg.position.x, offZ: fp.z - pg.position.z, pg, moved: false };
+          controls.enabled = false;
+          try { renderer.domElement.setPointerCapture?.(e.pointerId); } catch { /* iOS can refuse — moves still arrive on the element */ }
+          e.preventDefault();
+          return;
+        }
+        // On empty floor → PAN the plan (drag), or DESELECT (tap, settled in onUp).
+        // We remember the world point grabbed under the cursor and keep it pinned
+        // there each move by translating the (straight-down) camera + target — a
+        // rock-solid drag-to-pan that needs no OrbitControls.
+        const grab = floorHit();
+        if (!grab) { stateRef.current.onSelect?.(null); return; }
+        l.pan = { gx: grab.x, gz: grab.z, moved: false };
+        renderer.domElement.style.cursor = 'grabbing';
+        try { renderer.domElement.setPointerCapture?.(e.pointerId); } catch { /* moves still arrive */ }
         e.preventDefault();
       };
       const onMovePtr = (e) => {
-        if (!l.drag) return;
-        setNdc(e);
-        const fp = floorHit(); if (!fp) return;
-        const { placed: pl, resolvedById: byId } = stateRef.current;
-        const me = pl.find((p) => p.uid === l.drag.uid); if (!me) return;
-        const r = resolvePlacement(me, byId);
-        const box = footprintOf({ widthCm: Number(r.widthCm) || 0, depthCm: Number(r.depthCm) || 0 }, norm360(me.rot));
-        const cx = fp.x - l.drag.offX, cz = fp.z - l.drag.offZ;        // new piece CENTRE
-        const others = pl.filter((p) => p.uid !== l.drag.uid).map((p) => {
-          const rr = resolvePlacement(p, byId);
-          const f = footprintOf({ widthCm: Number(rr.widthCm) || 0, depthCm: Number(rr.depthCm) || 0 }, norm360(p.rot));
-          return { x: p.x, y: p.y, w: f.w, h: f.h };
-        });
-        const snapped = snapPlacement({ x: cx - box.w / 2, y: cz - box.h / 2, w: box.w, h: box.h }, others);
-        const c = clampToPlan(snapped.x, snapped.y, box.w, box.h);
-        l.drag.pg.position.set(c.x + box.w / 2, 0, c.y + box.h / 2);   // live preview
-        l.drag.next = { x: c.x, y: c.y };
-        l.drag.moved = true;
-        requestRender();
+        if (l.drag) {
+          setNdc(e);
+          const fp = floorHit(); if (!fp) return;
+          const { placed: pl, resolvedById: byId } = stateRef.current;
+          const me = pl.find((p) => p.uid === l.drag.uid); if (!me) return;
+          const r = resolvePlacement(me, byId);
+          const box = footprintOf({ widthCm: Number(r.widthCm) || 0, depthCm: Number(r.depthCm) || 0 }, norm360(me.rot));
+          const cx = fp.x - l.drag.offX, cz = fp.z - l.drag.offZ;        // new piece CENTRE
+          const others = pl.filter((p) => p.uid !== l.drag.uid).map((p) => {
+            const rr = resolvePlacement(p, byId);
+            const f = footprintOf({ widthCm: Number(rr.widthCm) || 0, depthCm: Number(rr.depthCm) || 0 }, norm360(p.rot));
+            return { x: p.x, y: p.y, w: f.w, h: f.h };
+          });
+          const snapped = snapPlacement({ x: cx - box.w / 2, y: cz - box.h / 2, w: box.w, h: box.h }, others);
+          const c = clampToPlan(snapped.x, snapped.y, box.w, box.h);
+          l.drag.pg.position.set(c.x + box.w / 2, 0, c.y + box.h / 2);   // live preview
+          l.drag.next = { x: c.x, y: c.y };
+          l.drag.moved = true;
+          requestRender();
+          return;
+        }
+        if (l.pan) {
+          // Where does the cursor hit the floor NOW (with the current camera)? Shift
+          // the camera + target by (grab − hit) so the grabbed point snaps back under
+          // the cursor. Exact for a straight-down camera (translation-invariant).
+          setNdc(e);
+          const hit = floorHit(); if (!hit) return;
+          const dx = l.pan.gx - hit.x, dz = l.pan.gz - hit.z;
+          if (dx || dz) {
+            camera.position.x += dx; camera.position.z += dz;
+            controls.target.x += dx; controls.target.z += dz;
+            camera.lookAt(controls.target);
+            l.pan.moved = true;
+            requestRender();
+          }
+        }
       };
       const onUp = (e) => {
-        if (!l.drag) return;
-        const d = l.drag; l.drag = null;
-        controls.enabled = stateRef.current.mode === '3d';   // stays off in 2D
-        renderer.domElement.releasePointerCapture?.(e.pointerId);
-        if (d.moved && d.next) stateRef.current.onMove?.(d.uid, d.next.x, d.next.y);
+        if (l.drag) {
+          const d = l.drag; l.drag = null;
+          controls.enabled = stateRef.current.mode === '3d';   // stays off in 2D
+          renderer.domElement.releasePointerCapture?.(e.pointerId);
+          if (d.moved && d.next) stateRef.current.onMove?.(d.uid, d.next.x, d.next.y);
+          return;
+        }
+        if (l.pan) {
+          const panned = l.pan.moved; l.pan = null;
+          renderer.domElement.style.cursor = stateRef.current.mode === '2d' ? 'grab' : '';
+          renderer.domElement.releasePointerCapture?.(e.pointerId);
+          if (!panned) stateRef.current.onSelect?.(null);   // a tap on empty floor = deselect
+        }
       };
       renderer.domElement.addEventListener('pointerdown', onDown);
       renderer.domElement.addEventListener('pointermove', onMovePtr);
