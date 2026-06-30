@@ -23,6 +23,33 @@ function withLabels(labelIds, add = [], remove = []) {
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
 
+// A Gmail-side search that targets invoice/bill mail specifically. It runs as a
+// SECOND sync pass (alongside the default recent-inbox pull) so invoices land in
+// the mirror even when the default sync's recent-message budget is full of
+// ordinary mail — the Facturas tab can only show what's been synced, and the
+// default `(in:inbox OR in:sent) newer_than:180d` window (capped ~120 messages)
+// silently drops older invoices and anything that's been archived.
+//   • `has:attachment` — invoices arrive as a PDF/XML document.
+//   • the keyword set mirrors INVOICE_RE in the inbox VM (core/crm gmailInbox).
+//   • NO `in:inbox` — Gmail search spans All Mail (archived included), so filed
+//     invoices still surface.
+//   • `newer_than:1y` — a full year back, well past the default 180 days.
+const INVOICE_SYNC_QUERY =
+  'has:attachment newer_than:1y ('
+  + 'factura OR facturación OR facturacion OR invoice OR recibo OR receipt'
+  + ' OR "nota de crédito" OR "nota de credito" OR statement OR "estado de cuenta"'
+  + ' OR cobro OR pago OR payment)';
+
+/**
+ * Pull invoice-like mail into the mirror (up to the 250 cap, across All Mail —
+ * not just the recent inbox window) so the Facturas tab is comprehensive. Best
+ * paired with a normal syncGmail() so threads stay fresh too. Returns
+ * { scanned, synced } like syncGmail.
+ */
+export async function syncGmailInvoices() {
+  return syncGmail({ query: INVOICE_SYNC_QUERY, maxResults: 250 });
+}
+
 /**
  * Flatten a rich-HTML signature into plain text for the email's text/plain
  * alternative (what text-only clients show) — line/block boundaries become

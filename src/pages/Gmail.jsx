@@ -18,7 +18,7 @@ import {
   resolveReplyDraft, resolveForwardDraft,
 } from '../core/crm/index.js';
 import {
-  syncGmail, markGmailThreadRead, markGmailThreadUnread, setGmailThreadBrand,
+  syncGmail, syncGmailInvoices, markGmailThreadRead, markGmailThreadUnread, setGmailThreadBrand,
   setGmailThreadStarred, archiveGmailThread, trashGmailThread,
   gmailWebUrl, expenseDeepLink,
   loadGmailAttachment, isPreviewable, sendGmailReply, sanitizeSignatureHtml, buildReplyContent,
@@ -97,7 +97,12 @@ export default function Gmail() {
     setSyncing(true);
     setSyncError('');
     try {
+      // Two passes: the recent inbox/sent window (keeps threads fresh) AND a
+      // dedicated invoice pull (so the Facturas tab isn't limited to whatever
+      // invoices happen to fall inside that recent window). Invoices fail soft —
+      // a broken second pass never blocks the inbox from refreshing.
       await syncGmail();
+      try { await syncGmailInvoices(); } catch { /* inbox already synced; invoices catch up next sync */ }
       invalidate();
     } catch (e) {
       setSyncError(e?.message || 'No se pudo sincronizar el correo.');
