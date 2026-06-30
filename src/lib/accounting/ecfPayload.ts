@@ -99,6 +99,13 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
   if (tipoPago === 2 && !input.fechaLimitePago) {
     throw new Error('Una venta a crédito (TipoPago 2) requiere la fecha límite de pago (FechaLimitePago).');
   }
+  const gravado = round2(input.gravado);
+  const itbis = round2(input.itbis);
+  const total = round2(input.total);
+
+  // Encabezado children follow the DGII e-CF XSD SEQUENCE exactly — it's an
+  // ordered <xs:sequence>, so a misplaced element fails recepción with the
+  // opaque "XML Inválido". Order: Version, IdDoc, Emisor, Comprador, Totales.
   const encab: Record<string, unknown> = {
     Version: '1.0',
     IdDoc: {
@@ -109,6 +116,7 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
       TipoIngresos: '01',
       TipoPago: tipoPago,
       ...(tipoPago === 2 ? { FechaLimitePago: formatEcfDate(input.fechaLimitePago) } : {}),
+      TotalPaginas: 1, // single-page representación impresa (required)
     },
     Emisor: {
       RNCEmisor: input.emisor.rnc,
@@ -117,17 +125,11 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
       ...(input.emisor.address ? { DireccionEmisor: input.emisor.address } : {}),
       FechaEmision: formatEcfDate(input.fechaEmision ?? Date.now()),
     },
-    Totales: {
-      MontoGravadoTotal: round2(input.gravado),
-      MontoGravadoI1: round2(input.gravado),
-      ITBIS1: rate,
-      TotalITBIS: round2(input.itbis),
-      MontoTotal: round2(input.total),
-    },
   };
 
   // Comprador: required for 31 (validated above); included for 32 only if we
-  // have a buyer. A 34 crediting a 31 carries the same buyer.
+  // have a buyer. A 34 crediting a 31 carries the same buyer. MUST sit before
+  // Totales in the sequence.
   if (input.ecfType === '31' || buyerRnc) {
     encab.Comprador = {
       ...(buyerRnc ? { RNCComprador: buyerRnc } : {}),
@@ -135,19 +137,19 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
     };
   }
 
-  // InformacionReferencia: the modified-document pointer for 33/34.
-  if (referencing && input.referencia) {
-    encab.InformacionReferencia = {
-      NCFModificado: input.referencia.ncfModificado,
-      ...(input.referencia.rncOtroContribuyente
-        ? { RNCOtroContribuyente: input.referencia.rncOtroContribuyente.replace(/\D/g, '') }
-        : {}),
-      ...(input.referencia.fechaNcfModificado != null
-        ? { FechaNCFModificado: formatEcfDate(input.referencia.fechaNcfModificado) }
-        : {}),
-      CodigoModificacion: input.referencia.codigoModificacion ?? 1,
-    };
-  }
+  // Totales — single 18% rate, no exempt operations. TotalITBIS1 (the ITBIS at
+  // rate 1) is required alongside TotalITBIS; MontoExento/MontoNoFacturable are
+  // booked at 0. Field order matches the XSD.
+  encab.Totales = {
+    MontoGravadoTotal: gravado,
+    MontoGravadoI1: gravado,
+    MontoExento: 0,
+    ITBIS1: rate,
+    TotalITBIS: itbis,
+    TotalITBIS1: itbis,
+    MontoTotal: total,
+    MontoNoFacturable: 0,
+  };
 
   const items = (input.items || []).map((it, i) => ({
     NumeroLinea: i + 1,
@@ -161,10 +163,46 @@ export function buildEcfPayload(input: EcfPayloadInput): Record<string, unknown>
     MontoItem: round2(it.amount),
   }));
 
-  return {
-    ECF: {
-      Encabezado: encab,
-      DetallesItems: { Item: items },
+  // ECF children (top level) sequence: Encabezado, DetallesItems, Paginacion,
+  // InformacionReferencia (notas only), FechaHoraFirma. InformacionReferencia is
+  // a SIBLING of Encabezado here — NOT nested inside it.
+  const ecf: Record<string, unknown> = {
+    Encabezado: encab,
+    DetallesItems: { Item: items },
+    // Single-page Paginacion summary (required) — its subtotals mirror Totales
+    // so the DGII per-page cross-check balances.
+    Paginacion: {
+      Pagina: {
+        PaginaNo: 1,
+        NoLineaDesde: 1,
+        NoLineaHasta: items.length || 1,
+        SubtotalMontoGravadoPagina: gravado,
+        SubtotalMontoGravado1Pagina: gravado,
+        SubtotalExentoPagina: 0,
+        SubtotalItbisPagina: itbis,
+        SubtotalItbis1Pagina: itbis,
+        MontoSubtotalPagina: total,
+        SubtotalMontoNoFacturablePagina: 0,
+      },
     },
   };
+
+  // InformacionReferencia: the modified-document pointer for 33/34 — a top-level
+  // ECF child after Paginacion, before FechaHoraFirma.
+  if (referencing && input.referencia) {
+    ecf.InformacionReferencia = {
+      NCFModificado: input.referencia.ncfModificado,
+      ...(input.referencia.rncOtroContribuyente
+        ? { RNCOtroContribuyente: input.referencia.rncOtroContribuyente.replace(/\D/g, '') }
+        : {}),
+      ...(input.referencia.fechaNcfModificado != null
+        ? { FechaNCFModificado: formatEcfDate(input.referencia.fechaNcfModificado) }
+        : {}),
+      CodigoModificacion: input.referencia.codigoModificacion ?? 1,
+    };
+  }
+
+  // FechaHoraFirma (the final ECF child) is stamped at sign time by the ecf-send
+  // Edge Function, so it reflects the real DR-local signature instant.
+  return { ECF: ecf };
 }

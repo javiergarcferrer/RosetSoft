@@ -192,9 +192,10 @@ test('buildEcfPayload (34 nota de crédito) carries InformacionReferencia + Codi
     referencia: { ncfModificado: 'E310000000001', fechaNcfModificado: Date.UTC(2026, 5, 1, 12), codigoModificacion: 1 },
   }).ECF;
   assert.equal(p.Encabezado.IdDoc.TipoeCF, '34');
-  assert.equal(p.Encabezado.InformacionReferencia.NCFModificado, 'E310000000001');
-  assert.equal(p.Encabezado.InformacionReferencia.FechaNCFModificado, '01-06-2026');
-  assert.equal(p.Encabezado.InformacionReferencia.CodigoModificacion, 1);
+  // InformacionReferencia is a TOP-LEVEL ECF child (sibling of Encabezado), not nested.
+  assert.equal(p.InformacionReferencia.NCFModificado, 'E310000000001');
+  assert.equal(p.InformacionReferencia.FechaNCFModificado, '01-06-2026');
+  assert.equal(p.InformacionReferencia.CodigoModificacion, 1);
   // The credited buyer rides along just like the original 31.
   assert.equal(p.Encabezado.Comprador.RNCComprador, '101010101');
 });
@@ -208,7 +209,7 @@ test('buildEcfPayload (34) defaults CodigoModificacion to 1 (anulación total)',
     gravado: 100, itbis: 18, total: 118,
     referencia: { ncfModificado: 'E310000000002' },
   }).ECF;
-  assert.equal(p.Encabezado.InformacionReferencia.CodigoModificacion, 1);
+  assert.equal(p.InformacionReferencia.CodigoModificacion, 1);
 });
 
 test('buildEcfPayload (34) THROWS without the modified e-NCF — fail at build, not at the DGII', () => {
@@ -229,7 +230,32 @@ test('buildEcfPayload (31/32) never emit InformacionReferencia', () => {
     items: [{ name: 'x', qty: 1, unitPrice: 100, amount: 100 }],
     gravado: 100, itbis: 18, total: 118,
   }).ECF;
-  assert.equal(p31.Encabezado.InformacionReferencia, undefined);
+  assert.equal(p31.InformacionReferencia, undefined);
+});
+
+test('buildEcfPayload (31) emits the DGII XSD sequence — Comprador BEFORE Totales, Paginacion + TotalITBIS1', () => {
+  const ecf = buildEcfPayload({
+    ecfType: '31', eNcf: 'E310000000001',
+    emisor: { rnc: '131996035', name: 'ALCOVER SRL' },
+    comprador: { rnc: '101010101', name: 'CLIENTE SRL' },
+    items: [{ name: 'Sofá', qty: 1, unitPrice: 10000, amount: 10000 }],
+    gravado: 10000, itbis: 1800, total: 11800,
+    sequenceExpiresAt: Date.UTC(2027, 11, 31),
+  }).ECF;
+  // Encabezado sequence: Version, IdDoc, Emisor, Comprador, Totales — order is
+  // load-bearing (DGII rejects a misordered <xs:sequence> as "XML Inválido").
+  const enc = Object.keys(ecf.Encabezado);
+  assert.ok(enc.indexOf('Comprador') < enc.indexOf('Totales'), 'Comprador must precede Totales');
+  assert.deepEqual(enc, ['Version', 'IdDoc', 'Emisor', 'Comprador', 'Totales']);
+  // Top-level ECF sequence ends Encabezado → DetallesItems → Paginacion.
+  assert.deepEqual(Object.keys(ecf), ['Encabezado', 'DetallesItems', 'Paginacion']);
+  assert.equal(ecf.Encabezado.IdDoc.TotalPaginas, 1);
+  // ITBIS at rate 1 is required alongside the global TotalITBIS.
+  assert.equal(ecf.Encabezado.Totales.TotalITBIS1, 1800);
+  // Paginacion subtotals mirror Totales so the per-page cross-check balances.
+  assert.equal(ecf.Paginacion.Pagina.MontoSubtotalPagina, 11800);
+  assert.equal(ecf.Paginacion.Pagina.SubtotalItbis1Pagina, 1800);
+  assert.equal(ecf.Paginacion.Pagina.NoLineaHasta, 1);
 });
 
 test('buildEcfPayload carries TipoPago: 1 contado (default), 2 crédito with FechaLimitePago', () => {

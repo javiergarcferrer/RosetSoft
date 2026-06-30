@@ -257,6 +257,14 @@ Deno.serve(async (req: Request) => {
     const environment = ENV_MAP[envKey] ?? ENV_MAP.cert;
     const ecf = new (dgii as any).ECF(certs, environment);
 
+    // FechaHoraFirma — the final ECF child (dd-mm-yyyy HH:mm:ss, DR local). The
+    // browser-built payload omits it (it can't know the signing instant); stamp
+    // it here, right before signing, for both the transmit and local-sign paths.
+    // Appending the key makes it the LAST child of ECF, as the XSD requires.
+    if ((op === 'send' || op === 'sign') && payload?.ECF) {
+      payload.ECF.FechaHoraFirma = fechaFirmaNow();
+    }
+
     // op:'sign' — produce the signed XML LOCALLY (no DGII contact needed): the
     // código de seguridad + QR derive from the signature itself, so this lets the
     // dealer generate the set-de-pruebas XML and SEE the timbre on the
