@@ -3,6 +3,7 @@
 // row through the normal authed db; these helpers are what the logged-out viewer
 // uses to talk to the `account-share` Edge Function, plus the URL builder.
 import { newShareToken } from './quoteShare.js';
+import { PREVIEW_VERSION } from './previewVersion.js';
 
 export { newShareToken };
 
@@ -20,7 +21,8 @@ const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
 export function statementLinkUrl(token) {
   if (!token) return '';
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `${origin}/p/cuenta.html?d=${encodeURIComponent(token)}`;
+  // `pv` busts WhatsApp's per-URL preview cache when the card is re-rendered.
+  return `${origin}/p/cuenta.html?d=${encodeURIComponent(token)}&pv=${PREVIEW_VERSION}`;
 }
 
 function endpoint(token) {

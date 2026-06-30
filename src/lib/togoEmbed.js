@@ -3,6 +3,8 @@
 // Function. The anon key rides as a query param (gateway-acceptable without a
 // custom header, so the CORS preflight passes), exactly like the storefront.
 
+import { PREVIEW_VERSION } from './previewVersion.js';
+
 const VITE_ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {};
 const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
@@ -26,7 +28,8 @@ export function togoEmbedUrl() {
  */
 export function togoShareUrl() {
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `${origin}/p/togo.html`;
+  // `pv` busts WhatsApp's per-URL preview cache when the card is re-rendered.
+  return `${origin}/p/togo.html?pv=${PREVIEW_VERSION}`;
 }
 
 /** Same widget, flagged as ALREADY inside a fullscreen container (a host-page

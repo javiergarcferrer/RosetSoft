@@ -4,6 +4,8 @@
 // (settings.storeCustomerId); these helpers are what the LOGGED-OUT storefront
 // page uses to talk to the public `store` Edge Function, plus the URL builder.
 
+import { PREVIEW_VERSION } from './previewVersion.js';
+
 const VITE_ENV =
   (typeof import.meta !== 'undefined' && import.meta.env) || {};
 const SUPABASE_URL = VITE_ENV.VITE_SUPABASE_URL || '';
@@ -18,7 +20,8 @@ const SUPABASE_ANON_KEY = VITE_ENV.VITE_SUPABASE_ANON_KEY || '';
  */
 export function storeLinkUrl() {
   const origin = typeof location !== 'undefined' ? location.origin : '';
-  return `${origin}/p/tienda.html`;
+  // `pv` busts WhatsApp's per-URL preview cache when the card is re-rendered.
+  return `${origin}/p/tienda.html?pv=${PREVIEW_VERSION}`;
 }
 
 /**

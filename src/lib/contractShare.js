@@ -6,6 +6,7 @@
 // the URL builder. The token is minted with the same `newShareToken`.
 
 import { newShareToken } from './quoteShare.js';
+import { PREVIEW_VERSION } from './previewVersion.js';
 
 export { newShareToken };
 
@@ -33,7 +34,12 @@ export function contractLinkUrl(token, slug) {
   const suffix = slug
     ? `${encodeURIComponent(slug)}/${encodeURIComponent(token)}`
     : encodeURIComponent(token);
-  return `${origin}/p/contrato.html?d=${suffix}`;
+  // `pv` (preview version) is a LINK-PREVIEW cache-buster: WhatsApp/Meta freeze
+  // the card per URL string for weeks, so a re-shared link keeps showing a stale
+  // card. Bump it whenever the og card image is re-rendered (see PREVIEW_VERSION)
+  // — a freshly copied link is then a URL WhatsApp hasn't cached, forcing a fresh
+  // crawl. The launcher ignores it (reads only `d`).
+  return `${origin}/p/contrato.html?d=${suffix}&pv=${PREVIEW_VERSION}`;
 }
 
 function endpoint(token) {

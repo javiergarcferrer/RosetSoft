@@ -48,7 +48,7 @@ const RAUSCHEN = b64(join(FONTS, 'RauschenB-Semibold.woff2'));
 // the Meta link cache and the WhatsApp template button base; leave it be.
 const CARDS = [
   {
-    file: 'og-contrato-v6.jpg',
+    file: 'og-contrato-v7.jpg',
     accent: '#19A06B', // emerald — agreement / money
     glow: 'rgba(25,160,107,0.42)',
     head: 'Su plan de pago,',
@@ -56,7 +56,7 @@ const CARDS = [
     sub: 'Revíselo y fírmelo en línea.',
   },
   {
-    file: 'og-togo-v6.jpg',
+    file: 'og-togo-v7.jpg',
     accent: '#C76B29', // ALCOVER terracotta (current brand)
     glow: 'rgba(199,107,41,0.46)',
     head: 'Diseñe su Togo',
@@ -64,7 +64,7 @@ const CARDS = [
     sub: 'Combine módulos y telas en vivo.',
   },
   {
-    file: 'og-tienda-v6.jpg',
+    file: 'og-tienda-v7.jpg',
     accent: '#5B5BD6', // indigo
     glow: 'rgba(91,91,214,0.44)',
     head: 'La colección ALCOVER,',
@@ -72,7 +72,7 @@ const CARDS = [
     sub: 'Explore la tienda en línea.',
   },
   {
-    file: 'og-cuenta-v6.jpg',
+    file: 'og-cuenta-v7.jpg',
     accent: '#2F6BF0', // blue
     glow: 'rgba(47,107,240,0.42)',
     head: 'Su estado de cuenta,',
@@ -96,28 +96,30 @@ html,body{width:1200px;height:630px;background:#15110d}
    accent wash filling the upper-right and a faint light in the lower-left means
    the areas the text doesn't cover still read as an intentional gradient — no
    flat near-black "null space". Fills the whole 1200x630 frame, edge to edge. */
-.card{position:fixed;inset:0;overflow:hidden;
+.card{position:fixed;inset:0;overflow:hidden;display:flex;flex-direction:column;
+  justify-content:space-between;padding:84px 90px 16px;
   background:linear-gradient(152deg,#1a1611 0%,#141009 58%,#11100c 100%);
   font-family:Lausanne,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .glow{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(1300px 820px at 97% -6%, ${c.glow}, transparent 60%),
              radial-gradient(820px 600px at 2% 104%, rgba(255,255,255,0.05), transparent 58%)}
-/* Type runs LARGE so it stays readable after WhatsApp downscales the card to
-   ~a third of its size in the chat. The block hugs the top; ALCOVER hugs the
-   bottom; the lit gradient carries the space between. */
-.top{position:absolute;left:90px;top:70px;right:70px;display:flex;gap:32px}
+/* Flex column (justify-content:space-between on .card): the headline block is the
+   top flex child, ALCOVER the bottom one — so the wordmark is seated hard against
+   the bottom padding. Type runs LARGE so it stays readable after WhatsApp
+   downscales the card to ~a third of its size in the chat. */
+.top{position:relative;display:flex;gap:32px}
 .rule{width:7px;border-radius:4px;background:${c.accent};flex:none}
 .head{font-family:Sohne,system-ui,sans-serif;font-size:90px;line-height:1.04;letter-spacing:-2.2px;color:#fbfaf8}
 .line{font-family:Sohne,system-ui,sans-serif;font-size:90px;line-height:1.04;letter-spacing:-2.2px;color:${c.accent}}
 .sub{display:flex;align-items:center;gap:18px;margin-top:36px;
   font-family:Lausanne,system-ui,sans-serif;font-size:40px;letter-spacing:-0.3px;color:#cdcac2}
 .dot{width:17px;height:17px;border-radius:50%;background:${c.accent};flex:none}
-/* ALCOVER (Rauschen, all-caps → no descender ink) seated near the bottom with
-   line-height:1 and NO overflow clip — clipping the box was cutting the TOPS of
-   the letters. bottom:46 leaves a slight, even margin to the picture edge. */
-.mark{position:absolute;left:90px;bottom:46px;
-  font-family:Rauschen,system-ui,sans-serif;font-size:70px;line-height:1;
-  letter-spacing:0.5px;color:#fbfaf8}
+/* ALCOVER (Rauschen). line-height:1, no clip → full caps. The font carries a
+   small (~0.22em) built-in descent below the baseline, so the card's 16px
+   bottom padding lands the VISIBLE caps ~30px off the picture edge — a slight,
+   even margin, no dead band beneath it. */
+.mark{position:relative;font-family:Rauschen,system-ui,sans-serif;font-size:70px;
+  line-height:1;letter-spacing:0.5px;color:#fbfaf8}
 </style></head><body><div class="card">
   <div class="glow"></div>
   <div class="top">
