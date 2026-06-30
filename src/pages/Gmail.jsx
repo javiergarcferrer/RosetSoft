@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
   X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
-  Reply, Forward, Send, PenLine, PenSquare, Star, Archive, Trash2, MailOpen,
+  Reply, Forward, Send, PenLine, Pencil, Star, Archive, Trash2, MailOpen,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -186,17 +186,14 @@ export default function Gmail() {
         type="button"
         onClick={runSync}
         disabled={!connected || syncing}
-        className="inline-flex items-center gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-sm font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+        className="btn-secondary text-sm"
+        title="Sincronizar"
       >
         {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
         <span className="hidden sm:inline">Sincronizar</span>
       </button>
-      <button
-        type="button"
-        onClick={() => openCompose(null)}
-        className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 text-sm font-medium text-white hover:bg-ink-700"
-      >
-        <PenSquare size={16} /> Redactar
+      <button type="button" onClick={() => openCompose(null)} className="btn-brand text-sm">
+        <Pencil size={16} /> Redactar
       </button>
     </div>
   );
@@ -875,7 +872,32 @@ function AttachmentModal({ messageId, attachments, index, onClose }) {
           ) : isImg ? (
             <img src={state.url} alt={a.filename || 'adjunto'} className="mx-auto max-h-full max-w-full rounded object-contain" />
           ) : isPdf ? (
-            <iframe title={a.filename || 'PDF'} src={state.url} className="h-full min-h-[60vh] w-full rounded bg-white" />
+            // <object> (not <iframe>) renders blob PDFs inline reliably — the
+            // iframe shows Chrome's "Open" placeholder for blob URLs. Mirrors the
+            // accounting comprobante viewer. Falls back to an open/download link.
+            <object data={`${state.url}#toolbar=1&navpanes=0&view=FitH`} type="application/pdf" className="h-full min-h-[60vh] w-full rounded bg-white">
+              <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center text-sm text-ink-500">
+                <FileText size={40} className="text-ink-300" />
+                <p>No se pudo mostrar la vista previa.</p>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={state.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-ink-900 px-3 py-2 text-xs font-medium text-white hover:bg-ink-700"
+                  >
+                    <ExternalLink size={14} /> Abrir en pestaña
+                  </a>
+                  <a
+                    href={state.url}
+                    download={a.filename || 'archivo'}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                  >
+                    <Download size={14} /> Descargar
+                  </a>
+                </div>
+              </div>
+            </object>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center text-sm text-ink-500">
               <FileIcon size={40} className="text-ink-300" />

@@ -12,11 +12,12 @@
 import {
   LayoutDashboard, Users, UserSquare2, FileText, Package, Wallet,
   Shield, Layers, PackageSearch, Boxes, Settings as SettingsIcon,
-  Landmark, Plug, HardDrive, Mail, Sparkles,
+  Landmark, Plug, HardDrive, Sparkles,
 } from 'lucide-react';
 import TogoIcon from './icons/TogoIcon.jsx';
 import WhatsAppIcon from './icons/WhatsAppIcon.jsx';
 import InstagramIcon from './icons/InstagramIcon.jsx';
+import GmailIcon from './icons/GmailIcon.jsx';
 import { accountingSectionGroups } from './accountingSections.js';
 
 export const ROLES = ['admin', 'employee', 'accounting', 'team'];
@@ -58,7 +59,7 @@ const CHANNELS_GROUP = {
     { to: '/chats', label: 'WhatsApp', icon: WhatsAppIcon },
     { to: '/marketing', label: 'Instagram', icon: InstagramIcon, match: ['/marketing', '/instagram-studio'] },
     { to: '/estudio-imagenes', label: 'Estudio de imágenes', icon: Sparkles },
-    { to: '/gmail', label: 'Gmail', icon: Mail },
+    { to: '/gmail', label: 'Gmail', icon: GmailIcon },
   ],
 };
 
