@@ -11,7 +11,7 @@
 // either core.
 
 import { db, invalidate } from '../db/database.js';
-import { syncGmail, gmailReply, gmailAttachment } from './google.js';
+import { syncGmail, sendGmail, gmailReply, gmailAttachment } from './google.js';
 
 // Re-exported so the inbox imports its whole Model surface from one place.
 export { syncGmail };
@@ -140,6 +140,21 @@ export function buildReplyContent({ body = '', signatureHtml = '' } = {}) {
 export async function sendGmailReply({ to, cc, subject, text, html, fromName, messageId, threadId }) {
   const res = await gmailReply({ to, cc, subject, text, html, fromName, messageId, threadId });
   try { await syncGmail(); } catch { /* the reply is sent; the inbox catches up on next sync */ }
+  invalidate();
+  return res;
+}
+
+/**
+ * Compose and send a NEW email (or a forward) — not tied to an existing thread.
+ * `body` is the typed plain text and `signatureHtml` the chosen signature; both
+ * are folded into a Lausanne HTML part + a text alternative by buildReplyContent.
+ * `attachmentBlobs` is [{ filename, blob }] (the composer's picked files). Re-syncs
+ * so the sent copy lands in the inbox.
+ */
+export async function composeGmail({ to, cc, bcc, subject, body = '', signatureHtml = '', fromName, attachmentBlobs = [] }) {
+  const { html, text } = buildReplyContent({ body, signatureHtml });
+  const res = await sendGmail({ to, cc, bcc, subject, html, text, fromName, attachmentBlobs });
+  try { await syncGmail(); } catch { /* sent; the inbox catches up on next sync */ }
   invalidate();
   return res;
 }

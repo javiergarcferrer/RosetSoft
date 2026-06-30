@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import {
   classifyBrand, isInvoiceEmail, parseInvoiceAmount,
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices,
-  resolveReplyDraft, replySubject,
+  resolveReplyDraft, replySubject, forwardSubject, isEmailAddress, resolveEmailRecipients,
   GMAIL_BRAND_OTHER,
 } from '../src/core/crm/views/gmailInbox.js';
 
@@ -140,6 +140,54 @@ test('resolveReplyDraft never addresses the reply back to ourselves', () => {
 test('resolveReplyDraft returns null for an empty thread', () => {
   assert.equal(resolveReplyDraft({ items: [] }, {}), null);
   assert.equal(resolveReplyDraft(null, {}), null);
+});
+
+// ── forwardSubject / isEmailAddress ─────────────────────────────────────────
+test('forwardSubject adds Fwd: once, leaves an existing Fwd:/Fw: alone', () => {
+  assert.equal(forwardSubject('Pedido'), 'Fwd: Pedido');
+  assert.equal(forwardSubject('Fwd: Pedido'), 'Fwd: Pedido');
+  assert.equal(forwardSubject('Fw: Pedido'), 'Fw: Pedido');
+  assert.equal(forwardSubject(''), 'Fwd: (sin asunto)');
+});
+
+test('isEmailAddress validates a single address', () => {
+  assert.equal(isEmailAddress('a@b.com'), true);
+  assert.equal(isEmailAddress('  a@b.co  '), true);
+  assert.equal(isEmailAddress('not-an-email'), false);
+  assert.equal(isEmailAddress('a@b'), false);
+  assert.equal(isEmailAddress(''), false);
+});
+
+// ── resolveEmailRecipients ──────────────────────────────────────────────────
+test('resolveEmailRecipients unions CRM contacts + correspondents, CRM ranks first', () => {
+  const customers = [{ name: 'Lola Cliente', email: 'lola@correo.com' }];
+  const professionals = [{ name: 'Arq. Pérez', email: 'perez@studio.do' }];
+  const messages = [
+    { direction: 'in', fromEmail: 'proveedor@ligne-roset.com', fromName: 'LR Ventas' },
+    { direction: 'in', fromEmail: 'lola@correo.com', fromName: 'Lola' }, // dup of customer
+  ];
+  const out = resolveEmailRecipients(customers, professionals, messages, {});
+  // CRM contacts first (rank 0/1), then bare correspondents.
+  assert.deepEqual(out.map((r) => r.email), ['lola@correo.com', 'perez@studio.do', 'proveedor@ligne-roset.com']);
+  assert.equal(out[0].kind, 'customer');
+  assert.equal(out[0].name, 'Lola Cliente'); // CRM name wins over the correspondent name
+});
+
+test('resolveEmailRecipients filters by needle and excludes given addresses', () => {
+  const customers = [{ name: 'Lola', email: 'lola@correo.com' }, { name: 'Juan', email: 'juan@correo.com' }];
+  assert.deepEqual(
+    resolveEmailRecipients(customers, [], [], { needle: 'juan' }).map((r) => r.email),
+    ['juan@correo.com'],
+  );
+  assert.deepEqual(
+    resolveEmailRecipients(customers, [], [], { exclude: ['lola@correo.com'] }).map((r) => r.email),
+    ['juan@correo.com'],
+  );
+});
+
+test('resolveEmailRecipients drops malformed addresses', () => {
+  const customers = [{ name: 'Bad', email: 'nope' }, { name: 'Ok', email: 'ok@x.com' }];
+  assert.deepEqual(resolveEmailRecipients(customers, [], [], {}).map((r) => r.email), ['ok@x.com']);
 });
 
 // ── resolveGmailInvoices ────────────────────────────────────────────────────

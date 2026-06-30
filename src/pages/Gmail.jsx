@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
   X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
-  Reply, Send, PenLine,
+  Reply, Send, PenLine, PenSquare,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
+import ComposeModal from '../components/gmail/ComposeModal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.ts';
@@ -59,8 +60,18 @@ export default function Gmail() {
     () => db.gmailMessages.where('profileId').equals(profileId || '').toArray(),
     [profileId], [],
   );
+  // Customers + professionals power the composer's recipient autocomplete.
+  const { data: customers } = useLiveQueryStatus(
+    () => db.customers.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
+  const { data: professionals } = useLiveQueryStatus(
+    () => db.professionals.where('profileId').equals(profileId || '').toArray(),
+    [profileId], [],
+  );
 
   const [tab, setTab] = useState(GMAIL_BRAND_TABS[0].id);
+  const [composeOpen, setComposeOpen] = useState(false);
   const [needle, setNeedle] = useState('');
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -139,15 +150,24 @@ export default function Gmail() {
   };
 
   const actions = (
-    <button
-      type="button"
-      onClick={runSync}
-      disabled={!connected || syncing}
-      className="inline-flex items-center gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-sm font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-50"
-    >
-      {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-      Sincronizar
-    </button>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={runSync}
+        disabled={!connected || syncing}
+        className="inline-flex items-center gap-2 rounded-lg border border-ink-200 bg-surface px-3 py-2 text-sm font-medium text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+      >
+        {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+        <span className="hidden sm:inline">Sincronizar</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setComposeOpen(true)}
+        className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 text-sm font-medium text-white hover:bg-ink-700"
+      >
+        <PenSquare size={16} /> Redactar
+      </button>
+    </div>
   );
 
   if (!connected) {
@@ -269,6 +289,18 @@ export default function Gmail() {
           onClose={() => setPreview(null)}
         />
       )}
+
+      <ComposeModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        customers={customers}
+        professionals={professionals}
+        messages={messages}
+        signatureEs={settings?.gmailSignature || ''}
+        signatureEn={settings?.gmailSignatureEn || ''}
+        fromName={settings?.companyName || ''}
+        onSent={() => setSyncError('')}
+      />
     </div>
   );
 }

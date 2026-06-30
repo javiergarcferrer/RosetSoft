@@ -32,6 +32,9 @@ export {
   resolveGmailInvoices,
   resolveReplyDraft,
   replySubject,
+  forwardSubject,
+  isEmailAddress,
+  resolveEmailRecipients,
 } from './views/gmailInbox.js';
 export {
   VAR_SOURCES,

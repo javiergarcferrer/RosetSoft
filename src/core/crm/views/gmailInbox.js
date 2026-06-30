@@ -252,6 +252,57 @@ export function resolveReplyDraft(thread, { selfEmail = '' } = {}) {
   };
 }
 
+/** "Fwd: …" once, never stacking the prefix (case-insensitive on Fwd:/Fw:/Re:). */
+export function forwardSubject(subject) {
+  const s = String(subject || '').trim();
+  if (!s) return 'Fwd: (sin asunto)';
+  return /^fwd?:/i.test(s) ? s : `Fwd: ${s}`;
+}
+
+const _EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Whether a string is a syntactically valid single email address. */
+export function isEmailAddress(s) {
+  return _EMAIL_RE.test(String(s || '').trim());
+}
+
+/**
+ * Recipient suggestions for the composer's To/Cc/Bcc autocomplete — the union of
+ * CRM contacts (customers + professionals with an email) and people the inbox has
+ * corresponded with (synced gmail_messages), deduped by address. CRM contacts
+ * rank first (a known name beats a bare correspondent), then by name.
+ *
+ *   resolveEmailRecipients(customers, professionals, messages, { needle, limit, exclude })
+ *     → [{ name, email, kind: 'customer'|'professional'|'contact' }]
+ */
+export function resolveEmailRecipients(customers, professionals, messages, { needle = '', limit = 8, exclude = [] } = {}) {
+  const byEmail = new Map();
+  const add = (email, name, kind, rank) => {
+    const e = String(email || '').trim().toLowerCase();
+    if (!e || !_EMAIL_RE.test(e)) return;
+    const existing = byEmail.get(e);
+    if (!existing || rank < existing.rank) {
+      byEmail.set(e, { email: e, name: String(name || '').trim() || (existing?.name || ''), kind, rank });
+    } else if (!existing.name && name) {
+      existing.name = String(name).trim();
+    }
+  };
+  for (const c of customers || []) add(c.email, c.name || c.company, 'customer', 0);
+  for (const p of professionals || []) add(p.email, p.name || p.company, 'professional', 1);
+  // People we've exchanged mail with — the counterpart of each message.
+  for (const m of messages || []) {
+    if (m.direction === 'out') add(m.toEmail, '', 'contact', 3);
+    else add(m.fromEmail, m.fromName, 'contact', 2);
+  }
+  const skip = new Set((exclude || []).map((e) => String(e || '').trim().toLowerCase()));
+  const q = needle.trim().toLowerCase();
+  return [...byEmail.values()]
+    .filter((r) => !skip.has(r.email))
+    .filter((r) => !q || r.email.includes(q) || r.name.toLowerCase().includes(q))
+    .sort((a, b) => a.rank - b.rank || (a.name || a.email).localeCompare(b.name || b.email))
+    .slice(0, Math.max(1, limit))
+    .map(({ name, email, kind }) => ({ name, email, kind }));
+}
+
 /**
  * The Facturas tab — every invoice-like message, newest first, decorated with
  * its brand and a best-effort amount. `brand` (optional) narrows to one bucket.
