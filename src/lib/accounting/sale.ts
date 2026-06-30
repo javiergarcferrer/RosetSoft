@@ -272,12 +272,18 @@ export interface CreditNotePostInput {
  * (a credit balance there is the refund the customer is owed). Pure.
  */
 export function buildCreditNoteEntry({
-  newId, config, note, postedAt,
+  newId, config, note, postedAt, reversesEntryId,
 }: {
   newId: () => string;
   config: ResolvedAccountingConfig;
   note: CreditNotePostInput;
   postedAt?: number;
+  /**
+   * When this credit note is an anulación that exactly reverses a sale, the id
+   * of the sale's asiento — stamped as `reversesId` for the audit trail (the
+   * sale's own `reversedById` is stamped server-side by the void_sale RPC).
+   */
+  reversesEntryId?: string | null;
 }): { entry: JournalEntry; lines: JournalLine[] } {
   const base = round2(note.base);
   const itbis = round2(note.itbis || 0);
@@ -304,7 +310,7 @@ export function buildCreditNoteEntry({
     });
   }
 
-  return buildJournalEntry({
+  const built = buildJournalEntry({
     newId,
     postedAt,
     source: 'sale',
@@ -313,4 +319,6 @@ export function buildCreditNoteEntry({
     refId: note.id,
     lines,
   });
+  if (reversesEntryId) built.entry.reversesId = reversesEntryId;
+  return built;
 }

@@ -81,6 +81,9 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
   // A not-yet-transmitted e-CF can be voided in place (sequence gap); an issued
   // one (sent/accepted) is cancelled/corrected only via a nota de crédito.
   const canVoid = !isNote && !voided && posting.ecfStatus !== 'sent' && posting.ecfStatus !== 'accepted';
+  // Never anul a factura with cobros applied — the money would silently
+  // re-apply (FIFO) to the customer's other invoices. Reverse the cobro first.
+  const hasCobro = cobrado > 0.005;
   const issued = posting.ecfStatus === 'sent' || posting.ecfStatus === 'accepted';
 
   // The sale's asiento, derived from the posting exactly as lib/accounting/sale
@@ -309,16 +312,25 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
               )}
               {canVoid && voidOpen && (
                 <div className="surface-subtle p-3">
-                  <p className="text-xs text-ink-500 mb-2">Revierte el asiento y marca el e-NCF como anulado (queda un hueco en la secuencia — no se transmite nada a la DGII). Si viene de una cotización, vuelve a “Por facturar”.</p>
-                  <textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} rows={2} placeholder="Motivo (opcional)…" className="input w-full mb-2" />
-                  <div className="flex gap-2">
-                    <button type="button" disabled={voiding}
-                      onClick={async () => { setErr(''); setVoiding(true); const r = await onVoid?.(voidReason); setVoiding(false); if (r?.ok) onClose(); else setErr(r?.error || 'No se pudo anular.'); }}
-                      className="btn-danger text-xs">
-                      {voiding ? <Loader2 size={13} className="animate-spin" /> : <Ban size={13} aria-hidden />} Confirmar anulación
-                    </button>
-                    <button type="button" onClick={() => { setVoidOpen(false); setErr(''); }} disabled={voiding} className="btn-ghost text-xs">Cancelar</button>
-                  </div>
+                  {hasCobro ? (
+                    <>
+                      <p className="text-xs text-rose-600 mb-2">Esta factura tiene {formatDop(cobrado)} en cobros aplicados. Revierte el cobro antes de anular para no descuadrar el balance del cliente.</p>
+                      <button type="button" onClick={() => { setVoidOpen(false); setErr(''); }} className="btn-ghost text-xs">Entendido</button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-ink-500 mb-2">Revierte el asiento y marca el e-NCF como anulado (queda un hueco en la secuencia — no se transmite nada a la DGII). Si viene de una cotización, vuelve a “Por facturar”.</p>
+                      <textarea value={voidReason} onChange={(e) => setVoidReason(e.target.value)} rows={2} placeholder="Motivo (requerido)…" className="input w-full mb-2" />
+                      <div className="flex gap-2">
+                        <button type="button" disabled={voiding || !voidReason.trim()}
+                          onClick={async () => { setErr(''); setVoiding(true); const r = await onVoid?.(voidReason.trim()); setVoiding(false); if (r?.ok) onClose(); else setErr(r?.error || 'No se pudo anular.'); }}
+                          className="btn-danger text-xs disabled:opacity-40">
+                          {voiding ? <Loader2 size={13} className="animate-spin" /> : <Ban size={13} aria-hidden />} Confirmar anulación
+                        </button>
+                        <button type="button" onClick={() => { setVoidOpen(false); setErr(''); }} disabled={voiding} className="btn-ghost text-xs">Cancelar</button>
+                      </div>
+                    </>
+                  )}
                   {err && <p className="text-xs text-rose-600 mt-2">{err}</p>}
                 </div>
               )}

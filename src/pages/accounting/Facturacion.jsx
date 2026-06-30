@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { FileText, Loader2, Check, Download, Search, Send, Printer, RefreshCw, Boxes, FileMinus, FileDown, HandCoins } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
-import { db, newId, invalidate, assignSequenceNumber } from '../../db/database.js';
+import { db, newId, invalidate } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
@@ -30,14 +30,14 @@ import {
   resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
   resolveAccountingCockpit, resolveReceivables, resolveInvoiceRegister, invoiceRowTotals, buildPaymentEntry,
-  resolveDepositConfirmations, bankAccountOptions,
+  resolveDepositConfirmations, bankAccountOptions, canVoidPosting, canCollectPosting,
 } from '../../core/accounting/index.js';
 import { postPaymentTx } from '../../lib/paymentPosting.js';
 import { lookupRnc, cleanRnc } from '../../lib/rncLookup.js';
 import { assignNextENcf } from '../../lib/ecfSequence.js';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { sendEcf, signEcf, checkEcfStatus } from '../../lib/ecfSend.js';
-import { postSaleTx } from '../../lib/salePosting.js';
+import { postSaleTx, voidSaleTx } from '../../lib/salePosting.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
 
 function ymd(ts) {
@@ -851,6 +851,10 @@ export default function Facturacion() {
   async function collectInvoice(p, { amount, method, date, currency, usdAmount, fxRate, bankAccountId }) {
     const amt = Number(amount) || 0; // ALWAYS the DOP value posted + allocated
     if (!p || amt <= 0) return { ok: false, error: 'El monto debe ser mayor que cero.' };
+    // A cobro must never land on an anulada factura — it would orphan the
+    // allocation and the FIFO would misapply it. The RPC enforces this too.
+    const guard = canCollectPosting(p);
+    if (!guard.ok) return { ok: false, error: guard.reason };
     try {
       const id = newId();
       const postedAt = date ? new Date(date).getTime() : Date.now();
@@ -873,17 +877,19 @@ export default function Facturacion() {
           ...fxFields, bankAccountCode: bank?.accountCode || null,
         },
       });
-      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
-      await db.journalLines.bulkPut(built.lines);
-      await assignSequenceNumber({
-        table: 'payments', profileId: scope, start: 1,
-        build: (n) => ({
-          id, profileId: scope, number: n, direction: 'in', partyType: 'customer', partyId: p.customerId,
+      // Asiento + lines + cobro land together (numbers assigned server-side) or
+      // not at all — the SAME transactional path as collectDeposit, so a cobro
+      // can never leave a half-posted asiento with no payment row.
+      await postPaymentTx({
+        entry: built.entry,
+        lines: built.lines,
+        payment: {
+          id, profileId: scope, direction: 'in', partyType: 'customer', partyId: p.customerId,
           paidAt: postedAt, amount: amt, method, reference,
           commission: 0, commissionItbis: 0, itbisRetained: 0, isrRetained: 0,
           ...fxFields,
           allocations: [{ docId: p.id, amount: amt }], journalEntryId: built.entry.id,
-        }),
+        },
       });
       invalidate();
       return { ok: true };
@@ -931,27 +937,27 @@ export default function Facturacion() {
   // transmitido (sent/accepted) sólo se cancela con nota de crédito. Si estaba
   // ligada a una cotización, ésta vuelve a "Por facturar".
   async function voidInvoice(p, reason) {
-    if (!p) return { ok: false, error: 'Factura no encontrada.' };
-    if (p.voidedAt) return { ok: false, error: 'La factura ya está anulada.' };
-    if (p.ecfStatus === 'sent' || p.ecfStatus === 'accepted') {
-      return { ok: false, error: 'Un e-CF ya transmitido a la DGII sólo se cancela con una nota de crédito.' };
-    }
-    if (/^E34/.test(p.ncf || '')) {
-      return { ok: false, error: 'Una nota de crédito no se anula por aquí.' };
-    }
+    // The shared guard (also enforced server-side by void_sale) gives the dealer
+    // an instant, specific reason — including the cardinal one: never anul a
+    // factura that already has cobros applied.
+    const guard = canVoidPosting(p, paymentsQ.data);
+    if (!guard.ok) return { ok: false, error: guard.reason };
     try {
       const postedAt = Date.now();
       const built = buildCreditNoteEntry({
         newId, config, postedAt,
+        // Audit link: the reversal points back to the sale's asiento.
+        reversesEntryId: p.journalEntryId || null,
         note: {
           id: p.id, quoteId: p.quoteId, customerId: p.customerId,
           base: p.base, itbis: p.itbis, depositToRestore: p.depositApplied || 0,
           ncf: null, memo: `Anulación ${p.ncf || `venta #${p.number ?? ''}`}`.trim(),
         },
       });
-      await assignSequenceNumber({ table: 'journalEntries', profileId: scope, start: 1, build: (n) => ({ ...built.entry, number: n }) });
-      await db.journalLines.bulkPut(built.lines);
-      await db.salesPostings.update(p.id, { voidedAt: postedAt, voidedReason: reason || '' });
+      // Reversal asiento + lines + the voided flag land in ONE transaction —
+      // never a posted reversal with the posting still "active" (which a retry
+      // would double-reverse).
+      await voidSaleTx({ postingId: p.id, reason: reason || '', entry: built.entry, lines: built.lines });
       invalidate();
       return { ok: true };
     } catch (e) {

@@ -62,6 +62,8 @@ export {
   resolveLrSales, lrSalesCsv, lrSalesEmail, monthLabel, monthRange, previousMonth,
 } from './lrSales.js';
 export { buildSaleEntry, buildSalesBillEntry, buildCreditNoteEntry, resolveCreditNoteDraft, depositApplied } from '../../lib/accounting/sale.js';
+// ── reversal / annulment guards (books-honesty gates shared by the View + RPC)
+export { canVoidPosting, canCollectPosting, paymentsAllocatedTo, amountCollectedOn } from '../../lib/accounting/reversalGuards.js';
 export { resolveInvoiceDoc } from './invoiceDoc.js';
 export { resolveReceptorInbox } from './receptorInbox.js';
 
