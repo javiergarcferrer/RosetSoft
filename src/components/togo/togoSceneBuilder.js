@@ -13,6 +13,7 @@
  * the layout/material wiring here is unchanged.
  */
 import { togoParts, autoUnitScale } from '../../lib/togo/togoModel.js';
+import { meshLoopsFromTriangles } from '../../lib/togo/meshToPlan.js';
 
 // sRGB ↔ linear-light transfer (the exact IEC 61966-2-1 curve). Used to average
 // swatch pixels in LINEAR light (gamma-correct) so the sampled colour isn't
@@ -274,6 +275,82 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
     group.add(pieceGroup);
   }
   return group;
+}
+
+/**
+ * The EXACT top-down silhouette of a built piece group, as closed cm polygons in
+ * the group's OWN local frame (so the loops ride the group's placement rotation
+ * when added back as children). It projects the group's LOWER-BODY triangles —
+ * the part that actually sits on the floor, a leaning backrest roll excluded so
+ * the contour isn't inflated — onto the ground and traces their union with the
+ * SAME `meshLoopsFromTriangles` the 2D plan/DXF use, so the on-floor contour can
+ * never disagree with the rendered mesh or the catalogue tile.
+ *
+ * Works on BOTH the real-FBX and the procedural-cushion build (any meshes under
+ * the group). Returns `[]` for an empty/degenerate group (caller keeps its
+ * footprint-rectangle fallback). The scene's world is y-up and the group only
+ * rotates about Y + translates, so local Y is still the vertical axis here.
+ */
+export function floorContourLoops(THREE, group, { cutFrac = 0.4, grid = 120 } = {}) {
+  if (!group) return [];
+  group.updateMatrixWorld(true);
+  const inv = group.matrixWorld.clone().invert();
+  const m = new THREE.Matrix4();
+  const v = new THREE.Vector3();
+  // Pass 1 — local bbox (for the lower-body cut + the loop origin).
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  const meshes = [];
+  group.traverse((o) => {
+    if (!o.isMesh || !o.geometry?.attributes?.position || o.userData?.contour || o.userData?.pad) return;
+    o.updateWorldMatrix(true, false);
+    m.multiplyMatrices(inv, o.matrixWorld);
+    const pos = o.geometry.attributes.position, idx = o.geometry.index;
+    meshes.push({ pos, idx, m: m.clone() });
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m);
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+      if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+    }
+  });
+  if (!meshes.length || !(maxY > minY)) return [];
+  const cut = minY + (maxY - minY) * cutFrac;
+  // Pass 2 — floor (x,z) triangles of the lower body, in local cm.
+  const tris = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (const { pos, idx, m: wm } of meshes) {
+    const count = idx ? idx.count : pos.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      const i0 = idx ? idx.getX(i) : i, i1 = idx ? idx.getX(i + 1) : i + 1, i2 = idx ? idx.getX(i + 2) : i + 2;
+      a.fromBufferAttribute(pos, i0).applyMatrix4(wm);
+      b.fromBufferAttribute(pos, i1).applyMatrix4(wm);
+      c.fromBufferAttribute(pos, i2).applyMatrix4(wm);
+      if ((a.y + b.y + c.y) / 3 > cut) continue;
+      tris.push(a.x, a.z, b.x, b.z, c.x, c.z);
+    }
+  }
+  let { loops } = meshLoopsFromTriangles(tris, { grid });
+  // A degenerate lower slice (a flat-on-the-floor export) → the whole silhouette.
+  if (!loops.length) ({ loops } = meshLoopsFromTriangles(triesAll(meshes, a, b, c), { grid }));
+  // The rasteriser normalises to its own bbox; shift loops back into local cm.
+  return loops.map((poly) => poly.map((p) => ({ x: p.x + minX, y: p.y + minZ })));
+}
+
+// Every floor (x,z) triangle, no height cut — the fallback when the lower slice
+// came out empty.
+function triesAll(meshes, a, b, c) {
+  const tris = [];
+  for (const { pos, idx, m: wm } of meshes) {
+    const count = idx ? idx.count : pos.count;
+    for (let i = 0; i + 2 < count; i += 3) {
+      const i0 = idx ? idx.getX(i) : i, i1 = idx ? idx.getX(i + 1) : i + 1, i2 = idx ? idx.getX(i + 2) : i + 2;
+      a.fromBufferAttribute(pos, i0).applyMatrix4(wm);
+      b.fromBufferAttribute(pos, i1).applyMatrix4(wm);
+      c.fromBufferAttribute(pos, i2).applyMatrix4(wm);
+      tris.push(a.x, a.z, b.x, b.z, c.x, c.z);
+    }
+  }
+  return tris;
 }
 
 /** The radius of the layout (cm) for framing the camera — half the footprint

@@ -1,25 +1,23 @@
 /**
- * Mesh → top-down plan. The FBX-native replacement for the DWG `planGeometry`
- * pipeline.
+ * Mesh → top-down silhouette loops. The geometric core shared by the plan SVG and
+ * the 3D configurator's on-floor contour.
  *
  * Given the floor triangles of a loaded mesh — already projected to the XZ ground
  * plane and scaled to centimetres — it rasterises their UNION into an occupancy
- * grid, traces the boundary into closed loops, simplifies them, and emits a plan
- * SVG in the SAME shape the old `planToSvg` produced: `viewBox="0 0 width depth"`
- * (the viewBox IS the real cm footprint) and one themeable `<path>`
- * (stroke=currentColor). Because the viewBox equals the footprint, a piece's 2D
- * tile is literally its mesh seen from above and can never disagree with the 3D
- * — no letterbox, no dead space, at any rotation.
+ * grid, traces the boundary into closed loops and simplifies them. The loops are
+ * the EXACT silhouette of the mesh seen from above, in cm space (0..width,
+ * 0..depth), each a closed polygon `[{x,y}, …]` (no repeated last point) wound CCW
+ * for the outer boundary and CW for any hole.
  *
  * Pure (no three.js, no DOM) so it unit-tests off synthetic triangles.
  *
  * @param tris  Float array (or number[]) of XZ vertices in cm, 6 per triangle:
  *              [ax,az, bx,bz, cx,cz, …].
- * @returns { svg, widthCm, depthCm, triCount, loops }
+ * @returns { loops, widthCm, depthCm, triCount } — widthCm/depthCm rounded.
  */
-export function meshPlanFromTriangles(tris, opts = {}) {
+export function meshLoopsFromTriangles(tris, opts = {}) {
   const n = tris ? tris.length : 0;
-  if (n < 6) return EMPTY;
+  if (n < 6) return EMPTY_LOOPS;
 
   // 1) Footprint bbox.
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -29,7 +27,8 @@ export function meshPlanFromTriangles(tris, opts = {}) {
     if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
   }
   const wCm = maxX - minX, dCm = maxZ - minZ;
-  if (!(wCm > 0) || !(dCm > 0)) return EMPTY;
+  if (!(wCm > 0) || !(dCm > 0)) return EMPTY_LOOPS;
+  const W = Math.round(wCm), D = Math.round(dCm);
 
   // 2) Occupancy grid (~`grid` cells on the longer side), exact cell size in cm.
   const target = Math.max(24, Math.min(360, opts.grid || 170));
@@ -80,12 +79,12 @@ export function meshPlanFromTriangles(tris, opts = {}) {
       if (!isOcc(gx + 1, gz)) link(gx + 1, gz + 1, gx + 1, gz);  // right
     }
   }
-  if (out.size === 0) return { ...EMPTY, widthCm: Math.round(wCm), depthCm: Math.round(dCm) };
+  if (out.size === 0) return { loops: [], widthCm: W, depthCm: D, triCount: (n / 6) | 0 };
 
-  // 4) Trace + simplify loops; emit one path in cm space (0..w, 0..d).
+  // 4) Trace + simplify loops in cm space (0..w, 0..d).
   const eps = Math.max(cx, cz) * 0.9;
   const toPt = (k) => ({ x: Math.floor(k / stride) * cx, y: (k % stride) * cz });
-  let d = '';
+  const loops = [];
   for (const from of [...out.keys()]) {
     let arr = out.get(from);
     while (arr && arr.length) {
@@ -100,25 +99,40 @@ export function meshPlanFromTriangles(tris, opts = {}) {
       }
       if (loop.length >= 4) {
         const poly = simplifyClosed(loop.map(toPt), eps);
-        if (poly.length >= 3) {
-          d += poly.map((p, i) => `${i ? 'L' : 'M'}${round2(p.x)} ${round2(p.y)}`).join('') + 'Z';
-        }
+        if (poly.length >= 3) loops.push(poly);
       }
       arr = out.get(from);
     }
   }
-  if (!d) return { ...EMPTY, widthCm: Math.round(wCm), depthCm: Math.round(dCm) };
+  return { loops, widthCm: W, depthCm: D, triCount: (n / 6) | 0 };
+}
 
-  const W = Math.round(wCm), D = Math.round(dCm);
+/**
+ * Mesh → top-down plan SVG. The FBX-native replacement for the DWG `planGeometry`
+ * pipeline: the same silhouette `meshLoopsFromTriangles` traces, emitted as a plan
+ * SVG in the SAME shape the old `planToSvg` produced — `viewBox="0 0 width depth"`
+ * (the viewBox IS the real cm footprint) and one themeable `<path>`
+ * (stroke=currentColor). Because the viewBox equals the footprint, a piece's 2D
+ * tile is literally its mesh seen from above and can never disagree with the 3D
+ * — no letterbox, no dead space, at any rotation.
+ *
+ * @returns { svg, widthCm, depthCm, triCount, loops } (loops = the loop COUNT).
+ */
+export function meshPlanFromTriangles(tris, opts = {}) {
+  const { loops, widthCm: W, depthCm: D, triCount } = meshLoopsFromTriangles(tris, opts);
+  if (!loops.length) return W > 0 && D > 0 ? { ...EMPTY, widthCm: W, depthCm: D } : EMPTY;
+
+  const d = loops.map((poly) => poly.map((p, i) => `${i ? 'L' : 'M'}${round2(p.x)} ${round2(p.y)}`).join('') + 'Z').join('');
   const sw = +(Math.max(W, D) / 320 || 0.3).toFixed(2);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${D}" fill="none" `
     + `stroke="currentColor" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round">`
     + `<path d="${d}"/></svg>`;
-  return { svg, widthCm: W, depthCm: D, triCount: (n / 6) | 0, loops: (d.match(/M/g) || []).length };
+  return { svg, widthCm: W, depthCm: D, triCount, loops: loops.length };
 }
 
 const EMPTY = { svg: '', widthCm: 0, depthCm: 0, triCount: 0, loops: 0 };
+const EMPTY_LOOPS = { loops: [], widthCm: 0, depthCm: 0, triCount: 0 };
 const round2 = (v) => +v.toFixed(2);
 
 // Perpendicular distance of p from the segment a→b.
