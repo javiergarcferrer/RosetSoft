@@ -96,6 +96,34 @@ function securityCodeFrom(signedXml: string): string {
   return (m?.[1] || '').replace(/\s+/g, '').slice(0, 6);
 }
 
+/**
+ * Build the SIGNED RFCE summary from a signed full type-32 e-CF.
+ *
+ * A Factura de Consumo (tipo 32) under RD$250k transmits to the DGII as an RFCE
+ * (Resumen Factura Consumo Electrónica), not as the full invoice.
+ * `convertECF32ToRFCE` distills the signed e-CF into that summary — but the XML
+ * it returns is NOT signed (it only lifts the security code out of the e-CF's
+ * signature). The DGII summary service validates the RFCE against its XSD, whose
+ * final child is the XAdES `<ds:Signature>` (the `xs:any ##any` slot); an
+ * unsigned RFCE is therefore rejected with "The element 'RFCE' has incomplete
+ * content. List of possible elements expected: any element in namespace
+ * '##any'." So re-sign the converted XML (root auto-detected as RFCE) before it
+ * goes anywhere. The security code stays the one derived from the ORIGINAL
+ * e-CF signature (what the QR / consulta-timbre encodes), not the RFCE's.
+ *
+ * Returns null when the library can't convert (older version / non-32), so the
+ * caller falls back to the full-e-CF path.
+ */
+function signedRfceFrom(
+  dgiiLib: any, signature: any, signedEcfXml: string,
+): { xml: string; securityCode: string } | null {
+  if (typeof dgiiLib.convertECF32ToRFCE !== 'function') return null;
+  const rfce = dgiiLib.convertECF32ToRFCE(signedEcfXml);
+  if (!rfce?.xml) return null;
+  const xml = signature.signXml(rfce.xml, 'RFCE');
+  return { xml, securityCode: rfce.securityCode || securityCodeFrom(signedEcfXml) };
+}
+
 /** Signature date in DR local time, dd-mm-yyyy HH:mm:ss (QR `fechafirma`). */
 function fechaFirmaNow(): string {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -276,10 +304,9 @@ Deno.serve(async (req: Request) => {
       const fechaFirma = fechaFirmaNow();
       let securityCode = securityCodeFrom(signedXml);
       let outXml = signedXml;
-      if (ecfType === '32' && typeof (dgii as any).convertECF32ToRFCE === 'function') {
-        const rfce = (dgii as any).convertECF32ToRFCE(signedXml);
-        securityCode = rfce?.securityCode || securityCode;
-        outXml = rfce?.xml || signedXml;
+      if (ecfType === '32') {
+        const rfce = signedRfceFrom(dgii, signature, signedXml);
+        if (rfce) { securityCode = rfce.securityCode; outXml = rfce.xml; }
       }
       return json({ ok: true, signedXml: outXml, securityCode, fechaFirma });
     }
@@ -321,10 +348,10 @@ Deno.serve(async (req: Request) => {
     // security code (QR) is the signature's first 6 chars for EVERY type.
     let securityCode = securityCodeFrom(signedXml);
     let response: any;
-    if (ecfType === '32' && typeof (dgii as any).convertECF32ToRFCE === 'function') {
-      const rfce = (dgii as any).convertECF32ToRFCE(signedXml);
-      securityCode = rfce?.securityCode || securityCode;
-      response = await ecf.sendSummary(rfce?.xml || signedXml, fileName);
+    const rfce = ecfType === '32' ? signedRfceFrom(dgii, signature, signedXml) : null;
+    if (rfce) {
+      securityCode = rfce.securityCode;
+      response = await ecf.sendSummary(rfce.xml, fileName);
     } else {
       response = await ecf.sendElectronicDocument(signedXml, fileName);
     }
