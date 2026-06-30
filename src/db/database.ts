@@ -56,6 +56,7 @@ import type {
   WaGroupParticipant,
   ClaudeMessage,
   ScheduledPost,
+  GeneratedImage,
   IgEvent,
   IgMessage,
   MetaReceipt,
@@ -149,6 +150,7 @@ const TABLES = {
   waGroupParticipants:{ db: 'wa_group_participants', pk: 'id' },
   claudeMessages:     { db: 'claude_messages',     pk: 'id' },
   scheduledPosts:     { db: 'scheduled_posts',     pk: 'id' },
+  generatedImages:    { db: 'generated_images',    pk: 'id' },
   igEvents:           { db: 'ig_events',           pk: 'id' },
   igMessages:         { db: 'ig_messages',         pk: 'id' },
   metaReceipts:       { db: 'meta_receipts',       pk: 'id' },
@@ -219,6 +221,7 @@ export interface TableRowMap {
   waGroupParticipants: WaGroupParticipant;
   claudeMessages: ClaudeMessage;
   scheduledPosts: ScheduledPost;
+  generatedImages: GeneratedImage;
   igEvents: IgEvent;
   igMessages: IgMessage;
   metaReceipts: MetaReceipt;

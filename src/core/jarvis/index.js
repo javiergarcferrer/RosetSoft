@@ -31,3 +31,10 @@ export {
   describePost,
   resolveCatalogProducts,
 } from './scheduler.js';
+export {
+  DALLE_SIZES,
+  nearestDalleAspect,
+  cropPlan,
+  buildGenerationPlan,
+  resolveImageStudio,
+} from './imageStudio.js';
