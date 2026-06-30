@@ -9,9 +9,9 @@ import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampl
 const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 const norm360 = (d) => (((d % 360) + 360) % 360);
 const PLAN_W = 760, PLAN_H = 540;
-const CONTOUR_INK = 0x726a5d, CONTOUR_SEL = 0xb08d57;   // neutral vs brand-gold
-const FILL_OPACITY = 0.1, FILL_OPACITY_SEL = 0.2;       // the soft silhouette body
-const EDGE_OPACITY = 0.85, EDGE_OPACITY_SEL = 1;
+const CONTOUR_GOLD = 0xeab308, CONTOUR_SEL = 0xfbbf24;   // warm yellow-gold highlight, brighter when selected
+const FILL_OPACITY = 0.12, FILL_OPACITY_SEL = 0.22;     // the soft silhouette body
+const EDGE_OPACITY = 0.95, EDGE_OPACITY_SEL = 1;
 
 /**
  * The 2D contour for a piece, lying flat on the floor under the top-down camera —
@@ -24,7 +24,7 @@ const EDGE_OPACITY = 0.85, EDGE_OPACITY_SEL = 1;
  * Returned group sits at the footprint centre; it rides the piece's placement
  * rotation because it's added as a child of the (rotated) piece group.
  */
-function buildSilhouetteContour(THREE, loops, { color = CONTOUR_INK } = {}) {
+function buildSilhouetteContour(THREE, loops, { color = CONTOUR_GOLD } = {}) {
   const holder = new THREE.Group();
   // Largest |area| loop is the body; the rest are holes punched into the fill.
   const area = (poly) => { let s = 0; for (let i = 0, n = poly.length; i < n; i++) { const p = poly[i], q = poly[(i + 1) % n]; s += p.x * q.y - q.x * p.y; } return Math.abs(s) / 2; };
@@ -66,7 +66,7 @@ function buildSilhouetteContour(THREE, loops, { color = CONTOUR_INK } = {}) {
  * with a same-shape HOLE so its thickness is exact (WebGL line width is
  * unreliable). Rounded to match the Togo's soft corners.
  */
-function buildFootprintRing(THREE, w, d, { thickness = 2.4, color = CONTOUR_INK, opacity = 0.9 } = {}) {
+function buildFootprintRing(THREE, w, d, { thickness = 2.4, color = CONTOUR_GOLD, opacity = 0.9 } = {}) {
   const rr = (W, H, r) => {
     const s = new THREE.Shape();
     const x = -W / 2, y = -H / 2, k = Math.max(0, Math.min(r, W / 2, H / 2));
@@ -285,7 +285,7 @@ export default function TogoStage({
       // selected — fill and edge each pick up the selection colour/opacity.
       pg.userData?.contour?.traverse((o) => {
         const m = o.material; if (!m || !m.color) return;
-        m.color.setHex(on ? CONTOUR_SEL : CONTOUR_INK);
+        m.color.setHex(on ? CONTOUR_SEL : CONTOUR_GOLD);
         if (o.userData?.contourFill) m.opacity = on ? FILL_OPACITY_SEL : FILL_OPACITY;
         else m.opacity = on ? EDGE_OPACITY_SEL : EDGE_OPACITY;
       });

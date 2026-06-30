@@ -278,26 +278,31 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
 }
 
 /**
- * The EXACT top-down silhouette of a built piece group, as closed cm polygons in
- * the group's OWN local frame (so the loops ride the group's placement rotation
- * when added back as children). It projects the group's LOWER-BODY triangles —
- * the part that actually sits on the floor, a leaning backrest roll excluded so
- * the contour isn't inflated — onto the ground and traces their union with the
- * SAME `meshLoopsFromTriangles` the 2D plan/DXF use, so the on-floor contour can
- * never disagree with the rendered mesh or the catalogue tile.
+ * The smooth OUTERMOST top-down silhouette of a built piece group, as closed cm
+ * polygons in the group's OWN local frame (so the loops ride the group's
+ * placement rotation when added back as children). It projects the group's
+ * triangles up to `cutFrac` of its height onto the ground and traces their union
+ * with the SAME `meshLoopsFromTriangles` the 2D plan/DXF use — so the contour can
+ * never disagree with the rendered mesh — then rounds the rasteriser's staircase
+ * with Chaikin corner-cutting into a flowing curve.
+ *
+ * Default `cutFrac:1` captures the FULL silhouette: the widest, most protruding
+ * curve seen from straight above (the cushion bulge), not the narrower base — so
+ * the line wraps the piece like a highlight. Drop it below 1 for just the
+ * floor-level footprint.
  *
  * Works on BOTH the real-FBX and the procedural-cushion build (any meshes under
  * the group). Returns `[]` for an empty/degenerate group (caller keeps its
  * footprint-rectangle fallback). The scene's world is y-up and the group only
  * rotates about Y + translates, so local Y is still the vertical axis here.
  */
-export function floorContourLoops(THREE, group, { cutFrac = 0.4, grid = 120 } = {}) {
+export function floorContourLoops(THREE, group, { cutFrac = 1, grid = 150, smooth = 3 } = {}) {
   if (!group) return [];
   group.updateMatrixWorld(true);
   const inv = group.matrixWorld.clone().invert();
   const m = new THREE.Matrix4();
   const v = new THREE.Vector3();
-  // Pass 1 — local bbox (for the lower-body cut + the loop origin).
+  // Pass 1 — local bbox (for the height cut + the loop origin).
   let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   const meshes = [];
   group.traverse((o) => {
@@ -315,7 +320,7 @@ export function floorContourLoops(THREE, group, { cutFrac = 0.4, grid = 120 } = 
   });
   if (!meshes.length || !(maxY > minY)) return [];
   const cut = minY + (maxY - minY) * cutFrac;
-  // Pass 2 — floor (x,z) triangles of the lower body, in local cm.
+  // Pass 2 — floor (x,z) triangles up to the cut, in local cm.
   const tris = [];
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   for (const { pos, idx, m: wm } of meshes) {
@@ -329,28 +334,30 @@ export function floorContourLoops(THREE, group, { cutFrac = 0.4, grid = 120 } = 
       tris.push(a.x, a.z, b.x, b.z, c.x, c.z);
     }
   }
-  let { loops } = meshLoopsFromTriangles(tris, { grid });
-  // A degenerate lower slice (a flat-on-the-floor export) → the whole silhouette.
-  if (!loops.length) ({ loops } = meshLoopsFromTriangles(triesAll(meshes, a, b, c), { grid }));
-  // The rasteriser normalises to its own bbox; shift loops back into local cm.
-  return loops.map((poly) => poly.map((p) => ({ x: p.x + minX, y: p.y + minZ })));
+  const { loops } = meshLoopsFromTriangles(tris, { grid });
+  // The rasteriser normalises to its own bbox; shift loops back into local cm,
+  // then round the grid staircase into a smooth curve.
+  return loops.map((poly) => chaikinClosed(poly.map((p) => ({ x: p.x + minX, y: p.y + minZ })), smooth));
 }
 
-// Every floor (x,z) triangle, no height cut — the fallback when the lower slice
-// came out empty.
-function triesAll(meshes, a, b, c) {
-  const tris = [];
-  for (const { pos, idx, m: wm } of meshes) {
-    const count = idx ? idx.count : pos.count;
-    for (let i = 0; i + 2 < count; i += 3) {
-      const i0 = idx ? idx.getX(i) : i, i1 = idx ? idx.getX(i + 1) : i + 1, i2 = idx ? idx.getX(i + 2) : i + 2;
-      a.fromBufferAttribute(pos, i0).applyMatrix4(wm);
-      b.fromBufferAttribute(pos, i1).applyMatrix4(wm);
-      c.fromBufferAttribute(pos, i2).applyMatrix4(wm);
-      tris.push(a.x, a.z, b.x, b.z, c.x, c.z);
+// Chaikin corner-cutting on a CLOSED polygon: each pass replaces every vertex
+// with two points 1/4 and 3/4 along its outgoing edge, so the polyline converges
+// to a smooth quadratic B-spline — the grid's stair-steps melt into a flowing
+// curve. A few passes are plenty (each roughly halves the residual jaggedness).
+function chaikinClosed(pts, iters = 3) {
+  let p = pts;
+  if (p.length < 4) return p;
+  for (let k = 0; k < iters; k++) {
+    const out = [];
+    const n = p.length;
+    for (let i = 0; i < n; i++) {
+      const u = p[i], w = p[(i + 1) % n];
+      out.push({ x: u.x * 0.75 + w.x * 0.25, y: u.y * 0.75 + w.y * 0.25 });
+      out.push({ x: u.x * 0.25 + w.x * 0.75, y: u.y * 0.25 + w.y * 0.75 });
     }
+    p = out;
   }
-  return tris;
+  return p;
 }
 
 /** The radius of the layout (cm) for framing the camera — half the footprint
