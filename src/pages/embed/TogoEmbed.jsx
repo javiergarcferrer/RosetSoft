@@ -770,6 +770,22 @@ function PlanDimensions({ rect, overallCm }) {
   );
 }
 
+/** The selected piece's silhouette highlight — a thick warm-yellow stroke that
+ *  hugs the model, drawn from the perspective-correct on-screen outline TogoStage
+ *  computes (CSS-px points). No viewBox: the SVG's user units ARE CSS px, so the
+ *  points map 1:1 onto the canvas. A soft amber drop-shadow gives it depth so it
+ *  reads as pressed against the seat. */
+function ContourOverlay({ points }) {
+  if (!points || points.length < 3) return null;
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join('') + 'Z';
+  return (
+    <svg className="absolute inset-0 w-full h-full pointer-events-none z-[6]" style={{ overflow: 'visible' }} fill="none" aria-hidden>
+      <path d={d} stroke="#f5c000" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round"
+        style={{ filter: 'drop-shadow(0 1px 2.5px rgba(176,128,0,0.5))' }} />
+    </svg>
+  );
+}
+
 function CanvasArea({
   view, placed, resolvedById, material, selectedUid, onSelect, onMove, onRotate,
   models = [], onAddPiece, thumbById = {}, renderThumbById = {}, overallCm, fill = false,
@@ -777,6 +793,7 @@ function CanvasArea({
   const boxedH = 'h-[56vh] min-h-[320px] lg:h-[58vh] lg:min-h-[440px]';
   const [selPos, setSelPos] = useState(null);
   const [planRect, setPlanRect] = useState(null);
+  const [contour, setContour] = useState(null);
   const showRotate = view === '2d' && selectedUid != null && selPos;
   const showDims = view === '2d' && planRect && overallCm?.widthCm > 0;
   return (
@@ -784,9 +801,10 @@ function CanvasArea({
       <TogoStage
         mode={view} placed={placed} resolvedById={resolvedById} material={material}
         selectedUid={selectedUid} onSelect={onSelect} onMove={onMove}
-        onSelectedScreenPos={setSelPos} onPlanBounds={setPlanRect}
+        onSelectedScreenPos={setSelPos} onPlanBounds={setPlanRect} onSelContour={setContour}
         className="absolute inset-0"
       />
+      {view === '2d' && <ContourOverlay points={contour} />}
       {showDims && <PlanDimensions rect={planRect} overallCm={overallCm} />}
       {/* Rotate control floating just beneath the tapped piece. */}
       {showRotate && (

@@ -13,7 +13,7 @@
  * the layout/material wiring here is unchanged.
  */
 import { togoParts, autoUnitScale } from '../../lib/togo/togoModel.js';
-import { meshLoopsFromTriangles } from '../../lib/togo/meshToPlan.js';
+import { traceGridLoops } from '../../lib/togo/meshToPlan.js';
 
 // sRGB ↔ linear-light transfer (the exact IEC 61966-2-1 curve). Used to average
 // swatch pixels in LINEAR light (gamma-correct) so the sampled colour isn't
@@ -278,85 +278,95 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
 }
 
 /**
- * The smooth OUTERMOST top-down silhouette of a built piece group, as closed cm
- * polygons in the group's OWN local frame (so the loops ride the group's
- * placement rotation when added back as children). It projects the group's
- * triangles up to `cutFrac` of its height onto the ground and traces their union
- * with the SAME `meshLoopsFromTriangles` the 2D plan/DXF use — so the contour can
- * never disagree with the rendered mesh — then rounds the rasteriser's staircase
- * with Chaikin corner-cutting into a flowing curve.
- *
- * Default `cutFrac:1` captures the FULL silhouette: the widest, most protruding
- * curve seen from straight above (the cushion bulge), not the narrower base — so
- * the line wraps the piece like a highlight. Drop it below 1 for just the
- * floor-level footprint.
- *
- * Works on BOTH the real-FBX and the procedural-cushion build (any meshes under
- * the group). Returns `[]` for an empty/degenerate group (caller keeps its
- * footprint-rectangle fallback). The scene's world is y-up and the group only
- * rotates about Y + translates, so local Y is still the vertical axis here.
+ * Bake a piece group's mesh vertices into a flat Float32Array in the GROUP'S OWN
+ * local frame (so it's invariant to the group's placement/rotation — a drag just
+ * moves the group, the cache stays valid). Snapshot it once per selection; project
+ * it every frame. The pad/contour helper meshes are skipped.
  */
-export function floorContourLoops(THREE, group, { cutFrac = 1, grid = 150, smooth = 3, inflate = 0 } = {}) {
-  if (!group) return [];
+export function collectLocalVerts(THREE, group) {
+  if (!group) return new Float32Array(0);
   group.updateMatrixWorld(true);
   const inv = group.matrixWorld.clone().invert();
   const m = new THREE.Matrix4();
   const v = new THREE.Vector3();
-  // Pass 1 — local bbox (for the height cut + the loop origin).
-  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  const meshes = [];
+  const out = [];
   group.traverse((o) => {
     if (!o.isMesh || !o.geometry?.attributes?.position || o.userData?.contour || o.userData?.pad) return;
     o.updateWorldMatrix(true, false);
     m.multiplyMatrices(inv, o.matrixWorld);
-    const pos = o.geometry.attributes.position, idx = o.geometry.index;
-    meshes.push({ pos, idx, m: m.clone() });
+    const pos = o.geometry.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i).applyMatrix4(m);
-      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
-      if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
-      if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+      out.push(v.x, v.y, v.z);
     }
   });
-  if (!meshes.length || !(maxY > minY)) return [];
-  const cut = minY + (maxY - minY) * cutFrac;
-  // Pass 2 — floor (x,z) triangles up to the cut, in local cm.
-  const tris = [];
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  for (const { pos, idx, m: wm } of meshes) {
-    const count = idx ? idx.count : pos.count;
-    for (let i = 0; i + 2 < count; i += 3) {
-      const i0 = idx ? idx.getX(i) : i, i1 = idx ? idx.getX(i + 1) : i + 1, i2 = idx ? idx.getX(i + 2) : i + 2;
-      a.fromBufferAttribute(pos, i0).applyMatrix4(wm);
-      b.fromBufferAttribute(pos, i1).applyMatrix4(wm);
-      c.fromBufferAttribute(pos, i2).applyMatrix4(wm);
-      if ((a.y + b.y + c.y) / 3 > cut) continue;
-      tris.push(a.x, a.z, b.x, b.z, c.x, c.z);
-    }
-  }
-  const { loops } = meshLoopsFromTriangles(tris, { grid });
-  // The rasteriser normalises to its own bbox; shift loops back into local cm,
-  // round the grid staircase into a smooth curve, then nudge outward so the line
-  // clears the cushion bulge (and undoes Chaikin's slight corner inset).
-  return loops.map((poly) => inflateClosed(chaikinClosed(poly.map((p) => ({ x: p.x + minX, y: p.y + minZ })), smooth), inflate));
+  return new Float32Array(out);
 }
 
-// Push a CLOSED polygon outward by `margin` cm: each vertex slides along its
-// (smoothed) outward normal — the perpendicular of the chord through its two
-// neighbours, flipped to point away from the centroid. Keeps the curve's shape,
-// just a hair larger, so the highlight wraps OUTSIDE the seat instead of cutting
-// through it. A no-op for margin ≤ 0.
-function inflateClosed(pts, margin) {
-  if (!(margin > 0) || pts.length < 3) return pts;
-  const n = pts.length;
-  let cx = 0, cy = 0; for (const p of pts) { cx += p.x; cy += p.y; } cx /= n; cy /= n;
-  return pts.map((c, i) => {
-    const p = pts[(i - 1 + n) % n], q = pts[(i + 1) % n];
-    let nx = -(q.y - p.y), ny = q.x - p.x;            // chord normal (rotate +90°)
-    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-    if (nx * (c.x - cx) + ny * (c.y - cy) < 0) { nx = -nx; ny = -ny; }  // point outward
-    return { x: c.x + nx * margin, y: c.y + ny * margin };
-  });
+/**
+ * The EXACT on-screen silhouette of a piece, in CSS pixels — the perspectivally-
+ * correct outline you'd trace around the rendered model.
+ *
+ * The math is the standard graphics pipeline, the same a GPU runs per vertex:
+ *   world = groupWorld · vLocal            (place the snapshot in the world)
+ *   clip  = projection · view · world       (camera.project does view·proj + the
+ *   ndc   = clip.xyz / clip.w               perspective divide, w = −view-space z)
+ *   px    = ((ndc.x+1)/2·W, (1−ndc.y)/2·H)  (NDC → viewport)
+ * Because the divide by w is where perspective lives, a vertex sitting higher on
+ * the cushion (nearer the lens) lands FARTHER out in px than one at the floor —
+ * which is exactly why a flat floor ring never matched the bulge, and why we must
+ * project the real geometry. We then splat the projected vertices into a pixel
+ * occupancy grid (a small dilation bridges the gaps between samples), trace the
+ * outer boundary with the shared `traceGridLoops`, and Chaikin-smooth it. The
+ * result hugs the model to the pixel at any camera pose, piece position, or zoom.
+ *
+ * `verts` is the local snapshot from `collectLocalVerts`; `worldMatrix` is the
+ * group's CURRENT matrixWorld; `camera` the live camera; `w`,`h` the canvas CSS
+ * size. Returns the largest loop as `[{x,y}, …]` px, or null if it can't be built.
+ */
+export function projectScreenSilhouette(THREE, verts, worldMatrix, camera, w, h, { target = 230, dilate = 2, smooth = 2 } = {}) {
+  const n = (verts?.length || 0) / 3;
+  if (n < 3 || !(w > 0) || !(h > 0)) return null;
+  const v = new THREE.Vector3();
+  const px = new Float64Array(n * 2);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < n; i++) {
+    v.set(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]).applyMatrix4(worldMatrix).project(camera);
+    const x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
+    px[i * 2] = x; px[i * 2 + 1] = y;
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const spanX = maxX - minX, spanY = maxY - minY;
+  if (!(spanX > 0) || !(spanY > 0)) return null;
+  const cell = Math.max(0.5, Math.max(spanX, spanY) / target);
+  const pad = dilate + 1;
+  const gw = Math.ceil(spanX / cell) + 1 + 2 * pad;
+  const gh = Math.ceil(spanY / cell) + 1 + 2 * pad;
+  const occ = new Uint8Array(gw * gh);
+  for (let i = 0; i < n; i++) {
+    const gx = Math.floor((px[i * 2] - minX) / cell) + pad;
+    const gy = Math.floor((px[i * 2 + 1] - minY) / cell) + pad;
+    for (let dy = -dilate; dy <= dilate; dy++) {
+      const ay = gy + dy; if (ay < 0 || ay >= gh) continue;
+      for (let dx = -dilate; dx <= dilate; dx++) {
+        const ax = gx + dx; if (ax < 0 || ax >= gw) continue;
+        occ[ay * gw + ax] = 1;
+      }
+    }
+  }
+  const loops = traceGridLoops(occ, gw, gh, cell, cell);
+  if (!loops.length) return null;
+  let best = loops[0], bestA = polyArea(best);
+  for (let i = 1; i < loops.length; i++) { const a = polyArea(loops[i]); if (a > bestA) { bestA = a; best = loops[i]; } }
+  const ox = minX - pad * cell, oy = minY - pad * cell;
+  return chaikinClosed(best.map((p) => ({ x: p.x + ox, y: p.y + oy })), smooth);
+}
+
+function polyArea(poly) {
+  let s = 0;
+  for (let i = 0, n = poly.length; i < n; i++) { const p = poly[i], q = poly[(i + 1) % n]; s += p.x * q.y - q.x * p.y; }
+  return Math.abs(s) / 2;
 }
 
 // Chaikin corner-cutting on a CLOSED polygon: each pass replaces every vertex

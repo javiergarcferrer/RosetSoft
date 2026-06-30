@@ -4,99 +4,11 @@ import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { inferTogoForm, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
 import { footprintOf, snapPlacement, clampToPlan, resolvePlacement } from '../../core/quote/index.js';
 import { loadTogoModels } from './togoModelLoader.js';
-import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampleSwatchColor, floorContourLoops } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampleSwatchColor, collectLocalVerts, projectScreenSilhouette } from './togoSceneBuilder.js';
 
 const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 const norm360 = (d) => (((d % 360) + 360) % 360);
 const PLAN_W = 760, PLAN_H = 540;
-const CONTOUR_GOLD = 0xeab308, CONTOUR_SEL = 0xfbbf24;   // warm yellow-gold highlight, brighter when selected
-const FILL_OPACITY = 0.12, FILL_OPACITY_SEL = 0.22;     // the soft silhouette body
-const EDGE_OPACITY = 0.95, EDGE_OPACITY_SEL = 1;
-// Raise the edge line to the cushion's widest band: under the perspective
-// top-down camera a contour at floor level reads SMALLER than the bulge above it
-// (which is closer to the lens), so it cut through the seat. At the seat's own
-// height it shares the cushion's magnification and wraps it. A small outward
-// nudge (cm) clears the last of the bulge + undoes the smoothing's slight inset.
-const CONTOUR_LIFT = TOGO_HEIGHT_CM * 0.5;
-const CONTOUR_INFLATE_CM = 2;
-
-/**
- * The 2D contour for a piece, lying flat on the floor under the top-down camera —
- * the EXACT top-down silhouette of the piece (channels, arms, corner cut and all),
- * not a generic box. `loops` are closed cm polygons in the piece's local frame
- * (from `floorContourLoops`, derived from the SAME geometry that renders): the
- * largest is the body outline, any others are interior holes. Drawn as a soft
- * translucent FILL (a precise floor projection) plus a crisp edge LINE on top, so
- * the shape reads whether it peeks past the cushions or sits flush under them.
- * Returned group sits at the footprint centre; it rides the piece's placement
- * rotation because it's added as a child of the (rotated) piece group.
- */
-function buildSilhouetteContour(THREE, loops, { color = CONTOUR_GOLD, lift = 0 } = {}) {
-  const holder = new THREE.Group();
-  // Largest |area| loop is the body; the rest are holes punched into the fill.
-  const area = (poly) => { let s = 0; for (let i = 0, n = poly.length; i < n; i++) { const p = poly[i], q = poly[(i + 1) % n]; s += p.x * q.y - q.x * p.y; } return Math.abs(s) / 2; };
-  const sorted = [...loops].sort((a, b) => area(b) - area(a));
-  const toShapePts = (poly) => poly.map((p) => new THREE.Vector2(p.x, p.y));
-  const shape = new THREE.Shape(toShapePts(sorted[0]));
-  for (let i = 1; i < sorted.length; i++) shape.holes.push(new THREE.Path(toShapePts(sorted[i])));
-
-  const fill = new THREE.Mesh(
-    new THREE.ShapeGeometry(shape),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: FILL_OPACITY, depthWrite: false, side: THREE.DoubleSide }),
-  );
-  fill.userData.contourFill = true;
-  holder.add(fill);
-
-  for (const poly of sorted) {
-    const geo = new THREE.BufferGeometry();
-    const arr = new Float32Array(poly.length * 3);
-    for (let i = 0; i < poly.length; i++) { arr[i * 3] = poly[i].x; arr[i * 3 + 1] = poly[i].y; arr[i * 3 + 2] = 0; }
-    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    // depthTest off → the crisp silhouette edge always draws on top in the
-    // top-down view, so it reads even where the cushion bulge sits over its own
-    // floor-level outline (the fill keeps depth-test, so it just peeks at the rim).
-    const line = new THREE.LineLoop(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: EDGE_OPACITY, depthWrite: false, depthTest: false }));
-    line.userData.contourEdge = true;
-    line.position.z = -lift;   // holder is rotated +90° about X, so local -z → world +y (height)
-    line.renderOrder = 3;
-    holder.add(line);
-  }
-
-  holder.rotation.x = Math.PI / 2;   // Shape XY → floor XZ (Shape Y → world +Z = depth)
-  holder.position.y = 1.2;
-  holder.renderOrder = 2;
-  return holder;
-}
-
-/**
- * Fallback contour when the silhouette can't be traced (degenerate geometry): a
- * flat rounded-rectangle OUTLINE ring at the footprint, built as a filled SHAPE
- * with a same-shape HOLE so its thickness is exact (WebGL line width is
- * unreliable). Rounded to match the Togo's soft corners.
- */
-function buildFootprintRing(THREE, w, d, { thickness = 2.4, color = CONTOUR_GOLD, opacity = 0.9 } = {}) {
-  const rr = (W, H, r) => {
-    const s = new THREE.Shape();
-    const x = -W / 2, y = -H / 2, k = Math.max(0, Math.min(r, W / 2, H / 2));
-    s.moveTo(x + k, y);
-    s.lineTo(x + W - k, y); s.quadraticCurveTo(x + W, y, x + W, y + k);
-    s.lineTo(x + W, y + H - k); s.quadraticCurveTo(x + W, y + H, x + W - k, y + H);
-    s.lineTo(x + k, y + H); s.quadraticCurveTo(x, y + H, x, y + H - k);
-    s.lineTo(x, y + k); s.quadraticCurveTo(x, y, x + k, y);
-    return s;
-  };
-  const r = Math.min(w, d) * 0.2;
-  const outer = rr(w, d, r);
-  outer.holes.push(rr(Math.max(1, w - 2 * thickness), Math.max(1, d - 2 * thickness), Math.max(0, r - thickness)));
-  const geo = new THREE.ShapeGeometry(outer);
-  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;   // flat on the floor (Shape is XY → XZ)
-  mesh.position.y = 1.2;
-  mesh.userData.contourEdge = true;
-  mesh.renderOrder = 2;
-  return mesh;
-}
 
 /**
  * THE configurator stage — ONE three.js scene for BOTH "2D" and "3D". The 2D plan
@@ -116,15 +28,15 @@ function buildFootprintRing(THREE, w, d, { thickness = 2.4, color = CONTOUR_GOLD
  */
 export default function TogoStage({
   placed = [], resolvedById = {}, mode = '2d', material, selectedUid = null,
-  onSelect, onMove, onSelectedScreenPos, onPlanBounds, className = '',
+  onSelect, onMove, onSelectedScreenPos, onPlanBounds, onSelContour, className = '',
 }) {
   const mountRef = useRef(null);
   const api = useRef(null);
   const [failed, setFailed] = useState(false);
 
   // Latest props the imperative three loop reads without re-subscribing.
-  const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds });
-  stateRef.current = { placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds };
+  const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds, onSelContour });
+  stateRef.current = { placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds, onSelContour };
 
   // placed + resolved → absolute-world pieces (NOT recentred): plan-x→world-x,
   // plan-y→world-z 1:1, so dragging one piece never shifts the others.
@@ -247,23 +159,10 @@ export default function TogoStage({
         pad.userData.uid = uid;
         pad.userData.pad = true;
         pg.add(pad);
-        // The 2D contour tracing this piece's EXACT top-down silhouette (top-down
-        // only). Traced from the same geometry that renders, so it can never
-        // disagree with the piece; cached per model+footprint (it's independent of
-        // position/rotation), with the footprint rectangle as a last-resort fallback.
-        const realUrl = loaded.modelFor(sp)?.object ? sp?.mesh?.url : null;
-        const key = `${realUrl || 'proc'}|${sp?.form || ''}|${Math.round(w)}x${Math.round(d)}`;
-        let loops = l.contourCache.get(key);
-        if (loops === undefined) { loops = floorContourLoops(THREE, pg, { inflate: CONTOUR_INFLATE_CM }); l.contourCache.set(key, loops); }
-        const contour = (loops && loops.length) ? buildSilhouetteContour(THREE, loops, { lift: CONTOUR_LIFT }) : buildFootprintRing(THREE, w, d);
-        contour.userData.uid = uid;
-        contour.userData.contour = true;
-        contour.visible = stateRef.current.mode === '2d' && uid != null && uid === stateRef.current.selectedUid;
-        pg.userData.contour = contour;
-        pg.add(contour);
       }
     });
     l.group = group;
+    l.selVerts = null; l.selVertsUid = null;   // geometry changed → re-snapshot for the contour
     l.scene.add(group);
     applyHighlight(l, sel);
     // Frame the camera on the layout when the piece COUNT changes (add/remove) —
@@ -284,32 +183,17 @@ export default function TogoStage({
     l.group.children.forEach((pg) => {
       const on = sel != null && pg.userData.uid === sel;
       pg.traverse((o) => {
-        if (o.userData?.contour || o.userData?.contourFill || o.userData?.contourEdge) return;   // the contour keeps its own colour
+        if (o.userData?.pad) return;
         const m = o.material; if (!m || !m.emissive || seen.has(m)) return; seen.add(m);
         m.emissive.setHex(on ? 0x3a342b : 0x000000);
         m.emissiveIntensity = on ? 0.5 : 0;
       });
-      // The 2D silhouette contour shows ONLY on the selected piece (top-down) —
-      // its yellow highlight is the "this one's selected" cue, so an unselected
-      // piece carries no outline at all.
-      const contour = pg.userData?.contour;
-      if (contour) {
-        contour.visible = on && stateRef.current.mode === '2d';
-        contour.traverse((o) => {
-          const m = o.material; if (!m || !m.color) return;
-          m.color.setHex(CONTOUR_SEL);
-          m.opacity = o.userData?.contourFill ? FILL_OPACITY_SEL : EDGE_OPACITY_SEL;
-        });
-      }
     });
+    // The selected piece's silhouette outline is a SCREEN-space overlay (drawn by
+    // the parent) — selection just changes which piece feeds it, so re-snapshot the
+    // selected geometry and let the next render reproject it.
+    l.selVerts = null; l.selVertsUid = null;
     l.requestRender();
-  }
-
-  // Show the contour only on the SELECTED piece, and only under the top-down camera.
-  function setContourMode(l, mode) {
-    if (!l?.group) return;
-    const sel = stateRef.current.selectedUid;
-    l.group.children.forEach((pg) => { const r = pg.userData?.contour; if (r) r.visible = mode === '2d' && pg.userData.uid != null && pg.userData.uid === sel; });
   }
 
   // Re-skin (finish change) without rebuilding geometry.
@@ -447,7 +331,34 @@ export default function TogoStage({
         if (key !== _lastB) { _lastB = key; cb(rect); }
       };
 
-      const renderNow = () => { syncSize(); renderer.render(scene, camera); reportSelPos(); reportPlanBounds(); };
+      // The selected piece's EXACT on-screen silhouette (perspective-correct),
+      // reported to the parent as CSS-pixel points → it strokes a thick highlight
+      // that hugs the model. Snapshots the piece's local verts once per selection,
+      // reprojects them every render (so it tracks drag/resize/mode live), and only
+      // pushes to React when the outline actually moves.
+      let _lastC = '';
+      const reportSelContour = () => {
+        const cb = stateRef.current.onSelContour; if (!cb) return;
+        const l = api.current; if (!l) return;
+        const uid = stateRef.current.selectedUid;
+        const cw = renderer.domElement.clientWidth, ch = renderer.domElement.clientHeight;
+        let pts = null;
+        if (uid != null && l.group && stateRef.current.mode === '2d' && !l.tween) {
+          const pg = l.group.children.find((g) => g.userData.uid === uid);
+          if (pg) {
+            if (l.selVertsUid !== uid || !l.selVerts) { l.selVerts = collectLocalVerts(THREE, pg); l.selVertsUid = uid; }
+            pg.updateMatrixWorld(true);
+            pts = projectScreenSilhouette(THREE, l.selVerts, pg.matrixWorld, camera, cw, ch);
+          }
+        }
+        // Signature = a few sampled points → re-render only when the line shifts.
+        const sig = pts && pts.length
+          ? `${uid}:${pts.length}:${Math.round(pts[0].x)},${Math.round(pts[0].y)},${Math.round(pts[pts.length >> 1].x)},${Math.round(pts[pts.length >> 1].y)}`
+          : '';
+        if (sig !== _lastC) { _lastC = sig; cb(pts); }
+      };
+
+      const renderNow = () => { syncSize(); renderer.render(scene, camera); reportSelPos(); reportPlanBounds(); reportSelContour(); };
       let scheduled = false;
       const requestRender = () => { if (scheduled || !alive) return; scheduled = true; raf = requestAnimationFrame(() => { scheduled = false; if (alive) renderNow(); }); };
       controls.addEventListener('change', requestRender);
@@ -458,9 +369,9 @@ export default function TogoStage({
       api.current = {
         THREE, deps, renderer, scene, camera, controls, disposeStage, quilt,
         group: null, scene3d: { pieces: [], center: { x: PLAN_W / 2, z: PLAN_H / 2 }, radius: 170 },
-        framedCount: -1, colorCache: new Map(), modelCache: new Map(), contourCache: new Map(), requestRender,
+        framedCount: -1, colorCache: new Map(), modelCache: new Map(), requestRender,
         raycaster: new THREE.Raycaster(), floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-        drag: null, tween: null,
+        drag: null, tween: null, selVerts: null, selVertsUid: null,
       };
 
       await rebuild();
@@ -585,7 +496,6 @@ export default function TogoStage({
   // flip orbit-rotate (locked top-down in 2D, free orbit in 3D).
   useEffect(() => {
     const l = api.current; if (!l) return;
-    setContourMode(l, mode);              // contours show in 2D, hide in 3D
     const { camera, controls } = l;
     const to = poseFor(mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
     const from = { px: camera.position.x, py: camera.position.y, pz: camera.position.z, tx: controls.target.x, ty: controls.target.y, tz: controls.target.z };

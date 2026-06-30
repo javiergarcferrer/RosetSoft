@@ -61,8 +61,25 @@ export function meshLoopsFromTriangles(tris, opts = {}) {
     }
   }
 
-  // 3) Directed boundary edges (occupied region kept on the LEFT → CCW outer
-  //    loops, CW holes), so following each vertex's outgoing edge traces loops.
+  // 3+4) Trace the occupancy boundary into simplified loops (units = cell size).
+  const loops = traceGridLoops(occ, gw, gh, cx, cz);
+  return { loops, widthCm: W, depthCm: D, triCount: (n / 6) | 0 };
+}
+
+/**
+ * Trace the boundary of an occupancy grid into simplified closed loops, in the
+ * grid's own units (cell `cx`×`cz`). Shared by the top-down plan (occupancy from
+ * floor triangles) and the perspective on-screen silhouette (occupancy from
+ * camera-projected vertices) — one tracer, two rasters.
+ *
+ * It walks each occupied cell's exposed sides as DIRECTED unit edges with the
+ * filled region kept on the LEFT (→ CCW outer loops, CW holes), then follows each
+ * vertex's outgoing edge to close every loop, and Douglas–Peucker-simplifies it.
+ *
+ * @param occ  Uint8Array length gw*gh, 1 = occupied, indexed `occ[gz*gw+gx]`.
+ * @returns array of closed polygons `[{x,y}, …]` (no repeated last point).
+ */
+export function traceGridLoops(occ, gw, gh, cx = 1, cz = 1) {
   const isOcc = (gx, gz) => gx >= 0 && gz >= 0 && gx < gw && gz < gh && occ[gz * gw + gx] === 1;
   const stride = gh + 1;
   const out = new Map();                                        // fromKey → toKey[]
@@ -79,9 +96,7 @@ export function meshLoopsFromTriangles(tris, opts = {}) {
       if (!isOcc(gx + 1, gz)) link(gx + 1, gz + 1, gx + 1, gz);  // right
     }
   }
-  if (out.size === 0) return { loops: [], widthCm: W, depthCm: D, triCount: (n / 6) | 0 };
-
-  // 4) Trace + simplify loops in cm space (0..w, 0..d).
+  if (out.size === 0) return [];
   const eps = Math.max(cx, cz) * 0.9;
   const toPt = (k) => ({ x: Math.floor(k / stride) * cx, y: (k % stride) * cz });
   const loops = [];
@@ -104,7 +119,7 @@ export function meshLoopsFromTriangles(tris, opts = {}) {
       arr = out.get(from);
     }
   }
-  return { loops, widthCm: W, depthCm: D, triCount: (n / 6) | 0 };
+  return loops;
 }
 
 /**
