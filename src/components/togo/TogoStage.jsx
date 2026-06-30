@@ -99,7 +99,8 @@ export default function TogoStage({
       camera.up.set(0, 0, -1);                 // world -z is "up" on the plan
       camera.position.set(pose.px, pose.py, pose.pz);
       controls.target.set(pose.tx, pose.ty, pose.tz);
-      controls.enabled = false;                // 2D = no orbit/zoom; drag does the editing
+      controls.enabled = false;                // 2D = orbit off; drag/pan/pinch do the editing
+      l.fitHeight = pose.py;                    // the framed camera height = pinch-zoom 1× reference
       camera.lookAt(pose.tx, pose.ty, pose.tz);
     } else {
       camera.up.set(0, 1, 0);
@@ -272,7 +273,7 @@ export default function TogoStage({
         renderer.setSize(cw, ch, false);              // buffer only — CSS stays 100%
         camera.aspect = cw / ch;
         camera.updateProjectionMatrix();
-        if (!l.drag && !l.tween) {
+        if (!l.drag && !l.tween && !l.pinch) {
           const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
           placeCamera(l, pose, stateRef.current.mode);
         }
@@ -373,6 +374,7 @@ export default function TogoStage({
         framedCount: -1, colorCache: new Map(), modelCache: new Map(), requestRender,
         raycaster: new THREE.Raycaster(), floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
         drag: null, pan: null, tween: null, selTris: null, selTrisUid: null,
+        pointers: new Map(), pinch: null, fitHeight: 0,
       };
 
       await rebuild();
@@ -387,8 +389,11 @@ export default function TogoStage({
       // ── Pointer editing (2D only): tap = select, drag = move on the floor. ──
       const ndc = new THREE.Vector2();
       const hit = new THREE.Vector3();
-      const setNdc = (e) => { const r = mount.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); };
+      const ndcFrom = (cx, cy) => { const r = mount.getBoundingClientRect(); ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); };
+      const setNdc = (e) => ndcFrom(e.clientX, e.clientY);
       const floorHit = () => { l.raycaster.setFromCamera(ndc, camera); return l.raycaster.ray.intersectPlane(l.floor, hit) ? hit.clone() : null; };
+      // Floor point under arbitrary screen coords (for the pinch midpoint anchor).
+      const floorAt = (cx, cy) => { ndcFrom(cx, cy); return floorHit(); };
       const pieceUidAt = () => {
         l.raycaster.setFromCamera(ndc, camera);
         const hits = l.raycaster.intersectObjects(l.group ? l.group.children : [], true);
@@ -396,7 +401,24 @@ export default function TogoStage({
         return null;
       };
       const onDown = (e) => {
-        if (stateRef.current.mode !== '2d') return;       // 3D → orbit owns the pointer
+        if (stateRef.current.mode !== '2d') return;       // 3D → orbit owns the pointer (+ its own pinch zoom)
+        l.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        // Second finger down → switch to PINCH. Abandon any in-flight single-finger
+        // gesture first (commit a moved drag so the piece doesn't snap back; drop a
+        // pan), then seed the pinch with the current finger spread.
+        if (l.pointers.size === 2) {
+          if (l.drag) {
+            if (l.drag.moved && l.drag.next) stateRef.current.onMove?.(l.drag.uid, l.drag.next.x, l.drag.next.y);
+            controls.enabled = false; l.drag = null;
+          }
+          if (l.pan) { l.pan = null; renderer.domElement.style.cursor = 'grab'; }
+          const [a, b] = [...l.pointers.values()];
+          l.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) };
+          try { renderer.domElement.setPointerCapture?.(e.pointerId); } catch { /* moves still arrive */ }
+          e.preventDefault();
+          return;
+        }
+        if (l.pointers.size > 2) { e.preventDefault(); return; }   // 3+ fingers → ignore extras
         setNdc(e);
         const uid = pieceUidAt();
         if (uid != null) {
@@ -423,6 +445,32 @@ export default function TogoStage({
         e.preventDefault();
       };
       const onMovePtr = (e) => {
+        if (l.pointers.has(e.pointerId)) l.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        // ── Pinch: dolly the straight-down camera so two fingers zoom the plan,
+        // keeping the world point under the finger MIDPOINT pinned beneath it (so the
+        // zoom feels anchored and the gesture also pans when both fingers translate).
+        if (l.pinch) {
+          const pts = [...l.pointers.values()];
+          if (pts.length < 2) return;
+          const [a, b] = pts;
+          const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+          const before = floorAt(mx, my);                       // world point under the midpoint NOW
+          const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+          const scale = l.pinch.dist / dist;                    // fingers spreading (dist↑) → scale<1 → closer camera
+          l.pinch.dist = dist;
+          const fit = l.fitHeight || camera.position.y;
+          camera.position.y = Math.max(fit * 0.25, Math.min(fit * 3, camera.position.y * scale));
+          camera.lookAt(controls.target);
+          const after = floorAt(mx, my);                        // where that same screen point lands after the dolly
+          if (before && after) {                                // translate so `before` snaps back under the midpoint
+            const dx = before.x - after.x, dz = before.z - after.z;
+            camera.position.x += dx; camera.position.z += dz;
+            controls.target.x += dx; controls.target.z += dz;
+            camera.lookAt(controls.target);
+          }
+          requestRender();
+          return;
+        }
         if (l.drag) {
           setNdc(e);
           const fp = floorHit(); if (!fp) return;
@@ -461,6 +509,15 @@ export default function TogoStage({
         }
       };
       const onUp = (e) => {
+        l.pointers.delete(e.pointerId);
+        // A finger lifted during a pinch → end the pinch. Any finger still down does
+        // nothing until it too lifts (re-tapping starts a fresh drag/pan), so the plan
+        // never lurches when the second finger leaves.
+        if (l.pinch) {
+          if (l.pointers.size < 2) l.pinch = null;
+          renderer.domElement.releasePointerCapture?.(e.pointerId);
+          return;
+        }
         if (l.drag) {
           const d = l.drag; l.drag = null;
           controls.enabled = stateRef.current.mode === '3d';   // stays off in 2D
@@ -478,10 +535,12 @@ export default function TogoStage({
       renderer.domElement.addEventListener('pointerdown', onDown);
       renderer.domElement.addEventListener('pointermove', onMovePtr);
       window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
       l.cleanupPointer = () => {
         renderer.domElement.removeEventListener('pointerdown', onDown);
         renderer.domElement.removeEventListener('pointermove', onMovePtr);
         window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
       };
 
       // Every signal that the displayed size MIGHT have changed just asks for a
