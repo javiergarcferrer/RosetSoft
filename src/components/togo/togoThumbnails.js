@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { inferTogoForm } from '../../lib/togo/togoModel.js';
 import { loadTogoModels } from './togoModelLoader.js';
-import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, STANDARD_TOGO_FINISH } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, disposeGroup, makeFabricMaps, STANDARD_TOGO_FINISH } from './togoSceneBuilder.js';
 
 const SIZE = 320;                         // px (square) before DPR
 const cache = new Map();                  // model id → data URL (session-lived)
@@ -40,9 +40,9 @@ async function getEngine() {
     const scene = new THREE.Scene();
     const disposeStage = setupTogoStage(deps, renderer, scene, 120);
     scene.background = null;                     // keep it transparent (stage set a colour)
-    const quilt = makeQuiltNormalMap(THREE); if (quilt) quilt.repeat.set(5, 5);
+    const { normalMap: quilt, grainMap: grain } = makeFabricMaps(THREE);
     const camera = new THREE.PerspectiveCamera(28, 1, 1, 6000);
-    return { THREE, deps, renderer, scene, camera, quilt, disposeStage, modelCache: new Map() };
+    return { THREE, deps, renderer, scene, camera, quilt, grain, disposeStage, modelCache: new Map() };
   })();
   return enginePromise;
 }
@@ -53,7 +53,7 @@ export async function renderTogoThumb(model) {
   if (cache.has(model.id)) return cache.get(model.id);
   let eng;
   try { eng = await getEngine(); } catch { return null; }
-  const { THREE, deps, renderer, scene, camera, quilt, modelCache } = eng;
+  const { THREE, deps, renderer, scene, camera, quilt, grain, modelCache } = eng;
   const w = Number(model.widthCm) || 90, d = Number(model.depthCm) || 90;
   const form = inferTogoForm(model.name || model.label || '', w, d);
   const piece = { uid: 't', widthCm: w, depthCm: d, form, x: 0, z: 0, rotationDeg: 0, fabricCode: '', mesh: model.mesh || null };
@@ -65,7 +65,7 @@ export async function renderTogoThumb(model) {
     // (terciopelo) finish over the materialless oatmeal body (colorFor → null),
     // so the hotbar previews match what lands on the plan and read their shape.
     group = buildTogoGroup(deps, { pieces: [piece] }, {
-      ...STANDARD_TOGO_FINISH, normalMap: quilt,
+      ...STANDARD_TOGO_FINISH, normalMap: quilt, grainMap: grain,
       colorFor: () => null, modelFor: loaded.modelFor,
     });
     scene.add(group);

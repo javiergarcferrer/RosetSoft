@@ -4,7 +4,7 @@ import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { inferTogoForm, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
 import { footprintOf, snapPlacement, clampToPlan, resolvePlacement } from '../../core/quote/index.js';
 import { loadTogoModels } from './togoModelLoader.js';
-import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampleSwatchColor, collectLocalTris, projectScreenSilhouette } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, disposeGroup, makeFabricMaps, sampleSwatchColor, collectLocalTris, projectScreenSilhouette } from './togoSceneBuilder.js';
 
 const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 const norm360 = (d) => (((d % 360) + 360) % 360);
@@ -133,7 +133,7 @@ export default function TogoStage({
     if (!api.current) return;
     if (l.group) { l.scene.remove(l.group); disposeGroup(l.group); }
     const group = buildTogoGroup(l.deps, scene, {
-      ...DEFAULT_FINISH, ...(finish || {}), normalMap: l.quilt,
+      ...DEFAULT_FINISH, ...(finish || {}), normalMap: l.quilt, grainMap: l.grain,
       colorFor: (c) => (l.colorCache.has(c) ? l.colorCache.get(c) : null),
       modelFor: loaded.modelFor,
     });
@@ -366,10 +366,10 @@ export default function TogoStage({
       controls.addEventListener('change', requestRender);
 
       const disposeStage = setupTogoStage(deps, renderer, scene, 320);
-      const quilt = makeQuiltNormalMap(THREE); if (quilt) quilt.repeat.set(5, 5);
+      const { normalMap: quilt, grainMap: grain } = makeFabricMaps(THREE);
 
       api.current = {
-        THREE, deps, renderer, scene, camera, controls, disposeStage, quilt,
+        THREE, deps, renderer, scene, camera, controls, disposeStage, quilt, grain,
         group: null, scene3d: { pieces: [], center: { x: PLAN_W / 2, z: PLAN_H / 2 }, radius: 170 },
         framedCount: -1, colorCache: new Map(), modelCache: new Map(), requestRender,
         raycaster: new THREE.Raycaster(), floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
@@ -573,6 +573,7 @@ export default function TogoStage({
         disposeGroup(l.group);
         l.disposeStage?.();
         l.quilt?.dispose?.();
+        l.grain?.dispose?.();
         // colorCache holds plain hex numbers (sampleSwatchColor) — nothing to
         // dispose; just drop the reference with the rest of `l`.
         l.modelCache?.forEach?.((m) => disposeGroup(m.object || m));

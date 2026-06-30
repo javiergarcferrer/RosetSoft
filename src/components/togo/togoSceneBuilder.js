@@ -39,49 +39,91 @@ const DEG = Math.PI / 180;
 // low roughness + a strong, tight sheen lobe is what gives Togo velvet its glow.
 export const STANDARD_TOGO_FINISH = {
   roughness: 0.6, sheen: 1.0, sheenRoughness: 0.3,
-  clearcoat: 0, clearcoatRoughness: 0.4, repeat: 3, normalScale: 0.5,
+  clearcoat: 0, clearcoatRoughness: 0.4, repeat: 3, normalScale: 0.8,
 };
 
 /**
- * Procedural fabric GRAIN normal map — the fine woven micro-relief that keeps
- * the upholstery from reading as smooth plastic (the big quilt CHANNELS are real
- * geometry now, see togoModel.togoParts). Built once (canvas heightfield →
- * finite-difference normals), tiled on every fabric material. A non-zero
- * `channels` still bakes in soft horizontal grooves if ever wanted.
- * Returns a THREE.Texture (linear — it's a normal map, not colour).
+ * Procedural fabric TEXTURE maps — what turns the flat sampled swatch colour into
+ * cloth you can read the WEAVE of (the big quilt CHANNELS are real geometry, see
+ * togoModel.togoParts; these are the fine surface character ON those cushions).
+ * Built ONCE on a canvas and SHARED (tiled) by every fabric material:
+ *   • normalMap — a plain-weave micro-relief (warp over weft, alternating in a
+ *     checker) plus a fine fibre jitter, so the raking key + sheen lobe catch the
+ *     individual threads instead of a smooth plastic shell.
+ *   • grainMap  — a near-white greyscale ALBEDO weave (subtle thread tone + a slow
+ *     mottle) that three MULTIPLIES by the material's colour, so the upholstery has
+ *     woven tonal variation rather than one dead-flat fill. The two are generated
+ *     from the SAME height field, so the tonal weave and the relief line up.
+ * Both are flagged `userData.shared` so disposeGroup leaves them to the owner (the
+ * stage/export that created them). Returns nulls under Node (no `document`), so the
+ * export path stays test-safe.
+ *
+ * Deterministic (value-noise from a sin-hash, not Math.random) so re-renders and
+ * the thumbnail cache are stable.
  */
-export function makeQuiltNormalMap(THREE, { size = 256, channels = 0, weave = 150, strength = 1.4 } = {}) {
-  if (typeof document === 'undefined') return null;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = size;
-  const ctx = cv.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  const TAU = Math.PI * 2;
-  // Height field: a fine woven grain (+ optional soft horizontal grooves).
-  const H = (x, y) => {
-    const v = y / size, u = x / size;
-    const ch = channels ? (Math.cos(v * TAU * channels) * 0.5 + 0.5) ** 1.7 : 0;
-    const grain = (Math.sin(u * TAU * weave) + Math.sin(v * TAU * weave)) * 0.5;
-    return ch + grain * 0.18;
+export function makeFabricMaps(THREE, { size = 256, threads = 96, normalStrength = 2.0 } = {}) {
+  if (typeof document === 'undefined') return { normalMap: null, grainMap: null };
+  const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const sm = (t) => t * t * (3 - 2 * t);
+  const noise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const tl = hash(xi, yi), tr = hash(xi + 1, yi), bl = hash(xi, yi + 1), br = hash(xi + 1, yi + 1);
+    const u = sm(xf), v = sm(yf);
+    return (tl * (1 - u) + tr * u) * (1 - v) + (bl * (1 - u) + br * u) * v;
   };
-  const d = img.data;
+  const PI = Math.PI;
+  // Height field: a plain weave (each cell either warp-over-weft or the reverse,
+  // alternating like real cloth) softened by a fine fibre jitter.
+  const hgt = new Float32Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const hL = H((x - 1 + size) % size, y), hR = H((x + 1) % size, y);
-      const hD = H(x, (y - 1 + size) % size), hU = H(x, (y + 1) % size);
-      let nx = (hL - hR) * strength, ny = (hD - hU) * strength, nz = 1;
-      const len = Math.hypot(nx, ny, nz) || 1; nx /= len; ny /= len; nz /= len;
-      const i = (y * size + x) * 4;
-      d[i] = (nx * 0.5 + 0.5) * 255;
-      d[i + 1] = (ny * 0.5 + 0.5) * 255;
-      d[i + 2] = (nz * 0.5 + 0.5) * 255;
-      d[i + 3] = 255;
+      const u = x / size, v = y / size;
+      const warp = Math.abs(Math.sin(u * PI * threads));   // vertical threads
+      const weft = Math.abs(Math.sin(v * PI * threads));   // horizontal threads
+      const over = (Math.floor(u * threads) + Math.floor(v * threads)) & 1;
+      const weave = over ? warp * 0.72 + weft * 0.28 : weft * 0.72 + warp * 0.28;
+      const fibre = noise(u * threads * 5, v * threads * 5);
+      hgt[y * size + x] = weave * 0.8 + fibre * 0.2;
     }
   }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
+  const nrm = document.createElement('canvas'); nrm.width = nrm.height = size;
+  const grn = document.createElement('canvas'); grn.width = grn.height = size;
+  const nctx = nrm.getContext('2d'), gctx = grn.getContext('2d');
+  const nimg = nctx.createImageData(size, size), gimg = gctx.createImageData(size, size);
+  const nd = nimg.data, gd = gimg.data;
+  const at = (x, y) => hgt[((y % size) + size) % size * size + (((x % size) + size) % size)];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // Normal = finite-difference of the (wrapped) height field.
+      const hL = at(x - 1, y), hR = at(x + 1, y), hD = at(x, y - 1), hU = at(x, y + 1);
+      let nx = (hL - hR) * normalStrength, ny = (hD - hU) * normalStrength, nz = 1;
+      const len = Math.hypot(nx, ny, nz) || 1; nx /= len; ny /= len; nz /= len;
+      const i = (y * size + x) * 4;
+      nd[i] = (nx * 0.5 + 0.5) * 255; nd[i + 1] = (ny * 0.5 + 0.5) * 255; nd[i + 2] = (nz * 0.5 + 0.5) * 255; nd[i + 3] = 255;
+      // Albedo grain = near-white, threads a touch brighter than valleys + a slow
+      // mottle. Mean ≈ 0.93 so it textures the colour without muddying it.
+      const u = x / size, v = y / size;
+      const mottle = noise(u * 4, v * 4);
+      let a = 0.93 + (hgt[y * size + x] - 0.5) * 0.10 + (mottle - 0.5) * 0.07;
+      a = a < 0 ? 0 : a > 1 ? 1 : a;
+      const g = Math.round(a * 255);
+      gd[i] = g; gd[i + 1] = g; gd[i + 2] = g; gd[i + 3] = 255;
+    }
+  }
+  nctx.putImageData(nimg, 0, 0); gctx.putImageData(gimg, 0, 0);
+  const normalMap = new THREE.CanvasTexture(nrm);
+  const grainMap = new THREE.CanvasTexture(grn);
+  for (const t of [normalMap, grainMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.userData = { shared: true }; }
+  return { normalMap, grainMap };
+}
+
+/**
+ * Back-compat shim — the fine woven NORMAL map alone (the grain albedo is the
+ * companion in makeFabricMaps). Kept for callers that only want relief.
+ * Returns a THREE.Texture (linear) or null under Node.
+ */
+export function makeQuiltNormalMap(THREE, opts = {}) {
+  return makeFabricMaps(THREE, opts).normalMap;
 }
 
 /**
@@ -117,15 +159,23 @@ export function makeFabricMaterial(THREE, tex, opts = {}) {
     // (form reads); the full 0.7 keeps a fabricked body from going pale.
     envMapIntensity: opts.envMapIntensity ?? (materialless ? 0.42 : 0.7),
   });
-  if (tex) {
-    tex.colorSpace = THREE.SRGBColorSpace;        // base colour is sRGB
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;  // tile the small swatch
-    tex.repeat.set(opts.repeat || 3, opts.repeat || 3);
-    tex.anisotropy = opts.anisotropy || 8;
-    mat.map = tex;
+  const rep = opts.repeat || 3;
+  // Albedo = the swatch PHOTO if one's supplied (legacy), else the procedural
+  // woven grain (shared) MULTIPLIED by the sampled colour → textured cloth.
+  const albedo = tex || opts.grainMap || null;
+  if (albedo) {
+    albedo.colorSpace = THREE.SRGBColorSpace;        // colour map is sRGB
+    albedo.wrapS = albedo.wrapT = THREE.RepeatWrapping;
+    albedo.repeat.set(rep, rep);
+    albedo.anisotropy = opts.anisotropy || 8;
+    mat.map = albedo;
   }
   if (opts.normalMap) {
     mat.normalMap = opts.normalMap;
+    // Tile the weave normal at the SAME repeat as the grain so the relief lines up
+    // with the tonal weave (both are derived from one height field).
+    opts.normalMap.wrapS = opts.normalMap.wrapT = THREE.RepeatWrapping;
+    opts.normalMap.repeat.set(rep, rep);
     const ns = opts.normalScale ?? 0.5;
     mat.normalScale = new THREE.Vector2(ns, ns);
   }
@@ -519,7 +569,8 @@ export function setupTogoStage(deps, renderer, scene, radius) {
 /** Dispose every geometry/material/(swatch) texture under a group (free GPU
  *  memory). Idempotent per object via a seen-set, so a material/geometry shared
  *  across many meshes (the real-model path) is disposed exactly ONCE. The shared
- *  quilt normal map is intentionally NOT touched — the owner disposes it. */
+ *  fabric maps (the woven normal + grain, flagged `userData.shared`) are
+ *  intentionally NOT touched — their owner (the stage/export) disposes them. */
 export function disposeGroup(group) {
   const seen = new Set();
   const once = (o, fn) => { if (o && !seen.has(o)) { seen.add(o); fn(); } };
@@ -527,7 +578,8 @@ export function disposeGroup(group) {
     once(o.geometry, () => o.geometry.dispose());
     const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
     for (const m of mats) {
-      once(m.map, () => m.map.dispose());
+      // A per-swatch photo map is owned by the material; the shared grain map is not.
+      once(m.map, () => { if (!m.map.userData?.shared) m.map.dispose(); });
       once(m, () => m.dispose());
     }
   });

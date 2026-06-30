@@ -16,7 +16,7 @@
  * exported root is scaled 0.01 — that's what makes AR place the sofa
  * TRUE-TO-SCALE in the customer's room.
  */
-import { buildTogoGroup, makeQuiltNormalMap, disposeGroup, sampleSwatchColor } from './togoSceneBuilder.js';
+import { buildTogoGroup, makeFabricMaps, disposeGroup, sampleSwatchColor } from './togoSceneBuilder.js';
 
 const CM_TO_M = 0.01;
 
@@ -48,9 +48,9 @@ export async function loadFabricTextures(THREE, codes, urlFor) {
 export function buildArGroup(deps, scene3d, opts = {}) {
   const { THREE } = deps;
   const textures = opts.textures instanceof Map ? opts.textures : new Map();
-  const quilt = makeQuiltNormalMap(THREE);
-  const rep = opts.repeat || 3;
-  if (quilt) quilt.repeat.set(rep, rep);
+  // The same woven fabric maps as the live preview, so AR carries the texture too
+  // (buildTogoGroup/makeFabricMaterial tile them to opts.repeat).
+  const { normalMap: quilt, grainMap: grain } = makeFabricMaps(THREE);
 
   // Upholster in each swatch's DOMINANT colour (sampled once from the loaded
   // image), matching the inline preview — not the tiled photo. KHR_materials_sheen
@@ -60,7 +60,7 @@ export function buildArGroup(deps, scene3d, opts = {}) {
 
   const group = buildTogoGroup(deps, scene3d, {
     ...opts,
-    normalMap: quilt,
+    normalMap: quilt, grainMap: grain,
     colorFor: (code) => (colors.has(code) ? colors.get(code) : null),
   });
 
@@ -71,7 +71,8 @@ export function buildArGroup(deps, scene3d, opts = {}) {
 
   const dispose = () => {
     disposeGroup(root);                      // geometries, materials, cloned swatch maps
-    quilt?.dispose?.();                      // the shared normal map (disposeGroup skips it)
+    quilt?.dispose?.();                      // the shared fabric maps (disposeGroup skips them)
+    grain?.dispose?.();
     textures.forEach((t) => t.dispose?.());  // the original loaded swatches
   };
   return { root, quilt, dispose };
