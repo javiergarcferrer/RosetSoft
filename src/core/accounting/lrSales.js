@@ -71,6 +71,9 @@ export function resolveLrSales({ quotes, floorRowsByQuote, customersById, start,
     if (!isReportableFloorSale(q, start, end)) continue;
     const customer = q.customerId ? custById.get(q.customerId) : null;
     for (const pr of byQuote.get(q.id) || []) {
+      // LifestyleGarden pieces are NOT part of the Ligne Roset relationship —
+      // a floor sale can mix brands, but only LR sell-through is reported here.
+      if (pr.isLsg) continue;
       rows.push({
         id: `${q.id}:${pr.lineId}`,
         date: q.depositReceivedAt,

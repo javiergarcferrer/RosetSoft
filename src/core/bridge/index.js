@@ -143,9 +143,17 @@ export function resolveCustomerAccount({ postings, payments, customerId }) {
  * (core/accounting/lrSales:resolveLrSales) consumes these and never prices a
  * quote line itself.
  *
- * @returns {Array<{ lineId, reference, product, fabric, qty, unitUsd, totalUsd }>}
+ * `lsgRefs` is the set of LifestyleGarden product references (SKUs); a row is
+ * stamped `isLsg` when its line — or, for a compound, any priced component —
+ * belongs to that brand. The Ligne Roset report drops those (they're not the
+ * supplier's sell-through); other floor-sale surfaces can keep the label or
+ * ignore it. With no set passed, nothing is flagged (back-compat).
+ *
+ * @returns {Array<{ lineId, reference, product, fabric, qty, unitUsd, totalUsd, isLsg }>}
  */
-export function quoteFloorSaleRows({ lines } = {}) {
+export function quoteFloorSaleRows({ lines, lsgRefs } = {}) {
+  const lsg = lsgRefs instanceof Set ? lsgRefs : new Set(lsgRefs || []);
+  const inLsg = (ref) => !!ref && lsg.has(ref);
   return (lines || []).filter(isPricedLine).map((line) => {
     const compound = isCompoundLine(line);
     const total = lineTotal(line);
@@ -153,6 +161,8 @@ export function quoteFloorSaleRows({ lines } = {}) {
     const unit = compound
       ? total
       : applyLineAdjustments(line.unitPrice, line.lineMarginPct, line.lineDiscountPct);
+    const isLsg = inLsg(line.reference)
+      || (compound && (line.components || []).some((c) => inLsg(c.reference)));
     return {
       lineId: line.id,
       reference: line.reference || '',
@@ -161,6 +171,7 @@ export function quoteFloorSaleRows({ lines } = {}) {
       qty,
       unitUsd: round2(unit),
       totalUsd: round2(total),
+      isLsg,
     };
   });
 }

@@ -10,6 +10,7 @@ import useColumns from '../search/useColumns.js';
 import useColumnWidths from '../search/useColumnWidths.jsx';
 import ColumnsMenu from '../search/ColumnsMenu.jsx';
 import { formatMoney, formatDate } from '../../lib/format.js';
+import { BRAND_LIFESTYLEGARDEN } from '../../lib/constants.js';
 import { downloadCsv } from '../../lib/csv.js';
 import { linesByQuoteId } from '../../core/quote/totals.js';
 import { quoteFloorSaleRows } from '../../core/bridge/index.js';
@@ -101,21 +102,26 @@ export default function LigneRosetReport() {
   const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope], []);
   const linesQ = useLiveQueryStatus(() => db.quoteLines.toArray(), [], []);
   const customersQ = useLiveQueryStatus(() => db.customers.where('profileId').equals(scope).toArray(), [scope], []);
-  const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded;
+  // LifestyleGarden references (SKUs) — so the bridge can flag those lines and
+  // the report drops them (this is the LIGNE ROSET sell-through, not LSG's).
+  const lsgQ = useLiveQueryStatus(() => db.products.where('brand').equals(BRAND_LIFESTYLEGARDEN).toArray(), [], []);
+  const loaded = quotesQ.loaded && linesQ.loaded && customersQ.loaded && lsgQ.loaded;
 
   const [monthValue, setMonthValue] = useState(() => toMonthValue(previousMonth()));
   const { year, monthIndex } = fromMonthValue(monthValue);
   const label = monthLabel(year, monthIndex);
 
   const customersById = useMemo(() => new Map(customersQ.data.map((c) => [c.id, c])), [customersQ.data]);
+  const lsgRefs = useMemo(() => new Set(lsgQ.data.map((p) => p.reference).filter(Boolean)), [lsgQ.data]);
   // CRM lines → priced floor-sale rows across the bridge; the accounting report
   // VM (resolveLrSales) only filters + aggregates these, never prices a line.
+  // `lsgRefs` lets the bridge flag LifestyleGarden lines so the VM can drop them.
   const floorRowsByQuote = useMemo(() => {
     const byQuote = linesByQuoteId(linesQ.data);
     const out = new Map();
-    for (const [quoteId, lines] of byQuote) out.set(quoteId, quoteFloorSaleRows({ lines }));
+    for (const [quoteId, lines] of byQuote) out.set(quoteId, quoteFloorSaleRows({ lines, lsgRefs }));
     return out;
-  }, [linesQ.data]);
+  }, [linesQ.data, lsgRefs]);
 
   const report = useMemo(() => {
     const { start, end } = monthRange(year, monthIndex);

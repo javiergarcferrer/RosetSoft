@@ -22,12 +22,12 @@ const midApril = Date.parse('2026-04-15T12:00:00-04:00');
 
 const customers = new Map([['c1', { id: 'c1', name: 'Cliente Uno' }]]);
 
-function run(quotes, linesByQuote) {
+function run(quotes, linesByQuote, lsgRefs) {
   // Price each quote's lines through the bridge (the View's job), then hand the
   // accounting VM the per-product rows it now consumes.
   const floorRowsByQuote = new Map();
   for (const [quoteId, lines] of Object.entries(linesByQuote || {})) {
-    floorRowsByQuote.set(quoteId, quoteFloorSaleRows({ lines }));
+    floorRowsByQuote.set(quoteId, quoteFloorSaleRows({ lines, lsgRefs }));
   }
   return resolveLrSales({
     quotes,
@@ -113,6 +113,22 @@ test('a compound rolls up to one row at its priced-component total', () => {
   assert.equal(r.lineCount, 1);
   assert.equal(r.rows[0].qty, 1);
   assert.equal(r.rows[0].totalUsd, 1800); // 1200 + 2*300, optional skipped
+});
+
+test('excludes LifestyleGarden lines — this is the Ligne Roset sell-through, not LSG', () => {
+  const r = run(
+    [{ id: 'q1', number: 12, status: 'accepted', customerId: 'c1', depositReceivedAt: midMay }],
+    { q1: [
+      { id: 'l1', quoteId: 'q1', kind: 'item', reference: 'TOGO', name: 'Togo', qty: 1, unitPrice: 1000 },
+      { id: 'l2', quoteId: 'q1', kind: 'item', reference: '2841200001', name: 'Nassau Round Side Table', qty: 1, unitPrice: 200 },
+      { id: 'l3', quoteId: 'q1', kind: 'item', reference: 'PARASOL', name: 'Parasol Set',
+        components: [{ id: 'c1', reference: '2959700000', qty: 1, unitPrice: 300 }] },
+    ] },
+    new Set(['2841200001', '2959700000']), // LSG SKUs (simple + a compound's component)
+  );
+  assert.equal(r.lineCount, 1); // only the Ligne Roset Togo survives
+  assert.equal(r.rows[0].reference, 'TOGO');
+  assert.equal(r.totals.usd, 1000);
 });
 
 test('CSV carries a header, a row per product, and a totals footer', () => {
