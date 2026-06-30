@@ -530,6 +530,31 @@ export interface ScheduledPost {
 }
 
 /**
+ * A DALL·E 3 generation the Image Studio produced. The View writes one row per
+ * result (best-effort) so the pane keeps a history gallery; the `dalle-image`
+ * Edge Function does the actual text-to-image + crop/resize. `inspiration`
+ * carries the reference URLs the dealer dropped (turned into the style brief),
+ * `revisedPrompt` is OpenAI's rewritten prompt for that image.
+ */
+export interface GeneratedImage {
+  id: string;
+  profileId: string;
+  prompt: string;
+  styleNote?: string;
+  status: 'queued' | 'generating' | 'completed' | 'failed';
+  imageUrl?: string;
+  width?: number;
+  height?: number;
+  count?: number;
+  revisedPrompt?: string;
+  model?: string;
+  inspiration?: unknown;
+  error?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/**
  * A persisted Instagram webhook event (comment / mention). Written by the
  * `meta-webhook` Edge Function on receipt; the Studio reads them for a live
  * activity feed without polling the Graph API.

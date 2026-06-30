@@ -43,6 +43,7 @@ const TogoWorkspace = lazyPage(() => import('./pages/TogoWorkspace.jsx'));
 const TogoEmbed = lazyPage(() => import('./pages/embed/TogoEmbed.jsx'));
 const AdminUsers = lazyPage(() => import('./pages/admin/Users.jsx'));
 const Jarvis = lazyPage(() => import('./pages/Jarvis.jsx'));
+const ImageStudio = lazyPage(() => import('./pages/ImageStudio.jsx'));
 const AdminMaterials = lazyPage(() => import('./pages/admin/Materials.jsx'));
 const AdminCatalogs = lazyPage(() => import('./pages/admin/Catalogs.jsx'));
 const AdminCatalog = lazyPage(() => import('./pages/admin/Catalog.jsx'));
@@ -272,6 +273,7 @@ function ProtectedApp() {
             <Route path="chats/difusion" element={<Difusion />} />
             <Route path="marketing" element={<Instagram />} />
             <Route path="instagram-studio" element={<Instagram />} />
+            <Route path="estudio-imagenes" element={<ImageStudio />} />
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:customerId" element={<CustomerDetail />} />
             <Route path="professionals" element={<Professionals />} />
