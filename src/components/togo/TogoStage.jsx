@@ -4,7 +4,7 @@ import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { inferTogoForm, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
 import { footprintOf, snapPlacement, clampToPlan, resolvePlacement } from '../../core/quote/index.js';
 import { loadTogoModels } from './togoModelLoader.js';
-import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampleSwatchColor, collectLocalVerts, projectScreenSilhouette } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, disposeGroup, makeQuiltNormalMap, sampleSwatchColor, collectLocalTris, projectScreenSilhouette } from './togoSceneBuilder.js';
 
 const DEFAULT_FINISH = { sheen: 0.7, sheenRoughness: 0.6, roughness: 0.85, repeat: 3, normalScale: 0.45 };
 const norm360 = (d) => (((d % 360) + 360) % 360);
@@ -162,7 +162,7 @@ export default function TogoStage({
       }
     });
     l.group = group;
-    l.selVerts = null; l.selVertsUid = null;   // geometry changed → re-snapshot for the contour
+    l.selTris = null; l.selTrisUid = null;   // geometry changed → re-snapshot for the contour
     l.scene.add(group);
     applyHighlight(l, sel);
     // Frame the camera on the layout when the piece COUNT changes (add/remove) —
@@ -192,7 +192,7 @@ export default function TogoStage({
     // The selected piece's silhouette outline is a SCREEN-space overlay (drawn by
     // the parent) — selection just changes which piece feeds it, so re-snapshot the
     // selected geometry and let the next render reproject it.
-    l.selVerts = null; l.selVertsUid = null;
+    l.selTris = null; l.selTrisUid = null;
     l.requestRender();
   }
 
@@ -346,9 +346,9 @@ export default function TogoStage({
         if (uid != null && l.group && stateRef.current.mode === '2d' && !l.tween) {
           const pg = l.group.children.find((g) => g.userData.uid === uid);
           if (pg) {
-            if (l.selVertsUid !== uid || !l.selVerts) { l.selVerts = collectLocalVerts(THREE, pg); l.selVertsUid = uid; }
+            if (l.selTrisUid !== uid || !l.selTris) { l.selTris = collectLocalTris(THREE, pg); l.selTrisUid = uid; }
             pg.updateMatrixWorld(true);
-            pts = projectScreenSilhouette(THREE, l.selVerts, pg.matrixWorld, camera, cw, ch);
+            pts = projectScreenSilhouette(THREE, l.selTris, pg.matrixWorld, camera, cw, ch);
           }
         }
         // Signature = a few sampled points → re-render only when the line shifts.
@@ -371,7 +371,7 @@ export default function TogoStage({
         group: null, scene3d: { pieces: [], center: { x: PLAN_W / 2, z: PLAN_H / 2 }, radius: 170 },
         framedCount: -1, colorCache: new Map(), modelCache: new Map(), requestRender,
         raycaster: new THREE.Raycaster(), floor: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
-        drag: null, tween: null, selVerts: null, selVertsUid: null,
+        drag: null, tween: null, selTris: null, selTrisUid: null,
       };
 
       await rebuild();

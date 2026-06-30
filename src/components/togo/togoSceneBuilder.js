@@ -13,7 +13,7 @@
  * the layout/material wiring here is unchanged.
  */
 import { togoParts, autoUnitScale } from '../../lib/togo/togoModel.js';
-import { traceGridLoops } from '../../lib/togo/meshToPlan.js';
+import { meshLoopsFromTriangles } from '../../lib/togo/meshToPlan.js';
 
 // sRGB ↔ linear-light transfer (the exact IEC 61966-2-1 curve). Used to average
 // swatch pixels in LINEAR light (gamma-correct) so the sampled colour isn't
@@ -281,26 +281,41 @@ export function buildTogoGroup(deps, scene3d, opts = {}) {
 }
 
 /**
- * Bake a piece group's mesh vertices into a flat Float32Array in the GROUP'S OWN
- * local frame (so it's invariant to the group's placement/rotation — a drag just
- * moves the group, the cache stays valid). Snapshot it once per selection; project
- * it every frame. The pad/contour helper meshes are skipped.
+ * Bake a piece group's mesh TRIANGLES into a flat Float32Array in the GROUP'S OWN
+ * local frame (9 floats per triangle: 3 vertices × xyz). Invariant to the group's
+ * placement/rotation — a drag just moves the group, the snapshot stays valid — by
+ * baking each mesh through `inv(group.matrixWorld) · mesh.matrixWorld`. The index
+ * buffer is expanded so every triangle is explicit. The pad/contour helper meshes
+ * are skipped. Snapshot it once per selection; project it every frame.
+ *
+ * We snapshot TRIANGLES (not loose vertices) because the silhouette is the boundary
+ * of the FILLED union of the projected triangles — rasterising filled triangles is
+ * robust where splatting sparse vertices (unevenly spread on a real FBX) tears into
+ * a disconnected scribble.
  */
-export function collectLocalVerts(THREE, group) {
+export function collectLocalTris(THREE, group) {
   if (!group) return new Float32Array(0);
   group.updateMatrixWorld(true);
   const inv = group.matrixWorld.clone().invert();
   const m = new THREE.Matrix4();
-  const v = new THREE.Vector3();
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   const out = [];
   group.traverse((o) => {
     if (!o.isMesh || !o.geometry?.attributes?.position || o.userData?.contour || o.userData?.pad) return;
     o.updateWorldMatrix(true, false);
     m.multiplyMatrices(inv, o.matrixWorld);
     const pos = o.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i).applyMatrix4(m);
-      out.push(v.x, v.y, v.z);
+    const idx = o.geometry.index;
+    const push = (ia, ib, ic) => {
+      a.fromBufferAttribute(pos, ia).applyMatrix4(m);
+      b.fromBufferAttribute(pos, ib).applyMatrix4(m);
+      c.fromBufferAttribute(pos, ic).applyMatrix4(m);
+      out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+    };
+    if (idx) {
+      for (let i = 0; i + 2 < idx.count; i += 3) push(idx.getX(i), idx.getX(i + 1), idx.getX(i + 2));
+    } else {
+      for (let i = 0; i + 2 < pos.count; i += 3) push(i, i + 1, i + 2);
     }
   });
   return new Float32Array(out);
@@ -315,55 +330,75 @@ export function collectLocalVerts(THREE, group) {
  *   clip  = projection · view · world       (camera.project does view·proj + the
  *   ndc   = clip.xyz / clip.w               perspective divide, w = −view-space z)
  *   px    = ((ndc.x+1)/2·W, (1−ndc.y)/2·H)  (NDC → viewport)
- * Because the divide by w is where perspective lives, a vertex sitting higher on
- * the cushion (nearer the lens) lands FARTHER out in px than one at the floor —
+ * Because the divide by w is where perspective lives, a triangle sitting higher on
+ * the cushion (nearer the lens) projects FARTHER out in px than one at the floor —
  * which is exactly why a flat floor ring never matched the bulge, and why we must
- * project the real geometry. We then splat the projected vertices into a pixel
- * occupancy grid (a small dilation bridges the gaps between samples), trace the
- * outer boundary with the shared `traceGridLoops`, and Chaikin-smooth it. The
- * result hugs the model to the pixel at any camera pose, piece position, or zoom.
+ * project the real geometry.
  *
- * `verts` is the local snapshot from `collectLocalVerts`; `worldMatrix` is the
- * group's CURRENT matrixWorld; `camera` the live camera; `w`,`h` the canvas CSS
- * size. Returns the largest loop as `[{x,y}, …]` px, or null if it can't be built.
+ * The silhouette is the boundary of the FILLED UNION of the model's projected
+ * triangles. So we project each triangle's 3 vertices to px, hand the flat px
+ * triangle list to `meshLoopsFromTriangles` (which point-in-triangle rasterises the
+ * union into an occupancy grid and traces it — the SAME robust filler the top-down
+ * plan uses), take the largest loop, shift it back to absolute px and Chaikin-smooth
+ * it. Filling triangles is what fixes the old vertex-splat "scribble": a filled
+ * triangle covers every cell it overlaps, so the union is solid no matter how
+ * unevenly the FBX spreads its vertices.
+ *
+ * `tris` is the local TRIANGLE snapshot from `collectLocalTris` (9 floats/tri);
+ * `worldMatrix` is the group's CURRENT matrixWorld; `camera` the live camera;
+ * `w`,`h` the canvas CSS size. Returns the largest loop as `[{x,y}, …]` px, or null
+ * if it can't be built.
  */
-export function projectScreenSilhouette(THREE, verts, worldMatrix, camera, w, h, { target = 230, dilate = 2, smooth = 2 } = {}) {
-  const n = (verts?.length || 0) / 3;
-  if (n < 3 || !(w > 0) || !(h > 0)) return null;
+export function projectScreenSilhouette(THREE, tris, worldMatrix, camera, w, h, { grid = 200, smooth = 2, bias = 1.4, maxTris = 16000, sampleTo = 12000 } = {}) {
+  const triCount = ((tris?.length || 0) / 9) | 0;
+  if (triCount < 1 || !(w > 0) || !(h > 0)) return null;
+
+  // Performance guard: a heavy FBX would project every triangle every frame (and
+  // every frame during a drag). Stride-sample down to ~sampleTo triangles — because
+  // the rasteriser FILLS each triangle, dropping some still paints a solid union, so
+  // the silhouette is preserved while the per-frame cost stays bounded.
+  const step = triCount > maxTris ? Math.ceil(triCount / sampleTo) : 1;
+
   const v = new THREE.Vector3();
-  const px = new Float64Array(n * 2);
+  const projected = [];                 // [ax,ay, bx,by, cx,cy, …] in CSS px
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (let i = 0; i < n; i++) {
-    v.set(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]).applyMatrix4(worldMatrix).project(camera);
-    const x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
-    px[i * 2] = x; px[i * 2 + 1] = y;
-    if (x < minX) minX = x; if (x > maxX) maxX = x;
-    if (y < minY) minY = y; if (y > maxY) maxY = y;
-  }
-  const spanX = maxX - minX, spanY = maxY - minY;
-  if (!(spanX > 0) || !(spanY > 0)) return null;
-  const cell = Math.max(0.5, Math.max(spanX, spanY) / target);
-  const pad = dilate + 1;
-  const gw = Math.ceil(spanX / cell) + 1 + 2 * pad;
-  const gh = Math.ceil(spanY / cell) + 1 + 2 * pad;
-  const occ = new Uint8Array(gw * gh);
-  for (let i = 0; i < n; i++) {
-    const gx = Math.floor((px[i * 2] - minX) / cell) + pad;
-    const gy = Math.floor((px[i * 2 + 1] - minY) / cell) + pad;
-    for (let dy = -dilate; dy <= dilate; dy++) {
-      const ay = gy + dy; if (ay < 0 || ay >= gh) continue;
-      for (let dx = -dilate; dx <= dilate; dx++) {
-        const ax = gx + dx; if (ax < 0 || ax >= gw) continue;
-        occ[ay * gw + ax] = 1;
-      }
+  for (let t = 0; t < triCount; t += step) {
+    const o = t * 9;
+    let ok = true;
+    for (let k = 0; k < 3; k++) {
+      v.set(tris[o + k * 3], tris[o + k * 3 + 1], tris[o + k * 3 + 2]).applyMatrix4(worldMatrix).project(camera);
+      const x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { ok = false; break; }
+      projected.push(x, y);
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
     }
+    if (!ok) projected.length -= projected.length % 6;   // drop the partial triangle
   }
-  const loops = traceGridLoops(occ, gw, gh, cell, cell);
+  if (projected.length < 6) return null;
+  if (!(maxX - minX > 0) || !(maxY - minY > 0)) return null;
+
+  // Rasterise + trace the filled union (units = px; `meshLoopsFromTriangles`
+  // normalises to the px bbox min, which equals our (minX,minY)).
+  const { loops } = meshLoopsFromTriangles(projected, { grid });
   if (!loops.length) return null;
+
   let best = loops[0], bestA = polyArea(best);
   for (let i = 1; i < loops.length; i++) { const a = polyArea(loops[i]); if (a > bestA) { bestA = a; best = loops[i]; } }
-  const ox = minX - pad * cell, oy = minY - pad * cell;
-  return chaikinClosed(best.map((p) => ({ x: p.x + ox, y: p.y + oy })), smooth);
+  if (best.length < 3) return null;
+
+  // Shift back to ABSOLUTE px, push each point a hair OUTWARD from the loop centroid
+  // (a small bias so the stroke sits pressed against / just outside the visible
+  // edge), then Chaikin-smooth the stair-steps into a flowing curve.
+  let cxAbs = 0, cyAbs = 0;
+  for (const p of best) { cxAbs += p.x; cyAbs += p.y; }
+  cxAbs = cxAbs / best.length + minX; cyAbs = cyAbs / best.length + minY;
+  const abs = best.map((p) => {
+    const x = p.x + minX, y = p.y + minY;
+    const dx = x - cxAbs, dy = y - cyAbs, len = Math.hypot(dx, dy) || 1;
+    return { x: x + (dx / len) * bias, y: y + (dy / len) * bias };
+  });
+  return chaikinClosed(abs, smooth);
 }
 
 function polyArea(poly) {
