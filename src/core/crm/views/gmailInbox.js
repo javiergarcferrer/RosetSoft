@@ -4,10 +4,12 @@
 // stored mail (synced server-side by the google-api `gmailSync` action), calls
 // these in useMemo, and renders. Two derivations the inbox is built around:
 //
-//   • BRAND categorization — each thread is filed under Ligne Roset /
-//     LifestyleGarden / Otros by matching the counterpart's email against a
-//     rule list (sender domain → brand). A per-message manual override
-//     (gmail_messages.brand) always wins, so the dealer can re-file a thread.
+//   • CATEGORY classification — each thread is filed under Ligne Roset (golden)
+//     / Proveedores / Finanzas / Operaciones / Boletines / Otros from the
+//     counterpart's sender + the subject/snippet wording + Gmail's own labels
+//     (see classifyBrand). A per-message manual override (gmail_messages.brand)
+//     always wins when it names a current category, so the dealer can re-file a
+//     thread; the stored column keeps the name `brand` for back-compat.
 //   • INVOICE detection — a message that reads like a bill AND carries a
 //     document (or whose attachment names an invoice) feeds the Facturas tab.
 //
@@ -15,30 +17,77 @@
 // view; turning one into a gasto is a navigation deep-link the View builds, so
 // the CRM↔Accounting wall (tests/architecture.test.js) stays intact.
 
-import { BRAND_LIGNE_ROSET, BRAND_LIFESTYLEGARDEN, BRAND_NAMES } from '../../../lib/constants.ts';
+import { BRAND_LIGNE_ROSET, BRAND_NAMES } from '../../../lib/constants.ts';
 
-/** The catch-all bucket for mail that matches no brand rule. */
+/** The catch-all bucket for mail that matches no category rule. */
 export const GMAIL_BRAND_OTHER = 'otros';
 
-/**
- * Default sender→brand rules. A message is filed under the FIRST rule whose
- * `match` substring appears in the sender's email (so a domain or a full
- * address both work). Order matters — put the most specific matches first.
- */
-export const DEFAULT_GMAIL_BRAND_RULES = [
-  { match: 'ligne-roset', brand: BRAND_LIGNE_ROSET },
-  { match: 'ligneroset', brand: BRAND_LIGNE_ROSET },
-  { match: 'roset', brand: BRAND_LIGNE_ROSET },
-  { match: 'lifestylegarden', brand: BRAND_LIFESTYLEGARDEN },
-  { match: 'alcoversrl', brand: BRAND_LIFESTYLEGARDEN },
-];
+// Inbox CATEGORIES (this used to be a per-brand split; it's now intent-based).
+// Ligne Roset keeps its own GOLDEN lane — every message from a Roset domain
+// lands there untouched, marketing blasts included (the PIB reports and the
+// network newsletter ARE dealer comms). Everything else is filed by what it IS,
+// not who sent it:
+//   • proveedores — other furniture / design houses + the suppliers we order
+//     from (real correspondence; their mass-mailings fall to boletines below).
+//   • finanzas    — money: our own accounting, collections, invoices, taxes,
+//     insurance, the bank.
+//   • operaciones — running the business: logistics / customs, fleet fuel,
+//     HR / recruiting, outside services.
+//   • boletines   — newsletters / promotions / marketing blasts (the noise),
+//     caught by bulk-sender markers + Gmail's own Promotions label.
+export const GMAIL_CAT_PROVEEDORES = 'proveedores';
+export const GMAIL_CAT_FINANZAS = 'finanzas';
+export const GMAIL_CAT_OPERACIONES = 'operaciones';
+export const GMAIL_CAT_BOLETINES = 'boletines';
 
 /** The inbox's top-level tabs, in display order (the Facturas tab is separate). */
 export const GMAIL_BRAND_TABS = [
   { id: BRAND_LIGNE_ROSET, label: BRAND_NAMES[BRAND_LIGNE_ROSET] || 'Ligne Roset' },
-  { id: BRAND_LIFESTYLEGARDEN, label: BRAND_NAMES[BRAND_LIFESTYLEGARDEN] || 'LifestyleGarden' },
+  { id: GMAIL_CAT_PROVEEDORES, label: 'Proveedores' },
+  { id: GMAIL_CAT_FINANZAS, label: 'Finanzas' },
+  { id: GMAIL_CAT_OPERACIONES, label: 'Operaciones' },
+  { id: GMAIL_CAT_BOLETINES, label: 'Boletines' },
   { id: GMAIL_BRAND_OTHER, label: 'Otros' },
 ];
+
+/** The category ids a manual override may legitimately carry. A stale value (e.g.
+ *  the retired 'lifestylegarden' brand) is ignored so the message re-classifies
+ *  under the current taxonomy instead of vanishing from every tab. */
+export const KNOWN_GMAIL_CATEGORIES = new Set(GMAIL_BRAND_TABS.map((t) => t.id));
+
+/**
+ * The classifier's knobs (injectable for tests). Ligne Roset and the supplier
+ * list match on the sender DOMAIN; finance/ops also recognise specific senders
+ * by name; the keyword lists catch unknown senders by what they wrote; the bulk
+ * markers pull mass-mailings out of every lane below Ligne Roset.
+ */
+export const DEFAULT_GMAIL_BRAND_RULES = {
+  // GOLDEN lane — any Roset domain.
+  ligneRoset: ['roset.fr', 'rosetusa.com', 'ligne-roset', 'ligneroset', 'roset.com'],
+  // Money we deal with by name: our accounting team, the collectors, the insurer,
+  // the magazine billing — filed to Finanzas regardless of wording.
+  financeSenders: [
+    'accounting@alcover.do', 'contabilidad@alcover.do',
+    'a24.com.do', 'setec.com.do', 'delllano.com.do', 'listindiario.com',
+  ],
+  // Operations we deal with by name: fleet fuel, logistics, outside services,
+  // recruiters (personal gmail addresses, matched on a distinctive localpart).
+  opsSenders: ['totalenergies.com', 'figibox.do', 'henriquez.com.do', 'recluta', 'asenciorh'],
+  // Other design houses + suppliers we actually order from.
+  suppliers: [
+    'kvadrat', 'dedar.com', 'finnjuhl.com', 'carlhansen.dk', 'dwr.com', 'designwithinreach',
+    'maharam.com', 'rimadesio', 'portaromana.com', 'svenskttenn.com', 'anthomdesignhouse.com',
+    'sampsonmills.com', 'taillardat.fr', 'emblemparis.fr', 'nakamotoforestry.com', 'sidoca.com',
+  ],
+  // Mass-mailing sender localparts (normalised, separators stripped) + sub-domains
+  // + telltale newsletter phrases.
+  bulkLocalparts: ['news', 'newsletter', 'noreply', 'donotreply', 'nepasrepondre', 'mailer', 'mailing', 'press', 'stories', 'marketing', 'specials', 'product'],
+  bulkDomains: ['news.', 'marketing.', 'beehiiv', 'mailchimp', 'sendgrid'],
+  bulkText: ['unsubscribe', 'darse de baja', 'publicidad', 'view in a browser', 'view in browser', 'view this newsletter', 'ver en el navegador'],
+  // Finanzas / Operaciones by wording, for senders we don't know by name.
+  finanzasWords: ['factura', 'facturaci', 'proforma', 'pago', 'pagar', 'retenci', 'itbis', 'ncf', 'e-cf', 'comprobante', 'estado de cuenta', 'estado de resultado', 'estados financieros', 'cobro', 'cobranza', 'seguro', 'póliza', 'poliza', 'banco', 'impuesto', 'dgii', 'desembolso'],
+  operacionesWords: ['combustible', 'tarjeta de', 'flota', 'empleado', 'nómina', 'nomina', 'candidat', 'armador', 'instalador', 'perfiles', 'recluta', 'aduana', 'embarque', 'contenedor', 'courier', 'logística', 'logistica', 'flete', 'shipment', 'expédition', 'expedition', 'envío'],
+};
 
 /** The domain part of an email address ('' when there's no @). */
 export function senderDomain(email) {
@@ -47,18 +96,49 @@ export function senderDomain(email) {
   return at >= 0 ? s.slice(at + 1) : '';
 }
 
+/** The localpart of an email address, separators stripped & lower-cased
+ *  (`No-Reply@x` → `noreply`) for robust mass-mailing-sender matching. */
+function senderLocal(email) {
+  const s = String(email || '').toLowerCase();
+  const at = s.indexOf('@');
+  return (at >= 0 ? s.slice(0, at) : s).replace(/[^a-z0-9]/g, '');
+}
+
 /**
- * The brand a single message belongs to. A manual override (message.brand) wins;
- * otherwise the first matching rule against the sender email; otherwise 'otros'.
+ * The category a single message belongs to. A manual override (message.brand)
+ * wins when it names a current category; otherwise the message is classified by
+ * an ordered set of signals — Ligne Roset first (golden, beats everything), then
+ * money/ops by known sender, then bulk mail, then the supplier list, then
+ * money/ops by wording. Falls back to 'otros'.
  */
 export function classifyBrand(message, rules = DEFAULT_GMAIL_BRAND_RULES) {
-  if (message?.brand) return message.brand;
-  const hay = String(message?.fromEmail || '').toLowerCase();
-  if (hay) {
-    for (const r of rules || []) {
-      if (r?.match && hay.includes(String(r.match).toLowerCase())) return r.brand;
-    }
+  if (message?.brand && KNOWN_GMAIL_CATEGORIES.has(message.brand)) return message.brand;
+  const r = rules || DEFAULT_GMAIL_BRAND_RULES;
+  const sender = String(message?.fromEmail || '').toLowerCase();
+  const domain = senderDomain(sender);
+  const local = senderLocal(sender);
+  const text = `${message?.subject || ''} ${message?.snippet || ''}`.toLowerCase();
+  const labels = message?.labelIds || [];
+  const inText = (needles) => (needles || []).some((n) => text.includes(n));
+  const inSender = (needles) => (needles || []).some((n) => sender.includes(n));
+  const inDomain = (needles) => !!domain && (needles || []).some((n) => domain.includes(n));
+
+  // 1) Ligne Roset — golden lane, beats everything (newsletters included).
+  if (inDomain(r.ligneRoset)) return BRAND_LIGNE_ROSET;
+  // 2) Money by known sender — never let a collector/biller fall into boletines.
+  if (inSender(r.financeSenders)) return GMAIL_CAT_FINANZAS;
+  // 3) Bulk / marketing — promo blasts out of every lane below.
+  const bulkLocal = (r.bulkLocalparts || []).some((n) => local.startsWith(n));
+  if (labels.includes('CATEGORY_PROMOTIONS') || bulkLocal || inDomain(r.bulkDomains) || inText(r.bulkText)) {
+    return GMAIL_CAT_BOLETINES;
   }
+  // 4) Operations by known sender.
+  if (inSender(r.opsSenders)) return GMAIL_CAT_OPERACIONES;
+  // 5) Other design houses / suppliers — real correspondence.
+  if (inDomain(r.suppliers)) return GMAIL_CAT_PROVEEDORES;
+  // 6) Money / operations by wording (unknown senders).
+  if (inText(r.finanzasWords)) return GMAIL_CAT_FINANZAS;
+  if (inText(r.operacionesWords)) return GMAIL_CAT_OPERACIONES;
   return GMAIL_BRAND_OTHER;
 }
 
@@ -156,7 +236,7 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
 
   const out = [];
   for (const t of threads.values()) {
-    const override = t._msgs.find((m) => m.brand)?.brand;
+    const override = t._msgs.find((m) => m.brand && KNOWN_GMAIL_CATEGORIES.has(m.brand))?.brand;
     if (override) {
       t.brand = override;
     } else {

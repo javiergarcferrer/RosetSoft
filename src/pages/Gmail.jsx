@@ -207,11 +207,11 @@ export default function Gmail() {
   if (!connected) {
     return (
       <div>
-        <PageHeader title="Gmail" subtitle="Bandeja de entrada por marca" />
+        <PageHeader title="Gmail" subtitle="Bandeja de entrada por categoría" />
         <EmptyState
           icon={Plug}
           title="Conecta Google primero"
-          description="La bandeja lee el correo de la cuenta de Google conectada. Conéctala en Integraciones para ver y clasificar los mensajes por marca."
+          description="La bandeja lee el correo de la cuenta de Google conectada. Conéctala en Integraciones para ver y clasificar los mensajes por categoría."
           action={(
             <Link to="/integraciones" className="inline-flex items-center gap-2 rounded-lg bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-700">
               Ir a Integraciones
@@ -239,7 +239,7 @@ export default function Gmail() {
       <div className={threadOpen ? 'hidden md:block' : undefined}>
         <PageHeader
           title="Gmail"
-          subtitle={settings?.googleEmail ? `Bandeja de ${settings.googleEmail}` : 'Bandeja de entrada por marca'}
+          subtitle={settings?.googleEmail ? `Bandeja de ${settings.googleEmail}` : 'Bandeja de entrada por categoría'}
           actions={actions}
         />
 
@@ -460,9 +460,9 @@ function ReadingPane({
             value={(last?.brand) || ''}
             onChange={(e) => onReassign(e.target.value || GMAIL_BRAND_OTHER)}
             className="rounded-lg border border-ink-200 bg-surface px-2 py-1.5 text-xs text-ink-700"
-            title="Reasignar marca"
+            title="Reasignar categoría"
           >
-            <option value="">Marca: auto</option>
+            <option value="">Categoría: auto</option>
             {GMAIL_BRAND_TABS.map((t) => (
               <option key={t.id} value={t.id}>{t.label}</option>
             ))}

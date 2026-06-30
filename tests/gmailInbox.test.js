@@ -12,26 +12,76 @@ import {
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices,
   resolveReplyDraft, replySubject, forwardSubject, resolveForwardDraft,
   isEmailAddress, resolveEmailRecipients,
-  GMAIL_BRAND_OTHER,
+  GMAIL_BRAND_OTHER, GMAIL_BRAND_TABS,
+  GMAIL_CAT_PROVEEDORES, GMAIL_CAT_FINANZAS, GMAIL_CAT_OPERACIONES, GMAIL_CAT_BOLETINES,
 } from '../src/core/crm/views/gmailInbox.js';
 
 const NOW = Date.parse('2026-06-10T12:00:00Z');
 const MIN = 60_000;
 const msg = (o) => ({ id: 'm', profileId: 'team', threadId: 't', direction: 'in', isRead: false, ...o });
 
-// ── classifyBrand ───────────────────────────────────────────────────────────
-test('classifyBrand matches sender domain to a brand', () => {
-  assert.equal(classifyBrand(msg({ fromEmail: 'ventas@ligne-roset.com' })), 'ligne-roset');
-  assert.equal(classifyBrand(msg({ fromEmail: 'orders@lifestylegarden.do' })), 'lifestylegarden');
+// ── classifyBrand (intent-based categories) ─────────────────────────────────
+test('classifyBrand: Ligne Roset is the golden lane — any Roset domain', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'lllamas@roset.fr' })), 'ligne-roset');
+  assert.equal(classifyBrand(msg({ fromEmail: 'egamboli@rosetusa.com' })), 'ligne-roset');
 });
 
-test('classifyBrand falls back to otros for an unknown sender', () => {
+test('classifyBrand: a Ligne Roset newsletter still stays in the golden lane', () => {
+  // A bulk-looking subject from a Roset domain must NOT leak into boletines.
+  const m = msg({ fromEmail: 'sgreenspan@rosetusa.com', subject: 'Ligne Roset Mini-Newsletter', snippet: 'unsubscribe' });
+  assert.equal(classifyBrand(m), 'ligne-roset');
+});
+
+test('classifyBrand: other design houses & suppliers → proveedores', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'orders@anthomdesignhouse.com' })), GMAIL_CAT_PROVEEDORES);
+  assert.equal(classifyBrand(msg({ fromEmail: 'brbe@carlhansen.dk' })), GMAIL_CAT_PROVEEDORES);
+});
+
+test('classifyBrand: money by known sender → finanzas (even with no keyword)', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'vmojica@a24.com.do', subject: 'Solicitud' })), GMAIL_CAT_FINANZAS);
+  assert.equal(classifyBrand(msg({ fromEmail: 'jjimenez@delllano.com.do', subject: 'Renovación' })), GMAIL_CAT_FINANZAS);
+});
+
+test('classifyBrand: money by wording from an unknown sender → finanzas', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'ventas@nuevoproveedor.do', subject: 'Su factura de mayo' })), GMAIL_CAT_FINANZAS);
+});
+
+test('classifyBrand: operations by sender and by wording → operaciones', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'maria.marte@totalenergies.com', subject: 'Tarjetas' })), GMAIL_CAT_OPERACIONES);
+  assert.equal(classifyBrand(msg({ fromEmail: 'rrhh@empresa.do', subject: 'Perfiles para armador' })), GMAIL_CAT_OPERACIONES);
+});
+
+test('classifyBrand: mass-mailings → boletines (localpart, Promotions label, phrase)', () => {
+  assert.equal(classifyBrand(msg({ fromEmail: 'news@news.kvadrat.dk', subject: 'Summer launches' })), GMAIL_CAT_BOLETINES);
+  assert.equal(classifyBrand(msg({ fromEmail: 'someone@bank.do', subject: 'Promo', labelIds: ['CATEGORY_PROMOTIONS'] })), GMAIL_CAT_BOLETINES);
+  assert.equal(classifyBrand(msg({ fromEmail: 'hola@tienda.do', subject: 'Oferta', snippet: 'Unsubscribe here' })), GMAIL_CAT_BOLETINES);
+});
+
+test('classifyBrand: a supplier mass-mailing goes to boletines, not proveedores', () => {
+  // Same brand (DWR), but a newsletter sender — bulk wins over the supplier lane.
+  assert.equal(classifyBrand(msg({ fromEmail: 'news@dwr.com', subject: 'Sale' })), GMAIL_CAT_BOLETINES);
+  // …while a real person at the same house lands in proveedores.
+  assert.equal(classifyBrand(msg({ fromEmail: 'james@anthomdesignhouse.com', subject: 'Re: PO' })), GMAIL_CAT_PROVEEDORES);
+});
+
+test('classifyBrand falls back to otros for an unknown, contentless sender', () => {
   assert.equal(classifyBrand(msg({ fromEmail: 'someone@randomdomain.com' })), GMAIL_BRAND_OTHER);
 });
 
-test('classifyBrand: a manual override always wins over the rules', () => {
+test('classifyBrand: a manual override to a current category wins over the rules', () => {
   // Sender would classify as ligne-roset, but the override re-files it.
-  assert.equal(classifyBrand(msg({ fromEmail: 'ventas@ligne-roset.com', brand: 'lifestylegarden' })), 'lifestylegarden');
+  assert.equal(classifyBrand(msg({ fromEmail: 'lllamas@roset.fr', brand: GMAIL_CAT_FINANZAS })), GMAIL_CAT_FINANZAS);
+});
+
+test('classifyBrand: a stale override (retired brand) is ignored and re-classifies', () => {
+  // 'lifestylegarden' no longer has a tab — the message must fall back to the
+  // rules (here: Roset domain → golden lane), not vanish from every tab.
+  assert.equal(classifyBrand(msg({ fromEmail: 'lllamas@roset.fr', brand: 'lifestylegarden' })), 'ligne-roset');
+});
+
+test('GMAIL_BRAND_TABS opens on the golden Ligne Roset lane and has no LifestyleGarden', () => {
+  assert.equal(GMAIL_BRAND_TABS[0].id, 'ligne-roset');
+  assert.ok(!GMAIL_BRAND_TABS.some((t) => t.id === 'lifestylegarden'));
 });
 
 // ── isInvoiceEmail ──────────────────────────────────────────────────────────
@@ -79,11 +129,11 @@ test('groups by threadId, newest-activity first, unread = inbound unread', () =>
 
 test('thread brand follows the inbound counterpart, not our outbound reply', () => {
   const messages = [
-    msg({ id: 'i', threadId: 'T', direction: 'in', fromEmail: 'x@lifestylegarden.do', receivedAt: NOW - 5 * MIN }),
+    msg({ id: 'i', threadId: 'T', direction: 'in', fromEmail: 'brbe@carlhansen.dk', receivedAt: NOW - 5 * MIN }),
     msg({ id: 'o', threadId: 'T', direction: 'out', fromEmail: 'us@alcover.do', receivedAt: NOW - 1 * MIN }),
   ];
   const [t] = resolveGmailThreads(messages, {});
-  assert.equal(t.brand, 'lifestylegarden');
+  assert.equal(t.brand, GMAIL_CAT_PROVEEDORES);
 });
 
 test('hasInvoice flags a thread carrying an invoice message; needle filters', () => {
