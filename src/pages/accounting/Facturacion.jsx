@@ -1282,8 +1282,10 @@ export default function Facturacion() {
         // line detail, then the fiscal fields + Facturar action.
         return (
           <>
-            <div className="fixed inset-0 z-40 bg-ink-900/40" onClick={close} aria-hidden />
-            <aside className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[460px] bg-surface border-l border-ink-200 shadow-2xl flex flex-col"
+            <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]" onClick={close} aria-hidden />
+            {/* `dark` keeps this drawer the same focused dark sheet as InvoiceDrawer
+                in both themes (matching chrome for facturar → factura). */}
+            <aside className="dark fixed top-0 right-0 bottom-0 z-50 w-full max-w-[460px] bg-surface text-ink-900 border-l border-ink-200 shadow-2xl flex flex-col"
               role="dialog" aria-modal="true" aria-label={`Facturar cotización ${q.number ?? ''}`}>
               <div className="px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-b border-ink-100">
                 <div className="flex items-center justify-between mb-3">

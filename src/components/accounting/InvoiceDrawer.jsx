@@ -134,8 +134,11 @@ export default function InvoiceDrawer({ row, posting, customer, payments, itbisR
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-ink-900/40" onClick={onClose} aria-hidden />
-      <aside className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-[460px] bg-surface border-l border-ink-200 shadow-2xl flex flex-col"
+      <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+      {/* `dark` pins the drawer to the dark surface ramp in BOTH themes — a focused
+          dark sheet over the dimmed page (and never a light wash, which is what
+          bg-ink-900/40 inverted to in dark mode). */}
+      <aside className="dark fixed top-0 right-0 bottom-0 z-50 w-full max-w-[460px] bg-surface text-ink-900 border-l border-ink-200 shadow-2xl flex flex-col"
         role="dialog" aria-modal="true" aria-label={`Factura ${posting.ncf || ''}`}>
         <div className="px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] border-b border-ink-100">
           <div className="flex items-center justify-between mb-3">

@@ -84,7 +84,7 @@ export function ActionChips({ actions, onSelect }) {
         return (
           <button key={a.id} type="button"
             onClick={() => { if (!onSelect?.(a)) navigate(a.to); }}
-            className={`inline-flex items-center gap-2 shrink-0 rounded-full border px-3 py-1.5 text-sm shadow-xs hover:shadow-sm transition-shadow ${SEV_SKIN[a.severity]}`}>
+            className={`inline-flex items-center gap-2 shrink-0 rounded-full border px-3 py-1.5 text-sm shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-95 active:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 ${SEV_SKIN[a.severity]}`}>
             <Icon size={14} className="shrink-0" />
             <span className="whitespace-nowrap">{actionText(a)}</span>
           </button>
