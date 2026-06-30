@@ -258,7 +258,7 @@ export default function TogoStage({
         const contour = (loops && loops.length) ? buildSilhouetteContour(THREE, loops, { lift: CONTOUR_LIFT }) : buildFootprintRing(THREE, w, d);
         contour.userData.uid = uid;
         contour.userData.contour = true;
-        contour.visible = stateRef.current.mode === '2d';
+        contour.visible = stateRef.current.mode === '2d' && uid != null && uid === stateRef.current.selectedUid;
         pg.userData.contour = contour;
         pg.add(contour);
       }
@@ -289,22 +289,27 @@ export default function TogoStage({
         m.emissive.setHex(on ? 0x3a342b : 0x000000);
         m.emissiveIntensity = on ? 0.5 : 0;
       });
-      // The 2D silhouette contour goes brand-gold + bolder when its piece is
-      // selected — fill and edge each pick up the selection colour/opacity.
-      pg.userData?.contour?.traverse((o) => {
-        const m = o.material; if (!m || !m.color) return;
-        m.color.setHex(on ? CONTOUR_SEL : CONTOUR_GOLD);
-        if (o.userData?.contourFill) m.opacity = on ? FILL_OPACITY_SEL : FILL_OPACITY;
-        else m.opacity = on ? EDGE_OPACITY_SEL : EDGE_OPACITY;
-      });
+      // The 2D silhouette contour shows ONLY on the selected piece (top-down) —
+      // its yellow highlight is the "this one's selected" cue, so an unselected
+      // piece carries no outline at all.
+      const contour = pg.userData?.contour;
+      if (contour) {
+        contour.visible = on && stateRef.current.mode === '2d';
+        contour.traverse((o) => {
+          const m = o.material; if (!m || !m.color) return;
+          m.color.setHex(CONTOUR_SEL);
+          m.opacity = o.userData?.contourFill ? FILL_OPACITY_SEL : EDGE_OPACITY_SEL;
+        });
+      }
     });
     l.requestRender();
   }
 
-  // Show the 2D contour rings only under the top-down camera.
+  // Show the contour only on the SELECTED piece, and only under the top-down camera.
   function setContourMode(l, mode) {
     if (!l?.group) return;
-    l.group.children.forEach((pg) => { const r = pg.userData?.contour; if (r) r.visible = mode === '2d'; });
+    const sel = stateRef.current.selectedUid;
+    l.group.children.forEach((pg) => { const r = pg.userData?.contour; if (r) r.visible = mode === '2d' && pg.userData.uid != null && pg.userData.uid === sel; });
   }
 
   // Re-skin (finish change) without rebuilding geometry.
