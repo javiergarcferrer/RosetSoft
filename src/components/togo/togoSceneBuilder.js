@@ -204,19 +204,22 @@ function placeRealModel(THREE, object, material, desc, pieceGroup, footprint) {
   wrap.scale.setScalar(base);
   wrap.updateMatrixWorld(true);
 
-  // FILL THE FOOTPRINT. The modelled Togo sits a couple % INSIDE its catalogue
-  // footprint, so two pieces snapped flush (footprint edges touching) still showed
-  // a visible gap between the cushions — "the white space". Stretch the wrap in X
-  // and Z just enough that the mesh's footprint EXACTLY matches widthCm × depthCm,
-  // so flush pieces actually touch. The correction is tiny (~1.0–1.05) and per-axis
-  // ratios are near-equal, so it doesn't visibly distort; clamped so a grossly
-  // wrong mesh is never warped. Height (Y) is untouched (stays the true ~72 cm).
+  // FILL THE FOOTPRINT — and then some. The modelled Togo sits INSIDE its
+  // catalogue footprint, so two pieces snapped flush (footprint edges touching)
+  // left a visible gap between the cushions — "the white space". Stretch the wrap
+  // in X and Z so the mesh slightly OVERFILLS widthCm × depthCm (BLEED): the soft
+  // cushions then meet and squish together at the seam with no gap, the way Togo
+  // modules actually butt up against each other. The ceiling is generous (an
+  // undersized export must still reach its footprint), but a grossly wrong mesh is
+  // never warped; per-axis ratios stay near-equal so it doesn't visibly distort.
+  // Height (Y) is untouched (stays the true ~72 cm).
   const sz = new THREE.Box3().setFromObject(wrap).getSize(new THREE.Vector3());
   const w = Number(footprint?.widthCm) || 0, d = Number(footprint?.depthCm) || 0;
   if (w > 0 && d > 0 && sz.x > 1e-3 && sz.z > 1e-3) {
-    const clamp = (r) => Math.max(0.85, Math.min(1.18, r));
-    wrap.scale.x = base * clamp(w / sz.x);
-    wrap.scale.z = base * clamp(d / sz.z);
+    const BLEED = 1.04;          // meet + slightly overlap neighbours at the seam
+    const clamp = (r) => Math.max(0.85, Math.min(1.35, r));
+    wrap.scale.x = base * clamp((w * BLEED) / sz.x);
+    wrap.scale.z = base * clamp((d * BLEED) / sz.z);
     wrap.updateMatrixWorld(true);
   }
 
