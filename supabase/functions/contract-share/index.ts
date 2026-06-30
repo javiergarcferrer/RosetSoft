@@ -110,7 +110,10 @@ async function buildBundle(admin: Admin, plan: Row): Promise<Record<string, unkn
       installmentCount: num(plan.installment_count),
       firstDueAt: plan.first_due_at,
       schedule: Array.isArray(plan.schedule) ? plan.schedule : [],
+      // The body is derived from the plan on the client (resolvePaymentPlanView)
+      // unless the dealer overrode it; pass both so the public link can decide.
       contractBody: plan.contract_body || '',
+      contractBodyCustom: plan.contract_body_custom === true,
       // Signed state — surfaced so the link shows the stamped signature + a link
       // to the archived PDF once signed.
       signedAt: plan.signed_at,

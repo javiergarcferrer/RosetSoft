@@ -20,6 +20,47 @@ export function buildPlanSchedule({ totalUsd, downPaymentPct = 50, monthlyRatePc
   return amortize({ totalUsd, downPaymentPct, monthlyRatePct, installmentCount, firstDueAt });
 }
 
+/**
+ * The auto-generated contract paragraph that DESCRIBES the plan in prose, derived
+ * from the plan itself so the words can never drift from the schedule.
+ *
+ * This is the congruency fix: the description used to be frozen as text on first
+ * save, so editing the stages (e.g. 50/20/20/10 → 50/25/25) updated the schedule
+ * but left the paragraph claiming the old split. Deriving it here — and having
+ * every surface render this unless the dealer typed a custom override
+ * (`contractBodyCustom`) — keeps the prose and the numbers in lockstep.
+ */
+export function defaultContractBody(plan) {
+  if (!plan) return '';
+  const number = plan.number ?? '';
+  const head = `El cliente acuerda adquirir los bienes detallados en la cotización Nº ${number} `;
+  const tail = `conforme al calendario de pagos detallado en este contrato. La entrega de los bienes se `
+    + `realizará según las condiciones acordadas. El atraso en el pago de cualquier cuota podrá generar `
+    + `cargos por mora.`;
+  if (plan.scheduleMode === 'custom') {
+    const stages = (Array.isArray(plan.schedule) ? plan.schedule : []).filter((s) => Number(s?.pct) > 0);
+    const count = stages.length || Number(plan.installmentCount) || 0;
+    const pcts = stages.map((s) => `${Number(s.pct) || 0}%`).join(' / ');
+    return `${head}y pagar su valor total en ${count} ${count === 1 ? 'pago' : 'pagos'} por etapas (${pcts}), ${tail}`;
+  }
+  const count = Number(plan.installmentCount) || 0;
+  const down = plan.downPaymentPct ?? 50;
+  const rate = plan.monthlyRatePct ?? 0;
+  return `${head}y pagar su valor total mediante un pago inicial del ${down}% y ${count} `
+    + `${count === 1 ? 'cuota mensual' : 'cuotas mensuales'} con una tasa de interés del ${rate}% mensual, ${tail}`;
+}
+
+/**
+ * The contract body a plan renders: a dealer override (or an already-signed
+ * contract's agreed text) verbatim, otherwise the description derived from the
+ * plan so it stays congruent with the schedule.
+ */
+function contractBodyFor(plan) {
+  const stored = plan.contractBody ?? '';
+  if ((plan.contractBodyCustom || plan.signedAt) && stored) return stored;
+  return defaultContractBody(plan);
+}
+
 /** Per-row state for the schedule table. */
 function installmentState(row, now) {
   if (row.paidAt) return 'paid';
@@ -91,8 +132,10 @@ export function resolvePaymentPlanView(plan, { rate = 0, now = Date.now() } = {}
     paidCount: installments.filter((r) => r.isPaid).length,
     overdueCount,
     nextDue: next ? { n: next.n, dueAt: next.dueAt, amount: next.amount, amountDop: next.amountDop } : null,
-    // Contract / signing.
-    contractBody: plan.contractBody ?? '',
+    // Contract / signing. Derive the description from the plan (unless the dealer
+    // overrode it or it's signed) so the prose can't drift from the schedule.
+    contractBody: contractBodyFor(plan),
+    contractBodyCustom: !!plan.contractBodyCustom,
     shareToken: plan.shareToken ?? null,
     shareEnabled: !!plan.shareEnabled,
     isSigned: !!plan.signedAt,
