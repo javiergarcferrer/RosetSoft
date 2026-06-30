@@ -1,6 +1,6 @@
 // dalle-image — the server side of the JARVIS image-generation pane. The dealer
 // types a prompt (optionally with dropped "inspiration" reference images and a
-// target size), and this function relays it to OpenAI DALL·E 3, renders the
+// target size), and this function relays it to OpenAI's gpt-image-1, renders the
 // results to the chosen dimensions, archives them in the public `social` bucket
 // and returns their URLs.
 //
@@ -32,14 +32,17 @@ const CORS_HEADERS = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 
 const DEFAULT_VISION_MODEL = 'gpt-4o';
+const IMAGE_MODEL = 'gpt-image-1';
 const STORAGE_BUCKET = 'social';
 
-// DALL·E 3 only supports n=1; we fan out `count` parallel calls for multiples.
+// gpt-image-1 only supports n=1; we fan out `count` parallel calls for multiples.
+// Its three sizes differ from the retired dall-e-3 set — it does NOT accept
+// 1024x1792 / 1792x1024 (those 400 as an invalid size).
 type Aspect = 'square' | 'portrait' | 'landscape';
-const SIZE_BY_ASPECT: Record<Aspect, '1024x1024' | '1024x1792' | '1792x1024'> = {
+const SIZE_BY_ASPECT: Record<Aspect, '1024x1024' | '1024x1536' | '1536x1024'> = {
   square: '1024x1024',
-  portrait: '1024x1792',
-  landscape: '1792x1024',
+  portrait: '1024x1536',
+  landscape: '1536x1024',
 };
 
 const DESCRIBE_PROMPT =
@@ -156,8 +159,9 @@ Deno.serve(async (req) => {
     const size = SIZE_BY_ASPECT[aspect];
     const count = clamp(Math.round(Number(body.count) || 1), 1, 6);
 
-    const quality = body.quality === 'hd' ? 'hd' : 'standard';
-    const style = body.style === 'natural' ? 'natural' : 'vivid';
+    // gpt-image-1's quality vocabulary is low|medium|high|auto (NOT dall-e's
+    // standard|hd) and it has no `style` knob — the UI's HD toggle maps to high.
+    const quality = body.quality === 'hd' ? 'high' : 'medium';
     const styleNote = String(body.styleNote || '').trim();
     const fullPrompt = [prompt, styleNote].filter(Boolean).join('\n\nEstilo de referencia: ');
 
@@ -165,16 +169,16 @@ Deno.serve(async (req) => {
     const targetHeight = posInt(body.targetHeight);
 
     try {
-      // DALL·E 3 only does n=1 → fan out `count` parallel calls.
+      // gpt-image-1 only does n=1 → fan out `count` parallel calls. It returns
+      // base64 inline by default, so we pass NO response_format — that param is
+      // rejected on this endpoint ("Unknown parameter: 'response_format'").
       const results = await Promise.all(
         Array.from({ length: count }, () =>
           openai.images.generate({
-            model: 'dall-e-3',
+            model: IMAGE_MODEL,
             n: 1,
             size,
-            response_format: 'b64_json',
             quality,
-            style,
             prompt: fullPrompt,
           }),
         ),
@@ -212,7 +216,7 @@ Deno.serve(async (req) => {
         }),
       );
 
-      return json({ ok: true, images });
+      return json({ ok: true, images, model: IMAGE_MODEL });
     } catch (e) {
       return json({ ok: false, error: apiErrorMessage(e) }, 502);
     }

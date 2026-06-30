@@ -9,11 +9,11 @@
  * the history gallery projection. No React / db / supabase — it's a Model.
  */
 
-/** The three native DALL·E 3 sizes, with the API string each maps to. */
+/** The three native gpt-image-1 sizes, with the API string each maps to. */
 export const DALLE_SIZES = {
   square: { w: 1024, h: 1024, api: '1024x1024' },
-  portrait: { w: 1024, h: 1792, api: '1024x1792' },
-  landscape: { w: 1792, h: 1024, api: '1792x1024' },
+  portrait: { w: 1024, h: 1536, api: '1024x1536' },
+  landscape: { w: 1536, h: 1024, api: '1536x1024' },
 };
 
 const ASPECTS = ['square', 'portrait', 'landscape'];

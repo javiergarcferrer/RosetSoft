@@ -24,10 +24,10 @@ const PRESETS = [
 const ASPECT_LABEL = { square: 'Cuadrada', portrait: 'Vertical', landscape: 'Horizontal' };
 
 /**
- * Estudio de imágenes — the DALL·E 3 ad/artwork pane. The dealer writes a
+ * Estudio de imágenes — the gpt-image-1 ad/artwork pane. The dealer writes a
  * prompt, optionally drops "inspiration" reference photos (turned into an
- * editable style brief by the `describe` mode, since DALL·E takes no image
- * input), sets exact target pixels (we pick the nearest native aspect; the
+ * editable style brief by the `describe` mode, since the generator takes no
+ * image input), sets exact target pixels (we pick the nearest native aspect; the
  * Edge Function crops/resizes to the exact dims), chooses how many images to
  * generate, and gets a grid of downloadable results. Every result is persisted
  * best-effort into `generated_images` for the history gallery below.
@@ -126,7 +126,7 @@ export default function ImageStudio() {
         height: img.height || plan.request.targetHeight,
         count: plan.request.count,
         revisedPrompt: img.revisedPrompt || null,
-        model: res?.model || 'dall-e-3',
+        model: res?.model || 'gpt-image-1',
         inspiration: inspiration.map((i) => i.url),
         error: null,
         createdAt: now,
@@ -145,7 +145,7 @@ export default function ImageStudio() {
     <div className="max-w-6xl mx-auto">
       <PageHeader
         title="Estudio de imágenes"
-        subtitle="Genera anuncios y arte con IA (DALL·E 3): describe la escena, arrastra imágenes de inspiración y elige el tamaño."
+        subtitle="Genera anuncios y arte con IA: describe la escena, arrastra imágenes de inspiración y elige el tamaño."
       />
 
       {error && (
