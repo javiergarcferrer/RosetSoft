@@ -48,7 +48,7 @@ const RAUSCHEN = b64(join(FONTS, 'RauschenB-Semibold.woff2'));
 // the Meta link cache and the WhatsApp template button base; leave it be.
 const CARDS = [
   {
-    file: 'og-contrato-v5.jpg',
+    file: 'og-contrato-v6.jpg',
     accent: '#19A06B', // emerald — agreement / money
     glow: 'rgba(25,160,107,0.42)',
     head: 'Su plan de pago,',
@@ -56,7 +56,7 @@ const CARDS = [
     sub: 'Revíselo y fírmelo en línea.',
   },
   {
-    file: 'og-togo-v5.jpg',
+    file: 'og-togo-v6.jpg',
     accent: '#C76B29', // ALCOVER terracotta (current brand)
     glow: 'rgba(199,107,41,0.46)',
     head: 'Diseñe su Togo',
@@ -64,7 +64,7 @@ const CARDS = [
     sub: 'Combine módulos y telas en vivo.',
   },
   {
-    file: 'og-tienda-v5.jpg',
+    file: 'og-tienda-v6.jpg',
     accent: '#5B5BD6', // indigo
     glow: 'rgba(91,91,214,0.44)',
     head: 'La colección ALCOVER,',
@@ -72,7 +72,7 @@ const CARDS = [
     sub: 'Explore la tienda en línea.',
   },
   {
-    file: 'og-cuenta-v5.jpg',
+    file: 'og-cuenta-v6.jpg',
     accent: '#2F6BF0', // blue
     glow: 'rgba(47,107,240,0.42)',
     head: 'Su estado de cuenta,',
@@ -102,20 +102,21 @@ html,body{width:1200px;height:630px;background:#15110d}
 .glow{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(1300px 820px at 97% -6%, ${c.glow}, transparent 60%),
              radial-gradient(820px 600px at 2% 104%, rgba(255,255,255,0.05), transparent 58%)}
-.top{position:absolute;left:96px;top:86px;right:80px;display:flex;gap:34px}
-.rule{width:6px;border-radius:3px;background:${c.accent};flex:none}
-.head{font-family:Sohne,system-ui,sans-serif;font-size:74px;line-height:1.06;letter-spacing:-1.6px;color:#fbfaf8}
-.line{font-family:Sohne,system-ui,sans-serif;font-size:74px;line-height:1.06;letter-spacing:-1.6px;color:${c.accent}}
-.sub{display:flex;align-items:center;gap:16px;margin-top:32px;
-  font-family:Lausanne,system-ui,sans-serif;font-size:30px;letter-spacing:-0.2px;color:#cbc8c0}
-.dot{width:14px;height:14px;border-radius:50%;background:${c.accent};flex:none}
-/* ALCOVER (Rauschen) sits flush at the bottom edge. Rauschen carries a tall
-   built-in descent, so a normal line box leaves a fat empty band beneath the
-   caps (the "black bar" below the logo). height = cap height + overflow:hidden
-   trims that descent away, and bottom:22px leaves only a hair of padding, so the
-   visible letters hug the bottom edge with no dead space under them. */
-.mark{position:absolute;left:96px;bottom:22px;height:47px;overflow:hidden;
-  font-family:Rauschen,system-ui,sans-serif;font-size:64px;line-height:0.74;
+/* Type runs LARGE so it stays readable after WhatsApp downscales the card to
+   ~a third of its size in the chat. The block hugs the top; ALCOVER hugs the
+   bottom; the lit gradient carries the space between. */
+.top{position:absolute;left:90px;top:70px;right:70px;display:flex;gap:32px}
+.rule{width:7px;border-radius:4px;background:${c.accent};flex:none}
+.head{font-family:Sohne,system-ui,sans-serif;font-size:90px;line-height:1.04;letter-spacing:-2.2px;color:#fbfaf8}
+.line{font-family:Sohne,system-ui,sans-serif;font-size:90px;line-height:1.04;letter-spacing:-2.2px;color:${c.accent}}
+.sub{display:flex;align-items:center;gap:18px;margin-top:36px;
+  font-family:Lausanne,system-ui,sans-serif;font-size:40px;letter-spacing:-0.3px;color:#cdcac2}
+.dot{width:17px;height:17px;border-radius:50%;background:${c.accent};flex:none}
+/* ALCOVER (Rauschen, all-caps → no descender ink) seated near the bottom with
+   line-height:1 and NO overflow clip — clipping the box was cutting the TOPS of
+   the letters. bottom:46 leaves a slight, even margin to the picture edge. */
+.mark{position:absolute;left:90px;bottom:46px;
+  font-family:Rauschen,system-ui,sans-serif;font-size:70px;line-height:1;
   letter-spacing:0.5px;color:#fbfaf8}
 </style></head><body><div class="card">
   <div class="glow"></div>
