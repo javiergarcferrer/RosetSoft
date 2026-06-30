@@ -20,7 +20,16 @@ and the SQL in `supabase/migrations/`.
   constraints). Name `YYYYMMDDHHMMSS_desc.sql`, timestamp later than every
   existing file. End with `notify pgrst, 'reload schema';`. **Pushing to
   `main` auto-applies them** (see root CLAUDE.md) — never ask the user to run
-  them.
+  them. **Never apply a repo migration with the `apply_migration` MCP tool** —
+  it stamps the row in `supabase_migrations.schema_migrations` with a
+  *current-timestamp* version (e.g. `20260630021151`), not the filename's
+  version, so remote ends up carrying an orphan version the local file doesn't
+  have. That drift (`Remote migration versions not found in local migrations
+  directory` in the branch-action log) JAMS the whole sync — it aborts before
+  the edge-function redeploy step, so a function change can sit unshipped across
+  many `main` pushes (symptom: prod runs stale function code; "force redeploy"
+  commits have no effect). Fix = reconcile `schema_migrations.version` to the
+  filename version via `execute_sql`, not more commits.
 
 ## Live tables (38 in `TABLES`)
 CRM side: `profiles · settings · images · customers · professionals · orders ·
