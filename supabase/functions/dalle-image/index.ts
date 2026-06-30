@@ -13,7 +13,7 @@
 //   test | config        → health probe for the JARVIS card; does NOT need a key.
 //   saveConfig {apiKey}   → write-only UPSERT of the key (never returned).
 //   describe {imageUrls}  → vision brief of reference images (art-direction note).
-//   generate {prompt,…}   → N parallel DALL·E 3 generations → resized → uploaded.
+//   generate {prompt,…}   → N parallel gpt-image-1 generations → resized → uploaded.
 //
 // This slice never writes the generated_images history table — the frontend
 // persists that, keeping this function independent.
@@ -187,9 +187,20 @@ Deno.serve(async (req) => {
       const images = await Promise.all(
         results.map(async (res) => {
           const datum = res.data?.[0];
-          const b64 = datum?.b64_json || '';
           const revisedPrompt = datum?.revised_prompt || null;
-          let bytes = decodeBase64(b64);
+          // gpt-image-1 returns the bytes inline as base64; we accept a returned
+          // URL too so a contract/model change can never silently upload 0 bytes
+          // (decodeBase64('') yields an empty array → a broken image with no error).
+          let bytes: Uint8Array;
+          if (datum?.b64_json) {
+            bytes = decodeBase64(datum.b64_json);
+          } else if (datum?.url) {
+            const imgRes = await fetch(datum.url);
+            if (!imgRes.ok) throw new Error(`image fetch failed: ${imgRes.status}`);
+            bytes = new Uint8Array(await imgRes.arrayBuffer());
+          } else {
+            throw new Error('OpenAI devolvió una imagen vacía');
+          }
           let width = nativeWidth(size);
           let height = nativeHeight(size);
 
