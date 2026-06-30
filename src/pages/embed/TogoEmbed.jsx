@@ -11,7 +11,7 @@ import { buildTogoGroup, disposeGroup, STANDARD_TOGO_FINISH } from '../../compon
 import { loadTogoModels } from '../../components/togo/togoModelLoader.js';
 import { fetchTogoCatalog, submitTogoRequest, togoEmbedModalUrl } from '../../lib/togoEmbed.js';
 import { useMeshPlans } from '../../components/togo/useMeshPlans.js';
-import { useTogoThumbnails } from '../../components/togo/togoThumbnails.js';
+import { useTogoThumbnails, useTogoFabricThumbs } from '../../components/togo/togoThumbnails.js';
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
@@ -581,7 +581,7 @@ export default function TogoEmbed() {
 
       <QuoteSheet
         open={quoteOpen} onClose={() => setQuoteOpen(false)}
-        placed={placed} resolvedById={resolvedById} thumbById={thumbById} renderThumbById={renderThumbById} rates={rates}
+        placed={placed} resolvedById={resolvedById} models={models} thumbById={thumbById} renderThumbById={renderThumbById} rates={rates}
         subtotalUsd={pricedUsd} pending={pendingFabric} overallCm={vm.overallCm}
         onRequest={() => { setQuoteOpen(false); setStep('form'); }}
       />
@@ -794,13 +794,21 @@ function CanvasArea({
  *  a swatch to see it big), unit price, the assembled size, the running total,
  *  and the "request a quote" CTA. Read-only over `placed` (the same data the
  *  lead submission and the estimate dock use). */
-function QuoteSheet({ open, onClose, placed, resolvedById, thumbById = {}, renderThumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
+function QuoteSheet({ open, onClose, placed, resolvedById, models = [], thumbById = {}, renderThumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
   const [preview, setPreview] = useState(null); // hovered swatch → big centered preview
   useEffect(() => { if (!open) setPreview(null); }, [open]);
   const rows = placed.map((p) => {
     const r = resolvePlacement(p, resolvedById);
     return { uid: p.uid, pieceId: p.pieceId, label: r.label || r.name || 'Togo', w: r.widthCm, d: r.depthCm, fabric: p.material?.fabric || '', code: p.material?.code || '', priced: !!p.material, price: r.unitPrice };
   });
+  // Render each fabricked row in its CHOSEN fabric (sampled swatch hue), so the
+  // Resumen thumbnail matches the placed piece. Only while the sheet is open.
+  const modelById = useMemo(() => Object.fromEntries(models.map((m) => [m.id, m])), [models]);
+  const fabricRows = open ? rows.filter((row) => row.code).map((row) => ({
+    key: row.uid, code: row.code,
+    model: modelById[row.pieceId] || { id: row.pieceId, widthCm: row.w, depthCm: row.d, name: row.label },
+  })) : [];
+  const fabricThumbs = useTogoFabricThumbs(fabricRows);
   return (
     <Modal open={open} onClose={onClose} title="Resumen de tu Togo" size="lg">
       {open && (
@@ -811,7 +819,7 @@ function QuoteSheet({ open, onClose, placed, resolvedById, thumbById = {}, rende
             <ul className="divide-y divide-ink-100 -my-1">
               {rows.map((row) => (
                 <li key={row.uid} className="flex items-center gap-3 py-2.5">
-                  <ModelThumb id={row.pieceId} render={renderThumbById} svg={thumbById[row.pieceId]} alt={row.label} className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 p-1" />
+                  <ModelThumb id={row.uid} render={{ [row.uid]: fabricThumbs[row.uid] || renderThumbById[row.pieceId] }} svg={thumbById[row.pieceId]} alt={row.label} className="shrink-0 w-12 h-12 rounded-lg bg-ink-50 p-1" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{row.label}</div>
                     <div className="text-[11px] text-ink-500 tabular-nums">{row.w}×{row.d} cm</div>

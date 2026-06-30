@@ -13,12 +13,30 @@
  */
 import { useEffect, useState } from 'react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
+import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { inferTogoForm } from '../../lib/togo/togoModel.js';
 import { loadTogoModels } from './togoModelLoader.js';
-import { buildTogoGroup, setupTogoStage, disposeGroup, makeFabricMaps, STANDARD_TOGO_FINISH } from './togoSceneBuilder.js';
+import { buildTogoGroup, setupTogoStage, disposeGroup, makeFabricMaps, sampleSwatchColor, STANDARD_TOGO_FINISH } from './togoSceneBuilder.js';
 
 const SIZE = 320;                         // px (square) before DPR
-const cache = new Map();                  // model id → data URL (session-lived)
+const cache = new Map();                  // `${modelId}:${fabricCode}` → data URL (session-lived)
+const colorCache = new Map();             // fabric code → sampled hex (or null), session-lived
+
+/** The dominant colour (hex) of a fabric swatch, sampled once and cached — the
+ *  SAME read the live stage does, so a Resumen thumbnail matches the placed
+ *  piece. CORS-clean via the swatch-proxy; a failure resolves to null (oatmeal). */
+async function colorForCode(THREE, code) {
+  if (!code) return null;
+  if (colorCache.has(code)) return colorCache.get(code);
+  const url = swatchProxyUrl(code) || swatchUrl(code);
+  if (!url) { colorCache.set(code, null); return null; }
+  try {
+    const tex = await new THREE.TextureLoader().loadAsync(url);
+    const c = sampleSwatchColor(tex.image); tex.dispose?.();
+    colorCache.set(code, c ?? null);
+    return c ?? null;
+  } catch { colorCache.set(code, null); return null; }
+}
 
 let enginePromise = null;
 async function getEngine() {
@@ -47,26 +65,41 @@ async function getEngine() {
   return enginePromise;
 }
 
-/** Render ONE model to a PNG data URL (cached by model id). */
-export async function renderTogoThumb(model) {
+// All renders share ONE offscreen renderer/scene, so they MUST run one at a time
+// — two concurrent calls (the hotbar's generic hook + the Resumen's per-fabric
+// hook) would otherwise add both groups to the scene at once and cross-render.
+// Chain every call through this promise so they serialise (and the chain survives
+// a single failure).
+let renderChain = Promise.resolve();
+export function renderTogoThumb(model, opts = {}) {
+  const next = renderChain.then(() => _renderTogoThumb(model, opts), () => _renderTogoThumb(model, opts));
+  renderChain = next.catch(() => {});
+  return next;
+}
+
+/** Render ONE model to a PNG data URL, in the given fabric (`opts.code`) or the
+ *  default oatmeal body when no code. Cached by `${modelId}:${code}`. */
+async function _renderTogoThumb(model, { code = '' } = {}) {
   if (!model?.id) return null;
-  if (cache.has(model.id)) return cache.get(model.id);
+  const cacheKey = `${model.id}:${code}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
   let eng;
   try { eng = await getEngine(); } catch { return null; }
   const { THREE, deps, renderer, scene, camera, quilt, grain, modelCache } = eng;
+  const color = await colorForCode(THREE, code);   // the chosen fabric's hue (or null)
   const w = Number(model.widthCm) || 90, d = Number(model.depthCm) || 90;
   const form = inferTogoForm(model.name || model.label || '', w, d);
-  const piece = { uid: 't', widthCm: w, depthCm: d, form, x: 0, z: 0, rotationDeg: 0, fabricCode: '', mesh: model.mesh || null };
+  const piece = { uid: 't', widthCm: w, depthCm: d, form, x: 0, z: 0, rotationDeg: 0, fabricCode: code, mesh: model.mesh || null };
 
   let group = null;
   try {
     const loaded = await loadTogoModels({ pieces: [piece] }, modelCache);
-    // Render the preview EXACTLY as a placed piece reads: the standard velvet
-    // (terciopelo) finish over the materialless oatmeal body (colorFor → null),
-    // so the hotbar previews match what lands on the plan and read their shape.
+    // Render the preview EXACTLY as the placed piece reads: the standard velvet
+    // (terciopelo) finish in the chosen fabric colour (or the oatmeal body when
+    // none), so the thumbnail matches what's on the plan and reads its shape.
     group = buildTogoGroup(deps, { pieces: [piece] }, {
       ...STANDARD_TOGO_FINISH, normalMap: quilt, grainMap: grain,
-      colorFor: () => null, modelFor: loaded.modelFor,
+      colorFor: () => color, modelFor: loaded.modelFor,
     });
     scene.add(group);
 
@@ -81,7 +114,7 @@ export async function renderTogoThumb(model) {
     camera.updateProjectionMatrix();
     renderer.render(scene, camera);
     const url = renderer.domElement.toDataURL('image/png');
-    cache.set(model.id, url);
+    cache.set(cacheKey, url);
     return url;
   } catch {
     return null;
@@ -106,6 +139,32 @@ export function useTogoThumbnails(models) {
         const url = await renderTogoThumb(m);
         if (!alive) return;
         if (url) setThumbs((prev) => (prev[m.id] === url ? prev : { ...prev, [m.id]: url }));
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return thumbs;
+}
+
+/**
+ * Hook: renders each placed piece in its CHOSEN fabric and returns
+ * `{ [rowKey]: pngDataUrl }` — for the Resumen, where a row must show the model
+ * tinted to the fabric the customer picked. `rows` is `[{ key, model, code }]`;
+ * a row with no code is skipped (the caller falls back to the generic render).
+ */
+export function useTogoFabricThumbs(rows) {
+  const [thumbs, setThumbs] = useState({});
+  const key = (rows || []).map((r) => `${r?.key}:${r?.code || ''}`).join('|');
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      for (const r of (rows || [])) {
+        if (!alive) return;
+        if (!r?.code || !r?.model?.id) continue;
+        const url = await renderTogoThumb(r.model, { code: r.code });
+        if (!alive) return;
+        if (url) setThumbs((prev) => (prev[r.key] === url ? prev : { ...prev, [r.key]: url }));
       }
     })();
     return () => { alive = false; };
