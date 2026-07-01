@@ -101,6 +101,7 @@ export {
   parseEcfFechaEmision, consumoRequiresBuyerId, CONSUMO_BUYER_ID_THRESHOLD, sequenceState, pickSequence, padSeq, ecfQrUrl,
 } from '../../lib/accounting/ecf.js';
 export { buildEcfPayload, formatEcfDate } from '../../lib/accounting/ecfPayload.js';
+export { validateEcfPayload } from '../../lib/accounting/ecfValidation.js';
 export { buildCommercialApproval, formatEcfDateTime, ACECF_ESTADO } from '../../lib/accounting/ecfCommercial.js';
 
 // ── fiscal jurisdiction PLUGIN seam — the country-agnostic engine reads the
