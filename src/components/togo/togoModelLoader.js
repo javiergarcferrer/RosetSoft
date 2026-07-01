@@ -1,6 +1,6 @@
 /**
  * Shared loader for REAL Togo models (pCon / dealer exports — GLB/OBJ/FBX/DAE/3DS).
- * ONE implementation behind BOTH the inline 3D view (TogoScene3D) and the WebAR
+ * ONE implementation behind BOTH the configurator stage (TogoStage) and the WebAR
  * export (TogoArViewer), so AR places the SAME real meshes the preview shows —
  * not the procedural fallback. The three.js loaders are code-split via
  * `safeDynamicImport`, so a scene with no real models pulls in no loader at all.

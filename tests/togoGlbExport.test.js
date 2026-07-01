@@ -10,7 +10,7 @@ import { buildArGroup, loadFabricTextures } from '../src/components/togo/togoGlb
 import { resolveTogoScene } from '../src/core/quote/views/configuratorView.js';
 
 // A minimal three.js stand-in — only what buildTogoGroup/makeFabricMaterial touch.
-// makeQuiltNormalMap returns null under Node (no `document`), so no CanvasTexture.
+// makeFabricMaps returns nulls under Node (no `document`), so no CanvasTexture.
 function makeThreeStub() {
   class Vector2 { constructor(x, y) { this.x = x; this.y = y; } set(x, y) { this.x = x; this.y = y; return this; } }
   class Color { constructor(v) { this.v = v; } }

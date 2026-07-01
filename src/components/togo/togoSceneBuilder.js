@@ -118,15 +118,6 @@ export function makeFabricMaps(THREE, { size = 256, threads = 96, normalStrength
 }
 
 /**
- * Back-compat shim — the fine woven NORMAL map alone (the grain albedo is the
- * companion in makeFabricMaps). Kept for callers that only want relief.
- * Returns a THREE.Texture (linear) or null under Node.
- */
-export function makeQuiltNormalMap(THREE, opts = {}) {
-  return makeFabricMaps(THREE, opts).normalMap;
-}
-
-/**
  * A physically-based fabric material — the single biggest fidelity lever for
  * upholstery. MeshPhysicalMaterial adds a SHEEN lobe (the soft retro-reflective
  * glow real fabric has at grazing angles), tuned by the material editor. Takes
@@ -499,13 +490,6 @@ function chaikinClosed(pts, iters = 3) {
     p = out;
   }
   return p;
-}
-
-/** The radius of the layout (cm) for framing the camera — half the footprint
- *  diagonal, with a floor for a single small piece. */
-export function sceneRadius(scene3d) {
-  const o = scene3d?.overallCm || { widthCm: 0, depthCm: 0 };
-  return Math.max(90, Math.hypot(o.widthCm, o.depthCm) / 2);
 }
 
 /**
