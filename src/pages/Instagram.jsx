@@ -212,7 +212,7 @@ export default function Instagram() {
   const renderBoard = (sec) => (
     <>
       {sec.id === 'resumen' && (
-        <Overview st={st} sp={sp} onGoToInteraccion={goInteraccion} onGoToContenido={goContenido} />
+        <Overview st={st} sp={sp} kpis={audKpis} onGoToInteraccion={goInteraccion} onGoToContenido={goContenido} />
       )}
       {sec.id === 'contenido' && st && (
         <div className="h-full">

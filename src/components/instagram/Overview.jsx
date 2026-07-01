@@ -7,7 +7,7 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Heart, MessageCircle, Clock, TrendingUp, ArrowRight, Film,
+  Heart, MessageCircle, Clock, TrendingUp, ArrowRight, Film, Gauge,
 } from 'lucide-react';
 import ImageView from '../ImageView.tsx';
 import { Sparkline } from '../charts/MiniCharts.jsx';
@@ -39,9 +39,34 @@ function TopPost({ post }) {
   );
 }
 
+// Benchmark-band chip colors (furniture/home is a low-engagement vertical, so
+// "Bajo" is amber-informational, not red-alarming).
+const BAND_CHIP = {
+  exceptional: 'bg-emerald-100 text-emerald-800',
+  strong: 'bg-emerald-100 text-emerald-800',
+  average: 'bg-ink-100 text-ink-700',
+  low: 'bg-amber-100 text-amber-800',
+  unknown: 'bg-ink-100 text-ink-500',
+};
+
+// One labeled figure row in the Rendimiento card. Guards null → "—".
+function KpiRow({ label, value, chip, chipBand }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-ink-500">{label}</span>
+      <span className="flex items-center gap-2">
+        {chip && <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${BAND_CHIP[chipBand] || BAND_CHIP.unknown}`}>{chip}</span>}
+        <span className="font-medium tabular-nums text-ink-900">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+const asPct = (n) => (n != null ? pctFmt(n) : '—');
+
 // Memoized: the page re-renders every second to tick the live-freshness pill;
 // the overview's data only changes on an actual load, so skip those ticks.
-function Overview({ st, sp, onGoToInteraccion, onGoToContenido }) {
+function Overview({ st, sp, kpis, onGoToInteraccion, onGoToContenido }) {
   // Prefer igStudio's richer 28-day KPIs; fall back to socialPulse's 7-day.
   const followers = st?.profile.followers ?? sp?.kpis.igFollowers ?? 0;
   const reach28 = st?.kpis.reach28 ?? null;
@@ -110,6 +135,29 @@ function Overview({ st, sp, onGoToInteraccion, onGoToContenido }) {
             <div className="mt-3 border-t border-ink-100 pt-3 text-xs text-ink-500">
               Cuota de publicación: <span className="font-medium tabular-nums text-ink-800">{st.publishLimit.remaining}</span> de {st.publishLimit.total} disponibles hoy
             </div>
+          )}
+        </div>
+
+        {/* Rendimiento — the derived business KPIs (how am I doing vs. the sector). */}
+        <div className="card card-pad">
+          <span className="flex items-center gap-2 text-sm font-medium"><Gauge size={15} /> Rendimiento · 28 días</span>
+          {kpis?.hasData ? (
+            <div className="mt-2.5 space-y-2 text-sm">
+              <KpiRow
+                label="Interacción / seguidores"
+                value={asPct(kpis.engagementRateByFollowersPct)}
+                chip={kpis.engagementRateByFollowersPct != null ? kpis.engagementBenchmark.label : null}
+                chipBand={kpis.engagementBenchmark.band}
+              />
+              <KpiRow label="Interacción / alcance" value={asPct(kpis.engagementRateByReachPct)} />
+              <KpiRow label="Tasa de alcance" value={asPct(kpis.reachRatePct)} />
+              {kpis.discoveryPct != null && <KpiRow label="Descubrimiento (no seguidores)" value={asPct(kpis.discoveryPct)} />}
+              {kpis.bestFormat && (
+                <KpiRow label="Mejor formato" value={kpis.bestFormat} />
+              )}
+            </div>
+          ) : (
+            <div className="mt-2 text-sm text-ink-400">Las métricas aparecen tras el primer periodo con datos.</div>
           )}
         </div>
 
