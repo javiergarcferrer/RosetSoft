@@ -73,7 +73,9 @@ export function parseAmount(s: unknown): number {
   let neg = false;
   if (/^\(.*\)$/.test(t)) { neg = true; t = t.slice(1, -1); }
   t = t.replace(/[^\d.,\-]/g, '');
-  if (t.startsWith('-')) neg = true;
+  // Leading OR trailing minus ("1,500.00-" is common SAP/LatAm debit notation —
+  // stripping it silently would flip a withdrawal into a deposit).
+  if (t.startsWith('-') || t.endsWith('-')) neg = true;
   t = t.replace(/-/g, '');
 
   const lastComma = t.lastIndexOf(',');
@@ -102,10 +104,15 @@ export function parseDate(s: unknown): number {
   if (!s) return NaN;
   const t = String(s).trim();
   let m: RegExpMatchArray | null;
+  // Reject impossible month/day instead of letting Date.UTC roll them over —
+  // a US-format CSV ("12/25/2026" read as dd/mm) must SKIP the row, not parse
+  // as a valid-looking date two years out.
   if ((m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) {
+    if (+m[2] > 12 || +m[3] > 31) return NaN;
     return Date.UTC(+m[1], +m[2] - 1, +m[3]);
   }
   if ((m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/))) {
+    if (+m[2] > 12 || +m[1] > 31) return NaN;
     let y = +m[3]; if (y < 100) y += 2000;
     return Date.UTC(y, +m[2] - 1, +m[1]);
   }
@@ -219,7 +226,11 @@ export function firstMatchingRule(rules: BankRule[] | null | undefined, descript
 
 /* ── matcher: statement line ↔ unreconciled ledger line ───────────────────── */
 
-const AMOUNT_EPS = 0.01;
+// Both sides are round2'd, so real float noise is ~1e-12 — the epsilon only
+// needs to absorb that. 0.01 would silently auto-match lines a full cent OFF
+// (a mistyped RD$50.01 cobro against a RD$50.00 deposit), stamping
+// reconciledAt on a wrong-amount asiento.
+const AMOUNT_EPS = 0.005;
 
 interface LedgerRow { line?: { id?: string; usd?: number | null }; postedAt?: number; amount: number; usd?: number | null; reconciled?: boolean; memo?: string; number?: number | null }
 

@@ -70,8 +70,9 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify(reqBody),
       });
-      const data = await res.json().catch(() => ({}));
-      const ig = row.ig_creation_id ? data : (data?.results?.instagram || {});
+      let data: Record<string, unknown> | null = null;
+      try { data = await res.json(); } catch { data = null; }
+      const ig = (row.ig_creation_id ? data : ((data as any)?.results?.instagram || {})) as any;
 
       if (ig?.ok) {
         await admin.from('scheduled_posts').update({
@@ -79,25 +80,66 @@ Deno.serve(async (req) => {
         }).eq('id', row.id);
         results.push({ id: row.id, status: 'published' });
       } else if (ig?.pending && ig?.creationId) {
-        // Video still processing — keep the container id, requeue for the next tick.
-        await admin.from('scheduled_posts').update({
-          status: 'queued', ig_creation_id: String(ig.creationId), updated_at: new Date().toISOString(),
+        // Video still processing — keep the container id, requeue for the next
+        // tick, and GIVE BACK the attempt the claim charged: a pending re-poll
+        // is not a failure, and charging it would burn the whole retry budget
+        // on a normal 3-minute video encode. A container stuck beyond 45 min
+        // is declared failed instead of polling forever.
+        const stuck = row.scheduled_at && (Date.now() - Date.parse(row.scheduled_at)) > 45 * 60_000;
+        await admin.from('scheduled_posts').update(stuck ? {
+          status: 'failed', last_error: 'El video sigue procesándose en Instagram tras 45 min.', updated_at: new Date().toISOString(),
+        } : {
+          status: 'queued', ig_creation_id: String(ig.creationId),
+          attempts: Math.max(0, (row.attempts || 1) - 1), updated_at: new Date().toISOString(),
         }).eq('id', row.id);
-        results.push({ id: row.id, status: 'pending' });
-      } else {
-        const err = String(ig?.error || data?.error || 'Fallo al publicar').slice(0, 300);
+        results.push({ id: row.id, status: stuck ? 'failed' : 'pending' });
+      } else if (data != null) {
+        // meta-social ANSWERED with a definite error — the publish did not go
+        // through, so retrying is safe.
+        const err = String(ig?.error || (data as any)?.error || 'Fallo al publicar').slice(0, 300);
         const failed = (row.attempts || 0) >= MAX_ATTEMPTS;
         await admin.from('scheduled_posts').update({
           status: failed ? 'failed' : 'queued', last_error: err, updated_at: new Date().toISOString(),
         }).eq('id', row.id);
         results.push({ id: row.id, status: failed ? 'failed' : 'retry' });
+      } else {
+        // NO parseable answer — the outcome is UNKNOWN: the post may already be
+        // live on Instagram. Blindly requeueing a fresh publish would create a
+        // DUPLICATE post, so a first-publish row fails closed for the dealer to
+        // check; a finishPublish row (existing container) is safe to re-poll.
+        if (row.ig_creation_id) {
+          await admin.from('scheduled_posts').update({
+            status: 'queued', attempts: Math.max(0, (row.attempts || 1) - 1), updated_at: new Date().toISOString(),
+          }).eq('id', row.id);
+          results.push({ id: row.id, status: 'retry' });
+        } else {
+          await admin.from('scheduled_posts').update({
+            status: 'failed',
+            last_error: 'Resultado desconocido (sin respuesta) — verifica en Instagram si la publicación salió antes de reintentar.',
+            updated_at: new Date().toISOString(),
+          }).eq('id', row.id);
+          results.push({ id: row.id, status: 'failed' });
+        }
       }
     } catch (e) {
-      const failed = (row.attempts || 0) >= MAX_ATTEMPTS;
-      await admin.from('scheduled_posts').update({
-        status: failed ? 'failed' : 'queued', last_error: String((e as Error)?.message || e).slice(0, 300), updated_at: new Date().toISOString(),
-      }).eq('id', row.id);
-      results.push({ id: row.id, status: failed ? 'failed' : 'retry' });
+      // Same unknown-outcome policy as above: the request may have reached
+      // meta-social and published before the failure — never auto-repeat a
+      // first publish; only container re-polls are safe to retry.
+      const msg = String((e as Error)?.message || e).slice(0, 260);
+      if (row.ig_creation_id) {
+        await admin.from('scheduled_posts').update({
+          status: 'queued', attempts: Math.max(0, (row.attempts || 1) - 1),
+          last_error: msg, updated_at: new Date().toISOString(),
+        }).eq('id', row.id);
+        results.push({ id: row.id, status: 'retry' });
+      } else {
+        await admin.from('scheduled_posts').update({
+          status: 'failed',
+          last_error: `Resultado desconocido (${msg}) — verifica en Instagram antes de reintentar.`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', row.id);
+        results.push({ id: row.id, status: 'failed' });
+      }
     }
   }
 

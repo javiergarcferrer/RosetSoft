@@ -84,15 +84,21 @@ export function useLiveQueryStatus<T, D>(
 
   useEffect(() => {
     let active = true;
+    // Guard against out-of-order resolution: two invalidates in quick
+    // succession start two fetches, and the FIRST one (whose SELECT ran before
+    // the second write) can resolve LAST — overwriting fresh data with stale
+    // rows until the next invalidate. Only the latest run may set state.
+    let seq = 0;
     const run = async () => {
+      const mine = ++seq;
       try {
         const r = await Promise.resolve(fnRef.current());
-        if (active) setState({ data: r, loaded: true, error: null });
+        if (active && mine === seq) setState({ data: r, loaded: true, error: null });
       } catch (e) {
         // Don't hang on the loading skeleton forever: flip `loaded` and
         // surface the error so the page can show an error/empty state. Keep
         // the prior data (SWR-style) so a transient error doesn't blank it.
-        if (active) {
+        if (active && mine === seq) {
           console.error('useLiveQuery error:', e);
           setState((s) => ({ data: s.data, loaded: true, error: e }));
         }

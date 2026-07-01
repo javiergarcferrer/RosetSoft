@@ -359,6 +359,10 @@ async function buildBundle(admin: Admin, quote: Row): Promise<Record<string, unk
       terms: quote.terms,
       marginPct: 0,
       discountPct: quote.discount_pct,
+      // Courtesy (Friends & Family) is client-visible by design — it renders as
+      // its own line on the client's bill. Omitting it here made the public
+      // link/PDF compute an OVERSTATED total vs. the dealer's editor.
+      courtesyDiscountPct: quote.courtesy_discount_pct ?? 0,
       shipping: quote.shipping,
       // The curated project palette — surfaced first in the client's fabric
       // picker (read-only quick-pick); the client never edits the library.
@@ -406,6 +410,13 @@ Deno.serve(async (req: Request) => {
 
   // ---- POST: apply the recipient's picks to the REAL quote_lines ----------
   if (req.method === 'POST') {
+    // Picks are only valid while the quote is still open. Once it's accepted
+    // (rate locked, sale figures derived) or declined/archived, the link stays
+    // readable but the content is FROZEN — otherwise the recipient could keep
+    // mutating lines/prices under a signed-off quote.
+    if (quote.status !== 'draft' && quote.status !== 'sent') {
+      return json({ error: 'quote locked' }, 409);
+    }
     let body: {
       alternatives?: Record<string, unknown>;
       optionals?: Record<string, unknown>;

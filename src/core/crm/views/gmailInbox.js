@@ -96,12 +96,22 @@ export function senderDomain(email) {
   return at >= 0 ? s.slice(at + 1) : '';
 }
 
-/** The localpart of an email address, separators stripped & lower-cased
- *  (`No-Reply@x` → `noreply`) for robust mass-mailing-sender matching. */
-function senderLocal(email) {
+/** Cumulative separator-bounded prefixes of the localpart, lower-cased
+ *  (`No-Reply@x` → {no, noreply}) for mass-mailing-sender matching. Boundaries
+ *  matter: 'product' must match product@/product-updates@ but NEVER
+ *  production@ — a bare startsWith filed real supplier mail as newsletters. */
+function senderLocalPrefixes(email) {
   const s = String(email || '').toLowerCase();
   const at = s.indexOf('@');
-  return (at >= 0 ? s.slice(0, at) : s).replace(/[^a-z0-9]/g, '');
+  const raw = at >= 0 ? s.slice(0, at) : s;
+  const out = new Set();
+  let acc = '';
+  for (const t of raw.split(/[^a-z0-9]+/)) {
+    if (!t) continue;
+    acc += t;
+    out.add(acc);
+  }
+  return out;
 }
 
 /**
@@ -116,7 +126,7 @@ export function classifyBrand(message, rules = DEFAULT_GMAIL_BRAND_RULES) {
   const r = rules || DEFAULT_GMAIL_BRAND_RULES;
   const sender = String(message?.fromEmail || '').toLowerCase();
   const domain = senderDomain(sender);
-  const local = senderLocal(sender);
+  const local = senderLocalPrefixes(sender);
   const text = `${message?.subject || ''} ${message?.snippet || ''}`.toLowerCase();
   const labels = message?.labelIds || [];
   const inText = (needles) => (needles || []).some((n) => text.includes(n));
@@ -125,18 +135,19 @@ export function classifyBrand(message, rules = DEFAULT_GMAIL_BRAND_RULES) {
 
   // 1) Ligne Roset — golden lane, beats everything (newsletters included).
   if (inDomain(r.ligneRoset)) return BRAND_LIGNE_ROSET;
-  // 2) Money by known sender — never let a collector/biller fall into boletines.
+  // 2) Money/ops by known sender — never let a collector, biller or the
+  //    fuel-card statement (noreply@totalenergies…) fall into boletines.
   if (inSender(r.financeSenders)) return GMAIL_CAT_FINANZAS;
-  // 3) Bulk / marketing — promo blasts out of every lane below.
-  const bulkLocal = (r.bulkLocalparts || []).some((n) => local.startsWith(n));
+  if (inSender(r.opsSenders)) return GMAIL_CAT_OPERACIONES;
+  // 3) Bulk / marketing — promo blasts out of every lane below. The localpart
+  //    match is token-bounded (see senderLocalPrefixes).
+  const bulkLocal = (r.bulkLocalparts || []).some((n) => local.has(n));
   if (labels.includes('CATEGORY_PROMOTIONS') || bulkLocal || inDomain(r.bulkDomains) || inText(r.bulkText)) {
     return GMAIL_CAT_BOLETINES;
   }
-  // 4) Operations by known sender.
-  if (inSender(r.opsSenders)) return GMAIL_CAT_OPERACIONES;
-  // 5) Other design houses / suppliers — real correspondence.
+  // 4) Other design houses / suppliers — real correspondence.
   if (inDomain(r.suppliers)) return GMAIL_CAT_PROVEEDORES;
-  // 6) Money / operations by wording (unknown senders).
+  // 5) Money / operations by wording (unknown senders).
   if (inText(r.finanzasWords)) return GMAIL_CAT_FINANZAS;
   if (inText(r.operacionesWords)) return GMAIL_CAT_OPERACIONES;
   return GMAIL_BRAND_OTHER;
@@ -169,7 +180,14 @@ function _currency(tok) {
   return 'USD';
 }
 function _amount(raw) {
-  const n = Number(String(raw || '').replace(/[, ]/g, ''));
+  let t = String(raw || '').replace(/ /g, '');
+  // European format — dots as thousands, optional comma decimal ("1.234,56",
+  // "€1.500"): swap the separators before parsing, or the French suppliers'
+  // totals read up to 1000× low ("1.234,56" → 1.23).
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d+,\d{1,2}$/.test(t)) t = t.replace(',', '.'); // bare comma decimal
+  else t = t.replace(/,/g, ''); // US format — commas are thousands
+  const n = Number(t);
   return Number.isFinite(n) ? n : NaN;
 }
 

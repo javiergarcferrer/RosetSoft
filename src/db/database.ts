@@ -388,7 +388,11 @@ export class Query<T> implements PromiseLike<T[]> {
       raw = [];
       for (let from = 0; ; from += PAGE) {
         let q = build();
-        if (!this.orderField) q = q.order(snake(this.t.pk), { ascending: true });
+        // ALWAYS append the PK as the (secondary) sort: a caller-supplied
+        // non-unique orderBy leaves ties in no stable order, so page N and
+        // N+1 could re-shuffle rows across the boundary — skipping some and
+        // duplicating others. The PK tiebreak makes pagination deterministic.
+        q = q.order(snake(this.t.pk), { ascending: true });
         const { data, error } = await q.range(from, from + PAGE - 1);
         if (error) throw error;
         const page = (data as unknown[]) || [];

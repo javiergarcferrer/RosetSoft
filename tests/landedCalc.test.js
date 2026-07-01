@@ -114,6 +114,20 @@ test('allocate: rounding drift lands on the last line, never lost', () => {
   assert.equal(shares[0] + shares[1] + shares[2], 100);
 });
 
+test('allocate: never assigns a NEGATIVE share (round-up overshoot is clawed back from the largest)', () => {
+  // 0.05 across cbm [1, 1, 0]: each half rounds to 0.03, overshooting the total,
+  // so the zero-volume last line would get −0.01 of freight. It must get 0, the
+  // excess comes off a positive share, and Σ still equals the total.
+  const lines = [
+    { id: 'a', qty: 1, unitCost: 1, cbm: 1 },
+    { id: 'b', qty: 1, unitCost: 1, cbm: 1 },
+    { id: 'c', qty: 1, unitCost: 1, cbm: 0 },
+  ];
+  const shares = allocate(lines, 0.05, 'volume');
+  assert.ok(shares.every((s) => s >= 0), `negative share in ${JSON.stringify(shares)}`);
+  assert.equal(Math.round(shares.reduce((a, b) => a + b, 0) * 100) / 100, 0.05);
+});
+
 test('allocate: zero metric falls back to an even split', () => {
   const lines = [{ id: 'a', qty: 1, unitCost: 5 }, { id: 'b', qty: 1, unitCost: 5 }];
   const shares = allocate(lines, 600, 'volume'); // no cbm → equal

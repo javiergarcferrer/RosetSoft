@@ -164,7 +164,11 @@ Deno.serve(async (req) => {
       const v = (change.value || {}) as Record<string, any>;
       if (field === 'comments') {
         eventRows.push({
-          id: crypto.randomUUID(), profile_id: TEAM, kind: 'comment',
+          // Deterministic id when Meta gives us the comment id — webhook
+          // delivery is at-least-once, so a redelivery collides on the PK and
+          // is dropped instead of duplicating the Studio feed.
+          id: v.id ? `igev-comment-${String(v.id)}` : crypto.randomUUID(),
+          profile_id: TEAM, kind: 'comment',
           object_id: v.id ? String(v.id) : null,
           media_id: v.media?.id ? String(v.media.id) : null,
           username: v.from?.username ? String(v.from.username) : null,
@@ -173,7 +177,8 @@ Deno.serve(async (req) => {
         });
       } else if (field === 'mentions') {
         eventRows.push({
-          id: crypto.randomUUID(), profile_id: TEAM, kind: 'mention',
+          id: v.comment_id ? `igev-mention-${String(v.comment_id)}` : crypto.randomUUID(),
+          profile_id: TEAM, kind: 'mention',
           object_id: v.comment_id ? String(v.comment_id) : null,
           media_id: v.media_id ? String(v.media_id) : null,
           payload: v, created_at: new Date().toISOString(),
@@ -188,7 +193,9 @@ Deno.serve(async (req) => {
     catch (e) { console.error('[meta-webhook] dm insert failed:', (e as Error).message); }
   }
   if (eventRows.length) {
-    try { await admin.from('ig_events').insert(eventRows); } catch { /* never fail the webhook */ }
+    // ignoreDuplicates on the (deterministic) PK — a Meta redelivery no-ops.
+    try { await admin.from('ig_events').upsert(eventRows, { onConflict: 'id', ignoreDuplicates: true }); }
+    catch { /* never fail the webhook */ }
   }
 
   // Always 200 — Meta retries on non-2xx and will disable a flaky endpoint.

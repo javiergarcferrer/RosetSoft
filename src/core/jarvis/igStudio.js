@@ -229,7 +229,9 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
       engagementRatePct: (interactions28 != null && reachTotal28) ? (interactions28 / reachTotal28) * 100 : null,
       followerReach,
       nonFollowerReach,
-      followerReachPct: reachTotal28 > 0 ? Math.round((followerReach / reachTotal28) * 100) : null,
+      // Only meaningful when the follower/non-follower breakdown answered —
+      // otherwise followerReach is a coerced 0 and the pct would read as a lie.
+      followerReachPct: hasReachSplit && reachTotal28 > 0 ? Math.round((followerReach / reachTotal28) * 100) : null,
       hasReachSplit,
     },
     publishLimit,
@@ -281,15 +283,18 @@ export function resolveAudienceKpis(studio) {
   const k = s.kpis || {};
   const followers = num(s.profile?.followers);
   const reach = num(k.reach28);
-  const views = num(k.views28);
   const interactions = k.interactions28 != null ? num(k.interactions28) : null;
   const pct = (n, d) => (d > 0 && n != null ? (n / d) * 100 : null);
 
   const erByFollowers = pct(interactions, followers);
   const erByReach = pct(interactions, reach);
   const reachRate = pct(reach, followers);
-  const discoveryPct = reach > 0 && k.nonFollowerReach != null ? (num(k.nonFollowerReach) / reach) * 100 : null;
-  const viewsPerReach = reach > 0 ? views / reach : null;
+  // `nonFollowerReach` arrives as a NUMBER even when the follower-split call
+  // errored (resolveIgStudio coerces with num()), so the honest "is the split
+  // known" signal is hasReachSplit — otherwise a failed Meta breakdown would
+  // render as a hard "0% discovery". Same for views28: null means unknown.
+  const discoveryPct = reach > 0 && k.hasReachSplit ? (num(k.nonFollowerReach) / reach) * 100 : null;
+  const viewsPerReach = reach > 0 && k.views28 != null ? num(k.views28) / reach : null;
 
   // Content-format performance: Reels vs feed posts, by average engagement per
   // post — each format wins on a different axis, so never collapse to one ER.

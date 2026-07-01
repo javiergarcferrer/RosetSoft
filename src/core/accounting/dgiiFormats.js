@@ -104,22 +104,32 @@ export function collectionSplit(payments) {
   };
   for (const p of payments || []) {
     if (p.direction !== 'in' || p.partyType !== 'customer') continue;
-    const allocs = p.allocations || [];
+    // Only allocations that can actually receive a share; the LAST one takes
+    // the rounding remainder (drift-to-last, same convention as landedCalc) so
+    // the per-invoice retentions sum back EXACTLY to what the cobro withheld —
+    // the 607 must agree to the cent with the retention agent's own filing.
+    const allocs = (p.allocations || []).filter((a) => a.docId && (Number(a.amount) || 0) > 0);
     const allocTotal = allocs.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-    for (const a of allocs) {
+    const totI = round2(Number(p.itbisRetained) || 0);
+    const totR = round2(Number(p.isrRetained) || 0);
+    let doneI = 0;
+    let doneR = 0;
+    allocs.forEach((a, i) => {
       const amount = Number(a.amount) || 0;
-      if (!a.docId || amount <= 0) continue;
       const slot = ensure(a.docId);
       if (p.method === 'cash') slot.efectivo = round2(slot.efectivo + amount);
       else if (p.method === 'card') slot.tarjeta = round2(slot.tarjeta + amount);
       else slot.cheque = round2(slot.cheque + amount);
+      const last = i === allocs.length - 1;
       const share = allocTotal > 0 ? amount / allocTotal : 0;
-      const retI = round2((Number(p.itbisRetained) || 0) * share);
-      const retR = round2((Number(p.isrRetained) || 0) * share);
+      const retI = last ? round2(totI - doneI) : round2(totI * share);
+      const retR = last ? round2(totR - doneR) : round2(totR * share);
+      doneI = round2(doneI + retI);
+      doneR = round2(doneR + retR);
       if (retI > 0) slot.retItbis = round2(slot.retItbis + retI);
       if (retR > 0) slot.retIsr = round2(slot.retIsr + retR);
       if ((retI > 0 || retR > 0) && !slot.fechaRet) slot.fechaRet = p.paidAt || null;
-    }
+    });
   }
   return map;
 }

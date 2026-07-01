@@ -68,6 +68,25 @@ test('classifyBrand falls back to otros for an unknown, contentless sender', () 
   assert.equal(classifyBrand(msg({ fromEmail: 'someone@randomdomain.com' })), GMAIL_BRAND_OTHER);
 });
 
+test('classifyBrand: bulk localparts are token-bounded — a real supplier person is never demoted', () => {
+  // 'product' the token matches product@ / product-updates@ …
+  assert.equal(classifyBrand(msg({ fromEmail: 'product-updates@randomshop.com' })), GMAIL_CAT_BOLETINES);
+  // … but production@ at a KNOWN supplier is real correspondence, not a newsletter.
+  assert.equal(classifyBrand(msg({ fromEmail: 'production@taillardat.fr', subject: 'Re: chairs order' })), GMAIL_CAT_PROVEEDORES);
+});
+
+test('classifyBrand: a named ops biller from a noreply@ address stays in operaciones', () => {
+  // The fleet-fuel statement — a noreply localpart must not demote a NAMED ops sender.
+  assert.equal(classifyBrand(msg({ fromEmail: 'noreply@totalenergies.com', subject: 'Estado de cuenta flota' })), GMAIL_CAT_OPERACIONES);
+});
+
+test('parseInvoiceAmount reads European formats (dots-as-thousands, comma decimal)', () => {
+  const eu = parseInvoiceAmount(msg({ subject: 'Facture', snippet: 'Total EUR 1.234,56' }));
+  assert.deepEqual(eu, { amount: 1234.56, currency: 'EUR' });
+  const bare = parseInvoiceAmount(msg({ subject: 'Facture', snippet: 'Montant: €1.500' }));
+  assert.deepEqual(bare, { amount: 1500, currency: 'EUR' });
+});
+
 test('classifyBrand: a manual override to a current category wins over the rules', () => {
   // Sender would classify as ligne-roset, but the override re-files it.
   assert.equal(classifyBrand(msg({ fromEmail: 'lllamas@roset.fr', brand: GMAIL_CAT_FINANZAS })), GMAIL_CAT_FINANZAS);

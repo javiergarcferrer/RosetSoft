@@ -155,10 +155,13 @@ export function validateEcfPayload(
   if (itbis < 0) err('ITBIS_NEGATIVO', 'El ITBIS no puede ser negativo.', 'itbis');
   if (total < 0) err('TOTAL_NEGATIVO', 'El monto total no puede ser negativo.', 'total');
 
-  // ITBIS must equal base × rate (single-rate operations). Allow 1 centavo of
-  // rounding drift; more than that is a reconciliation failure DGII flags.
+  // ITBIS must equal base × rate (single-rate operations). Header ITBIS may be
+  // a sum of per-line ROUNDED ITBIS, and each line can contribute up to half a
+  // cent of legitimate rounding — so the tolerance scales with the line count
+  // (1 line → 1 centavo). Beyond that it's a reconciliation failure DGII flags.
   const expectedItbis = round2(gravado * (rate / 100));
-  if (Math.abs(round2(itbis) - expectedItbis) > 0.01) {
+  const itbisTol = Math.max(0.01, 0.005 * (input.items || []).length);
+  if (Math.abs(round2(itbis) - expectedItbis) > itbisTol) {
     err('ITBIS_NO_CUADRA', `El ITBIS (${round2(itbis)}) no cuadra con ${rate}% del gravado (esperado ${expectedItbis}).`, 'itbis');
   }
   // MontoTotal must equal gravado + ITBIS (no exempt ops in this book).

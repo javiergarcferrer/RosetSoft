@@ -18,6 +18,7 @@ function studio(over = {}) {
       interactions28: 300,
       followerReach: 3000,
       nonFollowerReach: 2000,
+      hasReachSplit: true,
       ...(over.kpis || {}),
     },
     audience: {
@@ -91,6 +92,28 @@ test('audience concentration: top country, top-3 share, home market, dominant ag
   assert.equal(k.audienceConcentration.homeMarketPct, 70);
   assert.equal(k.audienceConcentration.top3CountryPct, 96); // (700+200+60)/1000
   assert.equal(k.audienceConcentration.dominantAge.label, '25-34');
+});
+
+test('missing follower-split → discovery is null, NOT "0%" (no lying from missing data)', () => {
+  // resolveIgStudio coerces nonFollowerReach to a NUMBER (0) even when the
+  // breakdown call errored; hasReachSplit is the honest signal. With reach
+  // present but the split unknown, discovery must be null.
+  const k = resolveAudienceKpis(studio({
+    kpis: { reach28: 5000, nonFollowerReach: 0, followerReach: 0, hasReachSplit: false },
+  }));
+  assert.equal(k.discoveryPct, null);
+});
+
+test('discovery renders when the split IS known', () => {
+  const k = resolveAudienceKpis(studio({
+    kpis: { reach28: 5000, nonFollowerReach: 2000, followerReach: 3000, hasReachSplit: true },
+  }));
+  assert.equal(k.discoveryPct, 40);
+});
+
+test('missing views28 → viewsPerReach is null, NOT 0', () => {
+  const k = resolveAudienceKpis(studio({ kpis: { reach28: 5000, views28: null } }));
+  assert.equal(k.viewsPerReach, null);
 });
 
 test('all ratios guard divide-by-zero (return null, never NaN/Infinity)', () => {

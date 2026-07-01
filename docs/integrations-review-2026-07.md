@@ -160,6 +160,46 @@ can't be shipped by a `main` push:
 
 ---
 
+---
+
+## 6. Bug-hunt findings surfaced for the OWNER's decision (verified real, not auto-fixed)
+
+A five-agent adversarial sweep (pricing, accounting, VMs, edge functions, data
+layer) ran on 2026-07-01; every confirmed mechanical defect was fixed and pinned
+the same day. These survivors are **real but judgement-bound** — they change a
+legal interpretation, a paid-message behavior, or a UX contract, so they need
+the owner (or the asesor) to decide:
+
+1. **Cesantía schedule (`lib/accounting/prestaciones.ts:137`)** — the engine pays
+   a hybrid 21/23-day schedule for tenures ≥ 5 years; the prevailing reading of
+   CT Art. 80 (and the Ministerio de Trabajo calculator) pays 23 days × ALL
+   years once tenure reaches 5. On a 10-year, RD$100k/month liquidación that is
+   ≈ RD$42,000 less. The hybrid is **deliberately pinned** in
+   `tests/prestaciones.test.js` — confirm with the asesor laboral; if the 23-all
+   reading is right, change engine + pin together.
+2. **Regalía defaults (`prestaciones.ts:218`, `Nomina.jsx:374`)** — when the
+   optional "earned YTD" field is left blank, the liquidación counts the
+   termination month as fully earned, and the December payroll default assumes a
+   full year regardless of `hireAt`. Both overpay. Decide the proration rule.
+3. **Month-end hires (`prestaciones.ts:104`)** — hired Aug 31 → terminated
+   Feb 28/29 counts 5 months, not 6 (fewer preaviso/cesantía days).
+4. **USD bank line posting (`Conciliacion.jsx:211`)** — an unmatched line
+   imported from the USD account's statement books the USD figure as DOP
+   (US$25 fee → RD$25 asiento, no `usd`/`rate` stamp, can never re-match).
+   Needs a rate-source decision (statement date's rate vs today's) before fixing.
+5. **Quote pick repricing drift (`core/quote/actions.js` vs `quote-share/pick.ts`)**
+   — when a line's stored price no longer equals its base grade's catalog price,
+   the client reducer prices by DELTA while the server repins to catalog; the
+   parity test's fixtures can't see it (unit == catalog there). Persisted money
+   is always the server's; decide whether the client should repin too.
+6. **`priceOf` treats a $0 catalog price as real (`lib/pricing.ts:55`)** — a SKU
+   whose Retail cell was blank in the CSV imports as $0 and can become the
+   "cheapest grade" ($0 quotes). Only fires if such SKUs exist in the live list.
+7. **`wa-send` has no idempotency key** — a client-side retry after a lost
+   response re-sends a real WhatsApp message. Needs an API-shape decision.
+
 _This document is the durable memory of the review; the money/tax invariants it
 introduced are pinned in `tests/ecfValidation.test.js`, `tests/igAudienceKpis.test.js`,
-and `tests/gmailInvoiceTrust.test.js`._
+`tests/gmailInvoiceTrust.test.js`, and (from the bug-hunt) new pins in
+`tests/dgiiFormats.test.js`, `tests/landedCalc.test.js`, `tests/bankStatement.test.js`,
+`tests/socialPulse.test.js`, `tests/gmailInbox.test.js`._

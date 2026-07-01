@@ -187,12 +187,23 @@ export function allocate(lines: readonly CalcLine[], total: number, method: Allo
   const metrics = lines.map(metric);
   const sumM = metrics.reduce((a, b) => a + b, 0);
   let assigned = 0;
-  return lines.map((_, i) => {
+  const out = lines.map((_, i) => {
     let share = sumM > 0 ? round2((t * metrics[i]) / sumM) : round2(t / n);
     if (i === n - 1) share = round2(t - assigned); // drift → last
     assigned = round2(assigned + share);
     return share;
   });
+  // Earlier round-ups can overshoot the total, driving the remainder NEGATIVE —
+  // a zero-metric last line would then receive a negative cent of freight. Clamp
+  // it to 0 and take the excess back from the largest share; Σ stays === total.
+  if (out[n - 1] < 0) {
+    const deficit = out[n - 1];
+    out[n - 1] = 0;
+    let maxI = 0;
+    for (let i = 1; i < n - 1; i++) if (out[i] > out[maxI]) maxI = i;
+    out[maxI] = round2(out[maxI] + deficit);
+  }
+  return out;
 }
 
 // ──────────────────────────────────────────────────────── Margin back-calc

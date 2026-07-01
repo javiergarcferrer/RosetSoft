@@ -32,6 +32,21 @@ test('ad spend sums string values; deltas compare 7d vs previous 7d', () => {
   assert.equal(spendSeries.length, 14);
 });
 
+test('ad KPIs sum by DATE, not row position — paused ads report 0, not stale spend', () => {
+  // The Marketing API omits no-delivery days. All delivery ended 14+ days ago:
+  // the last 7 ROWS are weeks old, but "this week" spent nothing.
+  const stale = Array.from({ length: 10 }, (_, i) => ({
+    date_start: new Date(NOW - (23 - i) * DAY).toISOString().slice(0, 10), // 23..14 days ago
+    spend: '100', clicks: '10', impressions: '1000',
+  }));
+  const { kpis } = resolveSocialPulse({ adsDaily: stale }, { now: NOW });
+  assert.equal(kpis.spend7, 0);
+  assert.equal(kpis.clicks7, 0);
+  assert.equal(kpis.spend7Prev ?? 0, 0); // 8-14 days ago window: only the 14d row could touch it
+  // …while the 28-day total still sees the historical spend.
+  assert.equal(kpis.spend28, 1000);
+});
+
 test('division guards: no clicks → null CPC; no impressions → null CTR; no prev → null delta', () => {
   const { kpis, campaigns } = resolveSocialPulse({
     adsDaily: [{ date_start: '2026-06-10', spend: '50', clicks: '0', impressions: '0' }],

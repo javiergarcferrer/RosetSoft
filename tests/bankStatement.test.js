@@ -29,11 +29,20 @@ test('parseAmount classifies decimal vs grouping separators (no 10x / no drop)',
   assert.equal(parseAmount('73.670,00'), 73670);   // EU thousands + decimal
 });
 
+test('parseAmount reads a TRAILING minus as negative (SAP/LatAm debit notation)', () => {
+  assert.equal(parseAmount('1,500.00-'), -1500);
+  assert.equal(parseAmount('RD$ 250.75-'), -250.75);
+});
+
 test('parseDate reads DD/MM/YYYY (DR) and ISO', () => {
   assert.equal(parseDate('05/01/2026'), Date.UTC(2026, 0, 5));
   assert.equal(parseDate('31-12-2025'), Date.UTC(2025, 11, 31));
   assert.equal(parseDate('2026-01-05'), Date.UTC(2026, 0, 5));
   assert.ok(Number.isNaN(parseDate('not a date')));
+  // Impossible month/day must REJECT (row gets skipped), never roll over — a
+  // US-format "12/25/2026" read as dd/mm would otherwise parse as 2028-01-12.
+  assert.ok(Number.isNaN(parseDate('12/25/2026')));
+  assert.ok(Number.isNaN(parseDate('2026-25-12')));
 });
 
 const BP_CSV = [

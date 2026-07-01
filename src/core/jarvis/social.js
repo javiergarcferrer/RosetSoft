@@ -53,11 +53,33 @@ export function inLabel(ts, now = Date.now()) {
 }
 
 // Sum a slice of daily rows. `days` rows from the end; `skip` rows skipped
-// from the end first (so {days:7, skip:7} = the previous week).
+// from the end first (so {days:7, skip:7} = the previous week). ONLY valid for
+// contiguous series (IG insights emit every day) — the Marketing API OMITS
+// no-delivery days, so ad rows must be summed by DATE (sumAdDays), never by
+// row position, or a paused account reports weeks-old spend as "this week".
 function sumTail(rows, field, days, skip = 0) {
   const end = rows.length - skip;
   return rows.slice(Math.max(0, end - days), Math.max(0, end))
     .reduce((s, r) => s + num(r[field]), 0);
+}
+
+/** Local midnight of `now` — the day boundary the ad windows anchor to. */
+function dayStartLocal(now) {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Sum ad rows whose date_start falls in the `days`-day window ending `skip`
+ *  days before today (both ends inclusive, local days). `pick` maps a row to
+ *  its value (field name or function). */
+function sumAdDays(rows, pick, days, now, skip = 0) {
+  const end = dayStartLocal(now) - skip * DAY;
+  const start = end - (days - 1) * DAY;
+  const val = typeof pick === 'function' ? pick : (r) => num(r[pick]);
+  return rows.reduce((s, r) => {
+    const t = localDayMs(r.date_start);
+    return s + (t != null && t >= start && t <= end ? val(r) : 0);
+  }, 0);
 }
 
 const deltaPct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
@@ -134,11 +156,11 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const adsDaily = [...(s.adsDaily || [])].sort(
     (a, b) => String(a.date_start || '').localeCompare(String(b.date_start || '')),
   );
-  const spend7 = sumTail(adsDaily, 'spend', 7);
-  const spend7Prev = sumTail(adsDaily, 'spend', 7, 7);
-  const spend28 = sumTail(adsDaily, 'spend', 28);
-  const clicks7 = sumTail(adsDaily, 'clicks', 7);
-  const impressions7 = sumTail(adsDaily, 'impressions', 7);
+  const spend7 = sumAdDays(adsDaily, 'spend', 7, now);
+  const spend7Prev = sumAdDays(adsDaily, 'spend', 7, now, 7);
+  const spend28 = sumAdDays(adsDaily, 'spend', 28, now);
+  const clicks7 = sumAdDays(adsDaily, 'clicks', 7, now);
+  const impressions7 = sumAdDays(adsDaily, 'impressions', 7, now);
 
   // IG daily reach values (insights metric rows → the `reach` series).
   const reachRows = metricRows(s.igReach, 'reach');
@@ -153,13 +175,9 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
 
   // Ad RESULTS: the first result type with activity in range (see above).
   const resultType = RESULT_TYPES.find(([t]) => adsDaily.some((r) => actionCount(r, t) > 0)) || null;
-  const sumResults = (days, skip = 0) => {
-    if (!resultType) return 0;
-    const end = adsDaily.length - skip;
-    return adsDaily.slice(Math.max(0, end - days), Math.max(0, end))
-      .reduce((acc, r) => acc + actionCount(r, resultType[0]), 0);
-  };
-  const results7 = sumResults(7);
+  const results7 = resultType
+    ? sumAdDays(adsDaily, (r) => actionCount(r, resultType[0]), 7, now)
+    : 0;
 
   // Campaigns: the new shape is the campaigns edge (id + status + nested
   // insights); rows from the old level=campaign insights call (flat, with

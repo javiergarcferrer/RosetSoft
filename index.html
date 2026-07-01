@@ -28,10 +28,13 @@
           var isPublic = path === '/configurator' || path === '/configurator/' || hash.indexOf('#/q/') === 0 || hash.indexOf('#/contrato/') === 0 || hash.indexOf('#/cuenta/') === 0 || hash.indexOf('#/tienda') === 0 || hash.indexOf('#/embed') === 0 || hash.indexOf('#/eliminar-datos') === 0;
           var pref = null;
           try { pref = localStorage.getItem('rs.theme'); } catch (e) {}
+          // Mirrors lib/theme.js resolveIsDark EXACTLY: 'dark' → dark,
+          // 'light' → light, anything else (null / 'system' / a corrupt value,
+          // which theme.js self-heals to 'system') → follow the OS.
           var dark =
             !isPublic &&
             (pref === 'dark' ||
-              ((pref === null || pref === 'system') &&
+              (pref !== 'light' &&
                 window.matchMedia('(prefers-color-scheme: dark)').matches));
           document.documentElement.classList.toggle('dark', dark);
         } catch (e) {}

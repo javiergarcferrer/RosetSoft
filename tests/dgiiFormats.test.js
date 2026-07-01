@@ -127,6 +127,24 @@ test('collectionSplit groups allocated cobros by method and prorates retentions'
   assert.equal(b.retItbis, 75);
 });
 
+test('collectionSplit: per-invoice retentions sum back EXACTLY to the payment retention (drift → last)', () => {
+  // RD$100.00 retained across three equal RD$1,000 allocations: naive per-share
+  // rounding gives 33.33 × 3 = 99.99 — a cent short on a FILED 607. The last
+  // allocation must take the remainder: 33.33 + 33.33 + 33.34 = 100.00.
+  const split = collectionSplit([{
+    direction: 'in', partyType: 'customer', method: 'bank', paidAt: D,
+    amount: 3000, itbisRetained: 100, isrRetained: 100,
+    allocations: [{ docId: 'x', amount: 1000 }, { docId: 'y', amount: 1000 }, { docId: 'z', amount: 1000 }],
+  }]);
+  assert.equal(split.get('x').retItbis, 33.33);
+  assert.equal(split.get('y').retItbis, 33.33);
+  assert.equal(split.get('z').retItbis, 33.34);
+  const totI = split.get('x').retItbis + split.get('y').retItbis + split.get('z').retItbis;
+  const totR = split.get('x').retIsr + split.get('y').retIsr + split.get('z').retIsr;
+  assert.equal(Math.round(totI * 100) / 100, 100);
+  assert.equal(Math.round(totR * 100) / 100, 100);
+});
+
 test('607 payment split feeds the retention columns + fecha retención', () => {
   const txt = dgii607Txt({
     rncEmisor: '131223344', period: '202605',
