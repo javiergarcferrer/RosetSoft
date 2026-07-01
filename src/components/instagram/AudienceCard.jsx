@@ -23,7 +23,7 @@ function BarList({ rows, max, accent = '#c96a2a' }) {
   );
 }
 
-export default function AudienceCard({ audience, errors }) {
+export default function AudienceCard({ audience, errors, kpis = null }) {
   const [dim, setDim] = useState('age');
   const dims = useMemo(() => [
     { id: 'age', label: 'Edad', rows: audience.age, accent: '#c96a2a' },
@@ -79,6 +79,19 @@ export default function AudienceCard({ audience, errors }) {
                 )}
                 <BarList rows={active.rows} max={max} accent={active.accent} />
               </>
+            )}
+            {kpis?.audienceConcentration && (kpis.audienceConcentration.homeMarketPct != null || kpis.audienceConcentration.dominantAge) && (
+              <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-ink-100 pt-3 text-xs text-ink-500">
+                {kpis.audienceConcentration.homeMarketPct != null && (
+                  <span>Rep. Dominicana <b className="tabular-nums text-ink-800">{kpis.audienceConcentration.homeMarketPct}%</b></span>
+                )}
+                {kpis.audienceConcentration.top3CountryPct != null && (
+                  <span>Top 3 países <b className="tabular-nums text-ink-800">{kpis.audienceConcentration.top3CountryPct}%</b></span>
+                )}
+                {kpis.audienceConcentration.dominantAge && (
+                  <span>Edad principal <b className="tabular-nums text-ink-800">{kpis.audienceConcentration.dominantAge.label}</b></span>
+                )}
+              </div>
             )}
           </div>
         )}

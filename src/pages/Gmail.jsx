@@ -4,6 +4,7 @@ import {
   Loader2, Search, RefreshCw, Paperclip, ExternalLink, FileText, Inbox, Plug,
   X, Download, Image as ImageIcon, File as FileIcon, ArrowLeft, ChevronLeft, ChevronRight,
   Reply, Forward, Send, PenLine, Pencil, Star, Archive, Trash2, MailOpen,
+  ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -13,10 +14,31 @@ import { useApp } from '../context/AppContext.jsx';
 import { db, invalidate } from '../db/database.js';
 import { useLiveQueryStatus } from '../db/hooks.ts';
 import {
-  GMAIL_BRAND_TABS, GMAIL_BRAND_OTHER,
+  GMAIL_BRAND_TABS, GMAIL_BRAND_OTHER, DEFAULT_GMAIL_BRAND_RULES,
   resolveGmailThreads, resolveGmailThread, resolveGmailInvoices, parseInvoiceAmount,
   resolveReplyDraft, resolveForwardDraft,
 } from '../core/crm/index.js';
+
+// The invoice sender-trust gate auto-trusts DMARC-verified mail from domains the
+// app already recognizes as suppliers / Ligne Roset (BEC defense); anything else
+// is left to human review.
+const SUPPLIER_ALLOWLIST = [
+  ...(DEFAULT_GMAIL_BRAND_RULES.ligneRoset || []),
+  ...(DEFAULT_GMAIL_BRAND_RULES.suppliers || []),
+];
+
+/** A compact trust badge for the Facturas list — shown only when there's a real
+ *  signal (verified supplier, or a suspected spoof); silent on the default. */
+function InvoiceTrustBadge({ trust }) {
+  if (!trust) return null;
+  if (trust.level === 'trusted') {
+    return <ShieldCheck size={12} className="text-emerald-600 shrink-0" title="Remitente verificado (DMARC + proveedor conocido)" />;
+  }
+  if (trust.level === 'suspect') {
+    return <ShieldAlert size={12} className="text-red-600 shrink-0" title={trust.reasons?.join(' ') || 'Autenticación del remitente sospechosa'} />;
+  }
+  return null;
+}
 import {
   syncGmail, syncGmailInvoices, markGmailThreadRead, markGmailThreadUnread, setGmailThreadBrand,
   setGmailThreadStarred, archiveGmailThread, trashGmailThread,
@@ -122,7 +144,7 @@ export default function Gmail() {
     [messages, needle],
   );
   const invoices = useMemo(
-    () => resolveGmailInvoices(messages, { needle }),
+    () => resolveGmailInvoices(messages, { needle, supplierAllowlist: SUPPLIER_ALLOWLIST }),
     [messages, needle],
   );
 
@@ -980,7 +1002,12 @@ function InvoiceList({ invoices, onPreview }) {
             });
             return (
               <tr key={m.id} className="hover:bg-ink-50/60">
-                <td className="px-4 py-2.5 text-ink-700 truncate max-w-[12rem]">{m.fromName || m.fromEmail}</td>
+                <td className="px-4 py-2.5 text-ink-700 max-w-[12rem]">
+                  <span className="inline-flex items-center gap-1.5 truncate">
+                    <InvoiceTrustBadge trust={m.trust} />
+                    <span className="truncate">{m.fromName || m.fromEmail}</span>
+                  </span>
+                </td>
                 <td className="px-4 py-2.5 text-ink-700 truncate max-w-[16rem]">
                   <span className="inline-flex items-center gap-1.5">
                     {(m.attachments || []).length > 0 ? (

@@ -23,7 +23,7 @@ import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
-import { resolveSocialPulse, resolveIgStudio } from '../core/jarvis/index.js';
+import { resolveSocialPulse, resolveIgStudio, resolveAudienceKpis } from '../core/jarvis/index.js';
 import { LivePill, freshLabel, fmt } from '../components/instagram/chrome.jsx';
 import Overview from '../components/instagram/Overview.jsx';
 import AudienceCard from '../components/instagram/AudienceCard.jsx';
@@ -92,6 +92,7 @@ export default function Instagram() {
 
   const sp = useMemo(() => (snap.raw ? resolveSocialPulse(snap.raw) : null), [snap.raw]);
   const st = useMemo(() => (stud.raw ? resolveIgStudio(stud.raw) : null), [stud.raw]);
+  const audKpis = useMemo(() => (st ? resolveAudienceKpis(st) : null), [st]);
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [adsOpen, setAdsOpen] = useState(false);
@@ -232,7 +233,7 @@ export default function Instagram() {
       )}
       {sec.id === 'audiencia' && st && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <AudienceCard audience={st.audience} errors={st.errors} />
+          <AudienceCard audience={st.audience} errors={st.errors} kpis={audKpis} />
           <BestTimeCard bestTimes={st.bestTimes} />
         </div>
       )}
