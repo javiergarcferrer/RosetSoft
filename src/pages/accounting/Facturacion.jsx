@@ -27,7 +27,7 @@ import Modal from '../../components/Modal.jsx';
 import { quoteToSale } from '../../core/bridge/index.js';
 import {
   resolveSales607, resolveItbisLiquidation, buildSaleEntry, buildCreditNoteEntry, resolveCreditNoteDraft,
-  resolveAccountingConfig, buildEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
+  resolveAccountingConfig, buildEcfPayload, validateEcfPayload, saleEcfType, saleTipoPago, saleDueDate, isValidFiscalId, consumoRequiresBuyerId,
   parseENcf, dgii607Txt, dgiiPeriod, dgiiTxtFilename, resolveInvoiceDoc,
   resolveAccountingCockpit, resolveReceivables, resolveInvoiceRegister, invoiceRowTotals, buildPaymentEntry,
   resolveDepositConfirmations, bankAccountOptions, canVoidPosting, canCollectPosting,
@@ -316,44 +316,61 @@ export default function Facturacion() {
   }
 
   // Signing pre-flight, shared by Generar XML + Transmitir: only a well-formed
-  // e-NCF can be signed (a manual NCF would burn a DGII rejection), and signing
-  // needs the cert + the emisor RNC. Returns an error message, or '' if ready.
+  // e-NCF can be signed (a manual NCF would burn a DGII rejection), signing
+  // needs the cert + the emisor RNC, and the payload must pass the DGII
+  // pre-transmit checklist (validateEcfPayload, the CA4404 rules) — every error
+  // it reports is a rejection-certain condition, so failing HERE saves the
+  // e-NCF instead of burning it at DGII. Returns an error message, or ''.
   function ecfPreflight(p) {
     if (!parseENcf(p.ncf)) return `${p.ncf} no es un e-NCF — sólo los comprobantes electrónicos se firman.`;
     if (!settings?.ecfCertUploadedAt) return 'Sube el certificado digital (.p12) en Configuración contable antes de firmar e-CF.';
     if (!cleanRnc(settings?.companyRnc)) return 'Define el RNC del emisor en Configuración contable antes de firmar e-CF.';
+    const { input, originalFechaEmision } = postingPayloadInput(p);
+    const v = validateEcfPayload(input, { originalFechaEmision });
+    if (!v.ok) return `${p.ncf}: ${v.errors.map((e) => e.message).join(' · ')}`;
     return '';
   }
 
-  // The e-CF payload for one posting — the SAME shape whether we sign to preview
-  // or sign to transmit, so the printed/downloaded doc can never disagree with
-  // the one sent. A nota de crédito (E34) carries the InformacionReferencia and
-  // transmits as contado; a sale carries its TipoPago (+ fecha límite if crédito).
-  function buildPostingPayload(p) {
+  // The e-CF payload INPUT for one posting — ONE construction shared by the
+  // validator (preflight) and the builder (sign/transmit), so what we validate
+  // is exactly what we sign. A nota de crédito (E34) carries the
+  // InformacionReferencia and transmits as contado; a sale carries its TipoPago
+  // (+ fecha límite if crédito). `originalFechaEmision` (the modified e-CF's
+  // date) rides along for the nota-crédito 30-day ITBIS rule.
+  function postingPayloadInput(p) {
     const customer = p.customerId ? customersById.get(p.customerId) : null;
     const isNota = /^E34/.test(p.ncf || '');
     const original = isNota && p.modifiesPostingId ? postingById.get(p.modifiesPostingId) : null;
     const tipoPago = isNota ? 1 : saleTipoPago(p.depositApplied, p.total);
-    return buildEcfPayload({
-      ecfType: p.ecfType || saleEcfType(!!p.rnc),
-      eNcf: p.ncf,
-      sequenceExpiresAt: p.ecfExpiresAt || null,
-      emisor: {
-        rnc: cleanRnc(settings?.companyRnc), name: settings?.companyName || '',
-        address: settings?.companyAddress || '',
+    return {
+      originalFechaEmision: original?.postedAt ?? null,
+      input: {
+        ecfType: p.ecfType || saleEcfType(!!p.rnc),
+        eNcf: p.ncf,
+        sequenceExpiresAt: p.ecfExpiresAt || null,
+        emisor: {
+          rnc: cleanRnc(settings?.companyRnc), name: settings?.companyName || '',
+          address: settings?.companyAddress || '',
+        },
+        comprador: p.rnc ? { rnc: p.rnc, name: customer?.name } : null,
+        items: [{ name: `${isNota ? 'Nota de crédito' : 'Venta'} ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
+        gravado: p.base, itbis: p.itbis, total: p.total,
+        itbisRate: config.itbisRate, fechaEmision: p.postedAt,
+        tipoPago,
+        fechaLimitePago: tipoPago === 2 ? saleDueDate(p.postedAt) : null,
+        referencia: isNota ? {
+          ncfModificado: p.modifiesNcf,
+          fechaNcfModificado: original?.postedAt ?? null,
+          codigoModificacion: p.codigoModificacion ?? 1,
+        } : null,
       },
-      comprador: p.rnc ? { rnc: p.rnc, name: customer?.name } : null,
-      items: [{ name: `${isNota ? 'Nota de crédito' : 'Venta'} ${p.ncf}`, qty: 1, unitPrice: p.base, amount: p.base }],
-      gravado: p.base, itbis: p.itbis, total: p.total,
-      itbisRate: config.itbisRate, fechaEmision: p.postedAt,
-      tipoPago,
-      fechaLimitePago: tipoPago === 2 ? saleDueDate(p.postedAt) : null,
-      referencia: isNota ? {
-        ncfModificado: p.modifiesNcf,
-        fechaNcfModificado: original?.postedAt ?? null,
-        codigoModificacion: p.codigoModificacion ?? 1,
-      } : null,
-    });
+    };
+  }
+
+  // The built payload — the SAME shape whether we sign to preview or sign to
+  // transmit, so the printed/downloaded doc can never disagree with the one sent.
+  function buildPostingPayload(p) {
+    return buildEcfPayload(postingPayloadInput(p).input);
   }
 
   // Generate the SIGNED e-CF XML WITHOUT transmitting. The signature is produced
