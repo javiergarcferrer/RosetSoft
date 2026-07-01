@@ -97,14 +97,27 @@ test('ecfTypeLabel resolves known types', () => {
   assert.equal(ecfTypeLabel('32'), 'Factura de Consumo');
 });
 
-test('ecfQrUrl builds the DGII timbre URL (31 vs 32 path)', () => {
-  const u31 = ecfQrUrl({ environment: 'cert', ecfType: '31', rncEmisor: '131996035', eNcf: 'E310000000001', total: 11800, fechaEmision: '01-06-2026', securityCode: 'abc123' });
-  assert.match(u31, /certecf\/consultatimbre\?/);
+test('ecfQrUrl: full e-CF (31) uses ecf.dgii.gov.do/consultatimbre with the 7-param set', () => {
+  const u31 = ecfQrUrl({ environment: 'cert', ecfType: '31', rncEmisor: '131996035', rncComprador: '101000001', eNcf: 'E310000000001', total: 11800, fechaEmision: '01-06-2026', fechaFirma: '01-06-2026 09:00:00', securityCode: 'abc123' });
+  assert.match(u31, /^https:\/\/ecf\.dgii\.gov\.do\/certecf\/consultatimbre\?/);
   assert.match(u31, /rncemisor=131996035/);
+  assert.match(u31, /rnccomprador=101000001/);
   assert.match(u31, /encf=E310000000001/);
   assert.match(u31, /codigoseguridad=abc123/);
-  const u32 = ecfQrUrl({ environment: 'prod', ecfType: '32', eNcf: 'E320000000001' });
-  assert.match(u32, /\/ecf\/consultatimbrefc\?/);
+});
+
+test('ecfQrUrl: consumo/RFCE (32) uses the fc.dgii.gov.do host + reduced 4-param set', () => {
+  const u32 = ecfQrUrl({ environment: 'prod', ecfType: '32', rncEmisor: '131996035', rncComprador: '101000001', eNcf: 'E320000000001', total: 622, fechaEmision: '01-06-2026', fechaFirma: '01-06-2026 09:00:00', securityCode: 'ybkUaH' });
+  // Correct host + path for the Factura de Consumo timbre service.
+  assert.match(u32, /^https:\/\/fc\.dgii\.gov\.do\/ecf\/consultatimbrefc\?/);
+  assert.match(u32, /rncemisor=131996035/);
+  assert.match(u32, /encf=E320000000001/);
+  assert.match(u32, /montototal=622/);
+  assert.match(u32, /codigoseguridad=ybkUaH/);
+  // The reduced set drops buyer + both dates.
+  assert.doesNotMatch(u32, /rnccomprador=/);
+  assert.doesNotMatch(u32, /fechaemision=/);
+  assert.doesNotMatch(u32, /fechafirma=/);
 });
 
 /* ----------------------------- sequences -------------------------------- */

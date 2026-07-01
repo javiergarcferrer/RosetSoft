@@ -35,6 +35,7 @@ export {
   resolveGmailThreads,
   resolveGmailThread,
   resolveGmailInvoices,
+  resolveInvoiceTrust,
   resolveReplyDraft,
   replySubject,
   forwardSubject,

@@ -470,6 +470,10 @@ async function gmailGetMessage(token: string, id: string): Promise<Record<string
     attachments,
     is_read: !labelIds.includes('UNREAD'),
     received_at: d.internalDate ? new Date(Number(d.internalDate)).toISOString() : null,
+    // Gmail's own SPF/DKIM/DMARC verdicts — the sender can't forge these. The
+    // Facturas tab's trust gate keys off this to flag spoofed supplier invoices
+    // (BEC defense); stored verbatim, evaluated client-side in resolveInvoiceTrust.
+    auth_results: h('authentication-results'),
   };
 }
 

@@ -23,7 +23,11 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
-const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') || 'rosetsoft-ig';
+// The webhook verify token is a shared secret between the Meta App Dashboard and
+// this function. It MUST come from the environment — never a hardcoded default,
+// which would be publicly guessable and let anyone complete the subscribe
+// handshake. Unset ⇒ the handshake fails closed (403) below.
+const VERIFY_TOKEN = Deno.env.get('META_WEBHOOK_VERIFY_TOKEN') || '';
 const TEAM = 'team';
 const IG_API = 'https://graph.instagram.com/v23.0';
 
@@ -67,7 +71,8 @@ Deno.serve(async (req) => {
     const mode = url.searchParams.get('hub.mode');
     const token = url.searchParams.get('hub.verify_token');
     const challenge = url.searchParams.get('hub.challenge') || '';
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    // Fail closed when no token is configured — never accept a guessable default.
+    if (mode === 'subscribe' && VERIFY_TOKEN && token === VERIFY_TOKEN) {
       return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
     }
     return new Response('forbidden', { status: 403 });

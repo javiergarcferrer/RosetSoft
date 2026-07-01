@@ -22,6 +22,7 @@ export { resolveSocialPulse, resolveAdsSalesWeeks, inLabel } from './social.js';
 export { resolveAdsBoard, resolveAdChildren, adInsightTiles } from './ads.js';
 export {
   resolveIgStudio,
+  resolveAudienceKpis,
   resolveMediaInsights,
   resolveMediaComments,
   resolveHashtagMedia,

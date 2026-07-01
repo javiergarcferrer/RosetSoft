@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
   let p12Path = '';
   try {
     p12Path = await Deno.makeTempFile({ suffix: '.p12' });
-    await Deno.writeFile(p12Path, b64ToBytes(cred.p12_base64));
+    await Deno.writeFile(p12Path, b64ToBytes(cred.p12_base64), { mode: 0o600 }); // owner-only: it's the signing private key
     const certs = new (dgii as any).P12Reader(cred.password).getKeyFromFile(p12Path);
 
     // Bearer token (minted by fe-autenticacion) must be present + unexpired.

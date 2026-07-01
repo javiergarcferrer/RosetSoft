@@ -139,16 +139,18 @@ export function pickSequence(sequences: ECFSequence[] | null | undefined, ecfTyp
     .sort((a, b) => Number(a.nextSeq) - Number(b.nextSeq))[0] || null;
 }
 
-const ECF_QR_BASE: Record<string, string> = {
-  prod: 'https://ecf.dgii.gov.do/ecf',
-  cert: 'https://ecf.dgii.gov.do/certecf',
-  dev: 'https://ecf.dgii.gov.do/testecf',
-};
+const ENV_SEGMENT: Record<string, string> = { prod: 'ecf', cert: 'certecf', dev: 'testecf' };
 
 /**
- * The DGII "consulta timbre" URL encoded in the e-CF QR. Type 32 (consumo) uses
- * the RFCE path (`consultatimbrefc`). The exact field set is validated against
- * DGII; this builds the standard query.
+ * The two DGII consulta-timbre services live on DIFFERENT hosts:
+ *  - Full e-CF (31/33/34/41/…): `ecf.dgii.gov.do/{env}/consultatimbre`, the
+ *    7-param query (emisor, comprador, e-NCF, fechaEmision, montoTotal,
+ *    fechaFirma, códigoSeguridad).
+ *  - Factura de Consumo / RFCE (type 32): `fc.dgii.gov.do/{env}/consultatimbrefc`,
+ *    a REDUCED 4-param query (emisor, e-NCF, montoTotal, códigoSeguridad — no
+ *    buyer, no dates). Confirmed against DGII's live fc.dgii.gov.do service.
+ * A consumo QR pointed at the ecf host (or carrying the buyer/date params) is a
+ * dead scan for the customer, so the host+params BOTH switch on the type.
  */
 export function ecfQrUrl({
   environment = 'cert', ecfType = '31', rncEmisor, rncComprador, eNcf,
@@ -157,15 +159,17 @@ export function ecfQrUrl({
   environment?: string; ecfType?: string; rncEmisor?: string; rncComprador?: string;
   eNcf?: string; total?: number; fechaEmision?: string; fechaFirma?: string; securityCode?: string;
 }): string {
-  const base = ECF_QR_BASE[environment] || ECF_QR_BASE.cert;
-  const path = ecfType === '32' ? 'consultatimbrefc' : 'consultatimbre';
+  const seg = ENV_SEGMENT[environment] || ENV_SEGMENT.cert;
+  const isConsumo = ecfType === '32';
+  const host = isConsumo ? 'https://fc.dgii.gov.do' : 'https://ecf.dgii.gov.do';
+  const path = isConsumo ? 'consultatimbrefc' : 'consultatimbre';
   const p = new URLSearchParams();
   if (rncEmisor) p.set('rncemisor', rncEmisor);
-  if (rncComprador) p.set('rnccomprador', rncComprador);
+  if (!isConsumo && rncComprador) p.set('rnccomprador', rncComprador);
   if (eNcf) p.set('encf', eNcf);
-  if (fechaEmision) p.set('fechaemision', fechaEmision);
+  if (!isConsumo && fechaEmision) p.set('fechaemision', fechaEmision);
   if (total != null) p.set('montototal', String(total));
-  if (fechaFirma) p.set('fechafirma', fechaFirma);
+  if (!isConsumo && fechaFirma) p.set('fechafirma', fechaFirma);
   if (securityCode) p.set('codigoseguridad', securityCode);
-  return `${base}/${path}?${p.toString()}`;
+  return `${host}/${seg}/${path}?${p.toString()}`;
 }

@@ -272,7 +272,7 @@ Deno.serve(async (req: Request) => {
   try {
     // dgii-ecf reads the key from a .p12 file; materialize the bytes to a temp file.
     p12Path = await Deno.makeTempFile({ suffix: '.p12' });
-    await Deno.writeFile(p12Path, b64ToBytes(cred.p12_base64));
+    await Deno.writeFile(p12Path, b64ToBytes(cred.p12_base64), { mode: 0o600 }); // owner-only: it's the signing private key
 
     const reader = new (dgii as any).P12Reader(cred.password);
     const certs = reader.getKeyFromFile(p12Path);

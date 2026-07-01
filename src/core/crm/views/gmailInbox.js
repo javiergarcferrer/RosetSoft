@@ -427,17 +427,72 @@ export function resolveEmailRecipients(customers, professionals, messages, { nee
 }
 
 /**
- * The Facturas tab — every invoice-like message, newest first, decorated with
- * its brand and a best-effort amount. `brand` (optional) narrows to one bucket.
- *
- *   resolveGmailInvoices(messages, { needle, brand, rules })
- *     → [{ ...message, brand, amount }]
+ * Read the SPF/DKIM/DMARC verdicts out of a Gmail `Authentication-Results`
+ * header value. Gmail stamps this; the sender can't forge it (it reflects
+ * Gmail's own check). Returns lower-cased verdicts, or null when a mechanism
+ * isn't present in the header.
  */
-export function resolveGmailInvoices(messages, { needle = '', brand = null, rules = DEFAULT_GMAIL_BRAND_RULES } = {}) {
+function parseAuthResults(raw) {
+  const s = String(raw || '').toLowerCase();
+  const grab = (mech) => {
+    const m = new RegExp(`\\b${mech}=(pass|fail|softfail|neutral|none|temperror|permerror)\\b`).exec(s);
+    return m ? m[1] : null;
+  };
+  return { dmarc: grab('dmarc'), spf: grab('spf'), dkim: grab('dkim'), present: !!s };
+}
+
+/**
+ * The trust verdict for an invoice email — the BEC / fake-invoice defense.
+ * Supplier-invoice fraud spoofs the visible `From:` display name, so we NEVER
+ * trust it: we key off Gmail's `Authentication-Results` (DMARC alignment) AND an
+ * allow-list of known supplier domains. Per FBI/IC3 + Google guidance, auto-trust
+ * ONLY when `dmarc=pass` and the sender domain is a known supplier; a failed
+ * DMARC is flagged as suspect; everything else routes to human review — an
+ * invoice is never auto-posted to the ledger on the strength of the From name.
+ *
+ * `message.authResults` is the stored Authentication-Results header (populated by
+ * the sync). When it's absent (older rows), the verdict is 'review', not
+ * 'trusted' — we fail safe, never open.
+ *
+ * @returns {{ level:'trusted'|'review'|'suspect', domain:string,
+ *   dmarc:string|null, spf:string|null, dkim:string|null, reasons:string[] }}
+ */
+export function resolveInvoiceTrust(message, { supplierAllowlist = [] } = {}) {
+  const domain = senderDomain(message?.fromEmail);
+  const auth = parseAuthResults(message?.authResults);
+  const allow = (supplierAllowlist || []).map((d) => String(d || '').toLowerCase().trim()).filter(Boolean);
+  const known = !!domain && allow.some((d) => domain === d || domain.endsWith(`.${d}`));
+  const reasons = [];
+
+  // Hard fail: DMARC failed, or both SPF and DKIM failed → likely spoofed.
+  if (auth.dmarc === 'fail' || (auth.spf === 'fail' && auth.dkim === 'fail')) {
+    reasons.push('La autenticación del remitente falló (posible suplantación).');
+    return { level: 'suspect', domain, dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, reasons };
+  }
+  // Auto-trust ONLY with dmarc=pass AND a known supplier domain.
+  if (auth.dmarc === 'pass' && known) {
+    return { level: 'trusted', domain, dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, reasons };
+  }
+  if (!auth.present) reasons.push('Sin datos de autenticación; revisar manualmente.');
+  else if (auth.dmarc !== 'pass') reasons.push('DMARC no verificado; revisar el remitente.');
+  else if (!known) reasons.push('Remitente autenticado pero no está en la lista de proveedores conocidos.');
+  return { level: 'review', domain, dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, reasons };
+}
+
+/**
+ * The Facturas tab — every invoice-like message, newest first, decorated with
+ * its brand, a best-effort amount, and a sender-trust verdict (BEC defense).
+ * `brand` (optional) narrows to one bucket. `supplierAllowlist` (optional)
+ * feeds the trust gate.
+ *
+ *   resolveGmailInvoices(messages, { needle, brand, rules, supplierAllowlist })
+ *     → [{ ...message, brand, amount, trust }]
+ */
+export function resolveGmailInvoices(messages, { needle = '', brand = null, rules = DEFAULT_GMAIL_BRAND_RULES, supplierAllowlist = [] } = {}) {
   const q = needle.trim().toLowerCase();
   return (messages || [])
     .filter(isInvoiceEmail)
-    .map((m) => ({ ...m, brand: classifyBrand(m, rules), amount: parseInvoiceAmount(m) }))
+    .map((m) => ({ ...m, brand: classifyBrand(m, rules), amount: parseInvoiceAmount(m), trust: resolveInvoiceTrust(m, { supplierAllowlist }) }))
     .filter((m) => (brand ? m.brand === brand : true))
     .filter((m) => !q
       || (m.subject || '').toLowerCase().includes(q)

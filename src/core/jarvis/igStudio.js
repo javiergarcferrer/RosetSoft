@@ -251,6 +251,94 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
   };
 }
 
+/**
+ * Engagement-rate benchmark bands (by followers), from Sprout Social's 2024-25
+ * bands: <0.43% needs work · 0.43-1% average · 1-3% strong · 3%+ exceptional.
+ * Home-decor/furniture is a low-engagement vertical (Rival IQ: below the 0.36%
+ * all-industry median), so the note calibrates expectations — a 0.4% ER is
+ * healthy for this business, not a failure.
+ */
+function engagementBand(pct) {
+  if (pct == null) return { band: 'unknown', label: 'Sin datos', note: '' };
+  if (pct >= 3) return { band: 'exceptional', label: 'Excepcional', note: 'Muy por encima del promedio del sector.' };
+  if (pct >= 1) return { band: 'strong', label: 'Fuerte', note: 'Por encima del promedio de Instagram.' };
+  if (pct >= 0.43) return { band: 'average', label: 'Promedio', note: 'En el rango típico; el mueble/hogar suele rondar aquí.' };
+  return { band: 'low', label: 'Bajo', note: 'Normal en mueble/hogar (sector de baja interacción); prioriza guardados y compartidos.' };
+}
+
+/**
+ * Derived audience business KPIs — turns the raw Studio numbers into the
+ * "understanding" layer: how good is engagement (by reach AND by followers, the
+ * two denominators the industry disagrees on — we report both), how far content
+ * travels beyond the existing audience (discovery), which format earns its keep,
+ * and how concentrated the audience is in the home market. Pure over the ALREADY
+ * resolved `resolveIgStudio` output — no extra API calls. Formulas are the
+ * documented ones (Hootsuite/Sprout/Rival IQ); every ratio guards its divisor
+ * and returns null (never NaN/Infinity) when the denominator is unknown.
+ */
+export function resolveAudienceKpis(studio) {
+  const s = studio || {};
+  const k = s.kpis || {};
+  const followers = num(s.profile?.followers);
+  const reach = num(k.reach28);
+  const views = num(k.views28);
+  const interactions = k.interactions28 != null ? num(k.interactions28) : null;
+  const pct = (n, d) => (d > 0 && n != null ? (n / d) * 100 : null);
+
+  const erByFollowers = pct(interactions, followers);
+  const erByReach = pct(interactions, reach);
+  const reachRate = pct(reach, followers);
+  const discoveryPct = reach > 0 && k.nonFollowerReach != null ? (num(k.nonFollowerReach) / reach) * 100 : null;
+  const viewsPerReach = reach > 0 ? views / reach : null;
+
+  // Content-format performance: Reels vs feed posts, by average engagement per
+  // post — each format wins on a different axis, so never collapse to one ER.
+  const grid = s.grid || [];
+  const byType = (isReel) => {
+    const rows = grid.filter((g) => !!g.isReel === isReel);
+    const eng = rows.reduce((a, g) => a + num(g.engagement), 0);
+    return { posts: rows.length, totalEngagement: eng, avgEngagement: rows.length ? Math.round(eng / rows.length) : 0 };
+  };
+  const reels = byType(true);
+  const posts = byType(false);
+  const totalEng = reels.totalEngagement + posts.totalEngagement;
+  const contentPerformance = [
+    { type: 'Reels', ...reels, sharePct: totalEng ? Math.round((reels.totalEngagement / totalEng) * 100) : 0 },
+    { type: 'Publicaciones', ...posts, sharePct: totalEng ? Math.round((posts.totalEngagement / totalEng) * 100) : 0 },
+  ];
+  const bestFormat = reels.avgEngagement === posts.avgEngagement ? null
+    : (reels.avgEngagement > posts.avgEngagement ? 'Reels' : 'Publicaciones');
+
+  // Audience concentration — among the top markets we can see (demographics only
+  // returns the top performers), how dominant is #1, the top 3, and the home
+  // market (Rep. Dominicana). Tells a single-location dealer if the audience is
+  // local and actionable, or diffuse.
+  const countries = s.audience?.topCountries || [];
+  const countryTotal = countries.reduce((a, c) => a + num(c.value), 0);
+  const top3 = countries.slice(0, 3).reduce((a, c) => a + num(c.value), 0);
+  const home = countries.find((c) => c.label === 'Rep. Dominicana');
+  const ages = s.audience?.age || [];
+  const dominantAge = ages.reduce((best, a) => (best && best.value >= a.value ? best : a), null);
+
+  return {
+    engagementRateByFollowersPct: erByFollowers,
+    engagementRateByReachPct: erByReach,
+    reachRatePct: reachRate,
+    discoveryPct,               // % of reach that came from non-followers
+    viewsPerReach,              // repeat-exposure ratio (>1 = re-watched)
+    engagementBenchmark: engagementBand(erByFollowers),
+    contentPerformance,
+    bestFormat,
+    audienceConcentration: {
+      topCountry: countries[0] ? { label: countries[0].label, pct: countryTotal ? Math.round((num(countries[0].value) / countryTotal) * 100) : null } : null,
+      top3CountryPct: countryTotal ? Math.round((top3 / countryTotal) * 100) : null,
+      homeMarketPct: countryTotal && home ? Math.round((num(home.value) / countryTotal) * 100) : null,
+      dominantAge: dominantAge ? { label: dominantAge.label, pct: dominantAge.pct ?? null } : null,
+    },
+    hasData: reach > 0 || followers > 0 || grid.length > 0,
+  };
+}
+
 const INSIGHT_LABELS = {
   reach: 'Alcance',
   views: 'Visualizaciones',
