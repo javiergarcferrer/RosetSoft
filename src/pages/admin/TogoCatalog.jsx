@@ -347,7 +347,12 @@ function ModelCard({ card, families, catalogLoading, onNeedCatalog }) {
           />
           <div className="text-[11px] text-ink-500 tabular-nums mt-1">{card.widthCm}×{card.depthCm} cm</div>
         </div>
-        <button type="button" onClick={() => db.togoModels.delete(card.id)} className="text-ink-400 hover:text-red-600 p-1" title="Eliminar modelo">
+        <button
+          type="button"
+          onClick={() => { if (window.confirm(`¿Eliminar el modelo "${card.name}"? Desaparecerá del configurador público.`)) db.togoModels.delete(card.id); }}
+          className="text-ink-400 hover:text-red-600 p-1"
+          title="Eliminar modelo"
+        >
           <Trash2 size={15} />
         </button>
       </div>

@@ -86,7 +86,7 @@ export default function TogoRequests() {
           const fam = families.get(resolvedById[it.modelId]?.root);
           const p = fam ? productForGrade(fam, mat.grade) : null;
           base.material = {
-            grade: mat.grade || '', fabric: mat.fabric || '', swatchImageId: null,
+            grade: mat.grade || '', fabric: mat.fabric || '', code: mat.code || '', swatchImageId: null,
             subtype: composeSubtype(mat.grade, mat.fabric),
             reference: p?.reference || '',
             unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) : (resolvedById[it.modelId]?.unitPrice ?? null),

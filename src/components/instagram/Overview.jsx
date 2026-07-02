@@ -177,8 +177,23 @@ function Overview({ st, sp, kpis, onGoToInteraccion, onGoToContenido }) {
               <KpiRow label="Interacción / alcance" value={asPct(kpis.engagementRateByReachPct)} />
               <KpiRow label="Tasa de alcance" value={asPct(kpis.reachRatePct)} />
               {kpis.discoveryPct != null && <KpiRow label="Descubrimiento (no seguidores)" value={asPct(kpis.discoveryPct)} />}
-              {kpis.bestFormat && (
-                <KpiRow label="Mejor formato" value={kpis.bestFormat} />
+              {(st?.formatMix?.length || 0) > 1 && (
+                <div className="border-t border-ink-100 pt-2">
+                  <div className="text-[11px] uppercase tracking-wider text-ink-400">Interacción media por formato</div>
+                  <div className="mt-1.5 space-y-1.5">
+                    {st.formatMix.map((f) => {
+                      const maxAvg = Math.max(1, ...st.formatMix.map((x) => x.avgEngagement));
+                      return (
+                        <div key={f.key} className="flex items-center gap-2 text-xs">
+                          <span className="w-20 shrink-0 truncate text-ink-500">{f.label}</span>
+                          <ScaleBar value={f.avgEngagement} max={maxAvg} className="min-w-0 flex-1" />
+                          <span className="w-14 shrink-0 text-right tabular-nums text-ink-700">{fmtCompact(f.avgEngagement)}</span>
+                          <span className="w-10 shrink-0 text-right tabular-nums text-ink-400">{f.posts} pub.</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
           ) : (
@@ -200,7 +215,11 @@ function Overview({ st, sp, kpis, onGoToInteraccion, onGoToContenido }) {
             {topPosts.length === 0 ? (
               <div className="text-sm text-ink-400">Sin publicaciones todavía.</div>
             ) : (
-              <div className="space-y-1">{topPosts.map((p) => <TopPost key={p.id} post={p} />)}</div>
+              <div className="space-y-1">
+                {topPosts.map((p, i) => (
+                  <TopPost key={p.id} post={p} rank={i + 1} maxEngagement={maxEngagement} />
+                ))}
+              </div>
             )}
           </div>
         </div>

@@ -88,30 +88,34 @@ export function resolveAccountingDashboard({
   const cashLeaves = new Set(leafCodesUnder(index, CASH_ROOT));
   const cash = subtreeBalance(index, raw, CASH_ROOT);
 
-  // Per-account cash balances → the "Bank accounts" card.
-  const bankAccounts = [];
-  for (const code of cashLeaves) {
-    const node = index.byCode.get(code);
-    if (!node) continue;
-    const r = raw.get(code);
-    const bal = r ? round2(naturalBalance((r.debit || 0) - (r.credit || 0), node.nature)) : 0;
-    if (Math.abs(bal) > 0.001) bankAccounts.push({ code, name: node.name, balance: bal });
-  }
-  bankAccounts.sort((a, b) => b.balance - a.balance);
-
-  // 6-month series: ingresos/egresos/utilidad (clases 4 vs 5+6), cash in/out
-  // (movements on Cajas y Bancos), and ventas (salesPostings.total) per month.
+  // 6-month series: ingresos/egresos/utilidad (clases 4 vs 5+6), cash in/out +
+  // net (movements on Cajas y Bancos), and ventas (salesPostings.total) per
+  // month — plus, per cash account, the signed movement per month and the
+  // balance carried into the window (feeds each bank row's balance trend).
   const months = lastMonths(end, 6);
   const idxByKey = new Map(months.map((m, i) => [m.key, i]));
+  const firstKey = months[0].key;
   const entryDate = new Map((entries || []).map((e) => [e.id, e.postedAt || 0]));
   const series = months.map((m) => ({ label: m.label, ingresos: 0, egresos: 0, sales: 0, cashIn: 0, cashOut: 0 }));
+  const bankPre = new Map();   // code → signed delta BEFORE the window
+  const bankMonth = new Map(); // code → per-month signed deltas (aligned with `months`)
   for (const l of lines || []) {
-    const i = idxByKey.get(monthKey(entryDate.get(l.entryId) || 0));
-    if (i == null) continue;
+    const k = monthKey(entryDate.get(l.entryId) || 0);
+    const i = idxByKey.get(k);
     const node = index.byCode.get(l.accountCode);
     if (!node) continue;
     const debit = Number(l.debit) || 0;
     const credit = Number(l.credit) || 0;
+    if (cashLeaves.has(l.accountCode)) {
+      const delta = debit - credit;
+      if (k < firstKey) bankPre.set(l.accountCode, (bankPre.get(l.accountCode) || 0) + delta);
+      else if (i != null) {
+        let arr = bankMonth.get(l.accountCode);
+        if (!arr) { arr = new Array(months.length).fill(0); bankMonth.set(l.accountCode, arr); }
+        arr[i] += delta;
+      }
+    }
+    if (i == null) continue;
     if (node.class === 4) series[i].ingresos += naturalBalance(debit - credit, node.nature);
     else if (node.class === 5 || node.class === 6) series[i].egresos += naturalBalance(debit - credit, node.nature);
     if (cashLeaves.has(l.accountCode)) { series[i].cashIn += debit; series[i].cashOut += credit; }
@@ -125,8 +129,28 @@ export function resolveAccountingDashboard({
     s.egresos = round2(s.egresos);
     s.cashIn = round2(s.cashIn);
     s.cashOut = round2(s.cashOut);
+    s.net = round2(s.cashIn - s.cashOut);
     s.utilidad = round2(s.ingresos - s.egresos);
   }
+  // Net cash movement across the whole visible window — grows or bleeds?
+  const cashNet6m = round2(series.reduce((s, m) => s + m.net, 0));
+
+  // Per-account cash balances → the "Bank accounts" card. `series` is the
+  // account's END-OF-MONTH balance across the same 6-month window (opening
+  // carry + cumulative monthly movement), so each row can wear a trend.
+  const bankAccounts = [];
+  for (const code of cashLeaves) {
+    const node = index.byCode.get(code);
+    if (!node) continue;
+    const r = raw.get(code);
+    const bal = r ? round2(naturalBalance((r.debit || 0) - (r.credit || 0), node.nature)) : 0;
+    if (Math.abs(bal) < 0.001) continue;
+    const deltas = bankMonth.get(code) || new Array(months.length).fill(0);
+    let cum = bankPre.get(code) || 0;
+    const balSeries = deltas.map((d) => { cum += d; return round2(naturalBalance(cum, node.nature)); });
+    bankAccounts.push({ code, name: node.name, balance: bal, series: balSeries });
+  }
+  bankAccounts.sort((a, b) => b.balance - a.balance);
 
   // Gastos (clase 6) by top-level category, this month → the donut.
   const rawMonth = accountRawBalances(lines, { entries, start: monthStart, end });
@@ -144,7 +168,15 @@ export function resolveAccountingDashboard({
     const rest = round2(cats.slice(5).reduce((s, c) => s + c.amount, 0));
     donutSegments = rest > 0 ? [...cats.slice(0, 5), { code: 'otros', name: 'Otros gastos', amount: rest }] : cats.slice(0, 5);
   }
-  const expenseDonut = { segments: donutSegments, total: round2(donutSegments.reduce((s, c) => s + c.amount, 0)) };
+  const donutTotal = round2(donutSegments.reduce((s, c) => s + c.amount, 0));
+  const expenseDonut = {
+    segments: donutSegments.map((c) => ({
+      ...c,
+      // Each category's share of the month's gastos (fraction, 3 decimals).
+      share: donutTotal > 0 ? Math.round((c.amount / donutTotal) * 1000) / 1000 : 0,
+    })),
+    total: donutTotal,
+  };
 
   // Cobros aging split + last-30-day collections → the "Invoices" card.
   // `notDue`/`overdue` keep the two-way split the strip used; `buckets` exposes
@@ -154,10 +186,14 @@ export function resolveAccountingDashboard({
   const sales365 = round2((salesPostings || [])
     .filter((s) => (s.postedAt || 0) > end - 365 * DAY && (s.postedAt || 0) <= end)
     .reduce((s, p) => s + (Number(p.total) || 0), 0));
+  // "At risk" = the 61+ day tail (the debt that stopped being a timing issue).
+  const atRisk = round2(cxc.totals.d61_90 + cxc.totals.d90);
   const ar = {
     unpaid: cxc.totals.balance,
     notDue: cxc.totals.d0_30,
     overdue: round2(cxc.totals.d31_60 + cxc.totals.d61_90 + cxc.totals.d90),
+    atRisk,
+    atRiskShare: cxc.totals.balance > 0 ? Math.round((atRisk / cxc.totals.balance) * 1000) / 1000 : 0,
     buckets: {
       d0_30: cxc.totals.d0_30, d31_60: cxc.totals.d31_60,
       d61_90: cxc.totals.d61_90, d90: cxc.totals.d90,
@@ -188,9 +224,16 @@ export function resolveAccountingDashboard({
     utilidadMonth: income.netIncome,
     // The P&L bridge steps for the waterfall: ingresos → costo de ventas →
     // gastos → utilidad neta (costs/expenses split out of egresosMonth).
+    // `pct` = each step as a fraction of ingresos (3 decimals; null when the
+    // month has no income — a share of zero is meaningless, not 0%).
     pnl: {
       income: income.totalIncome, costs: income.totalCosts,
       expenses: income.totalExpenses, net: income.netIncome,
+      pct: income.totalIncome > 0 ? {
+        costs: Math.round((income.totalCosts / income.totalIncome) * 1000) / 1000,
+        expenses: Math.round((income.totalExpenses / income.totalIncome) * 1000) / 1000,
+        net: Math.round((income.netIncome / income.totalIncome) * 1000) / 1000,
+      } : null,
     },
     itbis,
     ecfPending,
