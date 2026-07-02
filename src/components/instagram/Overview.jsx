@@ -46,10 +46,10 @@ function TopPost({ post, rank, maxEngagement }) {
 // Benchmark-band chip colors (furniture/home is a low-engagement vertical, so
 // "Bajo" is amber-informational, not red-alarming).
 const BAND_CHIP = {
-  exceptional: 'bg-emerald-100 text-emerald-800',
-  strong: 'bg-emerald-100 text-emerald-800',
+  exceptional: 'bg-emerald-600/10 text-emerald-700 dark:text-emerald-400',
+  strong: 'bg-emerald-600/10 text-emerald-700 dark:text-emerald-400',
   average: 'bg-ink-100 text-ink-700',
-  low: 'bg-amber-100 text-amber-800',
+  low: 'bg-amber-600/10 text-amber-700 dark:text-amber-400',
   unknown: 'bg-ink-100 text-ink-500',
 };
 

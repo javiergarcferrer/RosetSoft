@@ -23,8 +23,12 @@ import ImageView from '../components/ImageView.tsx';
 import Modal from '../components/Modal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { supabase } from '../db/supabaseClient.js';
-import { resolveSocialPulse, resolveIgStudio, resolveAudienceKpis } from '../core/jarvis/index.js';
+import { db } from '../db/database.js';
+import {
+  resolveSocialPulse, resolveIgStudio, resolveAudienceKpis, resolveAdsSalesWeeks,
+} from '../core/jarvis/index.js';
 import { LivePill, freshLabel, fmt } from '../components/instagram/chrome.jsx';
+import AdsImpact from '../components/instagram/AdsImpact.jsx';
 import Overview from '../components/instagram/Overview.jsx';
 import AudienceCard from '../components/instagram/AudienceCard.jsx';
 import BestTimeCard from '../components/instagram/BestTimeCard.jsx';
@@ -45,7 +49,7 @@ function pick(res, okGuard) {
 }
 
 export default function Instagram() {
-  const { settings } = useApp();
+  const { settings, profileId } = useApp();
   const linked = !!settings?.metaSocialConnectedAt;
   const username = settings?.metaSocialIgUsername;
 
@@ -94,6 +98,23 @@ export default function Instagram() {
   const st = useMemo(() => (stud.raw ? resolveIgStudio(stud.raw) : null), [stud.raw]);
   const audKpis = useMemo(() => (st ? resolveAudienceKpis(st) : null), [st]);
 
+  // Quotes for the ads↔ventas weekly view (the same rows JARVIS reads). One
+  // fetch per mount is enough — a 6-week bucketing doesn't need the 45s poll.
+  const [quotes, setQuotes] = useState([]);
+  useEffect(() => {
+    if (!linked || !profileId) return undefined;
+    let alive = true;
+    db.quotes.where('profileId').equals(profileId).toArray()
+      .then((rows) => { if (alive) setQuotes(rows || []); })
+      .catch(() => { /* the board simply skips the weeks chart */ });
+    return () => { alive = false; };
+  }, [linked, profileId]);
+  const adsSalesWeeks = useMemo(() => (
+    sp?.hasAds && snap.raw?.adsDaily?.length
+      ? resolveAdsSalesWeeks({ adsDaily: snap.raw.adsDaily, quotes, weeks: 6 })
+      : null
+  ), [sp?.hasAds, snap.raw, quotes]);
+
   const [composerOpen, setComposerOpen] = useState(false);
   const [adsOpen, setAdsOpen] = useState(false);
 
@@ -129,7 +150,10 @@ export default function Instagram() {
     const deck = deckRef.current;
     setActive(i);
     suppressUntil.current = Date.now() + 600;
-    if (deck) deck.scrollTo({ left: i * deck.clientWidth, behavior: 'smooth' });
+    // Respect prefers-reduced-motion: jump instead of animating the deck.
+    const reduce = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (deck) deck.scrollTo({ left: i * deck.clientWidth, behavior: reduce ? 'auto' : 'smooth' });
   }, []);
   // Keep the active tab synced to whichever board is centered (robust to swipe).
   useEffect(() => {
@@ -216,19 +240,28 @@ export default function Instagram() {
       )}
       {sec.id === 'contenido' && st && (
         <div className="h-full">
-          <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} onPublish={() => setComposerOpen(true)} />
+          <ContentGrid grid={st.grid} mentions={st.mentions} stories={st.stories} profile={st.profile} formatMix={st.formatMix} onPublish={() => setComposerOpen(true)} />
         </div>
       )}
       {sec.id === 'anuncios' && (
         <div className="mx-auto h-full max-w-3xl lg:max-w-none">
-          <CampaignsCard
-            campaigns={sp?.campaigns || []}
-            adCurrency={sp?.adCurrency}
-            spend7={sp?.kpis?.spend7}
-            hasAds={!!sp?.hasAds}
-            onChanged={load}
-            onCreateAd={() => setAdsOpen(true)}
-          />
+          <div className={`grid h-full grid-cols-1 gap-4 ${sp?.hasAds ? 'lg:grid-cols-5' : ''}`}>
+            <div className="min-h-0 lg:col-span-3">
+              <CampaignsCard
+                campaigns={sp?.campaigns || []}
+                adCurrency={sp?.adCurrency}
+                spend7={sp?.kpis?.spend7}
+                hasAds={!!sp?.hasAds}
+                onChanged={load}
+                onCreateAd={() => setAdsOpen(true)}
+              />
+            </div>
+            {sp?.hasAds && (
+              <div className="lg:col-span-2">
+                <AdsImpact kpis={sp.kpis} adCurrency={sp.adCurrency} weeks={adsSalesWeeks} />
+              </div>
+            )}
+          </div>
         </div>
       )}
       {sec.id === 'audiencia' && st && (
@@ -352,7 +385,7 @@ export default function Instagram() {
           // (a long post title, the chart) from forcing a track past 100%.
           <div
             ref={deckRef}
-            className="grid auto-cols-[100%] grid-flow-col min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [overscroll-behavior:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="grid auto-cols-[100%] grid-flow-col min-h-0 min-w-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden motion-safe:scroll-smooth [overscroll-behavior:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {sections.map((sec) => (
               <section

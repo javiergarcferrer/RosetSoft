@@ -1,24 +1,29 @@
 /**
  * Tests for src/core/crm/views/gmailInbox.js — the Gmail inbox VM.
  *
- * Pins the two derivations the feature is built on: BRAND classification
- * (sender-domain rules + manual override) and INVOICE detection, plus the
- * thread grouping / unread / brand-of-thread roll-up the inbox list renders.
+ * Pins the derivations the feature is built on: BRAND classification
+ * (sender-domain rules + manual override), INVOICE detection, the thread
+ * grouping / unread / archived-visibility / brand-of-thread roll-up the inbox
+ * list renders, the per-tab counts, and the list-quality helpers (relative
+ * dates, avatar initials/colors, the load-older pagination cursor).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   classifyBrand, isInvoiceEmail, parseInvoiceAmount,
-  resolveGmailThreads, resolveGmailThread, resolveGmailInvoices,
+  resolveGmailThreads, resolveGmailThread, resolveGmailInvoices, resolveGmailTabCounts,
   resolveReplyDraft, replySubject, forwardSubject, resolveForwardDraft,
   isEmailAddress, resolveEmailRecipients,
+  formatGmailDate, senderInitials, avatarColorIndex, oldestGmailAt, olderMailQuery,
   GMAIL_BRAND_OTHER, GMAIL_BRAND_TABS,
   GMAIL_CAT_PROVEEDORES, GMAIL_CAT_FINANZAS, GMAIL_CAT_OPERACIONES, GMAIL_CAT_BOLETINES,
 } from '../src/core/crm/views/gmailInbox.js';
 
 const NOW = Date.parse('2026-06-10T12:00:00Z');
 const MIN = 60_000;
-const msg = (o) => ({ id: 'm', profileId: 'team', threadId: 't', direction: 'in', isRead: false, ...o });
+// Default: an unread inbound message sitting in the inbox (INBOX label) — the
+// visibility rule hides inbound threads whose messages have all lost INBOX.
+const msg = (o) => ({ id: 'm', profileId: 'team', threadId: 't', direction: 'in', isRead: false, labelIds: ['INBOX'], ...o });
 
 // ── classifyBrand (intent-based categories) ─────────────────────────────────
 test('classifyBrand: Ligne Roset is the golden lane — any Roset domain', () => {
@@ -296,4 +301,108 @@ test('resolveGmailInvoices lists only invoices, newest first, with brand + amoun
   assert.equal(invoices[0].id, 'inv');
   assert.equal(invoices[0].brand, 'ligne-roset');
   assert.deepEqual(invoices[0].amount, { amount: 3200, currency: 'USD' });
+});
+
+// ── archived visibility (Gmail semantics) ───────────────────────────────────
+test('an inbound thread with no INBOX label anywhere is hidden (archived)', () => {
+  const messages = [
+    msg({ id: 'a', threadId: 'A', labelIds: [], receivedAt: NOW }),                         // archived inbound
+    msg({ id: 'b', threadId: 'B', labelIds: ['INBOX'], receivedAt: NOW - MIN }),            // in the inbox
+    msg({ id: 'c', threadId: 'C', direction: 'out', labelIds: ['SENT'], receivedAt: NOW }), // sent-only: stays
+  ];
+  const visible = resolveGmailThreads(messages, {});
+  assert.deepEqual(visible.map((t) => t.threadId).sort(), ['B', 'C']);
+  assert.equal(resolveGmailThreads(messages, { includeArchived: true }).length, 3);
+});
+
+test('a thread stays visible while ANY of its messages still carries INBOX', () => {
+  const messages = [
+    msg({ id: 'a1', threadId: 'A', labelIds: [], receivedAt: NOW - MIN }),
+    msg({ id: 'a2', threadId: 'A', labelIds: ['INBOX'], receivedAt: NOW }),
+  ];
+  assert.equal(resolveGmailThreads(messages, {}).length, 1);
+});
+
+test('hasAttachment and starred roll up to the thread', () => {
+  const messages = [
+    msg({ id: 'a1', threadId: 'A', receivedAt: NOW - MIN }),
+    msg({ id: 'a2', threadId: 'A', hasAttachment: true, labelIds: ['INBOX', 'STARRED'], receivedAt: NOW }),
+    msg({ id: 'b', threadId: 'B', receivedAt: NOW }),
+  ];
+  const a = resolveGmailThreads(messages, {}).find((t) => t.threadId === 'A');
+  const b = resolveGmailThreads(messages, {}).find((t) => t.threadId === 'B');
+  assert.equal(a.hasAttachment, true);
+  assert.equal(a.starred, true);
+  assert.equal(b.hasAttachment, false);
+  assert.equal(b.starred, false);
+});
+
+// ── resolveGmailTabCounts ───────────────────────────────────────────────────
+test('resolveGmailTabCounts buckets thread + unread counts per tab', () => {
+  const messages = [
+    msg({ id: 'r1', threadId: 'R1', fromEmail: 'x@roset.fr', receivedAt: NOW }),                    // LR, unread
+    msg({ id: 'r2', threadId: 'R2', fromEmail: 'y@rosetusa.com', isRead: true, receivedAt: NOW }),  // LR, read
+    msg({ id: 'f1', threadId: 'F1', fromEmail: 'z@nuevo.do', subject: 'Su factura', receivedAt: NOW }), // finanzas
+  ];
+  const c = resolveGmailTabCounts(messages);
+  assert.equal(c['ligne-roset'].threads, 2);
+  assert.equal(c['ligne-roset'].unread, 1);
+  assert.equal(c[GMAIL_CAT_FINANZAS].threads, 1);
+  assert.equal(c[GMAIL_BRAND_OTHER].threads, 0);
+  // Every tab id is present even when empty.
+  for (const t of GMAIL_BRAND_TABS) assert.ok(c[t.id]);
+});
+
+test('resolveGmailTabCounts excludes archived threads (they left the tabs)', () => {
+  const messages = [
+    msg({ id: 'a', threadId: 'A', fromEmail: 'x@roset.fr', labelIds: [], receivedAt: NOW }),
+  ];
+  assert.equal(resolveGmailTabCounts(messages)['ligne-roset'].threads, 0);
+});
+
+// ── formatGmailDate (relative buckets, deterministic months) ────────────────
+test('formatGmailDate: hoy → HH:MM, ayer, mismo año → d mmm, previo → d mmm yy', () => {
+  const now = new Date(2026, 5, 10, 15, 30).getTime(); // 10 jun 2026, local
+  assert.equal(formatGmailDate(new Date(2026, 5, 10, 9, 5).getTime(), now), '09:05');
+  assert.equal(formatGmailDate(new Date(2026, 5, 9, 22, 0).getTime(), now), 'ayer');
+  assert.equal(formatGmailDate(new Date(2026, 2, 3).getTime(), now), '3 mar');
+  assert.equal(formatGmailDate(new Date(2024, 11, 24).getTime(), now), '24 dic 24');
+  assert.equal(formatGmailDate(0, now), '');
+});
+
+// ── senderInitials / avatarColorIndex ───────────────────────────────────────
+test('senderInitials: first + last name initials, falling back to the address', () => {
+  assert.equal(senderInitials('Lola María Cliente', ''), 'LC');
+  assert.equal(senderInitials('Lola', ''), 'LO');
+  assert.equal(senderInitials('', 'billing@ligne-roset.com'), 'BI');
+  assert.equal(senderInitials('', ''), '?');
+});
+
+test('avatarColorIndex is deterministic, bounded and case-insensitive', () => {
+  const a = avatarColorIndex('billing@ligne-roset.com', 6);
+  assert.equal(avatarColorIndex('billing@ligne-roset.com', 6), a);
+  assert.equal(avatarColorIndex('BILLING@ligne-roset.com', 6), a);
+  assert.ok(a >= 0 && a < 6);
+});
+
+// ── load-older pagination (oldestGmailAt / olderMailQuery) ──────────────────
+test('oldestGmailAt returns the earliest timestamp, null when empty', () => {
+  const early = new Date(2026, 2, 15, 12).getTime();
+  const late = new Date(2026, 4, 1, 12).getTime();
+  assert.equal(oldestGmailAt([msg({ receivedAt: late }), msg({ receivedAt: early })]), early);
+  assert.equal(oldestGmailAt([]), null);
+  assert.equal(oldestGmailAt(null), null);
+});
+
+test('olderMailQuery builds a day-granular before: one day past the cursor', () => {
+  assert.equal(
+    olderMailQuery(new Date(2026, 2, 15, 12).getTime()),
+    '(in:inbox OR in:sent) before:2026/03/16',
+  );
+  // Month rollover pads and carries correctly.
+  assert.equal(
+    olderMailQuery(new Date(2026, 0, 31, 12).getTime()),
+    '(in:inbox OR in:sent) before:2026/02/01',
+  );
+  assert.equal(olderMailQuery(null), null);
 });

@@ -61,22 +61,96 @@ test('resolveAccountingDashboard builds the Business-overview series + breakdown
   assert.equal(d.bankAccounts[0].balance, 10000);
 
   // 6-month series; the operative month (the fixture's only entry) carries the
-  // income, the cash inflow and the sale, with nothing flowing out.
+  // income, the cash inflow and the sale, with nothing flowing out. Each month
+  // also exposes its NET cash movement (cashIn − cashOut) for the neto line,
+  // and the window rolls up into cashNet6m.
   assert.equal(d.monthsSeries.length, 6);
   const cur = d.monthsSeries[d.monthsSeries.length - 1];
   assert.equal(cur.ingresos, 10000);
   assert.equal(cur.cashIn, 10000);
   assert.equal(cur.cashOut, 0);
+  assert.equal(cur.net, 10000);
   assert.equal(cur.sales, 11800);
   assert.equal(cur.utilidad, 10000);
+  assert.equal(d.cashNet6m, 10000);
+
+  // Each bank row carries its END-OF-MONTH balance trend across the same
+  // window: flat at 0 until the entry's month, then the deposited 10k.
+  assert.equal(d.bankAccounts[0].series.length, 6);
+  assert.equal(d.bankAccounts[0].series[0], 0);
+  assert.equal(d.bankAccounts[0].series[5], 10000);
 
   // No clase-6 accounts in the fixture → an empty gastos donut.
   assert.equal(d.expenseDonut.total, 0);
   assert.equal(d.expenseDonut.segments.length, 0);
 
-  // The whole receivable is unpaid; nothing collected (no payments).
+  // The whole receivable is unpaid; nothing collected (no payments). The
+  // fixture sale is ancient (epoch-era postedAt aged against today), so the
+  // full balance sits in the +90 bucket → all of it is "at risk" (61+ days).
   assert.equal(d.ar.unpaid, 11800);
+  assert.equal(d.ar.buckets.d90, 11800);
+  assert.equal(d.ar.atRisk, 11800);
+  assert.equal(d.ar.atRiskShare, 1);
   assert.equal(d.collected30, 0);
+
+  // P&L shares of income: no costs/expenses booked → the margin is 100%.
+  assert.deepEqual(d.pnl.pct, { costs: 0, expenses: 0, net: 1 });
+});
+
+test('resolveAccountingDashboard: gastos donut shares, P&L pct-of-income and net cash', () => {
+  const accounts = [
+    ...ACCOUNTS,
+    { code: '6-00-000-00-00-00', class: 6, nature: 'debit', parentCode: null, level: 1, isPostable: false, name: 'GASTOS' },
+    { code: '6-01-000-00-00-00', class: 6, nature: 'debit', parentCode: '6-00-000-00-00-00', level: 2, isPostable: false, name: 'PERSONAL' },
+    { code: '6-01-001-00-00-00', class: 6, nature: 'debit', parentCode: '6-01-000-00-00-00', level: 3, isPostable: true, name: 'Sueldos' },
+    { code: '6-02-000-00-00-00', class: 6, nature: 'debit', parentCode: '6-00-000-00-00-00', level: 2, isPostable: false, name: 'OPERATIVOS' },
+    { code: '6-02-001-00-00-00', class: 6, nature: 'debit', parentCode: '6-02-000-00-00-00', level: 3, isPostable: true, name: 'Alquiler' },
+  ];
+  const entries = [...ENTRIES, { id: 'e2', postedAt: MONTH + 2 }, { id: 'e3', postedAt: MONTH + 3 }];
+  const lines = [
+    ...LINES,
+    // two gasto categories paid from the bank: 3,000 personal + 1,000 operativos
+    { entryId: 'e2', accountCode: '6-01-001-00-00-00', debit: 3000, credit: 0 },
+    { entryId: 'e2', accountCode: '1-01-001-02-00-00', debit: 0, credit: 3000 },
+    { entryId: 'e3', accountCode: '6-02-001-00-00-00', debit: 1000, credit: 0 },
+    { entryId: 'e3', accountCode: '1-01-001-02-00-00', debit: 0, credit: 1000 },
+  ];
+  const d = resolveAccountingDashboard({
+    accounts, entries, lines,
+    salesPostings: [], purchases: [], expenses: [], payments: [], imports: [],
+    customersById: new Map(), suppliersById: new Map(),
+    monthStart: MONTH, monthEnd: MONTH + 1_000_000,
+  });
+
+  // Donut: categories ranked with their share of the month's gastos.
+  assert.equal(d.expenseDonut.total, 4000);
+  assert.deepEqual(
+    d.expenseDonut.segments.map((s) => [s.name, s.amount, s.share]),
+    [['PERSONAL', 3000, 0.75], ['OPERATIVOS', 1000, 0.25]],
+  );
+
+  // P&L bridge: 10,000 income − 4,000 gastos → 60% net margin, 40% expenses.
+  assert.equal(d.utilidadMonth, 6000);
+  assert.deepEqual(d.pnl.pct, { costs: 0, expenses: 0.4, net: 0.6 });
+
+  // Cash: 10,000 in − 4,000 out → net 6,000, mirrored by the bank trend.
+  const cur = d.monthsSeries[d.monthsSeries.length - 1];
+  assert.equal(cur.cashIn, 10000);
+  assert.equal(cur.cashOut, 4000);
+  assert.equal(cur.net, 6000);
+  assert.equal(d.cashNet6m, 6000);
+  assert.equal(d.cash, 6000);
+  assert.equal(d.bankAccounts[0].series[5], 6000);
+
+  // A month with no income pins pct at null (never a fake 0%): shift the
+  // window one month later, where nothing was posted.
+  const empty = resolveAccountingDashboard({
+    accounts, entries, lines,
+    salesPostings: [], purchases: [], expenses: [], payments: [], imports: [],
+    customersById: new Map(), suppliersById: new Map(),
+    monthStart: MONTH + 40 * 86_400_000, monthEnd: MONTH + 70 * 86_400_000,
+  });
+  assert.equal(empty.pnl.pct, null);
 });
 
 /* --------------------- seller home (resolveDashboard) --------------------- */

@@ -78,7 +78,7 @@ export default function ThreadList({ threads, selectedId, onOpen, brandTab, need
                 onClick={() => onOpen(t.threadId)}
                 className={`w-full text-left pl-3 pr-3.5 py-3 flex items-start gap-2.5 transition ${
                   selected ? 'bg-brand-50/70' : 'hover:bg-ink-50'
-                } ${t.unread ? '' : ''}`}
+                }`}
               >
                 <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-semibold ${tone}`}>
                   {senderInitials(t.fromName, t.fromEmail)}

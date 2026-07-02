@@ -81,6 +81,9 @@ test('funnel step: click→result conversion guarded by clicks and a known resul
   assert.equal(withResults.kpis.clickToResult7Pct, 20); // 6 / 30
   assert.equal(withResults.kpis.results7Prev, 0);
   assert.equal(withResults.kpis.resultsDeltaPct, null); // no prev base
+  assert.equal(withResults.kpis.costPerResult7, 10); // 60 / 6
+  assert.equal(withResults.kpis.costPerResult7Prev, null); // no prev results
+  assert.equal(withResults.kpis.costPerResultDeltaPct, null);
   const noActions = resolveSocialPulse({
     adsDaily: [{ date_start: '2026-06-10', spend: '60', clicks: '30', impressions: '1000' }],
   }, { now: NOW });

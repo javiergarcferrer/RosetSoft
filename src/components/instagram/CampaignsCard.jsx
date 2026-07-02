@@ -11,10 +11,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../db/supabaseClient.js';
 import ImageView from '../ImageView.tsx';
+import { fmtCompact } from './chrome.jsx';
+import { FunnelStages } from './IgCharts.jsx';
 
-const money = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-const money2 = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const intFmt = (n) => Number(n || 0).toLocaleString('en-US');
+const money = (n) => Number(n || 0).toLocaleString('es-DO', { maximumFractionDigits: 0 });
+const money2 = (n) => Number(n || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const intFmt = (n) => Number(n || 0).toLocaleString('es-DO');
 
 // One labelled figure in the expanded ad's analytics grid — null values are
 // filtered out by the caller, so a tile only renders when there's a real number.
@@ -128,14 +130,19 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
                   const cur = c.currency || adCurrency; // each campaign bills in its own account's currency
                   const open = openId === c.id;
                   const dot = b === 'active' ? 'bg-emerald-500' : b === 'paused' ? 'bg-amber-400' : 'bg-ink-300';
+                  // The funnel carries volumen (impresiones → clics → resultados);
+                  // the tiles carry the money. Same data, no double-encoding.
+                  const hasFunnel = (c.impressions || 0) > 0;
                   const metrics = [
                     { key: 'spend', icon: Coins, label: 'Gasto', value: c.spend != null ? `${money(c.spend)}${cur ? ` ${cur}` : ''}` : null },
-                    { key: 'results', icon: Target, label: 'Resultados', value: c.results != null ? intFmt(c.results) : null },
-                    { key: 'cpr', icon: Coins, label: 'Costo/resultado', value: c.costPerResult != null ? `${money2(c.costPerResult)}${cur ? ` ${cur}` : ''}` : null },
-                    { key: 'clicks', icon: MousePointerClick, label: 'Clics', value: c.clicks != null ? intFmt(c.clicks) : null },
-                    { key: 'ctr', icon: Percent, label: 'CTR', value: c.ctrPct != null ? `${c.ctrPct.toFixed(2)}%` : null },
                     { key: 'cpc', icon: Coins, label: 'CPC', value: c.cpc != null ? `${money2(c.cpc)}${cur ? ` ${cur}` : ''}` : null },
-                    { key: 'impr', icon: Eye, label: 'Impresiones', value: c.impressions != null ? intFmt(c.impressions) : null },
+                    { key: 'cpr', icon: Coins, label: 'Costo/resultado', value: c.costPerResult != null ? `${money2(c.costPerResult)}${cur ? ` ${cur}` : ''}` : null },
+                    ...(hasFunnel ? [] : [
+                      { key: 'results', icon: Target, label: 'Resultados', value: c.results != null ? intFmt(c.results) : null },
+                      { key: 'clicks', icon: MousePointerClick, label: 'Clics', value: c.clicks != null ? intFmt(c.clicks) : null },
+                      { key: 'ctr', icon: Percent, label: 'CTR', value: c.ctrPct != null ? `${c.ctrPct.toFixed(2)}%` : null },
+                      { key: 'impr', icon: Eye, label: 'Impresiones', value: c.impressions != null ? intFmt(c.impressions) : null },
+                    ]),
                   ].filter((m) => m.value != null);
                   return (
                     <div key={c.id} className="overflow-hidden rounded-xl border border-ink-100 bg-surface">
@@ -170,13 +177,30 @@ export default function CampaignsCard({ campaigns = [], adCurrency, spend7, hasA
                               <ImageView id={null} fallbackUrl={c.image} alt={c.name} className="max-h-52 w-full object-cover" placeholderClassName="aspect-square w-full" />
                             </div>
                           )}
+                          {hasFunnel && (
+                            <div className="mb-2.5">
+                              <FunnelStages
+                                format={fmtCompact}
+                                stages={[
+                                  { label: 'Impresiones', value: c.impressions },
+                                  { label: 'Clics', value: c.clicks, convPct: c.ctrPct, convLabel: 'CTR' },
+                                  ...(c.results != null ? [{
+                                    label: 'Resultados',
+                                    value: c.results,
+                                    convPct: c.clicks > 0 ? (c.results / c.clicks) * 100 : null,
+                                    convLabel: 'de los clics',
+                                  }] : []),
+                                ]}
+                              />
+                            </div>
+                          )}
                           {metrics.length > 0 ? (
                             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                               {metrics.map((m) => <MetricTile key={m.key} icon={m.icon} label={m.label} value={m.value} />)}
                             </div>
-                          ) : (
+                          ) : !hasFunnel ? (
                             <div className="text-xs text-ink-400">Aún sin métricas reportadas para este anuncio.</div>
-                          )}
+                          ) : null}
                           <div className="mt-2.5 flex items-center justify-end gap-2">
                             {b !== 'inactive' && (
                               <button

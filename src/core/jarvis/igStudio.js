@@ -38,10 +38,6 @@ function dayLabel(ms) {
   return `${d.getUTCDate()} ${MONTHS_ES[d.getUTCMonth()]}`;
 }
 
-/** Daily values of one metric from an insights `data` array. */
-const metricValues = (insights, name) =>
-  ((insights || []).find((m) => m.name === name)?.values || []).map((v) => num(v.value));
-
 /** The total_value of a metric_type=total_value insights call. */
 const totalValue = (insights, name) => {
   const m = (insights || []).find((x) => x.name === name);

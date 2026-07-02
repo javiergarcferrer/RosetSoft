@@ -9,7 +9,7 @@ import { supabase } from '../../db/supabaseClient.js';
 import { db } from '../../db/database.js';
 import { PostThumb, PostPeek } from './postMedia.jsx';
 
-const money = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const money = (n) => Number(n || 0).toLocaleString('es-DO', { maximumFractionDigits: 0 });
 
 export default function EngagementPanel({ comments = [], campaigns = [], hasAds, adCurrency, spend7, posts = [], onChanged, onOpenAds }) {
   const showCampaigns = !!hasAds && campaigns.length > 0;

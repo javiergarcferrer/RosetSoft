@@ -13,7 +13,8 @@ import Modal from '../Modal.jsx';
 import StoryViewer from './StoryViewer.jsx';
 import { supabase } from '../../db/supabaseClient.js';
 import { resolveMediaInsights, resolveMediaComments } from '../../core/jarvis/index.js';
-import { fmt } from './chrome.jsx';
+import { fmt, fmtCompact } from './chrome.jsx';
+import { ScaleBar } from './IgCharts.jsx';
 
 // A media tile in the content grid / mentions wall.
 function MediaTile({ item, onClick }) {
@@ -34,7 +35,30 @@ function MediaTile({ item, onClick }) {
   );
 }
 
-export default function ContentGrid({ grid = [], mentions = [], stories = [], profile = null, onPublish }) {
+// Compact per-format comparison (Reels vs carruseles vs fotos) — average
+// interacciones per post on one shared scale, each row direct-labeled. The VM
+// (resolveIgStudio.formatMix) already derived it; this only draws.
+function FormatStrip({ formatMix }) {
+  if ((formatMix?.length || 0) < 2) return null;
+  const maxAvg = Math.max(1, ...formatMix.map((f) => f.avgEngagement));
+  return (
+    <div className="rounded-xl bg-ink-50 px-3.5 py-2.5">
+      <div className="text-[11px] uppercase tracking-wider text-ink-400">Interacción media por formato</div>
+      <div className="mt-1.5 space-y-1.5">
+        {formatMix.map((f) => (
+          <div key={f.key} className="flex items-center gap-2 text-xs">
+            <span className="w-20 shrink-0 truncate text-ink-500">{f.label}</span>
+            <ScaleBar value={f.avgEngagement} max={maxAvg} className="min-w-0 flex-1" />
+            <span className="w-14 shrink-0 text-right tabular-nums text-ink-700">{fmtCompact(f.avgEngagement)}</span>
+            <span className="w-12 shrink-0 text-right tabular-nums text-ink-400">{f.posts} pub.</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function ContentGrid({ grid = [], mentions = [], stories = [], profile = null, formatMix = [], onPublish }) {
   const [view, setView] = useState('posts'); // 'posts' | 'mentions'
   // Index of the story the full-screen viewer is open on (null = closed).
   const [storyAt, setStoryAt] = useState(null);
@@ -163,6 +187,7 @@ export default function ContentGrid({ grid = [], mentions = [], stories = [], pr
         </div>
       </div>
       <div className="card-pad space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+        {!showMentions && <FormatStrip formatMix={formatMix} />}
         {stories.length > 0 && !showMentions && (
           <div className="flex gap-3 overflow-x-auto pb-1">
             {stories.map((s, i) => (

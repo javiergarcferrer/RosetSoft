@@ -108,7 +108,17 @@ const SEGMENT_COLUMNS = [
   {
     key: 'share', label: '% del total',
     thClass: 'text-right', tdClass: 'text-right tabular-nums text-ink-500 whitespace-nowrap',
-    cell: ({ s }) => `${Math.round(s.share * 100)}%`,
+    // share as position + number: an inline track bar makes the ranking read
+    // down the column without decoding each percentage.
+    cell: ({ s }) => (
+      <span className="inline-flex items-center justify-end gap-2 min-w-0">
+        <span className="w-14 h-1.5 rounded-full bg-ink-100 overflow-hidden shrink-0" aria-hidden>
+          <span className="block h-full rounded-full bg-brand-400"
+            style={{ width: `${Math.min(100, Math.round(s.share * 100))}%` }} />
+        </span>
+        {Math.round(s.share * 100)}%
+      </span>
+    ),
   },
 ];
 const SEGMENT_DEFAULT = { count: true, base: true, itbis: true, total: true, share: true };
@@ -298,21 +308,28 @@ export default function AccountingDashboard() {
   const navigate = useNavigate();
   const scope = profileId || 'team';
 
-  const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope], []);
-  const entriesQ = useLiveQueryStatus(() => db.journalEntries.where('profileId').equals(scope).toArray(), [scope], []);
-  const linesQ = useLiveQueryStatus(() => db.journalLines.where('profileId').equals(scope).toArray(), [scope], []);
-  const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope], []);
-  const customersQ = useLiveQueryStatus(() => db.customers.where('profileId').equals(scope).toArray(), [scope], []);
-  const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope], []);
-  const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope], []);
-  const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope], []);
-  const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope], []);
-  const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope], []);
-  const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope], []);
-  const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope], []);
-  const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope], []);
-  const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope], []);
+  // Bumping `retryKey` re-runs every query (it rides each dep list) — the
+  // error banner's "Reintentar" without a full page reload.
+  const [retryKey, setRetryKey] = useState(0);
+  const accountsQ = useLiveQueryStatus(() => db.accounts.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const entriesQ = useLiveQueryStatus(() => db.journalEntries.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const linesQ = useLiveQueryStatus(() => db.journalLines.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const salesQ = useLiveQueryStatus(() => db.salesPostings.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const customersQ = useLiveQueryStatus(() => db.customers.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const purchasesQ = useLiveQueryStatus(() => db.purchases.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const expensesQ = useLiveQueryStatus(() => db.expenses.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const suppliersQ = useLiveQueryStatus(() => db.suppliers.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const paymentsQ = useLiveQueryStatus(() => db.payments.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const importsQ = useLiveQueryStatus(() => db.importLiquidations.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const expedientesQ = useLiveQueryStatus(() => db.importExpedientes.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const quotesQ = useLiveQueryStatus(() => db.quotes.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const ecfSeqQ = useLiveQueryStatus(() => db.ecfSequences.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
+  const periodsQ = useLiveQueryStatus(() => db.fiscalPeriods.where('profileId').equals(scope).toArray(), [scope, retryKey], []);
   const loaded = accountsQ.loaded && entriesQ.loaded && linesQ.loaded && salesQ.loaded;
+  const loadError = [
+    accountsQ, entriesQ, linesQ, salesQ, customersQ, purchasesQ, expensesQ,
+    suppliersQ, paymentsQ, importsQ, expedientesQ, quotesQ, ecfSeqQ, periodsQ,
+  ].some((q) => q.error);
 
   const today = useMemo(() => new Date(), []);
 
@@ -395,8 +412,14 @@ export default function AccountingDashboard() {
 
   const monthLabel = period.label;
   const ventasKpi = kpis.find((k) => k.key === 'ventas');
-  // Net cash movement across the visible window — does the saldo grow or bleed?
-  const cashNet = d.monthsSeries.reduce((s, m) => s + (m.cashIn - m.cashOut), 0);
+  const cobradoKpi = kpis.find((k) => k.key === 'cobrado');
+  const utilidadKpi = kpis.find((k) => k.key === 'utilidad');
+  const gastosKpi = kpis.find((k) => k.key === 'gastos');
+  // Leaf ratio for the hero band: what share of the period's facturado is
+  // already cobrado (null when nothing was invoiced — no misleading 0%).
+  const collectionRate = (ventasKpi?.current || 0) > 0
+    ? (cobradoKpi?.current || 0) / ventasKpi.current
+    : null;
   const segLabel = { customer: 'Cliente', seller: 'Vendedor', canal: 'Canal', ecfType: 'Comprobante' }[groupBy];
 
   // Column visibility (Shopify "edit columns"), persisted per browser, one key
@@ -415,7 +438,20 @@ export default function AccountingDashboard() {
       <PageHeader title="Resumen del negocio" subtitle={`Posición al ${formatDate(today.getTime())}`}
         actions={<PeriodNav kind={periodSel.kind} refMs={periodSel.ref} onChange={setPeriodSel} />} />
 
-      {!loaded ? <ListLoading /> : (
+      {loadError && (
+        <div role="alert" className="card p-4 mb-4 border border-rose-300/50 bg-rose-500/5 flex flex-wrap items-center gap-3">
+          <span className="icon-tile tint-rose shrink-0"><AlertTriangle size={15} /></span>
+          <div className="flex-1 min-w-40 text-sm text-ink-700">
+            No se pudieron cargar algunos datos contables.
+            <span className="block text-xs text-ink-400">Revisa la conexión e inténtalo de nuevo.</span>
+          </div>
+          <button type="button" onClick={() => setRetryKey((k) => k + 1)} className="btn-secondary text-sm inline-flex items-center gap-1.5">
+            <RefreshCw size={13} /> Reintentar
+          </button>
+        </div>
+      )}
+
+      {!loaded ? <DashSkeleton /> : (
         <div className="space-y-4 min-w-0">
           {/* Cockpit — the command center, always "as of today": one-tap quick
               create, the prioritized action center (what needs doing now), and
@@ -428,6 +464,71 @@ export default function AccountingDashboard() {
                   <span className="icon-tile tint-ink w-6 h-6 rounded-md"><a.icon size={13} /></span>{a.label}
                 </Link>
               ))}
+            </div>
+
+            {/* ¿Cómo va el negocio? — the four answers, one glance: cash on
+                hand, the period's bottom line, collection vs invoicing, and
+                the receivables actually at risk. Each tile drills into its
+                surface; everything below elaborates on these four. */}
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 min-w-0 [&>*]:min-w-0">
+              <HeroTile
+                icon={Wallet} label="Efectivo y bancos" value={d.cash} to="/accounting/ledger"
+                ariaLabel={`Efectivo y bancos: ${formatDop(d.cash)}; movimiento neto de seis meses ${formatDop(d.cashNet6m)}`}
+                chips={(
+                  <span className={`text-xs font-medium tabular-nums ${d.cashNet6m >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {d.cashNet6m >= 0 ? '+' : ''}{formatDop(d.cashNet6m)}
+                    <span className="text-[10px] text-ink-300 uppercase tracking-wide font-normal"> neto 6m</span>
+                  </span>
+                )}
+                spark={d.monthsSeries.map((m) => m.net)} sparkColor={C.current}
+              />
+              <HeroTile
+                icon={Scale} tint={(utilidadKpi?.current || 0) >= 0 ? 'tint-emerald' : 'tint-rose'}
+                label={`Utilidad · ${monthLabel}`} value={utilidadKpi?.current || 0}
+                tone={(utilidadKpi?.current || 0) >= 0 ? 'text-emerald-700' : 'text-rose-700'}
+                to="/accounting/statements"
+                ariaLabel={`Utilidad neta de ${monthLabel}: ${formatDop(utilidadKpi?.current || 0)}`}
+                chips={(
+                  <>
+                    <DeltaChip delta={utilidadKpi?.deltaPrev} vs={period.prev.label} />
+                    <span className="text-[10px] text-ink-300 uppercase tracking-wide">vs ant.</span>
+                    <DeltaChip delta={utilidadKpi?.deltaYoy} vs={period.yoy.label} />
+                    <span className="text-[10px] text-ink-300 uppercase tracking-wide">vs año</span>
+                  </>
+                )}
+                spark={utilidadSeries}
+              />
+              <HeroTile
+                icon={HandCoins} tint="tint-sky" label={`Cobrado · ${monthLabel}`} value={cobradoKpi?.current || 0}
+                to="/accounting/cuentas"
+                ariaLabel={`Cobrado en ${monthLabel}: ${formatDop(cobradoKpi?.current || 0)} de ${formatDop(ventasKpi?.current || 0)} facturado`}
+                sub={`de ${formatDop(ventasKpi?.current || 0)} facturado`}
+                chips={collectionRate != null && (
+                  <span className="inline-flex items-center gap-1.5 min-w-0 w-full">
+                    <span className="flex-1 h-1.5 rounded-full bg-ink-100 overflow-hidden min-w-0">
+                      <span className="block h-full rounded-full bg-sky-600 motion-safe:transition-all motion-safe:duration-500"
+                        style={{ width: `${Math.min(100, Math.round(collectionRate * 100))}%` }} />
+                    </span>
+                    <span className="text-xs font-medium tabular-nums text-ink-600 shrink-0">{Math.round(collectionRate * 100)}%</span>
+                  </span>
+                )}
+              />
+              <HeroTile
+                icon={AlertTriangle} tint={d.ar.atRisk > 0 ? 'tint-rose' : 'tint-emerald'}
+                label="CxC en riesgo (+60 días)" value={d.ar.atRisk}
+                tone={d.ar.atRisk > 0 ? 'text-rose-700' : ''}
+                to="/accounting/cuentas"
+                ariaLabel={`Cuentas por cobrar en riesgo, vencidas más de sesenta días: ${formatDop(d.ar.atRisk)}`}
+                chips={(
+                  <>
+                    {d.ar.atRisk > 0 && (
+                      <span className="chip bg-rose-100 text-rose-700 tabular-nums">{Math.round(d.ar.atRiskShare * 100)}% de la cartera</span>
+                    )}
+                    {d.ar.dso != null && <span className="chip bg-ink-100 text-ink-600 tabular-nums">DSO {d.ar.dso} días</span>}
+                  </>
+                )}
+                sub={d.ar.atRisk > 0 ? undefined : 'cartera al día'}
+              />
             </div>
 
             <div className="grid lg:grid-cols-3 gap-3 min-w-0">
@@ -522,15 +623,17 @@ export default function AccountingDashboard() {
               <div className="font-display text-2xl font-semibold tabular-nums text-ink-900"><CountUp value={d.cash} format={formatDop} /></div>
               <div className="text-xs text-ink-400 mb-3">Saldo en caja y bancos</div>
               <div className="mt-auto">
-                <BarPairs
-                  data={d.monthsSeries.map((m) => ({ label: m.label, a: m.cashIn, b: m.cashOut }))}
-                  colors={[C.in, C.out]} format={formatDop}
+                <ComboChart
+                  data={d.monthsSeries.map((m) => ({ label: m.label, a: m.cashIn, b: m.cashOut, line: m.net }))}
+                  colors={[C.in, C.out]} seriesLabels={['Entradas', 'Salidas']}
+                  lineColor={C.net} lineLabel="Neto" format={formatDop}
+                  ariaLabel={`Flujo de caja de los últimos 6 meses; movimiento neto ${formatDop(d.cashNet6m)}`}
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                  <Legend items={[{ label: 'Entradas', color: C.in }, { label: 'Salidas', color: C.out }]} />
+                  <Legend items={[{ label: 'Entradas', color: C.in }, { label: 'Salidas', color: C.out }, { label: 'Neto', color: C.net }]} />
                   <span className="text-xs whitespace-nowrap">
                     <span className="text-ink-400">Neto 6m </span>
-                    <span className={`tabular-nums font-medium ${cashNet >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{cashNet >= 0 ? '+' : ''}{formatDop(cashNet)}</span>
+                    <span className={`tabular-nums font-medium ${d.cashNet6m >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{d.cashNet6m >= 0 ? '+' : ''}{formatDop(d.cashNet6m)}</span>
                   </span>
                 </div>
               </div>
@@ -538,23 +641,33 @@ export default function AccountingDashboard() {
 
             {/* Gastos (donut por categoría) */}
             <div className="card p-4">
-              <CardHead title="Gastos" note={monthLabel} />
+              <CardHead title="Gastos" note={monthLabel} to="/accounting/compras-gastos" action="Ver gastos →" />
               {d.expenseDonut.total <= 0 ? (
-                <div className="flex items-center justify-center h-[148px] text-sm text-ink-400">Sin gastos este mes.</div>
+                <div className="flex flex-col items-center justify-center gap-2 h-[148px] text-sm text-ink-400">
+                  Sin gastos este mes.
+                  <Link to="/accounting/compras-gastos/nuevo?tipo=gasto" className="text-xs text-brand-600 hover:text-brand-700 font-medium">Registrar un gasto →</Link>
+                </div>
               ) : (
                 <div className="flex items-center gap-3 min-w-0">
-                  <Donut size={112} thickness={14}
-                    segments={d.expenseDonut.segments.map((s, i) => ({ value: s.amount, color: DONUT[i % DONUT.length] }))}>
+                  <Donut size={112} thickness={14} format={formatDop}
+                    ariaLabel={`Gastos de ${monthLabel}: ${formatDop(d.expenseDonut.total)} en ${d.expenseDonut.segments.length} categorías`}
+                    segments={d.expenseDonut.segments.map((s, i) => ({ value: s.amount, color: donutColor(s, i), label: s.name }))}>
                     <div className="eyebrow-xs text-ink-400">Total</div>
                     <div className="text-xs font-semibold tabular-nums">{formatDop(d.expenseDonut.total)}</div>
                   </Donut>
                   <ul className="flex-1 min-w-0 space-y-1.5">
                     {d.expenseDonut.segments.map((s, i) => (
                       <li key={s.code}>
-                        <Link to={`/accounting/ledger?cuenta=${s.code}`} className="flex items-center gap-2 text-xs min-w-0 rounded-md -mx-1 px-1 py-0.5 hover:bg-ink-50/60 transition-colors" title="Ver el mayor de esta cuenta">
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT[i % DONUT.length] }} />
-                          <span className="truncate text-ink-600 flex-1 min-w-0">{s.name}</span>
+                        <Link to={s.code === 'otros' ? '/accounting/compras-gastos' : `/accounting/ledger?cuenta=${s.code}`}
+                          className="flex items-center gap-2 text-xs min-w-0 rounded-md -mx-1 px-1 py-0.5 hover:bg-ink-50/60 transition-colors"
+                          title={s.code === 'otros' ? 'Ver compras y gastos' : 'Ver el mayor de esta cuenta'}>
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: donutColor(s, i) }} />
+                          <span className={`truncate flex-1 min-w-0 ${i < 3 && s.code !== 'otros' ? 'text-ink-700 font-medium' : 'text-ink-500'}`}>{s.name}</span>
+                          {/* top-3 callout: amount + share; the tail keeps the amount only */}
                           <span className="tabular-nums font-medium text-ink-700 shrink-0">{formatDop(s.amount)}</span>
+                          {i < 3 && s.code !== 'otros' && (
+                            <span className="tabular-nums text-ink-400 shrink-0 w-8 text-right">{Math.round(s.share * 100)}%</span>
+                          )}
                         </Link>
                       </li>
                     ))}
@@ -565,14 +678,24 @@ export default function AccountingDashboard() {
 
             {/* Ganancia y pérdida */}
             <div className="card p-4 flex flex-col">
-              <CardHead title="Ganancia y pérdida" note={monthLabel} />
+              <CardHead title="Ganancia y pérdida" note={monthLabel} to="/accounting/statements" action="Ver estados →" />
               <div className={`font-display text-2xl font-semibold tabular-nums ${d.utilidadMonth >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 <CountUp value={d.utilidadMonth} format={formatDop} />
               </div>
-              <div className="text-xs text-ink-400 mb-3">Utilidad neta de {monthLabel}</div>
+              <div className="text-xs text-ink-400 mb-3">
+                Utilidad neta de {monthLabel}
+                {d.pnl.pct && (
+                  <span className={`ml-1.5 tabular-nums font-medium ${d.pnl.pct.net >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    · margen {Math.round(d.pnl.pct.net * 100)}%
+                  </span>
+                )}
+              </div>
               <div className="mt-auto">
                 {d.pnl.income === 0 && d.pnl.net === 0 && d.egresosMonth === 0 ? (
-                  <div className="flex items-center justify-center h-[132px] text-sm text-ink-400">Sin actividad este mes.</div>
+                  <div className="flex flex-col items-center justify-center gap-2 h-[132px] text-sm text-ink-400">
+                    Sin actividad este mes.
+                    <Link to="/accounting/facturacion" className="text-xs text-brand-600 hover:text-brand-700 font-medium">Emitir una factura →</Link>
+                  </div>
                 ) : (
                   <Waterfall
                     steps={[
@@ -582,7 +705,8 @@ export default function AccountingDashboard() {
                       { label: 'Utilidad', value: d.pnl.net, total: true },
                     ]}
                     colors={{ increase: C.income, decrease: C.expense, total: 'rgb(var(--ink-400))' }}
-                    format={formatDop}
+                    format={formatDop} labels showPct
+                    ariaLabel={`Puente de resultados de ${monthLabel}: ingresos ${formatDop(d.pnl.income)}, costo ${formatDop(d.pnl.costs)}, gastos ${formatDop(d.pnl.expenses)}, utilidad ${formatDop(d.pnl.net)}`}
                   />
                 )}
               </div>
@@ -595,7 +719,13 @@ export default function AccountingDashboard() {
             <div className="card p-4 flex flex-col">
               <CardHead title="Cuentas por cobrar" to="/accounting/cuentas" action="Ver cuentas →" />
               <div className="font-display text-2xl font-semibold tabular-nums text-ink-900"><CountUp value={d.ar.unpaid} format={formatDop} /></div>
-              <div className="text-xs text-ink-400 mb-3">Sin cobrar{d.ar.dso != null ? ` · ${d.ar.dso} días de cobro (DSO)` : ''}</div>
+              <div className="flex flex-wrap items-center gap-1.5 mb-3 mt-0.5">
+                <span className="text-xs text-ink-400">Sin cobrar</span>
+                {d.ar.dso != null && <span className="chip bg-ink-100 text-ink-600 tabular-nums">DSO {d.ar.dso} días</span>}
+                {d.ar.atRisk > 0 && (
+                  <span className="chip bg-rose-100 text-rose-700 tabular-nums">{formatDop(d.ar.atRisk)} · +60 días</span>
+                )}
+              </div>
               <div className="mt-auto">
                 <AgingBars buckets={AGING.map((a) => ({ label: a.label, value: d.ar.buckets[a.key], tone: a.tone }))} format={formatDop} />
                 <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-ink-100">
@@ -607,11 +737,13 @@ export default function AccountingDashboard() {
 
             {/* Ventas */}
             <div className="card p-4 flex flex-col">
-              <CardHead title="Ventas" note="6 meses" />
+              <CardHead title="Ventas" note="6 meses" to="/accounting/facturacion" action="Facturación →" />
               <div className="font-display text-2xl font-semibold tabular-nums text-ink-900"><CountUp value={ventasKpi?.current || 0} format={formatDop} /></div>
               <div className="text-xs text-ink-400 mb-3">Facturado en {monthLabel}</div>
               <div className="mt-auto">
-                <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))} color={C.sales} />
+                <AreaChart points={d.monthsSeries.map((m) => ({ label: m.label, value: m.sales }))}
+                  color={C.sales} format={formatDop} showLast
+                  ariaLabel="Ventas facturadas por mes, últimos 6 meses" />
               </div>
             </div>
 
@@ -627,6 +759,10 @@ export default function AccountingDashboard() {
                       <Link to={`/accounting/ledger?cuenta=${b.code}`} className="flex items-center gap-2.5 py-1 rounded-lg hover:bg-ink-50/60 transition-colors -mx-1 px-1 min-w-0" title="Ver el mayor de esta cuenta">
                         <span className="w-8 h-8 rounded-lg bg-ink-100 ring-1 ring-inset ring-black/5 flex items-center justify-center text-ink-500 shrink-0"><Landmark size={14} /></span>
                         <span className="flex-1 min-w-0 truncate text-sm text-ink-700">{b.name}</span>
+                        {/* word-sized 6-month balance trend, when it moved */}
+                        {b.series?.some((v) => v !== b.series[0]) && (
+                          <span className="w-14 shrink-0 hidden sm:block"><Sparkline points={b.series} color={C.current} height={20} /></span>
+                        )}
                         <span className="tabular-nums font-medium text-sm text-ink-900 shrink-0">{formatDop(b.balance)}</span>
                       </Link>
                     </li>
@@ -640,15 +776,18 @@ export default function AccountingDashboard() {
             </div>
           </div>
 
-          {/* Compact KPI strip. */}
+          {/* Compact KPI strip — the figures the hero band doesn't already
+              answer (cash / cobrar / utilidad live up top). */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 min-w-0 [&>*]:min-w-0">
-            <Kpi icon={Wallet} label="Efectivo y bancos" value={formatDop(d.cash)} to="/accounting/ledger" />
-            <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
-              sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
             <Kpi icon={ArrowUpCircle} label="Por pagar" value={formatDop(d.cxpBalance)} to="/accounting/cuentas" />
             <Kpi icon={Receipt} label="ITBIS del período"
               value={formatDop(d.itbis.aPagar > 0 ? d.itbis.aPagar : d.itbis.aFavor)}
               sub={d.itbis.aPagar > 0 ? 'a pagar' : 'a favor'} to="/accounting/facturacion" />
+            <Kpi icon={FileText} label="e-CF por transmitir" value={String(d.ecfPending)}
+              sub={d.ecfPending > 0 ? 'pendientes con DGII' : 'todo transmitido'}
+              tone={d.ecfPending > 0 ? 'text-amber-600' : ''} to="/accounting/facturacion" />
+            <Kpi icon={ArrowDownCircle} label="Por cobrar" value={formatDop(d.cxcBalance)} to="/accounting/cuentas"
+              sub={d.overdue > 0 ? `${formatDop(d.overdue)} vencido +90` : 'al día'} tone={d.overdue > 0 ? 'text-rose-700' : ''} />
           </div>
 
           <div className="section-rule"><span>Análisis del período</span></div>
@@ -670,11 +809,7 @@ export default function AccountingDashboard() {
                     <div className="min-w-0">
                       <div className="eyebrow-xs text-ink-500 mb-0.5 truncate">{it.label}</div>
                       <div className="stat-value text-lg whitespace-nowrap">{it.value}</div>
-                      {it.delta ? (
-                        <div className="flex items-center gap-1.5 mt-0.5"><DeltaChip delta={importPanel.landedDelta} vs={period.prev.label} /><span className="text-[10px] text-ink-300 uppercase tracking-wide">vs ant.</span></div>
-                      ) : (
-                        <div className="text-[11px] text-ink-400 truncate">{it.sub}</div>
-                      )}
+                      <div className="text-[11px] text-ink-400 truncate">{it.sub}</div>
                     </div>
                   </div>
                 ))}
@@ -724,7 +859,12 @@ export default function AccountingDashboard() {
                 { key: 'canal', label: 'Canal' }, { key: 'ecfType', label: 'Comprobante' },
               ]} />
             {segmented.rows.length === 0 ? (
-              <p className="text-sm text-ink-400 py-6 text-center">Sin ventas que coincidan en el período.</p>
+              <div className="text-sm text-ink-400 py-6 text-center">
+                Sin ventas que coincidan en el período.
+                {!segQuery && (
+                  <Link to="/accounting/facturacion" className="block mt-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium">Emitir una factura →</Link>
+                )}
+              </div>
             ) : (
               <>
               <RowCards
@@ -805,7 +945,8 @@ export default function AccountingDashboard() {
               <div className="p-4 space-y-4">
                 <YoYColumns
                   data={monthly.map((m) => ({ label: m.label, value: m.ventas, prev: m.ventasYoy }))}
-                  color={C.sales} format={formatDop} />
+                  color={C.sales} format={formatDop} gridlines lastLabel
+                  ariaLabel="Ventas facturadas por mes, últimos 12 meses, contra el mismo mes del año anterior" />
                 <Legend items={[
                   { label: 'Ventas facturadas', color: C.sales },
                   { label: 'Mismo mes, año anterior', color: 'rgb(var(--ink-100))' },
@@ -929,7 +1070,10 @@ export default function AccountingDashboard() {
               <Link to="/accounting/ledger" className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">Ir al diario →</Link>
             </div>
             {d.recent.length === 0 ? (
-              <p className="text-sm text-ink-400 px-4 py-6">Aún no hay asientos.</p>
+              <div className="text-sm text-ink-400 px-4 py-6">
+                Aún no hay asientos.
+                <Link to="/accounting/ledger?new=1" className="ml-2 text-xs text-brand-600 hover:text-brand-700 font-medium">Crear el primer asiento →</Link>
+              </div>
             ) : (
               <>
               <div className="hidden md:flex justify-end px-4 pb-2">
