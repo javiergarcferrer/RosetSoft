@@ -74,20 +74,32 @@ function Overview({ st, sp, kpis, onGoToInteraccion, onGoToContenido }) {
   // Prefer igStudio's richer 28-day KPIs; fall back to socialPulse's 7-day.
   const followers = st?.profile.followers ?? sp?.kpis.igFollowers ?? 0;
   const reach28 = st?.kpis.reach28 ?? null;
-  const reachSeries = st?.reachSeries || [];
-  const split = st?.kpis.hasReachSplit
-    ? { fol: st.kpis.followerReach, non: st.kpis.nonFollowerReach, pct: st.kpis.followerReachPct }
-    : null;
+  const reachDaily = st?.reachDaily || [];
   const peak = st?.bestTimes?.peak || null;
   const comments = sp?.recentComments || [];
-  const topPosts = st?.topPosts || [];
+  const topPosts = (st?.topPosts || []).slice(0, 3);
+  const maxEngagement = Math.max(1, ...topPosts.map((p) => p.engagement));
+  // Honest deltas only: reach from the VM's 7d-vs-prev-7d windows; followers
+  // from the pulse's net-new count. Anything without a base renders nothing.
+  const reachDelta = st?.reachTrend?.deltaPct ?? sp?.kpis.reachDeltaPct ?? null;
+  const newFollowers7 = sp?.kpis.newFollowers7 || 0;
 
   return (
     <div className="space-y-4">
       {/* Hero KPI row — the material figures, biggest type on the board. */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label="Seguidores" value={fmt(followers)} sub={st ? `${fmt(st.profile.mediaCount)} publicaciones` : 'cuenta'} />
-        <Stat label="Alcance · 28d" value={reach28 != null ? fmt(reach28) : fmt(sp?.kpis.reach7 ?? 0)} sub={reach28 != null ? 'cuentas alcanzadas' : '7 días'} />
+        <Stat
+          label="Seguidores"
+          value={fmt(followers)}
+          sub={st ? `${fmt(st.profile.mediaCount)} publicaciones` : 'cuenta'}
+          delta={newFollowers7 > 0 ? <DeltaChip value={newFollowers7} format={(v) => `${fmt(Math.abs(v))}`} title="nuevos · 7 días" /> : null}
+        />
+        <Stat
+          label="Alcance · 28d"
+          value={reach28 != null ? fmt(reach28) : fmt(sp?.kpis.reach7 ?? 0)}
+          sub={reach28 != null ? 'cuentas alcanzadas' : '7 días'}
+          delta={<DeltaChip value={reachDelta} title="últimos 7 días vs 7 anteriores" />}
+        />
         <Stat
           label="Interacciones · 28d"
           value={st?.kpis.interactions28 != null ? fmt(st.kpis.interactions28) : '—'}
@@ -97,29 +109,38 @@ function Overview({ st, sp, kpis, onGoToInteraccion, onGoToContenido }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Reach trend + discovery split */}
+        {/* Reach trend (scrubbable area) + follower/discovery split */}
         <div className="card card-pad lg:col-span-2">
           <div className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-2 text-sm font-medium"><TrendingUp size={15} /> Alcance diario · 28 días</span>
-            {reach28 != null && <span className="text-xs text-ink-400 tabular-nums">{fmt(reach28)} total</span>}
+            {st?.reachTrend && (
+              <span className="flex items-center gap-2 text-xs text-ink-400 tabular-nums">
+                7d: {fmtCompact(st.reachTrend.cur7)}
+                <DeltaChip value={st.reachTrend.deltaPct} title="vs 7 días anteriores" />
+              </span>
+            )}
           </div>
-          {reachSeries.length > 1 ? (
-            <div className="mt-3 text-brand-600">
-              <Sparkline points={reachSeries} color="currentColor" height={56} />
+          {reachDaily.length > 1 ? (
+            <div className="mt-3 text-brand-600 dark:text-brand-500">
+              <AreaTrend
+                data={reachDaily}
+                stats={st?.reachStats}
+                height={128}
+                ariaLabel="Alcance diario, últimos 28 días"
+              />
             </div>
           ) : (
             <div className="mt-3 text-sm text-ink-400">Aún no hay suficiente historial de alcance.</div>
           )}
-          {split && (
-            <div className="mt-3">
-              <div className="flex h-2 overflow-hidden rounded-full bg-ink-100">
-                <div className="bg-brand-500" style={{ width: `${split.pct}%` }} title={`Seguidores ${fmt(split.fol)}`} />
-                <div className="bg-ink-300" style={{ width: `${100 - split.pct}%` }} title={`Descubrimiento ${fmt(split.non)}`} />
-              </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-ink-500">
-                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand-500" /> Seguidores {split.pct}%</span>
-                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ink-300" /> Descubrimiento {100 - split.pct}%</span>
-              </div>
+          {st?.kpis.hasReachSplit && (
+            <div className="mt-3 border-t border-ink-100 pt-3">
+              <SplitBar
+                parts={[
+                  { label: 'Seguidores', value: st.kpis.followerReach, barClass: 'bg-brand-500' },
+                  { label: 'Descubrimiento', value: st.kpis.nonFollowerReach, barClass: 'bg-ink-300' },
+                ]}
+                format={fmtCompact}
+              />
             </div>
           )}
         </div>

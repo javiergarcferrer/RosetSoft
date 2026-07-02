@@ -649,11 +649,11 @@ export function Waterfall({ steps = [], height = 132, colors = {}, format, label
                   }],
                 })}
               >
-                {/* connector from the previous step's end level, spanning the
-                    whole gap between the two bars' edges */}
+                {/* connector at the previous step's end level — drawn column-center
+                    to column-center BEFORE the bars, so it tucks under both caps */}
                 {i > 0 && (
                   <div className="absolute h-px bg-ink-300/70 pointer-events-none"
-                    style={{ top: `${yPct(segs[i - 1].end)}%`, left: 'calc(-16% - 0.375rem)', width: 'calc(32% + 0.375rem)' }} />
+                    style={{ top: `${yPct(segs[i - 1].end)}%`, left: '-50%', width: '100%' }} />
                 )}
                 <div
                   className="absolute inset-x-0 mx-auto w-[68%] max-w-8 rounded-[3px] motion-safe:transition-all motion-safe:duration-500 motion-safe:ease-out"

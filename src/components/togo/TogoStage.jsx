@@ -200,6 +200,22 @@ export default function TogoStage({
     l.requestRender();
   }
 
+  // Snap-engage flash: while dragging, the piece's warm selection glow brightens
+  // the instant it clicks flush to a neighbour (and relaxes when it unlocks) —
+  // visible feedback for the edge snap, paired with a tiny haptic tick. The
+  // dragged piece is always the selected one, so releasing back to 0.5 restores
+  // the plain selection highlight.
+  function setSnapGlow(pg, on) {
+    if (!pg) return;
+    const seen = new Set();
+    pg.traverse((o) => {
+      if (o.userData?.pad) return;
+      const m = o.material; if (!m || !m.emissive || seen.has(m)) return; seen.add(m);
+      m.emissive.setHex(0x3a342b);
+      m.emissiveIntensity = on ? 1.0 : 0.5;
+    });
+  }
+
   // Re-skin (finish change) without rebuilding geometry.
   const reskin = useCallback(() => {
     const l = api.current; if (!l || !l.group) return;
@@ -487,11 +503,17 @@ export default function TogoStage({
             const f = footprintOf({ widthCm: Number(rr.widthCm) || 0, depthCm: Number(rr.depthCm) || 0 }, norm360(p.rot));
             return { x: p.x, y: p.y, w: f.w, h: f.h };
           });
-          const snapped = snapPlacement({ x: cx - box.w / 2, y: cz - box.h / 2, w: box.w, h: box.h }, others);
+          const snapped = snapPlacementInfo({ x: cx - box.w / 2, y: cz - box.h / 2, w: box.w, h: box.h }, others);
           const c = clampToPlan(snapped.x, snapped.y, box.w, box.h);
           l.drag.pg.position.set(c.x + box.w / 2, 0, c.y + box.h / 2);   // live preview
           l.drag.next = { x: c.x, y: c.y };
           l.drag.moved = true;
+          // Edge-snap feedback on the ENGAGE/RELEASE transition only (not per move).
+          if (snapped.snapped !== !!l.drag.snapped) {
+            l.drag.snapped = snapped.snapped;
+            if (snapped.snapped) { try { navigator.vibrate?.(6); } catch { /* unsupported */ } }
+            setSnapGlow(l.drag.pg, snapped.snapped);
+          }
           requestRender();
           return;
         }
@@ -525,6 +547,7 @@ export default function TogoStage({
           const d = l.drag; l.drag = null;
           controls.enabled = stateRef.current.mode === '3d';   // stays off in 2D
           renderer.domElement.releasePointerCapture?.(e.pointerId);
+          if (d.snapped) { setSnapGlow(d.pg, false); l.requestRender(); }   // back to the plain selection glow
           if (d.moved && d.next) stateRef.current.onMove?.(d.uid, d.next.x, d.next.y);
           return;
         }
@@ -640,6 +663,14 @@ export default function TogoStage({
     // order, and it's still a positioning context for the mount/overlay below.
     <div style={{ position: 'absolute', inset: 0 }} className={className} aria-label="Configurador Togo">
       <div ref={mountRef} className="absolute inset-0" />
+      {!failed && !ready && (
+        <div className="absolute inset-0 grid place-items-center pointer-events-none" aria-hidden>
+          <div className="flex flex-col items-center gap-2 text-ink-400">
+            <Loader2 size={20} className="animate-spin" />
+            <span className="text-xs">Preparando el plano…</span>
+          </div>
+        </div>
+      )}
       {failed && (
         <div className="absolute inset-0 grid place-items-center text-center px-6 text-xs text-ink-500">
           La vista 3D no está disponible en este dispositivo.
