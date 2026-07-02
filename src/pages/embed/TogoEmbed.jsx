@@ -627,13 +627,13 @@ export default function TogoEmbed() {
            the tool buttons (2D editing only). Its rotate control lives on the
            canvas beneath the piece itself (see RotateDock). ── */}
       {view === '2d' && selected && selResolved && (
-        <div className="absolute top-[3.75rem] inset-x-0 z-20 px-3 flex justify-center pointer-events-none">
+        <div className="absolute top-[calc(max(0.75rem,env(safe-area-inset-top))+3.25rem)] inset-x-0 z-20 px-3 flex justify-center pointer-events-none">
           <div className="w-full max-w-md">
             <SelectedStrip
               selected={selected} selResolved={selResolved} selectedFamily={selectedFamily}
               thumbById={thumbById} renderThumbById={renderThumbById} rates={rates}
               onPickFabric={() => openMaterial('one')} onClearFabric={clearFabric}
-              onDelete={deleteSel}
+              onDuplicate={duplicateSel} onDelete={deleteSel}
             />
           </div>
         </div>
@@ -644,6 +644,15 @@ export default function TogoEmbed() {
            panels catch input, so the canvas stays draggable in the gaps. ── */}
       <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none">
         <div className="mx-auto w-full max-w-5xl flex flex-col items-stretch gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+
+          {/* First-run coach line — how to work the plan, one dismiss, remembered. */}
+          {view === '2d' && hintsOpen && vm.count > 0 && (
+            <div className="hud-panel pointer-events-auto self-center flex items-center gap-2 pl-3 pr-1.5 py-1.5 max-w-md togo-rise">
+              <Lightbulb size={14} className="text-brand-500 shrink-0" aria-hidden />
+              <span className="text-[11px] text-ink-600 leading-snug">Arrastra las piezas para moverlas — se imantan entre sí. Toca una para rotarla, duplicarla o elegir su tela.</span>
+              <button type="button" onClick={dismissHints} aria-label="Entendido, ocultar ayuda" className="shrink-0 w-8 h-8 grid place-items-center rounded-lg text-ink-400 hover:bg-ink-100/60 hover:text-ink-700 transition"><X size={14} /></button>
+            </div>
+          )}
 
           {/* The build tool: the piece hotbar (add pieces). Shown in 2D where the
               plan is editable; 3D is a look-only preview, so no tool here. */}
@@ -658,10 +667,21 @@ export default function TogoEmbed() {
                 <div className="text-sm text-ink-500">Agrega piezas para empezar tu Togo</div>
               ) : (
                 <>
-                  <div className="text-[11px] text-ink-500">Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}{pendingFabric > 0 && pricedUsd > 0 ? ` · ${pendingFabric} sin tela` : ''}</div>
+                  <div className="text-[11px] text-ink-500 flex items-center gap-1.5 flex-wrap">
+                    <span>Estimado · {vm.count} pieza{vm.count === 1 ? '' : 's'}</span>
+                    {pendingFabric > 0 && pricedUsd > 0 && (
+                      <button type="button" onClick={fixPendingFabric} className="inline-flex items-center gap-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 px-1.5 py-px text-[10px] font-medium hover:bg-amber-100 active:scale-95 transition">
+                        {pendingFabric} sin tela <ArrowRight size={10} aria-hidden />
+                      </button>
+                    )}
+                  </div>
                   {pricedUsd > 0
                     ? <div className="text-xl sm:text-2xl font-display font-semibold tabular-nums tracking-tight leading-none mt-0.5">{formatMoney(Math.round(animatedUsd), 'USD', rates)}</div>
-                    : <div className="text-sm text-ink-500 leading-tight py-0.5">Elige una tela para ver el precio</div>}
+                    : (
+                      <button type="button" onClick={fixPendingFabric} className="text-sm text-ink-600 leading-tight py-0.5 inline-flex items-center gap-1 underline decoration-ink-300 underline-offset-2 hover:text-ink-900 transition">
+                        <Palette size={13} className="text-brand-500 shrink-0" aria-hidden /> Elige una tela para ver el precio
+                      </button>
+                    )}
                   {vm.overallCm.widthCm > 0 && <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto {vm.overallCm.widthCm} × {vm.overallCm.depthCm} cm</div>}
                 </>
               )}
@@ -696,6 +716,7 @@ export default function TogoEmbed() {
         placed={placed} resolvedById={resolvedById} models={models} thumbById={thumbById} renderThumbById={renderThumbById} rates={rates}
         subtotalUsd={pricedUsd} pending={pendingFabric} overallCm={vm.overallCm}
         onRequest={() => { setQuoteOpen(false); setStep('form'); }}
+        onPickFabricFor={pickFabricFor}
       />
     </div>
   );
@@ -724,7 +745,7 @@ function HudIcon({ title, onClick, danger = false, children }) {
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`hud-panel w-9 h-9 grid place-items-center transition active:scale-90 hover:bg-ink-100/60 ${danger ? 'text-red-600' : 'text-ink-700'}`}
+      className={`hud-panel w-10 h-10 grid place-items-center transition active:scale-90 hover:bg-ink-100/60 ${danger ? 'text-red-600' : 'text-ink-700'}`}
     >
       {children}
     </button>
@@ -765,7 +786,7 @@ function PieceHotbar({ models, thumbById = {}, renderThumbById = {}, onAdd, hove
 /** Selected-piece strip — thumbnail, label, fabric swatch, price, dims + the
  *  per-piece actions (Tela / clear-fabric / rotate / delete). `compact` packs
  *  it onto one floating row for the mobile contextual bar. */
-function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, renderThumbById = {}, rates, onPickFabric, onClearFabric, onDelete }) {
+function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, renderThumbById = {}, rates, onPickFabric, onClearFabric, onDuplicate, onDelete }) {
   return (
     <div className="hud-panel pointer-events-auto flex items-center gap-2.5 pl-1.5 pr-1.5 py-1.5 togo-rise">
       <ModelThumb id={selected.pieceId} render={renderThumbById} svg={thumbById[selected.pieceId]} alt={selResolved.label} className="shrink-0 w-11 h-11 rounded-lg bg-ink-50/60" />
@@ -787,6 +808,7 @@ function SelectedStrip({ selected, selResolved, selectedFamily, thumbById = {}, 
         {selected.material && (
           <button type="button" onClick={onClearFabric} className="btn-icon text-ink-500" title="Quitar tela"><X size={15} /></button>
         )}
+        <button type="button" onClick={onDuplicate} className="btn-icon" title="Duplicar pieza"><CopyPlus size={15} /></button>
         <button type="button" onClick={onDelete} className="btn-icon text-red-600" title="Quitar"><Trash2 size={15} /></button>
       </div>
     </div>
@@ -906,7 +928,7 @@ function CanvasArea({
  *  a swatch to see it big), unit price, the assembled size, the running total,
  *  and the "request a quote" CTA. Read-only over `placed` (the same data the
  *  lead submission and the estimate dock use). */
-function QuoteSheet({ open, onClose, placed, resolvedById, models = [], thumbById = {}, renderThumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest }) {
+function QuoteSheet({ open, onClose, placed, resolvedById, models = [], thumbById = {}, renderThumbById = {}, rates, subtotalUsd, pending = 0, overallCm, onRequest, onPickFabricFor }) {
   const [preview, setPreview] = useState(null); // hovered swatch → big centered preview
   useEffect(() => { if (!open) setPreview(null); }, [open]);
   const rows = placed.map((p) => {
@@ -943,12 +965,17 @@ function QuoteSheet({ open, onClose, placed, resolvedById, models = [], thumbByI
                       className="shrink-0 w-10 h-10 rounded-md object-cover border border-ink-200 cursor-zoom-in"
                       onMouseEnter={() => setPreview({ code: row.code, fabric: row.fabric })}
                       onMouseLeave={() => setPreview(null)}
+                      onClick={() => setPreview((p) => (p?.code === row.code ? null : { code: row.code, fabric: row.fabric }))}
                     />
                   )}
                   <div className="shrink-0 w-28 text-right text-sm">
                     {row.priced
                       ? (row.price != null ? <span className="font-medium tabular-nums">{formatMoney(row.price, 'USD', rates)}</span> : <span className="text-ink-400">sin precio</span>)
-                      : <span className="text-[11px] text-ink-400">Elige una tela</span>}
+                      : (
+                        <button type="button" onClick={() => onPickFabricFor?.(row.uid)} className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 text-amber-700 px-2 py-1 text-[11px] font-medium hover:bg-amber-100 active:scale-95 transition">
+                          <Palette size={11} aria-hidden /> Elegir tela
+                        </button>
+                      )}
                   </div>
                 </li>
               ))}
@@ -957,10 +984,14 @@ function QuoteSheet({ open, onClose, placed, resolvedById, models = [], thumbByI
           {rows.length > 0 && (
             <div className="flex items-center justify-between gap-3 border-t border-ink-200 pt-3">
               <div className="min-w-0">
-                <div className="text-[10px] text-ink-500 uppercase tracking-wide">Estimado · {rows.length} pieza{rows.length === 1 ? '' : 's'}</div>
-                <div className="text-lg font-display font-semibold tabular-nums">{formatMoney(subtotalUsd, 'USD', rates)}</div>
-                {pending > 0 && <div className="text-[11px] text-amber-600">{pending} sin tela — elige una para incluirla</div>}
-                {overallCm?.widthCm > 0 && <div className="text-[11px] text-ink-500 tabular-nums">Conjunto: {overallCm.widthCm} × {overallCm.depthCm} cm</div>}
+                <div className="text-[10px] text-ink-500 uppercase tracking-wide">Total estimado · {rows.length} pieza{rows.length === 1 ? '' : 's'}</div>
+                <div className="text-xl font-display font-semibold tabular-nums tracking-tight">{formatMoney(subtotalUsd, 'USD', rates)}</div>
+                {pending > 0 && (
+                  <button type="button" onClick={() => onPickFabricFor?.(rows.find((r) => !r.priced)?.uid)} className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-amber-700 underline decoration-amber-300 underline-offset-2 hover:text-amber-800 transition">
+                    {pending} sin tela — elige una para incluirla <ArrowRight size={11} aria-hidden />
+                  </button>
+                )}
+                {overallCm?.widthCm > 0 && <div className="text-[11px] text-ink-500 tabular-nums mt-0.5">Conjunto: {overallCm.widthCm} × {overallCm.depthCm} cm</div>}
               </div>
               <button type="button" onClick={onRequest} className="btn-primary text-sm shrink-0">Solicitar cotización <ArrowRight size={15} /></button>
             </div>
@@ -1100,7 +1131,10 @@ function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const valid = form.name.trim() && (form.phone.trim() || form.email.trim());
+  // A typo'd email means the dealer can never reply — validate the shape when one
+  // is given (it stays optional as long as there's a phone).
+  const emailOk = !form.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim());
+  const valid = form.name.trim() && (form.phone.trim() || form.email.trim()) && emailOk;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -1126,16 +1160,17 @@ function RequestForm({ storeName, items, estimateUsd, total, onBack, onDone }) {
         </div>
         <div>
           <label className="label">Nombre *</label>
-          <input className="input" value={form.name} onChange={set('name')} placeholder="Tu nombre" autoFocus />
+          <input className="input" value={form.name} onChange={set('name')} placeholder="Tu nombre" autoComplete="name" autoFocus />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">WhatsApp / Teléfono</label>
-            <input className="input" value={form.phone} onChange={set('phone')} placeholder="809…" inputMode="tel" />
+            <input className="input" value={form.phone} onChange={set('phone')} placeholder="809…" inputMode="tel" autoComplete="tel" />
           </div>
           <div>
             <label className="label">Correo</label>
-            <input className="input" value={form.email} onChange={set('email')} placeholder="tu@correo.com" inputMode="email" />
+            <input className="input" value={form.email} onChange={set('email')} placeholder="tu@correo.com" inputMode="email" autoComplete="email" />
+            {!emailOk && <p className="mt-1 text-[11px] text-amber-700">Revisa el correo — no parece válido.</p>}
           </div>
         </div>
         <div>

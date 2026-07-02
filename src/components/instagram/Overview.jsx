@@ -10,11 +10,13 @@ import {
   Heart, MessageCircle, Clock, TrendingUp, ArrowRight, Film, Gauge,
 } from 'lucide-react';
 import ImageView from '../ImageView.tsx';
-import { Sparkline } from '../charts/MiniCharts.jsx';
-import { Stat, fmt, pctFmt } from './chrome.jsx';
+import { Stat, fmt, fmtCompact, pctFmt } from './chrome.jsx';
+import { AreaTrend, DeltaChip, SplitBar, ScaleBar } from './IgCharts.jsx';
 
-// A top-post chip — thumbnail + its engagement, links out to the post.
-function TopPost({ post }) {
+// A top-post row — rank + thumbnail + engagement, with a comparative stripe
+// (length = interacciones vs the leader) so the gap between posts is visible,
+// not just listed. Links out to the post.
+function TopPost({ post, rank, maxEngagement }) {
   return (
     <a
       href={post.permalink || '#'}
@@ -23,17 +25,19 @@ function TopPost({ post }) {
       className="group flex items-center gap-3 rounded-lg p-1.5 transition-colors hover:bg-ink-50"
       title={post.excerpt || post.type}
     >
+      <span className="w-4 shrink-0 text-center text-xs font-medium tabular-nums text-ink-400">{rank}</span>
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-ink-100">
         <ImageView id={null} fallbackUrl={post.thumb} alt={post.excerpt} className="h-full w-full object-cover" placeholderClassName="h-full w-full" />
         {post.isReel && <Film size={11} className="absolute right-1 top-1 text-white drop-shadow" />}
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm text-ink-700">{post.excerpt || (post.isReel ? 'Reel' : 'Publicación')}</div>
-        <div className="mt-0.5 flex items-center gap-3 text-xs text-ink-400">
+        <div className="mt-1 flex items-center gap-3 text-xs text-ink-400">
           <span className="inline-flex items-center gap-1 tabular-nums"><Heart size={11} /> {fmt(post.likes)}</span>
           <span className="inline-flex items-center gap-1 tabular-nums"><MessageCircle size={11} /> {fmt(post.comments)}</span>
-          <span className="ml-auto">{post.ago}</span>
+          <span className="ml-auto shrink-0">{post.ago}</span>
         </div>
+        <ScaleBar value={post.engagement} max={maxEngagement} className="mt-1.5" />
       </div>
     </a>
   );

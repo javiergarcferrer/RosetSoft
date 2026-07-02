@@ -3,8 +3,18 @@
 // live-status pill. Kept here as the single source so the surfaces can't drift.
 import { RefreshCw } from 'lucide-react';
 
-export const fmt = (n) => Number(n || 0).toLocaleString('en-US');
-export const pctFmt = (n) => (n == null ? '—' : `${n.toFixed(1)}%`);
+export const fmt = (n) => Number(n || 0).toLocaleString('es-DO');
+export const pctFmt = (n) => (n == null ? '—' : `${n.toLocaleString('es-DO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`);
+
+// Compact figure for dense chart labels/chips: 12,4 k · 1,2 M. Full precision
+// below 10 000 (where the exact number still reads at a glance).
+export const fmtCompact = (n) => {
+  const v = Number(n || 0);
+  const abs = Math.abs(v);
+  if (abs >= 1e6) return `${(v / 1e6).toLocaleString('es-DO', { maximumFractionDigits: 1 })} M`;
+  if (abs >= 10_000) return `${(v / 1e3).toLocaleString('es-DO', { maximumFractionDigits: 1 })} k`;
+  return v.toLocaleString('es-DO');
+};
 
 // "hace 12 s" → "hace 3 min" → "hace 2 h". Drives the live freshness pill.
 export const freshLabel = (ms, now) => {
@@ -17,12 +27,17 @@ export const freshLabel = (ms, now) => {
   return `hace ${Math.round(min / 60)} h`;
 };
 
-// A KPI tile — the analytics layer's material figure.
-export function Stat({ label, value, sub, tone }) {
+// A KPI tile — the analytics layer's material figure. `delta` takes a rendered
+// chip (e.g. <DeltaChip/>) so the tile itself stays dumb. Display-size values
+// use proportional figures (tabular-nums is for aligned columns, not heroes).
+export function Stat({ label, value, sub, tone, delta = null }) {
   return (
     <div className="stat-card p-4">
       <div className="text-[11px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className={`font-display text-2xl font-semibold tabular-nums mt-0.5 ${tone || 'text-ink-900'}`}>{value}</div>
+      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className={`font-display text-2xl font-semibold ${tone || 'text-ink-900'}`}>{value}</span>
+        {delta}
+      </div>
       {sub && <div className="text-xs text-ink-400 mt-0.5">{sub}</div>}
     </div>
   );

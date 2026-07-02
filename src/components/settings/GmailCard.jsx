@@ -65,7 +65,7 @@ export default function GmailCard() {
   // company's real letterhead (Configuración → Empresa) + the signed-in user's
   // name, so it lands as the dealer's actual signature ready to edit.
   const company = settings?.companyName || 'ALCOVER';
-  const useTemplate = useCallback((lang) => {
+  const applyTemplate = useCallback((lang) => {
     const html = defaultSignatureHtml(lang, {
       company,
       name: currentProfile?.name || '',
@@ -221,8 +221,8 @@ export default function GmailCard() {
               renderizado abajo; deja una vacía para no ofrecerla.
             </p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <SignatureField label="Español" value={signature} onChange={setSignature} onTemplate={() => useTemplate('es')} />
-              <SignatureField label="English" value={signatureEn} onChange={setSignatureEn} onTemplate={() => useTemplate('en')} />
+              <SignatureField label="Español" value={signature} onChange={setSignature} onTemplate={() => applyTemplate('es')} />
+              <SignatureField label="English" value={signatureEn} onChange={setSignatureEn} onTemplate={() => applyTemplate('en')} />
             </div>
             <div className="mt-3 flex justify-end">
               <button type="button" className="btn-ghost min-h-[44px]" onClick={saveSignature} disabled={sigState === 'saving'}>

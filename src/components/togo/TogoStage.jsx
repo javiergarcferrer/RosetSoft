@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { safeDynamicImport } from '../../lib/dynamicImport.js';
 import { swatchProxyUrl, swatchUrl } from '../../lib/swatchImage.js';
 import { inferTogoForm, TOGO_HEIGHT_CM } from '../../lib/togo/togoModel.js';
-import { footprintOf, snapPlacement, clampToPlan, resolvePlacement } from '../../core/quote/index.js';
+import { footprintOf, snapPlacementInfo, clampToPlan, resolvePlacement } from '../../core/quote/index.js';
 import { loadTogoModels } from './togoModelLoader.js';
 import { buildTogoGroup, setupTogoStage, disposeGroup, makeFabricMaps, sampleSwatchColor, collectLocalTris, projectScreenSilhouette } from './togoSceneBuilder.js';
 
@@ -33,6 +34,7 @@ export default function TogoStage({
   const mountRef = useRef(null);
   const api = useRef(null);
   const [failed, setFailed] = useState(false);
+  const [ready, setReady] = useState(false);   // first frame rendered → drop the loading veil
 
   // Latest props the imperative three loop reads without re-subscribing.
   const stateRef = useRef({ placed, resolvedById, mode, material, selectedUid, onSelect, onMove, onSelectedScreenPos, onPlanBounds, onSelContour });
@@ -385,6 +387,7 @@ export default function TogoStage({
       const pose = poseFor(stateRef.current.mode, l.scene3d.center, l.scene3d.radius, camera.aspect);
       placeCamera(l, pose, stateRef.current.mode);
       requestRender();
+      setReady(true);
 
       // ── Pointer editing (2D only): tap = select, drag = move on the floor. ──
       const ndc = new THREE.Vector2();
