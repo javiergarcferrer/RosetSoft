@@ -440,12 +440,30 @@ export default function TogoEmbed() {
         },
       };
     }));
-  }, [families, resolvedById]);
+  }, [families, resolvedById, commitPlaced]);
 
   const clearFabric = useCallback(() => {
     if (!selectedUid) return;
-    setPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
-  }, [selectedUid]);
+    commitPlaced((prev) => prev.map((row) => (row.uid === selectedUid ? { ...row, material: undefined } : row)));
+  }, [selectedUid, commitPlaced]);
+
+  // "N sin tela" → jump to the first piece missing a fabric and open the picker
+  // for it — the warning becomes ONE tap to fix instead of a hunt.
+  const fixPendingFabric = useCallback(() => {
+    const uid = firstWithoutFabric(placedRef.current);
+    if (!uid) return;
+    setSelectedUid(uid);
+    setMatMode('one');
+    setMatOpen(true);
+  }, []);
+  // Same jump from the Resumen sheet's per-row "Elige una tela".
+  const pickFabricFor = useCallback((uid) => {
+    if (!uid) return;
+    setQuoteOpen(false);
+    setSelectedUid(uid);
+    setMatMode('one');
+    setMatOpen(true);
+  }, []);
 
   // Download the plan as CAD (DXF) — opens in AutoCAD and every plan tool. A
   // genuine differentiator: consumer sofa configurators stop at PDF/image, so a
@@ -491,9 +509,37 @@ export default function TogoEmbed() {
   }, [selectedUid, placed.length]);
 
   // The 3D stage commits a piece's new plan position on drop (the snap/clamp ran
-  // inside the stage against the live layout).
+  // inside the stage against the live layout). One drag = one undo entry; a drop
+  // back on the exact same spot records nothing.
   const movePiece = useCallback((uid, x, y) => {
-    setPlaced((prev) => prev.map((p) => (p.uid === uid ? { ...p, x, y } : p)));
+    commitPlaced((prev) => {
+      const me = prev.find((p) => p.uid === uid);
+      if (!me || (me.x === x && me.y === y)) return prev;
+      return prev.map((p) => (p.uid === uid ? { ...p, x, y } : p));
+    });
+  }, [commitPlaced]);
+
+  // Desktop niceties (2D build only): ⌘/Ctrl+Z undo, ⌘/Ctrl+Shift+Z / Ctrl+Y
+  // redo, Delete/Backspace removes the selected piece. Ignored while typing.
+  const keysRef = useRef({});
+  keysRef.current = { undo, redo, deleteSel, active: step === 'build' && !matOpen && !quoteOpen && !arOpen && !dlOpen };
+  useEffect(() => {
+    const onKey = (e) => {
+      const k = keysRef.current;
+      if (!k.active) return;
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'z') { e.preventDefault(); if (e.shiftKey) k.redo(); else k.undo(); }
+        else if (key === 'y') { e.preventDefault(); k.redo(); }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        k.deleteSel();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   // The launch card — what the embed shows FIRST. Tapping it opens the
@@ -548,26 +594,32 @@ export default function TogoEmbed() {
         overallCm={vm.overallCm}
       />
 
-      {/* ── Top-left: brand + 2D/3D toggle ── */}
-      <div className="absolute top-3 left-3 z-30 flex items-center gap-2">
+      {/* ── Top-left: brand + 2D/3D toggle + undo/redo ── */}
+      <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-[max(0.75rem,env(safe-area-inset-left))] z-30 flex items-center gap-2">
         <div className="hud-panel hidden sm:flex items-center gap-1.5 px-2.5 py-1.5">
           <Sofa size={15} className="text-brand-500" aria-hidden />
           <span className="font-display font-semibold text-sm leading-none">Togo</span>
         </div>
         <div className="hud-panel inline-flex overflow-hidden">
-          <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-3 py-1.5 text-xs inline-flex items-center gap-1 transition ${view === '2d' ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100/60'}`}><Square size={13} /> 2D</button>
-          <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-3 py-1.5 text-xs inline-flex items-center gap-1 transition ${view === '3d' ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100/60'}`}><Box size={13} /> 3D</button>
+          <button type="button" onClick={() => setView('2d')} aria-pressed={view === '2d'} className={`px-3 py-2 text-xs inline-flex items-center gap-1 transition ${view === '2d' ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100/60'}`}><Square size={13} /> 2D</button>
+          <button type="button" onClick={() => setView('3d')} aria-pressed={view === '3d'} className={`px-3 py-2 text-xs inline-flex items-center gap-1 transition ${view === '3d' ? 'bg-brand-500 text-white' : 'text-ink-600 hover:bg-ink-100/60'}`}><Box size={13} /> 3D</button>
         </div>
+        {view === '2d' && (canUndo || canRedo) && (
+          <div className="hud-panel inline-flex overflow-hidden">
+            <button type="button" onClick={undo} disabled={!canUndo} title="Deshacer" aria-label="Deshacer" className="px-2.5 py-2 text-ink-700 transition hover:bg-ink-100/60 active:scale-90 disabled:opacity-30 disabled:active:scale-100"><Undo2 size={15} /></button>
+            <button type="button" onClick={redo} disabled={!canRedo} title="Rehacer" aria-label="Rehacer" className="px-2.5 py-2 text-ink-700 transition hover:bg-ink-100/60 active:scale-90 disabled:opacity-30 disabled:active:scale-100"><Redo2 size={15} /></button>
+          </div>
+        )}
       </div>
 
       {/* ── Top-right: tools, each its own floating button (no dropdown) ── */}
       {vm.count > 0 && (
-        <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5">
+        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] z-30 flex items-center gap-1.5">
           <HudIcon title="Una tela para todas" onClick={() => openMaterial('all')}><Layers size={15} /></HudIcon>
           <HudIcon title="Resumen de tu Togo" onClick={() => setQuoteOpen(true)}><Receipt size={15} /></HudIcon>
           <HudIcon title="Ver en tu espacio" onClick={() => setArOpen(true)}><View size={15} /></HudIcon>
           <HudIcon title="Descargar (DXF / OBJ)" onClick={() => setDlOpen(true)}><FileDown size={15} /></HudIcon>
-          <HudIcon title="Vaciar el plano" danger onClick={() => { buzz([4, 26, 7]); setPlaced([]); setSelectedUid(null); }}><Eraser size={15} /></HudIcon>
+          <HudIcon title="Vaciar el plano" danger onClick={() => { buzz([4, 26, 7]); commitPlaced([]); setSelectedUid(null); }}><Eraser size={15} /></HudIcon>
         </div>
       )}
 

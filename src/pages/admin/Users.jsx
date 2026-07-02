@@ -656,7 +656,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
         </div>
       </div>
       {error && (
-        <div role="alert" className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2 py-1">
+        <div role="alert" className="mt-2 text-[11px] text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 rounded-md px-2 py-1">
           {error}
         </div>
       )}
@@ -848,12 +848,12 @@ function InviteModal({ open, onClose, session, onInvited }) {
         </div>
 
         {error && (
-          <div role="alert" className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
+          <div role="alert" className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/40 px-3 py-2 text-xs text-red-800 dark:text-red-200">
             {error}
           </div>
         )}
         {success && (
-          <div role="status" className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
+          <div role="status" className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200">
             {success}
           </div>
         )}

@@ -272,7 +272,7 @@ export default function Existencias() {
                   </div>
                   <p className="text-[11px] text-ink-400 mt-1">Descuenta las unidades vendidas del inventario.</p>
                 </div>
-                {err && <p className="text-sm text-rose-600 mb-2">{err}</p>}
+                {err && <p className="text-sm text-rose-600 dark:text-rose-400 mb-2">{err}</p>}
 
                 {kardex.rows.length === 0 ? (
                   <p className="text-sm text-ink-500">Sin movimientos.</p>
@@ -380,7 +380,7 @@ function CatalogBlock({ item }) {
           {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Guardar y publicar
         </button>
       </div>
-      {msg && <p className={`text-xs mt-1.5 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
+      {msg && <p className={`text-xs mt-1.5 ${status === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-ink-500'}`}>{msg}</p>}
       <p className="text-[11px] text-ink-400 mt-1">Se publica cuando hay existencia y precio. Al agotarse, sale del catálogo.</p>
     </div>
   );

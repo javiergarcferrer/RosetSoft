@@ -420,7 +420,7 @@ function CategoryModels({ profileId, category }) {
     );
   }
   if (error) {
-    return <div className="px-5 py-4 text-sm text-red-700">No se pudieron cargar los productos.</div>;
+    return <div className="px-5 py-4 text-sm text-red-700 dark:text-red-400">No se pudieron cargar los productos.</div>;
   }
   if (allModels.length === 0) {
     return <div className="px-5 py-4 text-sm text-ink-500">Sin productos en esta categoría.</div>;

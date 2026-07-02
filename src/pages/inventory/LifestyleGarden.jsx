@@ -280,7 +280,7 @@ function CategoryModels({ profileId, category, refresh }) {
     );
   }
   if (error) {
-    return <div className="px-5 py-4 text-sm text-red-700">No se pudieron cargar los productos.</div>;
+    return <div className="px-5 py-4 text-sm text-red-700 dark:text-red-400">No se pudieron cargar los productos.</div>;
   }
   if (models.length === 0) {
     return <div className="px-5 py-4 text-sm text-ink-500">Sin productos en esta colección.</div>;
@@ -422,7 +422,7 @@ const ModelCard = memo(function ModelCard({ model }) {
                     <span className="font-mono text-ink-400 truncate" title={p.reference}>{p.reference}</span>
                     <span className="flex items-baseline gap-2 whitespace-nowrap">
                       {variantStockLabel(p) && (
-                        <span className={`tabular-nums ${Number(p.stockQty) > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                        <span className={`tabular-nums ${Number(p.stockQty) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                           {variantStockLabel(p)}
                         </span>
                       )}
