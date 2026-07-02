@@ -300,6 +300,11 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       resultsDeltaPct: deltaPct(results7, results7Prev),
       resultsLabel: resultType ? resultType[1] : null,
       costPerResult7: results7 > 0 ? spend7 / results7 : null,
+      costPerResult7Prev: results7Prev > 0 ? spend7Prev / results7Prev : null,
+      costPerResultDeltaPct: ratioDeltaPct(
+        results7 > 0 ? spend7 / results7 : null,
+        results7Prev > 0 ? spend7Prev / results7Prev : null,
+      ),
       // Click → result conversion (the funnel's second step); null when there
       // are no clicks or no result type ever reported.
       clickToResult7Pct: resultType && clicks7 > 0 ? (results7 / clicks7) * 100 : null,

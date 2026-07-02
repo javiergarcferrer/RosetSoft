@@ -4,12 +4,12 @@ import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Receipt,
   BookOpen, Landmark, Ship, Boxes, Percent, Gauge,
   FileText, ShoppingCart, Lock, CheckCircle2, ListChecks,
+  AlertTriangle, RefreshCw, Scale, HandCoins,
 } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
-import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import PeriodNav, { DeltaChip } from '../../components/accounting/PeriodNav.jsx';
 import { ActionList } from '../../components/accounting/ActionCenter.jsx';
@@ -18,7 +18,7 @@ import RowCards from '../../components/RowCards.jsx';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
-import { Donut, BarPairs, AreaChart, Legend, Sparkline, YoYColumns, BulletBar, Waterfall, AgingBars, CountUp } from '../../components/charts/MiniCharts.jsx';
+import { Donut, ComboChart, AreaChart, Legend, Sparkline, YoYColumns, BulletBar, Waterfall, AgingBars, CountUp } from '../../components/charts/MiniCharts.jsx';
 import { formatDop, formatDate } from '../../lib/format.js';
 import {
   resolveAccountingDashboard, resolveAccountingCockpit, resolvePeriod, resolveComparativeKpis,
@@ -38,27 +38,35 @@ const QUICK_ACTIONS = [
 ];
 // Chart palette — drawn from the app's warm tokens (ink/brand) + a few accents.
 // Centralized here so the incoming design system can retune the dashboard hues
-// in one spot.
+// in one spot. The categorical set was run through the dataviz palette
+// validator (lightness band, chroma floor, CVD ΔE ≥ 12, contrast ≥ 3:1) on
+// BOTH surfaces (#fff / #201e1a); brand slots ride the CSS var so they take
+// the dark ramp automatically.
 const C = {
-  in: '#059669',       // entradas de caja (emerald-600)
-  out: '#e8a76d',      // salidas de caja (brand-300)
+  in: '#059669',                    // entradas de caja (emerald-600)
+  out: 'rgb(var(--brand-500))',     // salidas de caja (brand token — flips in dark)
   income: '#059669',
-  expense: '#fb7185',  // rose-400
-  sales: '#c96a2a',    // brand-500
-  overdue: '#f43f5e',  // rose-500
-  current: 'rgb(var(--ink-300))',  // ink-300 — theme-aware neutral
+  expense: '#fb7185',               // rose-400
+  sales: 'rgb(var(--brand-500))',
+  net: 'rgb(var(--ink-700))',       // the neto overlay line — high-contrast neutral
+  current: 'rgb(var(--ink-300))',   // ink-300 — theme-aware neutral
 };
-// Donut slice ramp (gastos por categoría). Vibrant series stay fixed (they read
-// on either canvas); the two neutral fillers ride the ink ramp so they don't
-// glare as bright grey slices in dark mode.
-const DONUT = ['#c96a2a', '#e8a76d', '#059669', 'rgb(var(--ink-400))', '#f59e0b', 'rgb(var(--ink-200))'];
-// Receivables aging ramp — neutral while current, warming into rose as the
-// debt ages, so the +90 tail reads as the alarming one.
+// Donut slice ramp (gastos por categoría) — five distinct hues in FIXED order
+// (validated categorical set: brand, emerald-600, sky-600, purple-600,
+// rose-600). "Otros" is deliberately the de-emphasized ink slot; the legend
+// list beside the ring always carries name + amount + share, so color is
+// never the only identity channel.
+const DONUT = ['rgb(var(--brand-500))', '#059669', '#0284c7', '#9333ea', '#e11d48'];
+const DONUT_OTROS = 'rgb(var(--ink-300))';
+const donutColor = (seg, i) => (seg.code === 'otros' ? DONUT_OTROS : DONUT[i % DONUT.length]);
+// Receivables aging ramp — an ORDERED severity scale: neutral while current,
+// amber → orange → rose as the debt ages, so the 61+ tail reads as the
+// alarming one (the amounts ride each bar, so hue is never the only channel).
 const AGING = [
   { key: 'd0_30', label: '0–30', tone: 'rgb(var(--ink-300))' },
-  { key: 'd31_60', label: '31–60', tone: '#f59e0b' },
-  { key: 'd61_90', label: '61–90', tone: '#e8a76d' },
-  { key: 'd90', label: '+90', tone: '#f43f5e' },
+  { key: 'd31_60', label: '31–60', tone: '#d97706' },
+  { key: 'd61_90', label: '61–90', tone: '#ea580c' },
+  { key: 'd90', label: '+90', tone: '#e11d48' },
 ];
 
 const SOURCE = {
@@ -177,19 +185,67 @@ const RECENT_COLUMNS = [
 const RECENT_DEFAULT = { memo: true, debit: true };
 
 /**
- * Card chrome — title row with an optional right-aligned element. `to` renders
- * a navigation link (label `action`); `note` is a plain period label. They're
- * separate so a period like "junio 2026" never becomes a misleading link.
+ * Card chrome — title row with optional right-aligned elements. `to` renders
+ * a navigation link (label `action`); `note` is a plain period label. They
+ * can coexist (note first, then the link) so a card can carry both its period
+ * and its drill without the period ever becoming a misleading link.
  */
 function CardHead({ title, note, to, action }) {
   return (
     <div className="flex items-center justify-between gap-2 mb-3">
       <h2 className="eyebrow font-semibold text-ink-700">{title}</h2>
-      {to ? (
-        <Link to={to} className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors">{action || 'Ver →'}</Link>
-      ) : note ? (
-        <span className="eyebrow-xs text-ink-400">{note}</span>
-      ) : null}
+      {(note || to) && (
+        <span className="inline-flex items-center gap-2.5 min-w-0">
+          {note && <span className="eyebrow-xs text-ink-400 truncate">{note}</span>}
+          {to && <Link to={to} className="text-xs text-brand-600 hover:text-brand-700 font-medium transition-colors whitespace-nowrap">{action || 'Ver →'}</Link>}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Hero tile — the "¿cómo va el negocio?" band. One headline figure (CountUp)
+ * with its qualifiers: delta chips, a sub-line, an optional word-sized
+ * sparkline. Pure presentation over already-resolved VM numbers.
+ */
+function HeroTile({ icon: Icon, tint = 'tint-ink', label, value, format = formatDop, tone = '', chips, sub, spark, sparkColor, to, ariaLabel }) {
+  return (
+    <Link to={to} aria-label={ariaLabel} className="stat-card p-4 min-w-0 flex flex-col gap-1.5 active:scale-[0.99] transition-transform">
+      <div className="flex items-center gap-2 min-w-0">
+        {Icon && <span className={`icon-tile ${tint} w-7 h-7 rounded-lg`}><Icon size={14} /></span>}
+        <span className="eyebrow-xs tracking-wide text-ink-500 min-w-0 truncate">{label}</span>
+      </div>
+      <div className={`stat-value text-[clamp(1.05rem,4vw,1.5rem)] whitespace-nowrap ${tone}`}>
+        <CountUp value={value} format={format} />
+      </div>
+      {chips && <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">{chips}</div>}
+      {sub && <div className="text-[11px] text-ink-400 truncate">{sub}</div>}
+      {spark && spark.some((v) => v !== 0) && (
+        <div className="mt-auto pt-1 -mb-0.5"><Sparkline points={spark} color={sparkColor || 'rgb(var(--ink-300))'} /></div>
+      )}
+    </Link>
+  );
+}
+
+/** Skeleton mirroring the dashboard's card regions — no layout jump when the
+ *  real widgets land. */
+function DashSkeleton() {
+  return (
+    <div className="space-y-4 min-w-0 animate-pulse" aria-hidden>
+      <div className="flex gap-2 overflow-hidden">
+        {Array.from({ length: 5 }, (_, i) => <div key={i} className="h-9 w-28 shrink-0 rounded-lg bg-ink-100/80" />)}
+      </div>
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        {Array.from({ length: 4 }, (_, i) => <div key={i} className="h-28 rounded-2xl bg-ink-100/80" />)}
+      </div>
+      <div className="grid lg:grid-cols-3 gap-3">
+        <div className="h-52 rounded-2xl bg-ink-100/70 lg:col-span-2" />
+        <div className="h-52 rounded-2xl bg-ink-100/70" />
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {Array.from({ length: 3 }, (_, i) => <div key={i} className="h-64 rounded-2xl bg-ink-100/60" />)}
+      </div>
     </div>
   );
 }
