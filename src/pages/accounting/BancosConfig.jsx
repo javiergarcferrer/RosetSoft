@@ -8,8 +8,11 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import Modal from '../../components/Modal.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
-import { formatDop } from '../../lib/format.js';
+import { formatDop, formatMoney } from '../../lib/format.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
+
+/** Already-dollar amount → "$1,234.56" (no rate conversion). */
+const formatUsd = (v) => formatMoney(v, 'USD', { USD: 1 });
 import { resolveBankAccounts, BANK_OPTIONS } from '../../core/accounting/bankAccounts.js';
 
 const EMPTY_FORM = {
@@ -50,6 +53,7 @@ export default function BancosConfig() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [listErr, setListErr] = useState('');
 
   function openNew() {
     setEditing(null);
@@ -103,7 +107,14 @@ export default function BancosConfig() {
   }
 
   async function toggleArchive(row) {
-    await db.bankAccounts.put({ ...row, archived: !row.archived, updatedAt: Date.now() });
+    setListErr('');
+    try {
+      await db.bankAccounts.put({ ...row, archived: !row.archived, updatedAt: Date.now() });
+    } catch (e) {
+      // A denied write must surface — the card silently keeping its state reads
+      // as if the archive/restore succeeded.
+      setListErr(userMessageFor(e));
+    }
   }
 
   return (
@@ -117,6 +128,8 @@ export default function BancosConfig() {
           </button>
         }
       />
+
+      {listErr && <p className="text-sm text-rose-600 mb-3">{listErr}</p>}
 
       {!loaded ? <ListLoading /> : rows.length === 0 ? (
         <EmptyState
@@ -158,7 +171,7 @@ export default function BancosConfig() {
               </div>
               {row.openingBalance != null && (
                 <div className="text-sm text-ink-700 mt-2 tabular-nums whitespace-nowrap overflow-x-auto">
-                  Saldo inicial {formatDop(row.openingBalance)}
+                  Saldo inicial {row.currency === 'USD' ? formatUsd(row.openingBalance) : formatDop(row.openingBalance)}
                 </div>
               )}
             </div>
@@ -209,7 +222,7 @@ export default function BancosConfig() {
               inputMode="numeric" placeholder="Opcional" className="input w-full mt-1 tabular-nums" />
           </label>
 
-          <label className="block text-sm">Saldo inicial
+          <label className="block text-sm">Saldo inicial ({form.currency})
             <input type="number" step="0.01" inputMode="decimal" value={form.openingBalance}
               onChange={(e) => set('openingBalance', e.target.value)} placeholder="Opcional"
               className="input w-full mt-1 text-right tabular-nums" />

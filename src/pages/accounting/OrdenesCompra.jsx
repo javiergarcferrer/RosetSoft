@@ -55,13 +55,17 @@ export default function OrdenesCompra() {
           {showForm && <OrderForm scope={scope} suppliers={suppliersQ.data} onClose={() => setShowForm(false)} />}
 
           <TabPills
-            tabs={[{ key: '', label: 'Todas' }, { key: 'open', label: 'Abiertas' }, { key: 'received', label: 'Recibidas' }, { key: 'billed', label: 'Facturadas' }]}
+            tabs={[{ key: '', label: 'Todas' }, { key: 'open', label: 'Abiertas' }, { key: 'received', label: 'Recibidas' }, { key: 'billed', label: 'Facturadas' }, { key: 'cancelled', label: 'Canceladas' }]}
             active={statusFilter} onChange={setStatusFilter} />
 
           <ResultBar count={list.count} singular="orden" plural="órdenes" total={null} />
 
           {list.count === 0 ? (
-            <EmptyState icon={ClipboardList} title="Sin órdenes" description="Crea una orden de compra para seguir un pedido a un proveedor." />
+            statusFilter ? (
+              <EmptyState icon={ClipboardList} title="Sin órdenes en este estado" description="Ninguna orden coincide con el filtro actual." />
+            ) : (
+              <EmptyState icon={ClipboardList} title="Sin órdenes" description="Crea una orden de compra para seguir un pedido a un proveedor." />
+            )
           ) : (
             <div className="card overflow-hidden divide-y divide-ink-100">
               {list.rows.map((r) => (

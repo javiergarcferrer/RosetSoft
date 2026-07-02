@@ -1,8 +1,10 @@
 import { Fragment, useMemo, useState } from 'react';
+import { Target } from 'lucide-react';
 import { useLiveQueryStatus } from '../../db/hooks.js';
 import { db } from '../../db/database.js';
 import { useApp } from '../../context/AppContext.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
+import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
@@ -63,12 +65,15 @@ export default function Presupuesto() {
     <AccountingGate title="Presupuesto">
       <PageHeader title="Presupuesto vs. real" subtitle="Plan anual por cuenta contra el real del mayor — valores en RD$"
         actions={(
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="input">
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Año del presupuesto" className="input">
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         )} />
 
-      {!loaded ? <ListLoading /> : (
+      {!loaded ? <ListLoading /> : groups.length === 0 ? (
+        <EmptyState icon={Target} title="Sin cuentas de resultados"
+          description="El catálogo no tiene cuentas imputables de ingresos, costos o gastos para presupuestar." />
+      ) : (
         <>
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="card p-3 min-w-0"><div className="eyebrow-xs text-ink-500 mb-1">Presupuesto (utilidad)</div><div className="font-display text-lg font-semibold tabular-nums whitespace-nowrap overflow-x-auto">{formatDop(variance.netBudget)}</div></div>
@@ -106,7 +111,7 @@ export default function Presupuesto() {
                               <input type="number" step="0.01" inputMode="decimal"
                                 value={draft[a.code] ?? (vm?.budget ? String(vm.budget) : '')}
                                 onChange={(e) => setDraft((d) => ({ ...d, [a.code]: e.target.value }))}
-                                onBlur={(e) => saveBudget(a.code, e.target.value)}
+                                onBlur={(e) => { if (draft[a.code] !== undefined) saveBudget(a.code, e.target.value); }}
                                 className="input w-32 text-right tabular-nums py-1" placeholder="0.00" />
                             </td>
                             <td className="py-1.5 px-3 text-right text-sm tabular-nums whitespace-nowrap">{formatDop(actual)}</td>

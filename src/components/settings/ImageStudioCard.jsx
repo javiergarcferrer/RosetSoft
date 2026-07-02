@@ -54,7 +54,7 @@ export default function ImageStudioCard({ settings, saveSettings }) {
   }
 
   return (
-    <SettingsSection title={<><Sparkles size={16} className="text-violet-600" aria-hidden /> OpenAI · Generación de imágenes</>}>
+    <SettingsSection title={<><Sparkles size={16} className="text-violet-600 dark:text-violet-400" aria-hidden /> OpenAI · Generación de imágenes</>}>
       <p className="text-xs text-ink-500 mb-4">
         Conecta tu llave de OpenAI para generar anuncios y artes con <strong>DALL·E 3</strong> desde el
         Studio. Obtén una llave en <strong>platform.openai.com → API keys</strong> (botón «Create new
@@ -100,7 +100,7 @@ export default function ImageStudioCard({ settings, saveSettings }) {
         ) : null}
         {connectedAt ? <span className="text-[11px] text-ink-400 min-w-0 truncate">Conectado · {formatDateTime(connectedAt)}</span> : null}
       </div>
-      {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
+      {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-ink-500'}`}>{msg}</p>}
     </SettingsSection>
   );
 }

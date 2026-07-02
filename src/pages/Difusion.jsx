@@ -155,6 +155,7 @@ function TabButton({ active, onClick, icon: Icon, label }) {
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
         active ? 'bg-brand-600 text-white' : 'text-ink-500 hover:bg-ink-100'
       }`}
@@ -186,12 +187,12 @@ function CampaignsTab({ templates, templatesError, campaignRows, customers, prof
           disabled={templates === null}
           className="btn-brand shrink-0"
         >
-          <Plus size={14} /> Crear campaña
+          {templates === null ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Crear campaña
         </button>
       </div>
 
       {templatesError && (
-        <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">{templatesError}</p>
+        <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2">{templatesError}</p>
       )}
 
       {/* History with live delivery rollups */}
@@ -381,7 +382,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
     <Modal open={open} onClose={sending ? () => {} : onClose} title="Nueva campaña" size="lg">
       {result ? (
         <div className="space-y-3 text-center py-4">
-          <span className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${result.failed ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+          <span className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${result.failed ? 'bg-amber-50 dark:bg-amber-950/40' : 'bg-emerald-50 dark:bg-emerald-950/40'}`}>
             {result.failed ? <AlertTriangle size={22} className="text-amber-600" /> : <Check size={22} className="text-emerald-600" />}
           </span>
           <p className="text-sm font-medium text-ink-900">
@@ -389,7 +390,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
             {result.failed ? ` · ${result.failed} fallidos` : ''}
           </p>
           {result.errors.map((e, i) => (
-            <p key={i} className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 text-left">
+            <p key={i} className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 text-left">
               {e.to ? `${displayPhone(e.to)}: ` : ''}{e.error}
             </p>
           ))}
@@ -463,7 +464,11 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
                   <Icon size={12} /> {label}
                 </button>
               ))}
-              <span className="ml-auto text-xs text-ink-500 tabular-nums">{picked.size} seleccionados</span>
+              {/* Count SELECTED-IN-THIS-AUDIENCE, not raw picks: switching the
+                  audience kind (contacts → groups) keeps stale keys in `picked`
+                  that will never be sent — counting them would promise a bigger
+                  send than what actually goes out. */}
+              <span className="ml-auto text-xs text-ink-500 tabular-nums">{selectedContacts.length} seleccionados</span>
             </div>
             <div className="relative mb-1.5">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" aria-hidden />
@@ -531,8 +536,8 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
             <div className="label">Nombre de la campaña</div>
             <input className="input text-sm" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div className="rounded-xl bg-emerald-50/60 ring-1 ring-inset ring-emerald-100 px-3 py-2.5">
-            <div className="eyebrow-xs text-emerald-700 mb-1">
+          <div className="rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900/40 px-3 py-2.5">
+            <div className="eyebrow-xs text-emerald-700 dark:text-emerald-300 mb-1">
               Vista previa{previewContact ? ` — ${previewContact.name}` : ''}
             </div>
             <p className="text-sm text-ink-800 whitespace-pre-wrap">
@@ -541,7 +546,7 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
           </div>
 
           {error && (
-            <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{error}</span>
             </p>
           )}
@@ -556,11 +561,11 @@ function CampaignWizard({ open, onClose, approved, customers, professionals, gro
             <button
               type="button"
               onClick={send}
-              disabled={sending || !picked.size}
+              disabled={sending || !selectedContacts.length}
               className="btn-primary text-sm inline-flex items-center gap-1.5"
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Enviar a {picked.size} {isGroups ? (picked.size === 1 ? 'grupo' : 'grupos') : (picked.size === 1 ? 'contacto' : 'contactos')}
+              Enviar a {selectedContacts.length} {isGroups ? (selectedContacts.length === 1 ? 'grupo' : 'grupos') : (selectedContacts.length === 1 ? 'contacto' : 'contactos')}
             </button>
           </div>
         </div>
@@ -760,7 +765,7 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
     <Modal open={open} onClose={sending ? () => {} : onClose} title="Nueva campaña de correo" size="lg">
       {result ? (
         <div className="space-y-3 text-center py-4">
-          <span className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${result.failed ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+          <span className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${result.failed ? 'bg-amber-50 dark:bg-amber-950/40' : 'bg-emerald-50 dark:bg-emerald-950/40'}`}>
             {result.failed ? <AlertTriangle size={22} className="text-amber-600" /> : <Check size={22} className="text-emerald-600" />}
           </span>
           <p className="text-sm font-medium text-ink-900">
@@ -768,7 +773,7 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
             {result.failed ? ` · ${result.failed} fallidos` : ''}
           </p>
           {result.errors.map((e, i) => (
-            <p key={i} className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 text-left">
+            <p key={i} className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 text-left">
               {e.to ? `${e.to}: ` : ''}{e.error}
             </p>
           ))}
@@ -794,7 +799,9 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
                   <Icon size={12} /> {label}
                 </button>
               ))}
-              <span className="ml-auto text-xs text-ink-500 tabular-nums">{picked.size} seleccionados</span>
+              {/* Same rule as the WhatsApp wizard: count picks still valid in
+                  the CURRENT audience, not stale keys from a previous kind. */}
+              <span className="ml-auto text-xs text-ink-500 tabular-nums">{selectedContacts.length} seleccionados</span>
             </div>
             <div className="relative mb-1.5">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" aria-hidden />
@@ -836,8 +843,8 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
           </div>
 
           {/* Preview */}
-          <div className="rounded-xl bg-emerald-50/60 ring-1 ring-inset ring-emerald-100 px-3 py-2.5">
-            <div className="eyebrow-xs text-emerald-700 mb-1">
+          <div className="rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900/40 px-3 py-2.5">
+            <div className="eyebrow-xs text-emerald-700 dark:text-emerald-300 mb-1">
               Vista previa{previewContact ? ` — ${previewContact.name}` : ''}
             </div>
             {previewContact ? (
@@ -851,7 +858,7 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
           </div>
 
           {error && (
-            <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>{error}</span>
             </p>
           )}
@@ -863,9 +870,9 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
 
           <div className="flex items-center justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} disabled={sending} className="btn-ghost text-sm">Cancelar</button>
-            <button type="button" onClick={send} disabled={sending || !picked.size} className="btn-primary text-sm inline-flex items-center gap-1.5">
+            <button type="button" onClick={send} disabled={sending || !selectedContacts.length} className="btn-primary text-sm inline-flex items-center gap-1.5">
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Enviar a {picked.size} {picked.size === 1 ? 'contacto' : 'contactos'}
+              Enviar a {selectedContacts.length} {selectedContacts.length === 1 ? 'contacto' : 'contactos'}
             </button>
           </div>
         </div>
@@ -877,10 +884,10 @@ function EmailCampaignWizard({ open, onClose, customers, professionals, fromName
 /* ------------------------------- templates ------------------------------- */
 
 const STATUS_TONE = {
-  APPROVED: 'bg-emerald-50 text-emerald-700',
-  PENDING: 'bg-amber-50 text-amber-700',
-  IN_REVIEW: 'bg-amber-50 text-amber-700',
-  REJECTED: 'bg-rose-50 text-rose-700',
+  APPROVED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  IN_REVIEW: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  REJECTED: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
   PAUSED: 'bg-ink-100 text-ink-500',
   DISABLED: 'bg-ink-100 text-ink-500',
 };
@@ -892,7 +899,7 @@ const STATUS_LABEL = {
 function CategoryPill({ category }) {
   const mk = category === 'MARKETING';
   return (
-    <span className={`text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 ${mk ? 'bg-violet-50 text-violet-700' : 'bg-sky-50 text-sky-700'}`}>
+    <span className={`text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 ${mk ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300' : 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'}`}>
       {mk ? 'Marketing' : category === 'UTILITY' ? 'Utilidad' : category}
     </span>
   );
@@ -937,7 +944,7 @@ function TemplatesTab({ templates, templatesError, onReload }) {
       </div>
 
       {(templatesError || actionError) && (
-        <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">{templatesError || actionError}</p>
+        <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2">{templatesError || actionError}</p>
       )}
       {/* Rejected templates with Meta's reason (null when none). */}
       <TemplateRejectionsPanel />
@@ -1202,7 +1209,7 @@ function CreateTemplateModal({ open, onClose, onCreated }) {
           )}
         </div>
         {error && (
-          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
           </p>
         )}

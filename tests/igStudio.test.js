@@ -106,6 +106,68 @@ test('heatmap also folds into 7×6 four-hour buckets for mobile', () => {
   assert.equal(b.norm, 1);
 });
 
+test('reachDaily keeps per-day dates with deterministic DR-local labels; stats annotate min/max/avg', () => {
+  const { reachDaily, reachStats, reachSeries } = resolveIgStudio({
+    reach: [{
+      name: 'reach',
+      values: [
+        { value: '100', end_time: '2026-06-10T07:00:00+0000' },
+        { value: '400', end_time: '2026-06-11T07:00:00+0000' },
+        { value: '50', end_time: '2026-06-12T07:00:00+0000' },
+      ],
+    }],
+  }, { now: NOW });
+  assert.equal(reachDaily.length, 3);
+  assert.equal(reachDaily[0].value, 100);
+  // 07:00 UTC → 03:00 DR-local, same calendar day; label is hand-built Spanish.
+  assert.equal(reachDaily[0].label, '10 jun');
+  assert.equal(reachDaily[0].ms, Date.parse('2026-06-10T07:00:00+0000'));
+  assert.deepEqual(reachSeries, [100, 400, 50]); // bare series stays for Jarvis
+  assert.deepEqual(reachStats, { max: 400, maxIndex: 1, min: 50, minIndex: 2, avg: 550 / 3 });
+});
+
+test('reachStats is null under 2 points (nothing honest to annotate)', () => {
+  const { reachStats } = resolveIgStudio({ reach: [{ name: 'reach', values: [{ value: 9 }] }] }, { now: NOW });
+  assert.equal(reachStats, null);
+});
+
+test('reachTrend compares last 7 daily buckets vs the 7 before (honest: null without both windows)', () => {
+  const mk = (n, val) => Array.from({ length: n }, () => ({ value: val }));
+  // 14 points: prev week 10/day (70), current week 20/day (140) → +100%.
+  const { reachTrend } = resolveIgStudio({
+    reach: [{ name: 'reach', values: [...mk(7, 10), ...mk(7, 20)] }],
+  }, { now: NOW });
+  assert.deepEqual(reachTrend, { cur7: 140, prev7: 70, deltaPct: 100 });
+  // Under 14 points there is no honest comparison base.
+  const short = resolveIgStudio({ reach: [{ name: 'reach', values: mk(10, 5) }] }, { now: NOW });
+  assert.equal(short.reachTrend, null);
+  // A zero previous window → the windows exist but the delta is null, not ∞.
+  const zeroPrev = resolveIgStudio({
+    reach: [{ name: 'reach', values: [...mk(7, 0), ...mk(7, 20)] }],
+  }, { now: NOW });
+  assert.deepEqual(zeroPrev.reachTrend, { cur7: 140, prev7: 0, deltaPct: null });
+});
+
+test('formatMix splits Reels / carruseles / fotos by avg engagement, only formats that exist', () => {
+  const media = [
+    { id: 'a', media_type: 'IMAGE', like_count: '10', comments_count: '0', timestamp: '2026-06-10T12:00:00+0000' },
+    { id: 'b', media_type: 'IMAGE', like_count: '30', comments_count: '0', timestamp: '2026-06-10T13:00:00+0000' },
+    { id: 'c', media_type: 'CAROUSEL_ALBUM', like_count: '50', comments_count: '10', timestamp: '2026-06-11T12:00:00+0000' },
+    { id: 'd', media_type: 'VIDEO', media_product_type: 'REELS', like_count: '90', comments_count: '10', timestamp: '2026-06-12T12:00:00+0000' },
+  ];
+  const { formatMix } = resolveIgStudio({ media }, { now: NOW });
+  assert.deepEqual(formatMix.map((f) => f.key), ['reel', 'carousel', 'photo']);
+  const reel = formatMix.find((f) => f.key === 'reel');
+  const photo = formatMix.find((f) => f.key === 'photo');
+  assert.equal(reel.posts, 1);
+  assert.equal(reel.avgEngagement, 100);
+  assert.equal(photo.posts, 2);
+  assert.equal(photo.avgEngagement, 20); // (10+30)/2
+  // No stories/carousels → the format simply doesn't appear.
+  const onlyPhotos = resolveIgStudio({ media: media.slice(0, 2) }, { now: NOW });
+  assert.deepEqual(onlyPhotos.formatMix.map((f) => f.key), ['photo']);
+});
+
 test('reel watch time (ms) surfaces as seconds with a unit', () => {
   const rows = resolveMediaInsights({ reach: 100, ig_reels_avg_watch_time: 8200 });
   const wt = rows.find((r) => r.key === 'ig_reels_avg_watch_time');

@@ -458,6 +458,7 @@ function DocForm({ scope, config, suppliers, suppliersById, accounts, items, exp
         <div className="inline-flex flex-wrap rounded-lg border border-ink-200 p-0.5 bg-surface gap-0.5">
           {NATURE_TABS.map((n) => (
             <button key={n.key} type="button" onClick={() => setNature(n.key)} disabled={!!editDoc}
+              title={editDoc ? 'El tipo no se puede cambiar al editar — duplica el documento para registrarlo con otro tipo.' : undefined}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${nature === n.key ? 'bg-ink-900 text-ink-50 font-medium shadow-sm' : 'text-ink-500 hover:text-ink-700 hover:bg-ink-50'}`}>
               {n.label}
             </button>

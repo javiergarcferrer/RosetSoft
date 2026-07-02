@@ -778,7 +778,9 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPending(); }
+                  // Same rule as the composer: Enter sends on desktop only —
+                  // touch keyboards get a newline, the send button ships it.
+                  if (e.key === 'Enter' && !e.shiftKey && !isCoarsePointer) { e.preventDefault(); sendPending(); }
                   if (e.key === 'Escape') { e.preventDefault(); discardPending(); }
                 }}
                 placeholder="Añade un comentario…"
@@ -802,14 +804,14 @@ export default function ChatThread({ contact, thread, connected, onBack, onSend,
         <div className="flex items-end gap-1.5 px-3 py-3">
         {rec ? (
           <>
-            <div className="flex items-center gap-2.5 flex-1 min-h-[42px] rounded-lg bg-red-50 border border-red-100 px-3">
+            <div className="flex items-center gap-2.5 flex-1 min-h-[42px] rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 px-3">
               <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
-              <span className="text-sm text-red-800 tabular-nums">{recClock(recElapsed)}</span>
-              <span className="text-xs text-red-700/70 flex-1 truncate">Grabando nota de voz…</span>
+              <span className="text-sm text-red-800 dark:text-red-200 tabular-nums">{recClock(recElapsed)}</span>
+              <span className="text-xs text-red-700/70 dark:text-red-300/70 flex-1 truncate">Grabando nota de voz…</span>
               <button
                 type="button"
                 onClick={() => stopRecording(true)}
-                className="p-1.5 -mr-1 rounded text-red-700 hover:bg-red-100 transition-colors"
+                className="p-1.5 -mr-1 rounded text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                 title="Descartar grabación"
                 aria-label="Descartar grabación"
               >
@@ -1270,7 +1272,7 @@ function ContactSendModal({ open, onClose, excludeKey, onSend }) {
           <input className="input text-sm" value={org} onChange={(e) => setOrg(e.target.value)} />
         </div>
         {error && (
-          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
           </p>
         )}
@@ -1343,7 +1345,9 @@ function SaveContactModal({ target, onClose, onSave }) {
         </div>
         {msg && (
           <p className={`text-xs rounded-lg px-3 py-2 flex items-start gap-1.5 ${
-            msg.tone === 'error' ? 'text-red-700 bg-red-50' : 'text-amber-800 bg-amber-50'
+            msg.tone === 'error'
+              ? 'text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40'
+              : 'text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40'
           }`}>
             <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{msg.text}</span>
           </p>
@@ -1410,7 +1414,7 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
             <div className="flex items-center justify-center py-10 text-ink-400"><Loader2 size={18} className="animate-spin" /></div>
           )}
           {loadError && (
-            <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 mb-2">{loadError}</p>
+            <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 mb-2">{loadError}</p>
           )}
           {templates !== null && !loadError && !templates.length && (
             <p className="text-xs text-ink-400 text-center py-8">
@@ -1445,13 +1449,13 @@ function TemplateSendModal({ open, onClose, contact, onSend }) {
               />
             </div>
           ))}
-          <div className="rounded-xl bg-emerald-50/60 ring-1 ring-inset ring-emerald-100 px-3 py-2.5">
-            <div className="eyebrow-xs text-emerald-700 mb-1">Vista previa</div>
+          <div className="rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-inset ring-emerald-100 dark:ring-emerald-900/40 px-3 py-2.5">
+            <div className="eyebrow-xs text-emerald-700 dark:text-emerald-300 mb-1">Vista previa</div>
             <p className="text-sm text-ink-800 whitespace-pre-wrap">{fillTemplateBody(selected.bodyText, params)}</p>
             {selected.footerText && <p className="text-[11px] text-ink-400 mt-1">{selected.footerText}</p>}
           </div>
           {error && (
-            <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+            <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
             </p>
           )}
@@ -1640,13 +1644,13 @@ function InteractiveSendModal({ open, onClose, windowOpen, onSend }) {
           {mode === 'cta' && 'El cliente ve un botón que abre el enlace — sin URLs largas en el texto.'}
         </p>
         {!windowOpen && (
-          <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
             <Clock size={12} className="mt-0.5 shrink-0" />
             <span>Ventana de 24 h cerrada: igual que el texto libre, es probable que no se entregue hasta que el cliente vuelva a escribir.</span>
           </p>
         )}
         {error && (
-          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
           </p>
         )}
@@ -1765,7 +1769,7 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend, onSendCatalog }
           />
         </div>
         {loadError && (
-          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">{loadError}</p>
+          <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2">{loadError}</p>
         )}
         <div className="max-h-[42vh] overflow-y-auto -mx-1 px-1">
           {products === null && (
@@ -1827,13 +1831,13 @@ function ProductPickerModal({ open, onClose, windowOpen, onSend, onSendCatalog }
           />
         </div>
         {!windowOpen && (
-          <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <p className="text-[11px] text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
             <Clock size={12} className="mt-0.5 shrink-0" />
             <span>Ventana de 24 h cerrada: igual que el texto libre, es probable que no se entregue hasta que el cliente vuelva a escribir.</span>
           </p>
         )}
         {error && (
-          <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 flex items-start gap-1.5">
+          <p className="text-xs text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0 break-words">{error}</span>
           </p>
         )}

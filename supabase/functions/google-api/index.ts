@@ -852,16 +852,20 @@ Deno.serve(async (req) => {
     if (body.gmailSync) {
       const maxResults = Math.min(Math.max(Number(body.gmailSync.maxResults) || 120, 1), 250);
       // Default: recent inbox + our replies, so a thread shows both sides.
+      const isDefaultWindow = !body.gmailSync.query;
       const query = String(body.gmailSync.query || '(in:inbox OR in:sent) newer_than:180d');
       let ids: string[];
       try { ids = await gmailListIds(token, query, maxResults); }
       catch (e) { return json({ ok: false, error: String((e as Error)?.message || e).slice(0, 200) }, 502); }
 
       // Skip ids already mirrored (immutable bodies) — only fetch+store new mail.
-      const known = new Set<string>();
+      // Stored labels come along so the refresh pass below can diff cheaply.
+      const known = new Map<string, string[]>();
       if (ids.length) {
-        const { data: rows } = await admin.from('gmail_messages').select('id').in('id', ids);
-        for (const r2 of (rows || []) as Array<{ id: string }>) known.add(r2.id);
+        const { data: rows } = await admin.from('gmail_messages').select('id, label_ids').in('id', ids);
+        for (const r2 of (rows || []) as Array<{ id: string; label_ids: string[] | null }>) {
+          known.set(r2.id, r2.label_ids || []);
+        }
       }
       const fresh = ids.filter((id) => !known.has(id));
 
@@ -877,8 +881,42 @@ Deno.serve(async (req) => {
           if (error) return json({ ok: false, error: error.message }, 502);
         }
       }
+
+      // Label refresh for ALREADY-mirrored ids (default recent-window sync only,
+      // capped): a message's body is immutable but its labels aren't — mail read,
+      // starred or archived in the Gmail app must converge into the mirror or
+      // the inbox here shows stale unread badges forever. format=minimal is a
+      // cheap metadata fetch; only rows whose label set actually changed are
+      // written. The custom-query passes (invoice pull, load-older) skip this —
+      // they can list hundreds of old ids where label churn doesn't matter.
+      let refreshed = 0;
+      if (isDefaultWindow && known.size) {
+        const knownIds = ids.filter((id) => known.has(id)).slice(0, 100);
+        const CONC = 10;
+        for (let i = 0; i < knownIds.length; i += CONC) {
+          const chunk = knownIds.slice(i, i + CONC);
+          const metas = await Promise.all(chunk.map(async (id) => {
+            try {
+              const r = await fetch(`${GMAIL}/messages/${id}?format=minimal`, { headers: { Authorization: `Bearer ${token}` } });
+              const d = await r.json().catch(() => ({}));
+              return r.ok ? { id, labelIds: ((d.labelIds || []) as string[]) } : null;
+            } catch { return null; }
+          }));
+          for (const m of metas) {
+            if (!m) continue;
+            const stored = known.get(m.id) || [];
+            const same = stored.length === m.labelIds.length && m.labelIds.every((l) => stored.includes(l));
+            if (same) continue;
+            const { error } = await admin.from('gmail_messages')
+              .update({ label_ids: m.labelIds, is_read: !m.labelIds.includes('UNREAD') })
+              .eq('id', m.id);
+            if (!error) refreshed += 1;
+          }
+        }
+      }
+
       await admin.from('settings').update({ gmail_synced_at: new Date().toISOString() }).eq('profile_id', TEAM);
-      return json({ ok: true, scanned: ids.length, synced: toUpsert.length });
+      return json({ ok: true, scanned: ids.length, synced: toUpsert.length, refreshed });
     }
 
     // ── Gmail attachment fetch (preview/download) ─────────────────────────────

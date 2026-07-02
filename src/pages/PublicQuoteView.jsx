@@ -1,7 +1,7 @@
 import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertCircle, Check, CloudOff, Ship, MapPin, Download } from 'lucide-react';
+import { Loader2, AlertCircle, Check, CloudOff, RefreshCw, Ship, MapPin, Download } from 'lucide-react';
 import ClientPreview from '../components/quote-builder/ClientPreview.jsx';
 import ContainerTracking from '../components/ContainerTracking.jsx';
 // Derivations + the one mutation reducer come from the quote Model.
@@ -27,6 +27,8 @@ import { safeDynamicImport } from '../lib/dynamicImport.js';
 export default function PublicQuoteView() {
   const { token } = useParams();
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
+  // Bumped by the error screen's "Reintentar" — re-runs the fetch effect.
+  const [attempt, setAttempt] = useState(0);
   const [save, setSave] = useState('idle'); // idle | saving | saved | error
   const [pdf, setPdf] = useState('idle'); // idle | working | error — PDF download
   // The bundle we're currently showing (kept in a ref too, so the optimistic
@@ -62,9 +64,20 @@ export default function PublicQuoteView() {
     chainRef.current = Promise.resolve();
     fetchSharedQuote(token)
       .then((bundle) => { if (active) { bundleRef.current = bundle; setState({ status: 'ready', bundle, error: null }); } })
-      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e) }); });
+      // No HTTP status ⇒ the request never reached the server (offline /
+      // flaky data), NOT a dead link — the error screen branches on it.
+      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e), offline: e?.status == null }); });
     return () => { active = false; };
-  }, [token]);
+  }, [token, attempt]);
+
+  // The "Guardado" confirmation has done its job after a moment — clear it so
+  // the pill doesn't hover over the quote for the rest of the visit ('saving'
+  // and 'error' stay until resolved).
+  useEffect(() => {
+    if (save !== 'saved') return undefined;
+    const t = setTimeout(() => setSave((s) => (s === 'saved' ? 'idle' : s)), 2500);
+    return () => clearTimeout(t);
+  }, [save]);
 
   const bundle = state.bundle;
   const quote = bundle?.quote || null;
@@ -170,16 +183,29 @@ export default function PublicQuoteView() {
     );
   }
   if (state.status === 'error') {
+    // A connection drop is not a dead link — tell the customer the truth and
+    // let them retry (these links open from WhatsApp on mobile data).
+    const offline = !!state.offline;
     return (
       <div className="h-full flex flex-col items-center justify-center bg-ink-50 text-center px-6">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ink-100 text-ink-400 mb-5 shadow-xs">
-          <AlertCircle size={28} strokeWidth={1.5} aria-hidden />
+          {offline
+            ? <CloudOff size={28} strokeWidth={1.5} aria-hidden />
+            : <AlertCircle size={28} strokeWidth={1.5} aria-hidden />}
         </div>
-        <div className="font-display text-lg font-semibold text-ink-800">Enlace no disponible</div>
+        <div className="font-display text-lg font-semibold text-ink-800">
+          {offline ? 'Sin conexión' : 'Enlace no disponible'}
+        </div>
         <p className="text-sm text-ink-500 mt-2 max-w-sm leading-relaxed">
-          Este enlace de cotización no es válido o fue desactivado. Pídele a tu
-          asesor un enlace actualizado.
+          {offline
+            ? 'No pudimos conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.'
+            : 'Este enlace de cotización no es válido o fue desactivado. Pídele a tu asesor un enlace actualizado.'}
         </p>
+        {offline && (
+          <button type="button" onClick={() => setAttempt((a) => a + 1)} className="btn-brand mt-5">
+            <RefreshCw size={14} aria-hidden /> Reintentar
+          </button>
+        )}
       </div>
     );
   }

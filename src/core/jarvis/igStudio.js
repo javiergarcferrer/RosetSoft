@@ -30,6 +30,14 @@ function doParts(ms) {
   return { day: d.getUTCDay(), hour: d.getUTCHours() };
 }
 
+// Deterministic Spanish short-date label ("10 jun") in DR-local time — built by
+// hand (not toLocaleDateString) so tests never depend on the runtime's ICU.
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function dayLabel(ms) {
+  const d = new Date(ms - DO_OFFSET_MS);
+  return `${d.getUTCDate()} ${MONTHS_ES[d.getUTCMonth()]}`;
+}
+
 /** Daily values of one metric from an insights `data` array. */
 const metricValues = (insights, name) =>
   ((insights || []).find((m) => m.name === name)?.values || []).map((v) => num(v.value));
@@ -51,7 +59,9 @@ function demoResults(insightsData) {
 }
 
 const GENDER = { F: 'Mujeres', M: 'Hombres', U: 'Otro' };
-const GENDER_COLOR = { F: '#c96a2a', M: '#3b3830', U: 'rgb(var(--ink-300))' };
+// Token-backed series colors (CSS vars flip with the theme; fixed hexes would
+// vanish on the dark surface). Brand = emphasis, ink = the neutral counterpart.
+const GENDER_COLOR = { F: 'rgb(var(--brand-500))', M: 'rgb(var(--ink-700))', U: 'rgb(var(--ink-300))' };
 const AGE_ORDER = ['13-17', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'];
 // A small name map for the countries a DR furniture dealer actually sees;
 // anything else just shows its ISO code (honest, not blank).
@@ -148,8 +158,46 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
   const p = s.profile || {};
 
   const followers = num(p.followers_count);
-  const reachSeries = metricValues(s.reach, 'reach');
+  // Daily reach, WITH the bucket's date — the scrubbable trend chart needs a
+  // label per point, not just the bare values (which Jarvis still consumes).
+  const reachRows = ((s.reach || []).find((m) => m.name === 'reach')?.values) || [];
+  const reachDaily = reachRows.map((v) => {
+    const ms = toMs(v.end_time);
+    return { ms, label: ms != null ? dayLabel(ms) : '', value: num(v.value) };
+  });
+  const reachSeries = reachDaily.map((r) => r.value);
   const reachSeriesSum = reachSeries.reduce((a, b) => a + b, 0);
+
+  // Min / max / avg annotations for the trend chart — derived HERE (MVVM: the
+  // View never re-computes what a VM can own). Null under 2 points.
+  let reachStats = null;
+  if (reachDaily.length > 1) {
+    let maxIndex = 0;
+    let minIndex = 0;
+    let sum = 0;
+    reachDaily.forEach((r, i) => {
+      sum += r.value;
+      if (r.value > reachDaily[maxIndex].value) maxIndex = i;
+      if (r.value < reachDaily[minIndex].value) minIndex = i;
+    });
+    reachStats = {
+      max: reachDaily[maxIndex].value,
+      maxIndex,
+      min: reachDaily[minIndex].value,
+      minIndex,
+      avg: sum / reachDaily.length,
+    };
+  }
+
+  // Honest short-term trend: last 7 daily buckets vs the 7 before them. Only
+  // offered when BOTH windows exist in the series; delta null on a zero base.
+  let reachTrend = null;
+  if (reachDaily.length >= 14) {
+    const sumSlice = (from, to) => reachDaily.slice(from, to).reduce((a, r) => a + r.value, 0);
+    const cur7 = sumSlice(reachDaily.length - 7, reachDaily.length);
+    const prev7 = sumSlice(reachDaily.length - 14, reachDaily.length - 7);
+    reachTrend = { cur7, prev7, deltaPct: prev7 > 0 ? Math.round(((cur7 - prev7) / prev7) * 100) : null };
+  }
   const engaged28 = totalValue(s.accountTotals, 'accounts_engaged');
   const interactions28 = totalValue(s.accountTotals, 'total_interactions');
   const views28 = totalValue(s.accountTotals, 'views');
@@ -205,7 +253,28 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
   const mentions = (s.mentions || []).map((m) => ({ ...mediaItem(m, now), isMention: true }));
 
   // Top posts by engagement — the leaderboard beside the chronological grid.
-  const topPosts = [...grid].sort((a, b) => b.engagement - a.engagement).slice(0, 3);
+  const topPosts = [...grid].sort((a, b) => b.engagement - a.engagement).slice(0, 5);
+
+  // Format mix — Reels vs carruseles vs fotos, by post count and average
+  // engagement per post (the honest per-format comparison the API allows:
+  // per-post reach needs one insights call per media, which the studio payload
+  // deliberately doesn't fan out). Only formats that actually exist are listed.
+  const FORMAT_LABEL = { reel: 'Reels', carousel: 'Carruseles', photo: 'Fotos' };
+  const formatKeyOf = (g) => (g.isReel ? 'reel'
+    : String(g.type || '').toUpperCase() === 'CAROUSEL_ALBUM' ? 'carousel' : 'photo');
+  const formatMix = ['reel', 'carousel', 'photo']
+    .map((key) => {
+      const rows = grid.filter((g) => formatKeyOf(g) === key);
+      const eng = rows.reduce((a, g) => a + g.engagement, 0);
+      return {
+        key,
+        label: FORMAT_LABEL[key],
+        posts: rows.length,
+        totalEngagement: eng,
+        avgEngagement: rows.length ? Math.round(eng / rows.length) : 0,
+      };
+    })
+    .filter((f) => f.posts > 0);
 
   return {
     fetchedAt: s.fetchedAt || null,
@@ -236,6 +305,10 @@ export function resolveIgStudio(payload, { now = Date.now() } = {}) {
     },
     publishLimit,
     reachSeries,
+    reachDaily,
+    reachStats,
+    reachTrend,
+    formatMix,
     audience: {
       gender: ranked(genderRows, 3).map((g) => ({ ...g, label: g.label, color: g.color })),
       genderTotal,

@@ -47,6 +47,46 @@ test('ad KPIs sum by DATE, not row position — paused ads report 0, not stale s
   assert.equal(kpis.spend28, 1000);
 });
 
+test('CPC/CTR carry previous-window values and honest deltas', () => {
+  // prev week: $10/day, 5 clicks/day, 1000 imp/day → CPC 2, CTR 0.5%
+  // this week: $20/day, 10 clicks/day, 1000 imp/day → CPC 2, CTR 1%
+  const { kpis } = resolveSocialPulse({ adsDaily }, { now: NOW });
+  assert.equal(kpis.cpc7Prev, 2); // 70 / 35
+  assert.equal(kpis.cpcDeltaPct, 0); // 2 vs 2
+  assert.ok(Math.abs(kpis.ctr7PrevPct - 0.5) < 1e-9);
+  assert.equal(kpis.ctrDeltaPct, 100); // 1% vs 0.5%
+  assert.equal(kpis.clicks7Prev, 35);
+  assert.equal(kpis.clicksDeltaPct, 100);
+  assert.equal(kpis.impressions7, 7000);
+  assert.equal(kpis.spend7Prev, 70);
+});
+
+test('ratio deltas go null when a window has no base (never ∞ from an empty prev week)', () => {
+  const { kpis } = resolveSocialPulse({
+    adsDaily: [{ date_start: '2026-06-10', spend: '50', clicks: '10', impressions: '1000' }],
+  }, { now: NOW });
+  assert.equal(kpis.cpc7, 5);
+  assert.equal(kpis.cpc7Prev, null); // no clicks last week
+  assert.equal(kpis.cpcDeltaPct, null);
+  assert.equal(kpis.ctrDeltaPct, null);
+});
+
+test('funnel step: click→result conversion guarded by clicks and a known result type', () => {
+  const withResults = resolveSocialPulse({
+    adsDaily: [{
+      date_start: '2026-06-10', spend: '60', clicks: '30', impressions: '1000',
+      actions: [{ action_type: 'lead', value: '6' }],
+    }],
+  }, { now: NOW });
+  assert.equal(withResults.kpis.clickToResult7Pct, 20); // 6 / 30
+  assert.equal(withResults.kpis.results7Prev, 0);
+  assert.equal(withResults.kpis.resultsDeltaPct, null); // no prev base
+  const noActions = resolveSocialPulse({
+    adsDaily: [{ date_start: '2026-06-10', spend: '60', clicks: '30', impressions: '1000' }],
+  }, { now: NOW });
+  assert.equal(noActions.kpis.clickToResult7Pct, null); // no result type at all
+});
+
 test('division guards: no clicks → null CPC; no impressions → null CTR; no prev → null delta', () => {
   const { kpis, campaigns } = resolveSocialPulse({
     adsDaily: [{ date_start: '2026-06-10', spend: '50', clicks: '0', impressions: '0' }],

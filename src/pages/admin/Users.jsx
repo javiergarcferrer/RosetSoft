@@ -162,7 +162,7 @@ export default function AdminUsers() {
       {cleanupNote && (
         <div
           role="status"
-          className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-start gap-2"
+          className="mb-4 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2"
         >
           <Check size={14} className="flex-shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -172,7 +172,7 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={() => setCleanupNote(null)}
-            className="btn-icon -my-1.5 text-amber-700 hover:text-amber-900 hover:bg-amber-100 active:bg-amber-200"
+            className="btn-icon -my-1.5 text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 active:bg-amber-200 dark:active:bg-amber-900/60"
             aria-label="Cerrar"
           >
             <X size={14} />
@@ -538,7 +538,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
               {savedField === 'name' && (
                 <span
                   role="status"
-                  className="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-1.5 py-0.5 flex-shrink-0"
+                  className="inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 rounded-md px-1.5 py-0.5 flex-shrink-0"
                 >
                   <Check size={11} /> Guardado
                 </span>
@@ -644,7 +644,7 @@ function ActiveRow({ profile, session, isSelf, invitePending, onChanged }) {
                 : invitePending
                   ? 'Cancelar invitación y eliminar el registro'
                   : 'Eliminar de Supabase Auth y borrar el perfil'}
-              className="btn-ghost text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+              className="btn-ghost text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
               {busy
                 ? <><Loader2 size={14} className="animate-spin" /> Eliminando…</>

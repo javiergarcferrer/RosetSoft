@@ -142,6 +142,18 @@ export function footprintOf(piece, rot) {
  * fine); failing that we don't snap. Pure.
  */
 export function snapPlacement(cand, others = [], opts = {}) {
+  const { x, y } = snapPlacementInfo(cand, others, opts);
+  return { x, y };
+}
+
+/**
+ * Like `snapPlacement`, but ALSO reports whether the placement actually engaged
+ * an edge snap on each axis — so the View can give visible/haptic "it clicked
+ * flush" feedback while dragging, without re-deriving the geometry. `snappedX`
+ * is true when the accepted position sits edge-flush/aligned with a neighbour on
+ * the X axis (distance 0 counts: staying locked IS snapped); same for `snappedY`.
+ */
+export function snapPlacementInfo(cand, others = [], opts = {}) {
   const grid = opts.gridCm ?? SNAP_GRID_CM;
   const snap = opts.edgeCm ?? EDGE_SNAP_CM;
   const x = Math.round(cand.x / grid) * grid;
@@ -169,9 +181,14 @@ export function snapPlacement(cand, others = [], opts = {}) {
   const overlaps = (bx, by) => others.some((o) =>
     bx < o.x + o.w - EPS && bx + cand.w > o.x + EPS && by < o.y + o.h - EPS && by + cand.h > o.y + EPS);
   for (const [ox, oy] of [[dx, dy], [dx, 0], [0, dy], [0, 0]]) {
-    if (!overlaps(x + ox, y + oy)) return { x: x + ox, y: y + oy };
+    if (!overlaps(x + ox, y + oy)) {
+      const snappedX = bestDX !== Infinity && ox === dx;
+      const snappedY = bestDY !== Infinity && oy === dy;
+      return { x: x + ox, y: y + oy, snappedX, snappedY, snapped: snappedX || snappedY };
+    }
   }
-  return { x, y };   // every option overlaps (dragged on top) → leave it where it is
+  // Every option overlaps (dragged on top) → leave it where it is, no snap.
+  return { x, y, snappedX: false, snappedY: false, snapped: false };
 }
 
 /** Clamp a box's top-left so the whole footprint stays inside the plan. */
@@ -210,6 +227,82 @@ export function compactPlaced(placed, resolvedById) {
   squeeze('x', 'w');
   squeeze('y', 'h');
   return boxes.map((b) => ({ ...b.p, x: +b.x.toFixed(2), y: +b.y.toFixed(2) }));
+}
+
+// ── Undo/redo — a small immutable history stack over the `placed` state ─────
+// Pure so it's unit-tested: the View owns WHEN to snapshot (one entry per user
+// gesture: add, move-commit, rotate, delete, fabric, clear); this owns the stack
+// mechanics. Snapshots are the placed arrays themselves (immutably updated by
+// every mutation, so sharing references is safe).
+
+export const TOGO_HISTORY_LIMIT = 60;
+
+export function createHistory() {
+  return { past: [], future: [] };
+}
+
+/** Record `snapshot` (the state BEFORE a change) — clears the redo branch. */
+export function historyPush(hist, snapshot, limit = TOGO_HISTORY_LIMIT) {
+  const past = [...(hist?.past || []), snapshot];
+  if (past.length > limit) past.splice(0, past.length - limit);
+  return { past, future: [] };
+}
+
+/** Step back: returns `{ hist, present }` or null when there's nothing to undo. */
+export function historyUndo(hist, present) {
+  const past = hist?.past || [];
+  if (!past.length) return null;
+  return {
+    hist: { past: past.slice(0, -1), future: [present, ...(hist?.future || [])] },
+    present: past[past.length - 1],
+  };
+}
+
+/** Step forward again: returns `{ hist, present }` or null when nothing to redo. */
+export function historyRedo(hist, present) {
+  const future = hist?.future || [];
+  if (!future.length) return null;
+  return {
+    hist: { past: [...(hist?.past || []), present], future: future.slice(1) },
+    present: future[0],
+  };
+}
+
+export const canUndo = (hist) => (hist?.past || []).length > 0;
+export const canRedo = (hist) => (hist?.future || []).length > 0;
+
+/** The first placed piece still missing a fabric pick (its uid), or null — the
+ *  target the "N sin tela" warning jumps to. */
+export function firstWithoutFabric(placed) {
+  const hit = (placed || []).find((p) => !p.material);
+  return hit ? hit.uid : null;
+}
+
+/**
+ * Duplicate a placed piece (same rotation + fabric), dropped flush against the
+ * source's right edge, snapped/clamped like a fresh add. Returns the new placed
+ * array + the duplicate's uid, or null when the source uid isn't found. Pure —
+ * the caller supplies the new uid.
+ */
+export function duplicatePlacement(placed, uid, resolvedById, newUid, opts = {}) {
+  const list = placed || [];
+  const src = list.find((p) => p.uid === uid);
+  if (!src) return null;
+  const planW = opts.planWCm ?? PLAN_W_CM;
+  const planH = opts.planHCm ?? PLAN_H_CM;
+  const fp = footprintOf(resolvePlacement(src, resolvedById), norm360(src.rot));
+  const others = list.map((p) => {
+    const f = footprintOf(resolvePlacement(p, resolvedById), norm360(p.rot));
+    return { x: p.x, y: p.y, w: f.w, h: f.h };
+  });
+  const start = clampToPlan(src.x + fp.w, src.y, fp.w, fp.h, planW, planH);
+  const snapped = snapPlacement({ x: start.x, y: start.y, w: fp.w, h: fp.h }, others);
+  const c = clampToPlan(snapped.x, snapped.y, fp.w, fp.h, planW, planH);
+  const dup = {
+    ...src, uid: newUid, x: c.x, y: c.y,
+    ...(src.material ? { material: { ...src.material } } : {}),
+  };
+  return { placed: [...list, dup], uid: newUid };
 }
 
 /**

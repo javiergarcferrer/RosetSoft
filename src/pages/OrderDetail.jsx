@@ -28,6 +28,9 @@ import {
   validateContainerNo, detectCarrier, normalizeContainerNo,
 } from '../lib/containerTracking.js';
 import ContainerTracking from '../components/ContainerTracking.jsx';
+import StatusPill from '../components/StatusPill.jsx';
+import { quoteStagePill } from '../lib/statusPill.js';
+import { currentQuoteStage } from '../lib/quoteStages.js';
 import { reconcileQuoteStock, reconcileOrderStock } from '../lib/lsgStock.js';
 import { resolveOrderDetail } from '../core/quote/views/detail.js';
 import { viewerCompanySettings } from '../core/quote/index.js';
@@ -205,7 +208,12 @@ export default function OrderDetail() {
     const now = Date.now();
     const patch = { status: to.key, updatedAt: now };
     if (to.timestampField) patch[to.timestampField] = now;
-    await db.orders.update(orderId, patch);
+    try {
+      await db.orders.update(orderId, patch);
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+    }
   }
 
   async function undo() {
@@ -219,7 +227,12 @@ export default function OrderDetail() {
     if (!prev) return;
     const patch = { status: prev.key, updatedAt: Date.now() };
     if (cur?.timestampField) patch[cur.timestampField] = null;
-    await db.orders.update(orderId, patch);
+    try {
+      await db.orders.update(orderId, patch);
+      setError('');
+    } catch (e) {
+      setError(userMessageFor(e));
+    }
   }
 
   async function cancelOrder() {
@@ -522,6 +535,7 @@ export default function OrderDetail() {
           onPick={attachQuote}
           totalByQuote={totalByQuote}
           customerById={customerById}
+          settings={settings}
         />
       </Modal>
     </>
@@ -550,7 +564,14 @@ function ContainerRow({ container, arrivalAction = null, onError }) {
   const trackable = validation.status === 'valid';
 
   async function update(patch) {
-    await db.containers.update(container.id, { ...patch, updatedAt: Date.now() });
+    // Surface a failed write in the page banner — a silently reverting
+    // toggle/code field reads as a dead control.
+    try {
+      await db.containers.update(container.id, { ...patch, updatedAt: Date.now() });
+      onError?.('');
+    } catch (e) {
+      onError?.(userMessageFor(e));
+    }
   }
 
   async function toggleFilled() {
@@ -692,12 +713,17 @@ function QuoteRow({ quote, order, settings, customer, creator, total, onDetach }
   // Lead each row with the client so the dealer can tell whose order this is
   // at a glance — the quote number alone doesn't identify the customer.
   const clientLabel = customer?.name?.trim() || 'Sin cliente asignado';
+  const toast = useToast();
 
   async function setMilestone(field, on) {
-    await db.quotes.update(quote.id, {
-      [field]: on ? Date.now() : null,
-      updatedAt: Date.now(),
-    });
+    try {
+      await db.quotes.update(quote.id, {
+        [field]: on ? Date.now() : null,
+        updatedAt: Date.now(),
+      });
+    } catch (e) {
+      toast(userMessageFor(e), { tone: 'error' });
+    }
   }
 
   return (
@@ -836,11 +862,10 @@ function MilestonePill({ icon: Icon, label, done, doneAt, enabled, disabledHint,
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch-threshold widget — visible while the order is still being
-// filled. Shows the order's running total against `containerCount ×
-// per-container minimum`, with a progress bar that turns green once the
-// minimum is met. Hidden after the order moves to 'placed' since the
-// threshold has served its purpose by then.
+// Dispatch-threshold widget — a persistent reference in every active stage
+// (only a cancelled order hides it; see the render site). Shows the order's
+// running total against `containerCount × per-container minimum`, with a
+// progress bar that turns green once the minimum is met.
 //
 // The container count comes from the actual number of container rows
 // (with a floor of 1 — see orderDispatchThreshold). When the dealer adds
@@ -894,7 +919,7 @@ function DispatchThresholdCard({ containerCount, threshold, orderTotal, threshol
   );
 }
 
-function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
+function QuoteAttachList({ candidates, onPick, totalByQuote, customerById, settings }) {
   if (!candidates.length) {
     return (
       <div className="py-12 flex flex-col items-center gap-3 text-center">
@@ -925,12 +950,13 @@ function QuoteAttachList({ candidates, onPick, totalByQuote, customerById }) {
               </div>
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span className="text-[11px] text-ink-500 tabular-nums">#{q.number || '—'}</span>
-                <span className={`status-pill status-pill-${q.status || 'draft'} !py-0`}>{q.status || 'draft'}</span>
+                {/* Spanish stage pill (the raw status key rendered in English). */}
+                <StatusPill {...quoteStagePill(currentQuoteStage(q))} />
                 <span className="text-[11px] text-ink-400">{formatDateTime(q.updatedAt)}</span>
               </div>
             </div>
             <div className="text-sm font-medium tabular-nums whitespace-nowrap text-ink-900">
-              {formatMoney(totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
+              {formatMoney(totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', displayRatesFor(q, settings))}
             </div>
           </button>
         </li>

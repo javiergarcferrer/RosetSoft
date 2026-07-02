@@ -22,6 +22,7 @@ import { db, newId, assignSequenceNumber } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { waDigits } from '../lib/phone.js';
 import { phoneOwner, phoneInUseMessage } from '../lib/whatsapp.js';
 import { resolveProfessionalsList } from '../core/quote/views/lists.js';
@@ -651,7 +652,7 @@ function MobileNewCard({ onCreate }) {
 // header, never repeated in a band. Shared by the mobile card and the
 // desktop sheet row so both surfaces stay identical.
 function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
-  const { isAdmin } = useApp();
+  const { isAdmin, settings } = useApp();
   const groups = rollup?.groups || [];
   const wa = waDigits(pro.phone);
   return (
@@ -719,7 +720,7 @@ function ProQuotesPanel({ pro, rollup, onCommit, onRemove }) {
                         </div>
                       </div>
                       <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
-                        {formatMoney(e.total, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                        {formatMoney(e.total, e.quote.currencyCode || 'USD', displayRatesFor(e.quote, settings))}
                       </div>
                       <ExternalLink size={13} className="text-ink-300 group-hover:text-brand-600 flex-shrink-0 transition-colors" aria-hidden />
                     </Link>

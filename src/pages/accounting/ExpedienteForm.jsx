@@ -573,7 +573,7 @@ export default function ExpedienteForm({ scope, config, settings, suppliers, ite
                     <input value={fac.ncf} onChange={(e) => patchFac(emb.id, fac.id, { ncf: e.target.value })} placeholder="NCF" className={`${field} w-28 min-w-0`} />
                     <label className="btn-ghost text-xs gap-1 cursor-pointer px-2">
                       {parsing === fac.id ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} PDF
-                      <input type="file" accept="application/pdf" className="hidden" onChange={(e) => importPdf(emb.id, fac.id, e.target.files?.[0])} />
+                      <input type="file" accept="application/pdf" className="hidden" onChange={(e) => { importPdf(emb.id, fac.id, e.target.files?.[0]); e.target.value = ''; }} />
                     </label>
                     {emb.facturas.length > 1 && <button type="button" onClick={() => delFac(emb.id, fac.id)} className="btn-icon-danger" title="Eliminar factura" aria-label="Eliminar factura"><Trash2 size={14} /></button>}
                   </div>

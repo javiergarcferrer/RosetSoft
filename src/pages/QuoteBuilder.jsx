@@ -1113,6 +1113,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
   // The header/footer add buttons use just these two; LineItemList subscribes
   // to the rest of the editor actions from context itself.
   const { onAddSection, onAddLine, onOpenCatalog, onOpenInventory } = useQuoteActions();
+  const pricedCount = lines.filter(isPricedLine).length;
   return (
     <div className="card overflow-hidden">
       <header className="card-header">
@@ -1152,7 +1153,7 @@ function LineItemsCard({ lines, groups, quote, focusLineId }) {
       {lines.length > 0 && (
         <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between gap-2">
           <span className="text-[11px] text-ink-500">
-            {lines.filter(isPricedLine).length} artículo(s) · arrastra
+            {pricedCount} {pricedCount === 1 ? 'artículo' : 'artículos'} · arrastra
             <span className="font-mono"> ⋮⋮ </span>para reordenar
           </span>
           <div className="flex items-center gap-1.5">

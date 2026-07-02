@@ -22,6 +22,7 @@ import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { useStickyState } from '../context/NavMemory.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { waDigits } from '../lib/phone.js';
 import { phoneOwner, phoneInUseMessage } from '../lib/whatsapp.js';
 import { resolveCustomersList } from '../core/quote/views/lists.js';
@@ -145,7 +146,7 @@ const CUSTOMER_COLS_STORAGE_KEY = 'rs.customers.cols.v1';
  * name, which a blank sheet row can't offer.
  */
 export default function Customers() {
-  const { profileId, settings } = useApp();
+  const { profileId, settings, isAdmin } = useApp();
   // useLiveQueryStatus lets us distinguish "fetch still in flight on
   // first mount" from "user really has zero customers" — without that
   // the page would flash the empty-state UI for one frame on every
@@ -268,14 +269,18 @@ export default function Customers() {
         actions={
           <div className="flex items-center gap-2">
             {/* Difusión, woven in where the audience lives: lands on the
-                campaign wizard already targeting the clients list. */}
-            <Link
-              to="/chats/difusion?campana=clientes"
-              className="btn-secondary"
-              title="Enviar una plantilla de WhatsApp a clientes (Difusión)"
-            >
-              <Megaphone size={14} /> Difusión
-            </Link>
+                campaign wizard already targeting the clients list. WhatsApp
+                campaigns are admin-only while the feature is in testing —
+                same gate as Profesionales and the Canales nav. */}
+            {isAdmin && (
+              <Link
+                to="/chats/difusion?campana=clientes"
+                className="btn-secondary"
+                title="Enviar una plantilla de WhatsApp a clientes (Difusión)"
+              >
+                <Megaphone size={14} /> Difusión
+              </Link>
+            )}
             <button onClick={() => setCreating({})} className="btn-brand">
               <Plus size={14} /> Agregar cliente
             </button>
@@ -519,7 +524,7 @@ function MobileRow({ c, rollup, isOpen, onToggle, onCommit, onRemove }) {
 // repeated in a band. Shared by the mobile card and the desktop sheet row
 // so both surfaces stay identical.
 function CustomerPanel({ c, rollup, onCommit, onRemove }) {
-  const { isAdmin } = useApp();
+  const { isAdmin, settings } = useApp();
   const groups = rollup?.groups || [];
   const wa = waDigits(c.phone);
   return (
@@ -586,7 +591,7 @@ function CustomerPanel({ c, rollup, onCommit, onRemove }) {
                         </div>
                       </div>
                       <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
-                        {formatMoney(e.total, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                        {formatMoney(e.total, e.quote.currencyCode || 'USD', displayRatesFor(e.quote, settings))}
                       </div>
                       <ExternalLink size={13} className="text-ink-300 group-hover:text-brand-600 flex-shrink-0 transition-colors" aria-hidden />
                     </Link>

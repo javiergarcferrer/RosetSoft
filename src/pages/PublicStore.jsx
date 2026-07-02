@@ -1,6 +1,6 @@
 import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, AlertCircle, Store as StoreIcon, Search, MessageCircle, Phone } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Store as StoreIcon, Search, MessageCircle, Phone } from 'lucide-react';
 import FilterPopover from '../components/search/FilterPopover.jsx';
 import SortMenu from '../components/search/SortMenu.jsx';
 import { DebouncedInput } from '../components/DebouncedInput.jsx';
@@ -34,6 +34,8 @@ const TILE = 'bg-[#e9e3d8]';
 
 export default function PublicStore() {
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
+  // Bumped by the error screen's "Reintentar" — re-runs the fetch effect.
+  const [attempt, setAttempt] = useState(0);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   const [filters, setFilters] = useState({});
@@ -46,7 +48,7 @@ export default function PublicStore() {
       .then((bundle) => { if (active) setState({ status: 'ready', bundle, error: null }); })
       .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e) }); });
     return () => { active = false; };
-  }, []);
+  }, [attempt]);
 
   const bundle = state.bundle;
 
@@ -111,6 +113,13 @@ export default function PublicStore() {
         <p className="text-sm text-ink-500 mt-2 max-w-sm leading-relaxed">
           No se pudo cargar la tienda en este momento. Inténtalo de nuevo en unos minutos.
         </p>
+        <button
+          type="button"
+          onClick={() => setAttempt((a) => a + 1)}
+          className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-ink-300 px-4 py-2 text-xs font-medium text-ink-700 transition-colors hover:border-ink-900 hover:text-ink-900"
+        >
+          <RefreshCw size={14} aria-hidden /> Reintentar
+        </button>
       </div>
     );
   }

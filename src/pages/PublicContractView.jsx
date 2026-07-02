@@ -1,7 +1,7 @@
 import { userMessageFor } from '../lib/errorMessages.js';
 import { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertCircle, Check, Download, PenLine, Eraser } from 'lucide-react';
+import { Loader2, AlertCircle, Check, CloudOff, Download, PenLine, Eraser, RefreshCw } from 'lucide-react';
 import { fetchSharedContract, signSharedContract } from '../lib/contractShare.js';
 import { resolvePaymentPlanView } from '../core/quote/index.js';
 import { formatMoney } from '../lib/format.js';
@@ -20,6 +20,8 @@ import { safeDynamicImport } from '../lib/dynamicImport.js';
 export default function PublicContractView() {
   const { token } = useParams();
   const [state, setState] = useState({ status: 'loading', bundle: null, error: null });
+  // Bumped by the error screen's "Reintentar" — re-runs the fetch effect.
+  const [attempt, setAttempt] = useState(0);
   const [signerName, setSignerName] = useState('');
   const [signerDoc, setSignerDoc] = useState('');
   const [submit, setSubmit] = useState('idle'); // idle | working | error
@@ -30,9 +32,11 @@ export default function PublicContractView() {
     setState({ status: 'loading', bundle: null, error: null });
     fetchSharedContract(token)
       .then((bundle) => { if (active) setState({ status: 'ready', bundle, error: null }); })
-      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e) }); });
+      // No HTTP status ⇒ the request never reached the server (offline /
+      // flaky data), NOT a dead link — the error screen branches on it.
+      .catch((e) => { if (active) setState({ status: 'error', bundle: null, error: userMessageFor(e), offline: e?.status == null }); });
     return () => { active = false; };
-  }, [token]);
+  }, [token, attempt]);
 
   const bundle = state.bundle;
   const plan = useMemo(
@@ -106,16 +110,29 @@ export default function PublicContractView() {
     );
   }
   if (state.status === 'error' || !plan) {
+    // A connection drop is not a dead link — tell the client the truth and
+    // let them retry (these links open from WhatsApp on mobile data).
+    const offline = state.status === 'error' && !!state.offline;
     return (
       <div className="h-full flex flex-col items-center justify-center bg-ink-50 text-center px-6">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-ink-100 text-ink-400 mb-5 shadow-xs">
-          <AlertCircle size={28} strokeWidth={1.5} aria-hidden />
+          {offline
+            ? <CloudOff size={28} strokeWidth={1.5} aria-hidden />
+            : <AlertCircle size={28} strokeWidth={1.5} aria-hidden />}
         </div>
-        <div className="font-display text-lg font-semibold text-ink-800">Enlace no disponible</div>
+        <div className="font-display text-lg font-semibold text-ink-800">
+          {offline ? 'Sin conexión' : 'Enlace no disponible'}
+        </div>
         <p className="text-sm text-ink-500 mt-2 max-w-sm leading-relaxed">
-          Este contrato no es válido o fue desactivado. Pídele a tu asesor un
-          enlace actualizado.
+          {offline
+            ? 'No pudimos conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.'
+            : 'Este contrato no es válido o fue desactivado. Pídele a tu asesor un enlace actualizado.'}
         </p>
+        {offline && (
+          <button type="button" onClick={() => setAttempt((a) => a + 1)} className="btn-brand mt-5">
+            <RefreshCw size={14} aria-hidden /> Reintentar
+          </button>
+        )}
       </div>
     );
   }
@@ -343,6 +360,7 @@ const SignaturePad = forwardRef(function SignaturePad(_props, ref) {
     <div className="mt-1">
       <canvas
         ref={canvasRef}
+        aria-label="Área para dibujar tu firma"
         className="w-full h-40 rounded-lg border border-ink-200 bg-white touch-none cursor-crosshair"
         onPointerDown={start}
         onPointerMove={move}

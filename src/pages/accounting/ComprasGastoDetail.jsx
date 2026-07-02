@@ -321,7 +321,7 @@ export default function ComprasGastoDetail() {
     if (!doc || deleting) return;
     const what = detail.natureLabel.toLowerCase();
     const ok = await confirm({
-      title: 'Eliminar compra',
+      title: `Eliminar ${what}`,
       message: `¿Eliminar ${what}${detail.number != null ? ` #${detail.number}` : ''}? Se revierte el asiento${detail.reversesInventory ? ', los movimientos de inventario y las existencias' : ''}. Esta acción no se puede deshacer.`,
       confirmLabel: 'Eliminar',
       tone: 'danger',

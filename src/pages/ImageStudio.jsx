@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, Upload, Wand2, Download, X, ImageIcon, AlertTriangle, Maximize2,
 } from 'lucide-react';
@@ -50,6 +50,14 @@ export default function ImageStudio() {
   const fileRef = useRef(null);
 
   const aspect = useMemo(() => nearestDalleAspect(width, height), [width, height]);
+
+  // The expanded lightbox closes on Escape, like every overlay in the app.
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setExpanded(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
 
   const { data: history } = useLiveQueryStatus(
     () => db.generatedImages.where('profileId').equals(TEAM_PROFILE_ID).toArray().catch(() => []),
@@ -149,7 +157,7 @@ export default function ImageStudio() {
       />
 
       {error && (
-        <div className="card mb-4 border-rose-200 bg-rose-50 text-rose-700 flex items-start gap-2 text-sm">
+        <div className="card mb-4 px-4 py-3 border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-200 flex items-start gap-2 text-sm">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -158,7 +166,7 @@ export default function ImageStudio() {
       <div className="grid md:grid-cols-[1fr_320px] gap-5 items-start">
         {/* ── Composer ── */}
         <div className="space-y-5">
-          <div className="card space-y-4">
+          <div className="card card-pad space-y-4">
             <div>
               <label className="label" htmlFor="ig-prompt">Descripción</label>
               <textarea
@@ -178,8 +186,10 @@ export default function ImageStudio() {
                 onDrop={onDrop}
                 className="rounded-lg border border-dashed border-ink-200 p-3 text-center cursor-pointer hover:border-brand-400 transition-colors"
                 onClick={() => fileRef.current?.click()}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click(); } }}
                 role="button"
                 tabIndex={0}
+                aria-label="Subir imágenes de inspiración"
               >
                 <input
                   ref={fileRef}
@@ -241,7 +251,7 @@ export default function ImageStudio() {
         </div>
 
         {/* ── Controls ── */}
-        <div className="card space-y-4">
+        <div className="card card-pad space-y-4">
           <div>
             <label className="label">Tamaño</label>
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -292,7 +302,7 @@ export default function ImageStudio() {
           </div>
 
           <div>
-            <label className="label" htmlFor="ig-count">Cantidad</label>
+            <span className="label block">Cantidad</span>
             <div className="flex gap-1.5">
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <button
@@ -403,7 +413,7 @@ export default function ImageStudio() {
           role="presentation"
         >
           <div className="bg-surface rounded-xl max-w-2xl w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <img src={expanded.url} alt="" className="w-full max-h-[70vh] object-contain bg-ink-50" />
+            <img src={expanded.url} alt="Imagen generada ampliada" className="w-full max-h-[70vh] object-contain bg-ink-50" />
             <div className="p-4 flex items-start justify-between gap-3">
               <p className="text-xs text-ink-500 leading-snug">{expanded.revisedPrompt || 'Sin prompt revisado.'}</p>
               <div className="flex gap-2 shrink-0">
@@ -421,14 +431,18 @@ export default function ImageStudio() {
 }
 
 function ResultCard({ img, onExpand }) {
+  // The action chips are white KNOCKOUTS floating over the artwork, so the
+  // glyph must stay literally dark in both themes (text-ink-900 would invert
+  // to white-on-white in dark mode). Focus also reveals the overlay, so the
+  // actions are reachable by keyboard/touch, not just mouse hover.
   return (
     <div className="relative group rounded-lg overflow-hidden border border-ink-100 bg-ink-50">
-      <img src={img.url} alt="" className="w-full aspect-square object-cover" />
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-2 gap-1.5 opacity-0 group-hover:opacity-100">
+      <img src={img.url} alt="Imagen generada" className="w-full aspect-square object-cover" />
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-2 gap-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
         <button
           type="button"
           onClick={onExpand}
-          className="bg-white/90 text-ink-900 rounded-md p-1.5 hover:bg-white"
+          className="bg-white/90 text-black rounded-md p-1.5 hover:bg-white"
           aria-label="Ampliar"
         >
           <Maximize2 size={14} />
@@ -436,7 +450,7 @@ function ResultCard({ img, onExpand }) {
         <a
           href={img.url}
           download
-          className="bg-white/90 text-ink-900 rounded-md p-1.5 hover:bg-white"
+          className="bg-white/90 text-black rounded-md p-1.5 hover:bg-white"
           aria-label="Descargar"
         >
           <Download size={14} />

@@ -88,7 +88,7 @@ export default function GroupsPanel({
         {view === 'list' && (
           <div className="flex items-center gap-2 shrink-0">
             <button type="button" className="btn-secondary text-sm inline-flex items-center gap-1.5" disabled={busy}
-              onClick={() => run(() => listWaGroups(), 'Lista de grupos actualizada.')} title="Actualizar desde WhatsApp">
+              onClick={() => run(() => listWaGroups(), 'Lista de grupos actualizada.')} title="Actualizar desde WhatsApp" aria-label="Actualizar desde WhatsApp">
               {busy ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
             </button>
             <button type="button" className="btn-primary text-sm inline-flex items-center gap-1.5" onClick={() => { setView('create'); setError(null); setNotice(null); }}>
@@ -290,7 +290,7 @@ function ManageGroup({ group, customers, professionals, busy, onOpenChat, onSync
               <div className="text-[11px] text-ink-400">{group.participantCount} participante{group.participantCount === 1 ? '' : 's'}{group.isAdmin ? ' · eres administrador' : ''}</div>
               {group.description && <p className="text-xs text-ink-600 mt-1 whitespace-pre-wrap">{group.description}</p>}
             </div>
-            <button type="button" className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1" onClick={() => setEditing(true)} title="Editar"><Pencil size={13} /></button>
+            <button type="button" className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1" onClick={() => setEditing(true)} title="Editar grupo" aria-label="Editar grupo"><Pencil size={13} /></button>
           </div>
         )}
       </div>
@@ -310,8 +310,8 @@ function ManageGroup({ group, customers, professionals, busy, onOpenChat, onSync
         {group.inviteLink ? (
           <div className="flex items-center gap-2">
             <input className="input flex-1 text-xs" value={group.inviteLink} readOnly onFocus={(e) => e.target.select()} />
-            <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1" onClick={copyLink} title="Copiar"><Copy size={13} /></button>
-            <button type="button" className="btn-ghost text-xs inline-flex items-center gap-1" onClick={() => onInvite(true)} disabled={busy} title="Regenerar (revoca el anterior)"><RefreshCw size={13} /></button>
+            <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1" onClick={copyLink} title="Copiar enlace" aria-label="Copiar enlace"><Copy size={13} /></button>
+            <button type="button" className="btn-ghost text-xs inline-flex items-center gap-1" onClick={() => onInvite(true)} disabled={busy} title="Regenerar (revoca el anterior)" aria-label="Regenerar enlace (revoca el anterior)"><RefreshCw size={13} /></button>
           </div>
         ) : (
           <button type="button" className="btn-secondary text-xs inline-flex items-center gap-1.5" onClick={() => onInvite(false)} disabled={busy}>

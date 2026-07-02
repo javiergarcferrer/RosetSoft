@@ -93,7 +93,7 @@ export default function Periodos() {
             <thead className="bg-ink-50 text-ink-500 text-xs uppercase tracking-wide">
               <tr>
                 {cols.map((c) => <th key={c.key} className={c.thClass} {...thProps(c.key)}>{c.label}{ResizeHandle(c.key)}</th>)}
-                <th className="py-2 px-3"></th>
+                <th className="py-2 px-3"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody>

@@ -282,25 +282,63 @@ export async function setGmailThreadStarred(messages, starred) {
   }).catch(() => {});
 }
 
-/** Archive a thread — remove it from the Inbox (Gmail drops INBOX; we drop the
- *  rows from our mirror so it leaves this inbox too, staying in Gmail's All Mail). */
-export async function archiveGmailThread(messages) {
+// ── Archive / trash — split LOCAL (optimistic) vs REMOTE (deferred commit) ──
+// The inbox applies the local half immediately, shows an "Deshacer" snackbar,
+// and only fires the remote half once the undo window lapses; "Deshacer"
+// restores the local mirror and the remote call never happens. On a remote
+// failure the caller restores the local state too (reconcile-on-failure).
+//
+// Archive is LABEL-based (strip INBOX, keep the rows): deleting the rows used
+// to let the next sync re-import the thread's SENT halves (they still match
+// `in:sent`), resurrecting a ghost of the archived conversation. With the rows
+// kept and INBOX stripped, resolveGmailThreads hides the thread exactly like
+// Gmail does, and the sync's label-refresh keeps it hidden. Trash rows ARE
+// deleted — Gmail search excludes the Trash, so they never re-sync.
+
+/** LOCAL: add/remove the INBOX label on every message of a thread (optimistic
+ *  archive / unarchive). The rows stay in the mirror. */
+export async function setGmailThreadInboxLocal(messages, inInbox) {
   const rows = messages || [];
   if (!rows.length) return;
-  const ids = rows.map((m) => m.id);
-  await gmailModify({ ids, removeLabelIds: ['INBOX'] }).catch(() => {});
-  await Promise.all(ids.map((id) => db.gmailMessages.delete(id).catch(() => {})));
+  await Promise.all(rows.map((m) => db.gmailMessages.update(m.id, {
+    labelIds: withLabels(m.labelIds, inInbox ? ['INBOX'] : [], inInbox ? [] : ['INBOX']),
+  }).catch(() => {})));
   invalidate();
 }
 
-/** Trash a thread — move it to Gmail's Trash and drop it from our mirror. */
-export async function trashGmailThread(messages) {
+/** LOCAL: restore saved labelIds snapshots ([{ id, labelIds }]) — the archive undo. */
+export async function restoreGmailLabelsLocal(entries) {
+  const rows = entries || [];
+  if (!rows.length) return;
+  await Promise.all(rows.map((e) => db.gmailMessages.update(e.id, { labelIds: e.labelIds || [] }).catch(() => {})));
+  invalidate();
+}
+
+/** LOCAL: drop a thread's rows from the mirror (optimistic trash). */
+export async function deleteGmailThreadLocal(messages) {
   const rows = messages || [];
   if (!rows.length) return;
-  const ids = rows.map((m) => m.id);
-  await gmailTrash(ids).catch(() => {});
-  await Promise.all(ids.map((id) => db.gmailMessages.delete(id).catch(() => {})));
+  await Promise.all(rows.map((m) => db.gmailMessages.delete(m.id).catch(() => {})));
   invalidate();
+}
+
+/** LOCAL: put previously-deleted rows back (the trash undo / failure reconcile). */
+export async function restoreGmailMessagesLocal(rows) {
+  const list = rows || [];
+  if (!list.length) return;
+  await db.gmailMessages.bulkPut(list);
+  invalidate();
+}
+
+/** REMOTE: archive in Gmail (drop INBOX). Throws on failure so the caller can
+ *  reconcile the optimistic local state. */
+export async function archiveGmailThreadRemote(ids) {
+  return gmailModify({ ids: ids || [], removeLabelIds: ['INBOX'] });
+}
+
+/** REMOTE: move messages to Gmail's Trash. Throws on failure. */
+export async function trashGmailThreadRemote(ids) {
+  return gmailTrash(ids || []);
 }
 
 /**

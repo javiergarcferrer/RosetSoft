@@ -750,8 +750,8 @@ function SaleCard({ entry, lines, settings, families, taxName, savingPaid, onSel
           <WarehouseButton warehouse={warehouse} />
         </div>
       </div>
-      {warehouse.error && (
-        <div className="px-4 pb-2 -mt-1 text-[11px] text-rose-600">{warehouse.error}</div>
+      {(pdf.error || warehouse.error) && (
+        <div className="px-4 pb-2 -mt-1 text-[11px] text-rose-600">{pdf.error || warehouse.error}</div>
       )}
 
       {open && (
@@ -865,7 +865,7 @@ function CommissionLine({ role, who, badge, detail, action }) {
           <span className="text-sm font-medium text-ink-800 truncate">{who}</span>
           {badge && (
             <span className={`chip ${
-              badge === 'Trade discount' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-ink-100 text-ink-600'
+              badge === 'Trade discount' ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30' : 'bg-ink-100 text-ink-600'
             }`}>
               {badge}
             </span>
@@ -925,7 +925,7 @@ function SummaryTable({ title, icon: Icon, rows, keyOf, nameOf, subOf, colsStora
       />
       <div className="hidden md:block">
         {/* Standalone columns control for this rollup table. */}
-        <div className="hidden md:flex justify-end mb-2">
+        <div className="hidden md:flex justify-end mb-2 px-3 pt-3">
           <ColumnsMenu columns={SUMMARY_COLUMNS} visible={visible} onChange={setVisible} onReset={() => { reset(); resetWidths(); }} />
         </div>
         <div className="overflow-x-auto">
@@ -983,7 +983,7 @@ function PaidToggle({ paid, busy, onToggle }) {
         type="button"
         onClick={() => onToggle(false)}
         disabled={busy}
-        className="btn text-xs border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 disabled:cursor-wait"
+        className="btn text-xs border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:bg-emerald-200 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/25 disabled:cursor-wait"
         title="Pagada — clic para revertir a pendiente"
       >
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Pagada

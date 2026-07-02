@@ -376,7 +376,9 @@ export default function Ledger() {
     }
   }
 
-  const isoDay = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
+  // Local calendar date for CSV cells — isoDate is local, so an evening posting
+  // never shifts to the next day the way a UTC toISOString() slice would.
+  const isoDay = (ts) => (ts ? isoDate(ts) : '');
   function exportActive() {
     if (tab === 'balanza') {
       downloadCsv('balanza.csv', [
@@ -415,7 +417,9 @@ export default function Ledger() {
           tabs={[{ key: 'diario', label: 'Diario' }, { key: 'mayor', label: 'Mayor' }, { key: 'balanza', label: 'Balanza' }]}
           active={tab} onChange={setTab} />
         <button type="button" onClick={exportActive}
-          className="ml-auto btn-ghost"><Download size={14} /> <span className="hidden sm:inline">Exportar</span></button>
+          disabled={tab === 'mayor' && !mayor}
+          title={tab === 'mayor' && !mayor ? 'Elige una cuenta para exportar su mayor' : 'Exportar CSV'}
+          className="ml-auto btn-ghost disabled:opacity-40"><Download size={14} /> <span className="hidden sm:inline">Exportar</span></button>
       </div>
 
       {showForm && accountsQ.loaded && (

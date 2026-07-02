@@ -11,7 +11,7 @@ import { Mail, RefreshCw, Check, Copy, ExternalLink, Sparkles } from 'lucide-rea
 import SettingsSection from './SettingsSection.jsx';
 import CredentialInput from './CredentialInput.jsx';
 import { useApp } from '../../context/AppContext.jsx';
-import { supabase, SUPABASE_URL } from '../../db/supabaseClient.js';
+import { SUPABASE_URL } from '../../db/supabaseClient.js';
 import { saveGoogleConfig, connectGoogle, disconnectGoogle, saveGoogleLoginDomain } from '../../lib/google.js';
 import { sanitizeSignatureHtml, defaultSignatureHtml } from '../../lib/gmail.js';
 import { userMessageFor } from '../../lib/errorMessages.js';
@@ -170,7 +170,7 @@ export default function GmailCard() {
         </p>
 
         {connected && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
             <Mail size={15} />
             <span>Conectado{email ? ` como ${email}` : ''}.</span>
           </div>
@@ -280,7 +280,7 @@ export default function GmailCard() {
           </a>
         </div>
 
-        {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</div>}
+        {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{msg.text}</div>}
       </div>
     </SettingsSection>
   );
@@ -305,7 +305,10 @@ function SignatureField({ label, value, onChange, onTemplate }) {
         spellCheck={false}
       />
       <div className="mt-1.5 text-[10px] uppercase tracking-wider text-ink-400">Vista previa</div>
-      <div className="mt-1 min-h-[60px] rounded-lg border border-ink-100 bg-surface p-3 overflow-auto">
+      {/* White "paper" on purpose (like the Gmail message it will ride in) —
+          signature HTML carries its own fixed colors, so it must not sit on a
+          dark surface in dark mode. */}
+      <div className="mt-1 min-h-[60px] rounded-lg border border-ink-100 bg-white text-stone-900 p-3 overflow-auto">
         {preview
           ? <div dangerouslySetInnerHTML={{ __html: preview }} />
           : <span className="text-xs text-ink-300">Sin firma</span>}

@@ -213,16 +213,22 @@ export function parseInvoiceAmount(message) {
 /**
  * Group the message log into a thread list, newest-activity first.
  *
- *   resolveGmailThreads(messages, { needle, rules, now })
+ *   resolveGmailThreads(messages, { needle, rules, includeArchived })
  *     → [{ threadId, subject, fromName, fromEmail, snippet, brand, lastAt,
- *          lastDirection, count, unread, hasInvoice }]
+ *          lastDirection, count, unread, hasInvoice, hasAttachment, starred }]
  *
  * Threads group by Gmail's `threadId`. A thread's brand follows its latest
  * INBOUND counterpart (so our own replies don't re-file it), unless any message
  * carries a manual override. `needle` filters by subject / sender / snippet.
  * The View filters the returned rows by the active brand tab.
+ *
+ * ARCHIVED threads are excluded by default (Gmail semantics: a conversation
+ * shows in the inbox while ANY of its messages carries the INBOX label). A
+ * thread that received mail but has no INBOX message anywhere was archived —
+ * here or in Gmail — so it leaves the brand tabs; a new inbound message brings
+ * it back. All-outbound threads (a mail we sent, no reply yet) always show.
  */
-export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMAIL_BRAND_RULES } = {}) {
+export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMAIL_BRAND_RULES, includeArchived = false } = {}) {
   const threads = new Map();
   for (const m of messages || []) {
     const key = m.threadId || m.id;
@@ -232,15 +238,19 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
       t = {
         threadId: key, subject: '', fromName: '', fromEmail: '', snippet: '',
         lastAt: 0, lastDirection: null, count: 0, unread: 0, hasInvoice: false,
-        starred: false, brand: GMAIL_BRAND_OTHER, _msgs: [],
+        hasAttachment: false, starred: false, brand: GMAIL_BRAND_OTHER, _msgs: [],
+        _anyInbound: false, _anyInbox: false,
       };
       threads.set(key, t);
     }
     t.count += 1;
     t._msgs.push(m);
+    if (m.direction === 'in') t._anyInbound = true;
     if (m.direction === 'in' && !m.isRead) t.unread += 1;
     if (isInvoiceEmail(m)) t.hasInvoice = true;
+    if (m.hasAttachment || (m.attachments || []).length > 0) t.hasAttachment = true;
     if ((m.labelIds || []).includes('STARRED')) t.starred = true;
+    if ((m.labelIds || []).includes('INBOX')) t._anyInbox = true;
     const at = m.receivedAt || m.createdAt || 0;
     if (at >= t.lastAt) {
       t.lastAt = at;
@@ -254,6 +264,8 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
 
   const out = [];
   for (const t of threads.values()) {
+    // Archived: it received mail yet no message carries INBOX anymore.
+    if (!includeArchived && t._anyInbound && !t._anyInbox) continue;
     const override = t._msgs.find((m) => m.brand && KNOWN_GMAIL_CATEGORIES.has(m.brand))?.brand;
     if (override) {
       t.brand = override;
@@ -275,6 +287,7 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
       count: t.count,
       unread: t.unread,
       hasInvoice: t.hasInvoice,
+      hasAttachment: t.hasAttachment,
       starred: t.starred,
     });
   }
@@ -287,6 +300,104 @@ export function resolveGmailThreads(messages, { needle = '', rules = DEFAULT_GMA
     || (t.fromName || '').toLowerCase().includes(q)
     || (t.fromEmail || '').toLowerCase().includes(q)
     || (t.snippet || '').toLowerCase().includes(q));
+}
+
+/**
+ * Per-tab thread + unread counts for the inbox's tab badges.
+ *
+ *   resolveGmailTabCounts(messages, { rules })
+ *     → { [tabId]: { threads, unread } }   (every GMAIL_BRAND_TABS id present)
+ *
+ * A thread whose brand somehow isn't a current tab id falls into 'otros' so no
+ * conversation is ever uncounted.
+ */
+export function resolveGmailTabCounts(messages, { rules = DEFAULT_GMAIL_BRAND_RULES } = {}) {
+  const counts = {};
+  for (const t of GMAIL_BRAND_TABS) counts[t.id] = { threads: 0, unread: 0 };
+  for (const t of resolveGmailThreads(messages, { rules })) {
+    const bucket = counts[t.brand] || counts[GMAIL_BRAND_OTHER];
+    bucket.threads += 1;
+    bucket.unread += t.unread;
+  }
+  return counts;
+}
+
+// Spanish month abbreviations — hand-rolled so the label is deterministic in
+// every runtime (tests included), not dependent on the host's ICU data.
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/**
+ * The compact date label the thread list shows (Gmail-style buckets):
+ * today → 'HH:MM' · yesterday → 'ayer' · same year → '12 jun' · older →
+ * '12 jun 24'. Pure — `now` is injectable for tests.
+ */
+export function formatGmailDate(ms, now = Date.now()) {
+  if (!ms) return '';
+  const d = new Date(ms);
+  const n = new Date(now);
+  const sameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(d, n)) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (sameDay(d, y)) return 'ayer';
+  const label = `${d.getDate()} ${MONTHS_ES[d.getMonth()]}`;
+  return d.getFullYear() === n.getFullYear() ? label : `${label} ${String(d.getFullYear() % 100).padStart(2, '0')}`;
+}
+
+/** Up to two initials for a sender avatar — first + last name initial, falling
+ *  back to the first letters of the address. */
+export function senderInitials(name, email) {
+  const n = String(name || '').trim();
+  if (n) {
+    const parts = n.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] || '';
+    const second = parts.length > 1 ? (parts[parts.length - 1][0] || '') : (parts[0]?.[1] || '');
+    return (first + second).toUpperCase();
+  }
+  const e = String(email || '').replace(/[^a-zA-Z0-9]/g, '');
+  return e ? e.slice(0, 2).toUpperCase() : '?';
+}
+
+/**
+ * Deterministic bucket index for a sender's avatar color — the same address
+ * always lands on the same color, across renders and sessions.
+ */
+export function avatarColorIndex(seed, buckets = 6) {
+  const s = String(seed || '').toLowerCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = ((h * 31) + s.charCodeAt(i)) >>> 0;
+  return buckets > 0 ? h % buckets : 0;
+}
+
+/** The oldest message timestamp in the mirror (ms) — the "load older" cursor.
+ *  Null when there's nothing synced yet. */
+export function oldestGmailAt(messages) {
+  let oldest = 0;
+  for (const m of messages || []) {
+    const at = m.receivedAt || m.createdAt || 0;
+    if (at && (!oldest || at < oldest)) oldest = at;
+  }
+  return oldest || null;
+}
+
+/**
+ * The Gmail search that pulls mail OLDER than the cursor into the mirror — the
+ * "Cargar más" pagination. Gmail's `before:` is day-granular and exclusive, so
+ * the cursor's own day is included (+1 day) — already-mirrored ids are cheap
+ * server-side skips, and no day at the boundary is ever lost.
+ *
+ *   olderMailQuery(cursorMs) → '(in:inbox OR in:sent) before:2026/03/15' | null
+ */
+export function olderMailQuery(cursorMs, { scope = '(in:inbox OR in:sent)' } = {}) {
+  if (!cursorMs) return null;
+  const d = new Date(cursorMs);
+  d.setDate(d.getDate() + 1);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${scope} before:${d.getFullYear()}/${mm}/${dd}`;
 }
 
 /**

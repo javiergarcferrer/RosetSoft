@@ -62,8 +62,10 @@ export { resolveWarehouseOrder } from './views/warehouseOrder.js';
 // plus the DXF export (a placed plan → a downloadable CAD file).
 export {
   resolveConfigurator, resolveTogoModels, resolveTogoModelCards, togoPickerFamilies,
-  snapPlacement, footprintOf, clampToPlan, resolvePlacement, compactPlaced,
+  snapPlacement, snapPlacementInfo, footprintOf, clampToPlan, resolvePlacement, compactPlaced,
   buildTogoComponents, buildTogoModularSeed,
+  createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo, TOGO_HISTORY_LIMIT,
+  firstWithoutFabric, duplicatePlacement,
   resolveTogoDxf, placementsFromPlaced, placementsFromComponents, lineHasTogoPlan,
   resolveTogoScene, scenePlacementsFromPlaced, scenePlacementsFromComponents,
   PLAN_W_CM, PLAN_H_CM, PX_PER_CM, SNAP_GRID_CM, EDGE_SNAP_CM,

@@ -96,6 +96,7 @@ export default function Suppliers() {
   const [editing, setEditing] = useState(null); // null | 'new' | <id>
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
   const [looking, setLooking] = useState(false);
   const [lookupMsg, setLookupMsg] = useState('');
 
@@ -117,9 +118,10 @@ export default function Suppliers() {
     }
   }
 
-  function openNew() { setForm(blank()); setLookupMsg(''); setEditing('new'); }
+  function openNew() { setForm(blank()); setLookupMsg(''); setSaveErr(''); setEditing('new'); }
   function openEdit(s) {
     setLookupMsg('');
+    setSaveErr('');
     setForm({
       name: s.name || '', rnc: s.rnc || '', kind: s.kind || 'juridica',
       retainIsr: !!s.retainIsr, retainItbis: !!s.retainItbis,
@@ -130,6 +132,7 @@ export default function Suppliers() {
 
   async function save() {
     if (!form.name.trim()) return;
+    setSaveErr('');
     setSaving(true);
     try {
       const patch = {
@@ -148,6 +151,8 @@ export default function Suppliers() {
         await db.suppliers.update(editing, patch);
       }
       setEditing(null);
+    } catch (e) {
+      setSaveErr(userMessageFor(e));
     } finally {
       setSaving(false);
     }
@@ -197,6 +202,7 @@ export default function Suppliers() {
             Se usa al registrar la factura/gasto del proveedor; siempre puedes cambiarla en el asiento.
           </p>
           {lookupMsg && <p className="text-sm text-ink-500 mt-2">{lookupMsg}</p>}
+          {saveErr && <p className="text-sm text-rose-600 mt-2">{saveErr}</p>}
           <div className="flex flex-wrap items-center gap-5 mt-3">
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.retainIsr} onChange={(e) => setForm((f) => ({ ...f, retainIsr: e.target.checked }))} />

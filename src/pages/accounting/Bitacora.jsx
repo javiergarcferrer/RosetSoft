@@ -64,7 +64,12 @@ export default function Bitacora() {
           </div>
 
           {trail.count === 0 ? (
-            <EmptyState icon={ScrollText} title="Sin registros" description="Los cambios en facturas, gastos, pagos y asientos aparecerán aquí." />
+            logQ.data.length > 0 ? (
+              <EmptyState icon={ScrollText} title="Sin resultados"
+                description="Ningún registro coincide con los filtros. Ajusta la búsqueda, la tabla o la acción." />
+            ) : (
+              <EmptyState icon={ScrollText} title="Sin registros" description="Los cambios en facturas, gastos, pagos y asientos aparecerán aquí." />
+            )
           ) : (
             <div className="card overflow-hidden divide-y divide-ink-100">
               {trail.rows.map((e) => {

@@ -160,7 +160,19 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const spend7Prev = sumAdDays(adsDaily, 'spend', 7, now, 7);
   const spend28 = sumAdDays(adsDaily, 'spend', 28, now);
   const clicks7 = sumAdDays(adsDaily, 'clicks', 7, now);
+  const clicks7Prev = sumAdDays(adsDaily, 'clicks', 7, now, 7);
   const impressions7 = sumAdDays(adsDaily, 'impressions', 7, now);
+  const impressions7Prev = sumAdDays(adsDaily, 'impressions', 7, now, 7);
+
+  // Efficiency ratios for both windows — every divisor guarded (null, never
+  // NaN/Infinity), and a delta only exists when BOTH windows have a real value.
+  const cpc7 = clicks7 > 0 ? spend7 / clicks7 : null;
+  const cpc7Prev = clicks7Prev > 0 ? spend7Prev / clicks7Prev : null;
+  const ctr7Pct = impressions7 > 0 ? (clicks7 / impressions7) * 100 : null;
+  const ctr7PrevPct = impressions7Prev > 0 ? (clicks7Prev / impressions7Prev) * 100 : null;
+  const ratioDeltaPct = (cur, prev) => (cur != null && prev != null && prev > 0
+    ? Math.round(((cur - prev) / prev) * 100)
+    : null);
 
   // IG daily reach values (insights metric rows → the `reach` series).
   const reachRows = metricRows(s.igReach, 'reach');
@@ -177,6 +189,9 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
   const resultType = RESULT_TYPES.find(([t]) => adsDaily.some((r) => actionCount(r, t) > 0)) || null;
   const results7 = resultType
     ? sumAdDays(adsDaily, (r) => actionCount(r, resultType[0]), 7, now)
+    : 0;
+  const results7Prev = resultType
+    ? sumAdDays(adsDaily, (r) => actionCount(r, resultType[0]), 7, now, 7)
     : 0;
 
   // Campaigns: the new shape is the campaigns edge (id + status + nested
@@ -267,14 +282,27 @@ export function resolveSocialPulse(snapshot, { now = Date.now() } = {}) {
       reach7,
       reachDeltaPct: deltaPct(reach7, reach7Prev),
       spend7,
+      spend7Prev,
       spendDeltaPct: deltaPct(spend7, spend7Prev),
       spend28,
       clicks7,
-      cpc7: clicks7 > 0 ? spend7 / clicks7 : null,
-      ctr7Pct: impressions7 > 0 ? (clicks7 / impressions7) * 100 : null,
+      clicks7Prev,
+      clicksDeltaPct: deltaPct(clicks7, clicks7Prev),
+      impressions7,
+      cpc7,
+      cpc7Prev,
+      cpcDeltaPct: ratioDeltaPct(cpc7, cpc7Prev),
+      ctr7Pct,
+      ctr7PrevPct,
+      ctrDeltaPct: ratioDeltaPct(ctr7Pct, ctr7PrevPct),
       results7,
+      results7Prev,
+      resultsDeltaPct: deltaPct(results7, results7Prev),
       resultsLabel: resultType ? resultType[1] : null,
       costPerResult7: results7 > 0 ? spend7 / results7 : null,
+      // Click → result conversion (the funnel's second step); null when there
+      // are no clicks or no result type ever reported.
+      clickToResult7Pct: resultType && clicks7 > 0 ? (results7 / clicks7) * 100 : null,
       profileActions7,
       newFollowers7,
     },

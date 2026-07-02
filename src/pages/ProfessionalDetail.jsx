@@ -10,6 +10,7 @@ import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { resolveProfessionalDetail } from '../core/quote/views/detail.js';
 import ContactChatCard from '../components/whatsapp/ContactChatCard.jsx';
 
@@ -267,6 +268,8 @@ const STATUS_CHIP = {
 };
 
 function StatusGroup({ status, entries }) {
+  // Same rate source as the Quotes list (live until accepted, then locked).
+  const { settings } = useApp();
   const totalBase = entries.reduce((s, e) => s + e.base, 0);
   const totalCommission = entries.reduce((s, e) => s + e.commission, 0);
   const totalTrade = entries.reduce((s, e) => s + e.tradeDiscount, 0);
@@ -322,13 +325,13 @@ function StatusGroup({ status, entries }) {
             )}
             <div className="text-right shrink-0">
               <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
-                {formatMoney(e.base, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                {formatMoney(e.base, e.quote.currencyCode || 'USD', displayRatesFor(e.quote, settings))}
               </div>
               <div className="text-[10px] text-ink-400 tabular-nums whitespace-nowrap">
-                Total c/ ITBIS {formatMoney(e.grandTotal, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                Total c/ ITBIS {formatMoney(e.grandTotal, e.quote.currencyCode || 'USD', displayRatesFor(e.quote, settings))}
               </div>
               <div className={`text-[11px] tabular-nums whitespace-nowrap ${e.trade ? 'text-amber-700' : 'text-ink-500'}`}>
-                {e.pct}%{e.trade ? ' trade' : ''} → {formatMoney(e.amount, e.quote.currencyCode || 'USD', e.quote.rates || { USD: 1 })}
+                {e.pct}%{e.trade ? ' trade' : ''} → {formatMoney(e.amount, e.quote.currencyCode || 'USD', displayRatesFor(e.quote, settings))}
               </div>
             </div>
             <Link

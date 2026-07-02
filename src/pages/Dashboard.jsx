@@ -27,10 +27,10 @@ import { useContainerEtas } from '../core/tracking/index.js';
  * Layout, top → bottom (everything derived in core/quote/views/dashboard):
  *   1. Header — greeting + today's Banco Popular venta rate (the number
  *      every client conversation references).
- *   2. KPI strip — four small tiles (Borradores / Enviadas with a stale
- *      accent / En proceso / Ganadas este mes), each pairing the count
- *      with its USD pipeline value and deep-linking into the pre-filtered
- *      Quotes list.
+ *   2. KPI strip — small tiles (Borradores / Enviadas with a stale accent /
+ *      En proceso, plus Por facturar for banking roles), each pairing the
+ *      count with its USD pipeline value and deep-linking into the
+ *      pre-filtered Quotes list (or Facturación).
  *   3. Enviadas · esperando respuesta — THE follow-up list, OLDEST first,
  *      each showing how long it's been waiting so the dealer chases the
  *      stalest deals first; 7+ days flags for follow-up. Gets the wide

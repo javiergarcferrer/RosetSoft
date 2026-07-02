@@ -237,18 +237,24 @@ export default function Statements() {
           ]}
           active={tab} onChange={setTab} />
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <div className="flex gap-1">
-            {COMPARE.map((c) => (
-              <button key={c.key} type="button" onClick={() => setCompare(c.key)}
-                className={`btn text-xs ${compare === c.key ? 'tab-pill-active' : 'tab-pill'}`}>{c.label}</button>
-            ))}
-          </div>
-          <div className="flex gap-1">
-            <button type="button" onClick={() => setView('table')}
-              className={`btn text-xs ${view === 'table' ? 'tab-pill-active' : 'tab-pill'}`}><Table2 size={14} /> Tabla</button>
-            <button type="button" onClick={() => setView('chart')}
-              className={`btn text-xs ${view === 'chart' ? 'tab-pill-active' : 'tab-pill'}`}><BarChart3 size={14} /> Gráfico</button>
-          </div>
+          {/* The cash-flow statement is single-period and table-only, so the
+              comparison and Tabla/Gráfico switches would be dead controls there. */}
+          {tab !== 'cashflow' && (
+            <>
+              <div className="flex gap-1">
+                {COMPARE.map((c) => (
+                  <button key={c.key} type="button" onClick={() => setCompare(c.key)}
+                    className={`btn text-xs ${compare === c.key ? 'tab-pill-active' : 'tab-pill'}`}>{c.label}</button>
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setView('table')}
+                  className={`btn text-xs ${view === 'table' ? 'tab-pill-active' : 'tab-pill'}`}><Table2 size={14} /> Tabla</button>
+                <button type="button" onClick={() => setView('chart')}
+                  className={`btn text-xs ${view === 'chart' ? 'tab-pill-active' : 'tab-pill'}`}><BarChart3 size={14} /> Gráfico</button>
+              </div>
+            </>
+          )}
           <button type="button" onClick={exportActive} className="btn-ghost"><Download size={14} /> Exportar</button>
         </div>
       </div>

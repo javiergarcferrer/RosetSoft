@@ -163,10 +163,11 @@ function CommandPalette({ open, onClose, actions }) {
 
   return (
     <div className="jv-palette-scrim" onClick={onClose} role="presentation">
-      <div className="jv-palette" role="dialog" aria-label="Comandos" onClick={(e) => e.stopPropagation()}>
+      <div className="jv-palette" role="dialog" aria-modal="true" aria-label="Comandos" onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
           className="pin"
+          aria-label="Comando o destino"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setSel(0); }}
           onKeyDown={onKey}

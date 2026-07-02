@@ -1,9 +1,9 @@
 // Integraciones — the hub for every external tool Alcover connects to (under
 // Configuración). Each row shows live status and EXPANDS IN PLACE to its real
 // connection/config screen (WhatsAppCard + BusinessProfileCard, InstagramCard,
-// ShopifyCard). Integration config lives ONLY here — the general Configuración
-// view carries no integration cards, so there's no link-out and no duplication.
-// Gmail + Drive are shown as "coming soon" placeholders so the roadmap is clear.
+// ShopifyCard, ImageStudioCard, GmailCard, GoogleDriveCard). Integration config
+// lives ONLY here — the general Configuración view carries no integration
+// cards, so there's no link-out and no duplication.
 import { useState } from 'react';
 import { MessageCircle, Instagram as InstagramIcon, ShoppingBag, Mail, HardDrive, Sparkles, ChevronDown } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
@@ -17,17 +17,14 @@ import ImageStudioCard from '../components/settings/ImageStudioCard.jsx';
 import BusinessProfileCard from '../components/whatsapp/BusinessProfileCard.jsx';
 import { SHOPIFY_STORE_ALCOVER, SHOPIFY_STORE_LSG } from '../lib/shopifySync.js';
 
-function StatusPill({ connected, comingSoon }) {
-  const cls = comingSoon
-    ? 'bg-amber-50 text-amber-700'
-    : connected
-      ? 'bg-emerald-50 text-emerald-700'
-      : 'bg-ink-100 text-ink-500';
-  const label = comingSoon ? 'Próximamente' : connected ? 'Conectado' : 'Sin conectar';
+function StatusPill({ connected }) {
+  const cls = connected
+    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+    : 'bg-ink-100 text-ink-500';
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>
-      {!comingSoon && <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-ink-300'}`} />}
-      {label}
+      <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-ink-300'}`} />
+      {connected ? 'Conectado' : 'Sin conectar'}
     </span>
   );
 }
@@ -93,13 +90,12 @@ export default function Integrations() {
           const Icon = it.icon;
           const isOpen = open === it.id;
           return (
-            <div key={it.id} className={`overflow-hidden rounded-xl border border-ink-200 bg-surface ${it.comingSoon ? 'opacity-75' : ''}`}>
+            <div key={it.id} className="overflow-hidden rounded-xl border border-ink-200 bg-surface">
               <button
                 type="button"
-                disabled={it.comingSoon}
                 aria-expanded={isOpen}
                 onClick={() => setOpen(isOpen ? null : it.id)}
-                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-ink-50 disabled:cursor-default disabled:hover:bg-transparent"
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-ink-50"
               >
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-600">
                   <Icon size={20} />
@@ -107,15 +103,13 @@ export default function Integrations() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-ink-900">{it.name}</span>
-                    <StatusPill connected={it.connected} comingSoon={it.comingSoon} />
+                    <StatusPill connected={it.connected} />
                   </div>
                   <p className="truncate text-sm text-ink-500">{it.desc}</p>
                 </div>
-                {!it.comingSoon && (
-                  <ChevronDown size={18} className={`shrink-0 text-ink-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                )}
+                <ChevronDown size={18} className={`shrink-0 text-ink-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </button>
-              {isOpen && !it.comingSoon && (
+              {isOpen && (
                 <div className="border-t border-ink-100 bg-ink-50/40 p-3 sm:p-4">
                   {it.config}
                 </div>

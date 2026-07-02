@@ -103,7 +103,7 @@ export default function CajaChica() {
                     <span className="font-display font-semibold truncate">{r.fund.name}</span>
                     {r.status === 'closed'
                       ? <span className="text-[11px] px-1.5 py-0.5 rounded bg-ink-100 text-ink-500">Cerrada</span>
-                      : r.lowOnCash && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 inline-flex items-center gap-1"><AlertTriangle size={11} /> Reponer</span>}
+                      : r.lowOnCash && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 inline-flex items-center gap-1"><AlertTriangle size={11} /> Reponer</span>}
                   </div>
                   <div className="mt-2 text-2xl font-semibold tabular-nums">{formatDop(r.balance)}</div>
                   <div className="mt-1 text-xs text-ink-500">

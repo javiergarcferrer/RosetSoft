@@ -53,15 +53,15 @@ export default function TemplateRejectionsPanel() {
       </p>
       <ul className="space-y-2">
         {rows.map((r) => (
-          <li key={`${r.name}:${r.language}`} className="rounded-lg ring-1 ring-inset ring-rose-100 bg-rose-50/40 px-3 py-2.5">
+          <li key={`${r.name}:${r.language}`} className="rounded-lg ring-1 ring-inset ring-rose-100 dark:ring-rose-900/40 bg-rose-50/40 dark:bg-rose-950/30 px-3 py-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-sm font-medium text-ink-900">{r.name}</span>
               {r.language && <span className="text-[10px] text-ink-400 uppercase">{r.language}</span>}
-              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-rose-100 text-rose-700">Rechazada</span>
+              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">Rechazada</span>
               {r.updatedAt && <span className="ml-auto text-[10px] text-ink-400">{formatDateTime(r.updatedAt)}</span>}
             </div>
             {r.reason ? (
-              <p className="text-xs text-rose-700 mt-1 flex items-start gap-1.5">
+              <p className="text-xs text-rose-700 dark:text-rose-300 mt-1 flex items-start gap-1.5">
                 <AlertTriangle size={12} className="mt-px shrink-0" />
                 <span className="min-w-0">{r.reason}{r.reasonCode ? <span className="text-rose-400"> ({r.reasonCode})</span> : null}</span>
               </p>

@@ -70,7 +70,7 @@ export default function PaymentPlans() {
   const loaded = plansQ.loaded;
 
   return (
-    <AccountingGate>
+    <AccountingGate title="Planes de pago">
       <PageHeader title="Planes de pago" subtitle="Seguimiento de cobros por cuotas" />
 
       {!loaded ? (
@@ -79,18 +79,19 @@ export default function PaymentPlans() {
         <EmptyState
           icon={CalendarClock}
           title="Sin planes activos"
-          message="Los planes de pago con saldo pendiente aparecerán aquí para darles seguimiento."
+          description="Los planes de pago con saldo pendiente aparecerán aquí para darles seguimiento."
         />
       ) : (
         <div className="space-y-4">
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Kpi label="Por cobrar" value={dop(totals.outstandingDop)} sub={usd(totals.outstandingUsd)} />
+            <Kpi label="Por cobrar" value={rate ? dop(totals.outstandingDop) : usd(totals.outstandingUsd)}
+              sub={rate ? usd(totals.outstandingUsd) : null} />
             <Kpi label="Cuotas vencidas" value={String(totals.overdueCount)} tone={totals.overdueCount > 0 ? 'danger' : 'default'} />
             <Kpi label="Planes activos" value={String(totals.count)} />
           </div>
 
-          {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
+          {err && <p role="alert" className="text-sm text-rose-600">{err}</p>}
 
           {/* Plans */}
           <div className="space-y-2">
@@ -116,7 +117,7 @@ export default function PaymentPlans() {
                     <div className="text-right shrink-0">
                       <div className="font-semibold text-ink-900">{usd(r.outstandingUsd)}</div>
                       {r.nextDue ? (
-                        <div className={`text-xs ${r.overdueCount > 0 ? 'text-red-600' : 'text-ink-500'}`}>
+                        <div className={`text-xs ${r.overdueCount > 0 ? 'text-rose-600' : 'text-ink-500'}`}>
                           {r.overdueCount > 0
                             ? <span className="inline-flex items-center gap-1"><AlertTriangle size={11} /> {r.overdueCount} vencida{r.overdueCount > 1 ? 's' : ''}</span>
                             : `Próx. ${formatDate(r.nextDue.dueAt)}`}
@@ -146,7 +147,7 @@ export default function PaymentPlans() {
                           </thead>
                           <tbody>
                             {r.view.installments.map((c) => (
-                              <tr key={c.n} className={`border-b border-ink-50 ${c.isOverdue ? 'bg-red-50/50' : ''}`}>
+                              <tr key={c.n} className={`border-b border-ink-50 ${c.isOverdue ? 'bg-rose-50/50 dark:bg-rose-500/10' : ''}`}>
                                 <td className="py-1.5 px-2 text-ink-500">{c.n}</td>
                                 <td className="py-1.5 px-2 text-ink-700">{formatDate(c.dueAt)}</td>
                                 <td className="py-1.5 px-2 text-right font-medium text-ink-900">{usd(c.amount)}</td>
@@ -185,9 +186,9 @@ export default function PaymentPlans() {
 
 function Kpi({ label, value, sub, tone = 'default' }) {
   return (
-    <div className={`rounded-lg border px-4 py-3 ${tone === 'danger' ? 'border-red-200 bg-red-50/50' : 'border-ink-100 bg-surface'}`}>
+    <div className={`rounded-lg border px-4 py-3 ${tone === 'danger' ? 'border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/10' : 'border-ink-100 bg-surface'}`}>
       <div className="text-[10px] uppercase tracking-wide text-ink-500">{label}</div>
-      <div className={`text-lg font-bold mt-0.5 ${tone === 'danger' ? 'text-red-700' : 'text-ink-900'}`}>{value}</div>
+      <div className={`text-lg font-bold mt-0.5 ${tone === 'danger' ? 'text-rose-700 dark:text-rose-400' : 'text-ink-900'}`}>{value}</div>
       {sub ? <div className="text-[11px] text-ink-400">{sub}</div> : null}
     </div>
   );

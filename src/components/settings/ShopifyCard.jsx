@@ -191,7 +191,7 @@ export default function ShopifyCard({ settings, store }) {
         )}
         {connectedAt ? <span className="text-[11px] text-ink-400 min-w-0 truncate">Conectado · {formatDateTime(connectedAt)}</span> : null}
       </div>
-      {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>}
+      {msg && <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-ink-500'}`}>{msg}</p>}
     </SettingsSection>
   );
 }

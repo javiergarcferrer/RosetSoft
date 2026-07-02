@@ -110,7 +110,11 @@
   color: var(--jv-muted);
 }
 .jv-clock { color: var(--jv-fg); font-size: 1.05rem; letter-spacing: 0.06em; }
-.jv-readout { display: flex; flex-direction: column; line-height: 1.05; }
+/* No `display` here — the markup's Tailwind `hidden md:flex` / `hidden lg:flex`
+   owns visibility. (jarvis.css loads AFTER the utilities, so a `display: flex`
+   here would override `hidden` and leak the readouts into 620–767px / 620–1023px
+   headers, crowding the HUD bar on tablets and half-screen windows.) */
+.jv-readout { flex-direction: column; line-height: 1.05; }
 .jv-readout i {
   font-style: normal;
   font-size: 0.52rem;
@@ -255,7 +259,7 @@
 /* In-flight probe (a response to pressing Diagnóstico). */
 .jv-int-row.is-scanning .idot { color: var(--jv-scan); }
 
-/* ── buttons — ghost by default, solid for the primary action ────────── */
+/* ── buttons — ghost, hairline-bordered ────────────────────────────────── */
 .jv-btn {
   display: inline-flex;
   align-items: center;
@@ -274,13 +278,15 @@
 .jv-btn:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.35); }
 .jv-btn:active { background: rgba(255, 255, 255, 0.12); }
 .jv-btn:disabled { opacity: 0.45; pointer-events: none; }
-.jv-btn-primary {
-  background: var(--jv-fg);
-  border-color: transparent;
-  color: #0a0a0a;
+
+/* Keyboard focus — the page is keyboard-driven (⌘K palette, tab-through
+   links), so every interactive element gets a visible accent ring. Mouse and
+   touch stay clean via :focus-visible. */
+.jarvis a:focus-visible,
+.jarvis button:focus-visible {
+  outline: 2px solid var(--jv-accent);
+  outline-offset: 1px;
 }
-.jv-btn-primary:hover { background: #fff; border-color: transparent; }
-.jv-btn-primary:active { background: #d4d4d4; }
 
 /* ── activity feed ───────────────────────────────────────────────────── */
 .jv-feed .item {
@@ -543,33 +549,6 @@
   letter-spacing: 0.04em;
 }
 
-/* ── social rows — campaign / scheduled / post lines ───────────────────── */
-.jv-social-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  padding: 0.22rem 0;
-  font-size: 0.74rem;
-}
-.jv-social-row .name {
-  color: var(--jv-fg);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.jv-social-row .stat {
-  margin-left: auto;
-  flex: none;
-  font-size: 0.68rem;
-  color: var(--jv-muted);
-}
-.jv-social-row .stat.dim {
-  margin-left: 0;
-  color: var(--jv-faint);
-}
-.jv-social-row .stat:first-of-type { margin-left: auto; }
-
 /* ── skeleton shimmer — blocks in the final layout's shape, no spinners ── */
 .jv-skeleton {
   display: block;
@@ -696,15 +675,14 @@
   }
   .jv-header { padding: 0 0.75rem 0.5rem; gap: 0.55rem; }
 
-  /* The FECHA/SISTEMAS readouts and the "centro de mando" pill are desktop-only
-     HUD chrome — on phones they overflow the bar and overlap the wordmark (the
-     integrity % already headlines the Sistemas board). The readouts carry a
-     Tailwind `hidden`, but `.jv-readout { display: flex }` overrides it, so they
-     must be hidden here explicitly. The ⌘K button collapses to its icon — there
-     is no physical keyboard to drive the shortcut on a phone. */
+  /* The "centro de mando" pill is desktop-only HUD chrome — on phones it
+     overflows the bar and overlaps the wordmark. (The FECHA/SISTEMAS readouts
+     hide themselves via their Tailwind `hidden md:flex`/`lg:flex` classes —
+     `.jv-readout` deliberately sets no display; see the base rule.) The ⌘K
+     button collapses to its icon — there is no physical keyboard to drive the
+     shortcut on a phone. */
   .jv-brand { gap: 0.45rem; min-width: 0; }
-  .jv-brand-tag,
-  .jv-statusline .jv-readout { display: none; }
+  .jv-brand-tag { display: none; }
   .jv-statusline { gap: 0.5rem; }
   .jv-clock { font-size: 0.92rem; }
   .jv-header-actions { gap: 0.4rem; }

@@ -7,6 +7,7 @@ import BackLink from '../../components/BackLink.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import EmptyState from '../../components/EmptyState.jsx';
 import Modal from '../../components/Modal.jsx';
+import { useConfirm } from '../../components/ConfirmProvider.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { useApp } from '../../context/AppContext.jsx';
 import { useSetBreadcrumb } from '../../context/Breadcrumbs.jsx';
@@ -109,6 +110,7 @@ function Waterfall({ steps, landed, rates }) {
  */
 export default function LandedCalculator() {
   const { settings } = useApp();
+  const confirm = useConfirm();
   useSetBreadcrumb('Calculadora');
 
   const [draft, setDraft] = useState(loadDraft);
@@ -162,6 +164,17 @@ export default function LandedCalculator() {
   const t = vm.totals;
   const incotermDef = vm.incoterm;
 
+  // Reset wipes the whole working draft (not undoable) — always confirm first.
+  async function resetDraft() {
+    const ok = await confirm({
+      title: 'Reiniciar calculadora',
+      message: 'Se descartan las líneas y costos actuales y se carga el ejemplo. Los escenarios guardados no se tocan.',
+      confirmLabel: 'Reiniciar',
+      tone: 'danger',
+    });
+    if (ok) setDraft(seedDraft());
+  }
+
   return (
     <AccountingGate title="Calculadora de costo en destino">
       <BackLink to="/accounting/importaciones">Volver a importaciones</BackLink>
@@ -171,7 +184,7 @@ export default function LandedCalculator() {
         actions={(
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => { setScenarioName(''); setNameModal(true); }} className="btn-secondary"><Save size={15} /><span className="hidden sm:inline">Guardar</span></button>
-            <button type="button" onClick={() => setDraft(seedDraft())} className="btn-ghost" title="Reiniciar"><RotateCcw size={15} /></button>
+            <button type="button" onClick={resetDraft} className="btn-ghost" title="Reiniciar" aria-label="Reiniciar calculadora"><RotateCcw size={15} /></button>
           </div>
         )}
       />

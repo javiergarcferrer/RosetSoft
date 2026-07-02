@@ -136,7 +136,7 @@ export default function CuentasCobrarPagar() {
 
   const [params] = useSearchParams();
   const urlTab = params.get('tab');
-  const [tab, setTab] = useState(urlTab === 'cxc' || urlTab === 'cxp' ? urlTab : params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp'
+  const [tab, setTab] = useState(['cxc', 'cxp', 'cobranza'].includes(urlTab) ? urlTab : params.get('new') === 'out' ? 'cxp' : 'cxc'); // 'cxc' | 'cxp' | 'cobranza'
   const [showForm, setShowForm] = useState(!!params.get('new'));
   const [payBills, setPayBills] = useState(false);
   // ?statement=<partyId> deep-links straight into a party's estado de cuenta
@@ -441,7 +441,7 @@ function CobranzaView({ queue, onRemind, busyId }) {
                 {r.lastSentAt ? ` · última gestión ${formatDate(r.lastSentAt)}` : ''}
               </div>
             </div>
-            {r.buckets.d90 > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 whitespace-nowrap">+90: {formatDop(r.buckets.d90)}</span>}
+            {r.buckets.d90 > 0 && <span className="text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400 whitespace-nowrap">+90: {formatDop(r.buckets.d90)}</span>}
             <div className="text-right tabular-nums font-semibold whitespace-nowrap">{formatDop(r.balance)}</div>
             <button type="button" disabled={!r.dueCount || busyId === r.partyId} onClick={() => onRemind(r)}
               className="btn-primary disabled:opacity-40 whitespace-nowrap"

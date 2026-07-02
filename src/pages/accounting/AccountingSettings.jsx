@@ -53,6 +53,7 @@ export default function AccountingSettings() {
   const [certPassword, setCertPassword] = useState('');
   const [certSaving, setCertSaving] = useState(false);
   const [certMsg, setCertMsg] = useState('');
+  const [certOk, setCertOk] = useState(false); // colors certMsg success vs error
 
   function setRate(key, v) { setForm((f) => ({ ...f, [key]: v === '' ? '' : Number(v) })); }
 
@@ -111,8 +112,10 @@ export default function AccountingSettings() {
       await saveEcfCredentials({ profileId: scope, file: certFile, password: certPassword, environment: ecfEnv });
       setCertFile(null);
       setCertPassword('');
+      setCertOk(true);
       setCertMsg('✓ Certificado guardado de forma segura.');
     } catch (e) {
+      setCertOk(false);
       setCertMsg(userMessageFor(e));
     } finally {
       setCertSaving(false);
@@ -208,7 +211,7 @@ export default function AccountingSettings() {
                 </button>
               </div>
             </div>
-            {certMsg && <p className="text-sm mt-2 text-ink-600">{certMsg}</p>}
+            {certMsg && <p role={certOk ? undefined : 'alert'} className={`text-sm mt-2 ${certOk ? 'text-emerald-700' : 'text-rose-600'}`}>{certMsg}</p>}
           </div>
         </div>
       </div>

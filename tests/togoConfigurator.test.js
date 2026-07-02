@@ -6,10 +6,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  footprintOf, snapPlacement, clampToPlan, resolvePlacement,
+  footprintOf, snapPlacement, snapPlacementInfo, clampToPlan, resolvePlacement,
   buildTogoComponents, buildTogoModularSeed, resolveConfigurator, resolveTogoModels,
   resolveTogoModelCards, togoPickerFamilies,
   placementsFromPlaced, placementsFromComponents, resolveTogoDxf, lineHasTogoPlan,
+  createHistory, historyPush, historyUndo, historyRedo, canUndo, canRedo,
+  firstWithoutFabric, duplicatePlacement,
 } from '../src/core/quote/views/configuratorView.js';
 import { compoundSubtotal } from '../src/lib/pricing.js';
 import { modulesOf, isModularLine } from '../src/lib/modules.js';
@@ -68,6 +70,32 @@ test('snapPlacement rounds to the grid and clicks flush to a neighbour edge', ()
   // the settee's left snaps butt-flush (and stays overlap-free).
   const joined = snapPlacement({ x: -94, y: 4, w: 100, h: 100 }, [settee]);
   assert.equal(joined.x, -100, 'right edge joins the settee left edge (-100+100=0, touching)');
+});
+
+test('snapPlacementInfo reports WHICH axes engaged (the View\'s snap feedback), same x/y as snapPlacement', () => {
+  const settee = { x: 0, y: 0, w: 174, h: 102 };
+
+  // A flush join reports snapped on X (edges met) and Y (tops aligned).
+  const joined = snapPlacementInfo({ x: 170, y: 3, w: 102, h: 102 }, [settee]);
+  assert.deepEqual({ x: joined.x, y: joined.y }, snapPlacement({ x: 170, y: 3, w: 102, h: 102 }, [settee]));
+  assert.equal(joined.snappedX, true);
+  assert.equal(joined.snappedY, true);
+  assert.equal(joined.snapped, true);
+
+  // Already flush (distance 0) still reads as snapped — staying locked IS locked.
+  const locked = snapPlacementInfo({ x: 174, y: 0, w: 102, h: 102 }, [settee]);
+  assert.equal(locked.snapped, true);
+
+  // Far away → grid round only, no snap flags.
+  const far = snapPlacementInfo({ x: 400, y: 300, w: 102, h: 102 }, [settee]);
+  assert.deepEqual(far, { x: 400, y: 300, snappedX: false, snappedY: false, snapped: false });
+
+  // The rejected overlap-hazard snap must NOT report snapped (it stayed put).
+  const onTop = snapPlacementInfo({ x: 8, y: 4, w: 100, h: 100 }, [settee]);
+  assert.equal(onTop.snapped, false);
+
+  // No neighbours → never snapped.
+  assert.equal(snapPlacementInfo({ x: 101, y: 51, w: 50, h: 50 }, []).snapped, false);
 });
 
 test('clampToPlan keeps the whole footprint inside the plan', () => {
@@ -246,6 +274,87 @@ test('resolveConfigurator reports the overall assembled footprint (cm)', () => {
   assert.deepEqual(vm.overallCm, { widthCm: 212, depthCm: 284 });
   // Empty plan → zeroed, never NaN/Infinity.
   assert.deepEqual(resolveConfigurator([], resolved).overallCm, { widthCm: 0, depthCm: 0 });
+});
+
+// ---- undo/redo: the configurator's history stack ----
+test('history push/undo/redo walks the placed snapshots; a new change clears redo', () => {
+  const s0 = [];
+  const s1 = [{ uid: 'u1' }];
+  const s2 = [{ uid: 'u1' }, { uid: 'u2' }];
+
+  let h = createHistory();
+  assert.equal(canUndo(h), false);
+  assert.equal(canRedo(h), false);
+  assert.equal(historyUndo(h, s0), null, 'nothing to undo on a fresh stack');
+  assert.equal(historyRedo(h, s0), null, 'nothing to redo on a fresh stack');
+
+  h = historyPush(h, s0);          // change s0 → s1
+  h = historyPush(h, s1);          // change s1 → s2
+  assert.equal(canUndo(h), true);
+
+  const u1 = historyUndo(h, s2);   // back to s1
+  assert.equal(u1.present, s1);
+  assert.equal(canRedo(u1.hist), true);
+
+  const u2 = historyUndo(u1.hist, u1.present);   // back to s0
+  assert.equal(u2.present, s0);
+  assert.equal(canUndo(u2.hist), false);
+
+  const r1 = historyRedo(u2.hist, u2.present);   // forward to s1
+  assert.equal(r1.present, s1);
+  const r2 = historyRedo(r1.hist, r1.present);   // forward to s2
+  assert.equal(r2.present, s2);
+  assert.equal(canRedo(r2.hist), false);
+
+  // A NEW change after an undo abandons the redo branch.
+  const back = historyUndo(h, s2);
+  const branched = historyPush(back.hist, back.present);
+  assert.equal(canRedo(branched), false);
+
+  // The stack is bounded: oldest snapshots fall off, never grows past the limit.
+  let cap = createHistory();
+  for (let i = 0; i < 10; i++) cap = historyPush(cap, [i], 3);
+  assert.equal(cap.past.length, 3);
+  assert.deepEqual(cap.past, [[7], [8], [9]]);
+});
+
+test('firstWithoutFabric targets the first piece missing a material pick', () => {
+  assert.equal(firstWithoutFabric([]), null);
+  assert.equal(firstWithoutFabric([{ uid: 'a', material: { grade: 'A' } }]), null);
+  assert.equal(firstWithoutFabric([
+    { uid: 'a', material: { grade: 'A' } },
+    { uid: 'b' },
+    { uid: 'c' },
+  ]), 'b');
+});
+
+test('duplicatePlacement clones rotation + fabric and drops the copy flush to the right', () => {
+  const r = { a: { id: 'a', label: 'Sillón', widthCm: 102, depthCm: 102, unitPrice: 1200 } };
+  const one = [{ uid: 'u1', pieceId: 'a', x: 0, y: 0, rot: 0, material: { grade: 'G', fabric: 'ALCANTARA', unitPrice: 1500 } }];
+
+  const dup = duplicatePlacement(one, 'u1', r, 'u9');
+  assert.equal(dup.uid, 'u9');
+  assert.equal(dup.placed.length, 2);
+  const copy = dup.placed[1];
+  assert.equal(copy.uid, 'u9');
+  assert.equal(copy.pieceId, 'a');
+  // Flush against the source's right edge, same row.
+  assert.equal(copy.x, 102);
+  assert.equal(copy.y, 0);
+  // The fabric pick is CLONED, not shared (mutating one must not touch the other).
+  assert.deepEqual(copy.material, one[0].material);
+  assert.notEqual(copy.material, one[0].material);
+  // The original list is untouched (immutably extended).
+  assert.equal(one.length, 1);
+
+  // Unknown uid → null (the View no-ops).
+  assert.equal(duplicatePlacement(one, 'nope', r, 'u9'), null);
+
+  // A source at the plan's right edge clamps back inside instead of escaping.
+  const edge = [{ uid: 'e1', pieceId: 'a', x: 658, y: 0, rot: 0 }];
+  const atEdge = duplicatePlacement(edge, 'e1', r, 'e2');
+  const c = atEdge.placed[1];
+  assert.ok(c.x + 102 <= 760, 'the copy stays inside the plan');
 });
 
 // ---- DXF export: a placed plan → a downloadable CAD file ----

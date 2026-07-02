@@ -9,6 +9,7 @@ import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import RowCards from '../../components/RowCards.jsx';
 import { formatDate } from '../../lib/format.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 import { isoDate, parseISODate } from '../../lib/commissionCycle.js';
 import { ECF_TYPES, ecfTypeLabel, sequenceState } from '../../core/accounting/index.js';
 import useColumns from '../../components/search/useColumns.js';
@@ -86,6 +87,8 @@ export default function ECFSequences() {
         await db.ecfSequences.update(editing, patch);
       }
       setEditing(null);
+    } catch (e) {
+      setErr(userMessageFor(e));
     } finally {
       setSaving(false);
     }

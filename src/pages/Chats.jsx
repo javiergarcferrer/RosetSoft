@@ -316,7 +316,10 @@ export default function Chats() {
               <FilterChip label="Todas" active={filter === 'all'} onClick={() => setFilter('all')} count={filterCounts.all} />
               <FilterChip label="Sin leer" active={filter === 'unread'} onClick={() => setFilter('unread')} count={filterCounts.unread} tone="emerald" />
               <FilterChip label="Sin responder" active={filter === 'awaiting'} onClick={() => setFilter('awaiting')} count={filterCounts.awaiting} tone="amber" />
-              {filterCounts.snoozed > 0 && (
+              {/* Keep the chip while it's the ACTIVE filter even at count 0 —
+                  otherwise the last snooze expiring leaves the user stuck on an
+                  invisible filter with no way to see (or leave) it. */}
+              {(filterCounts.snoozed > 0 || filter === 'snoozed') && (
                 <FilterChip label="Pospuestas" active={filter === 'snoozed'} onClick={() => setFilter('snoozed')} count={filterCounts.snoozed} />
               )}
             </div>
@@ -335,7 +338,9 @@ export default function Chats() {
                     ? 'No hay conversaciones sin leer.'
                     : filter === 'awaiting'
                       ? 'Todo respondido — ningún cliente espera respuesta.'
-                      : 'Aún no hay conversaciones. Cuando un cliente escriba al número del negocio aparecerá aquí — o inicia tú con “Nuevo chat”.'}
+                      : filter === 'snoozed'
+                        ? 'No hay conversaciones pospuestas.'
+                        : 'Aún no hay conversaciones. Cuando un cliente escriba al número del negocio aparecerá aquí — o inicia tú con “Nuevo chat”.'}
               </p>
             )}
             {conversations.map((c) => (
@@ -597,10 +602,15 @@ function NewChatModal({ open, onClose, customers, professionals, conversations, 
     [customers, professionals, conversations, needle],
   );
   // Existing threads also match the search — picking one just opens it.
+  // Matches by name OR by phone digits (≥4, so a short fragment doesn't
+  // flood the list), mirroring the contact list's own search.
   const existing = useMemo(() => {
     const q = needle.trim().toLowerCase();
     if (!q) return [];
-    return (conversations || []).filter((c) => c.name.toLowerCase().includes(q)).slice(0, 5);
+    const digits = needle.replace(/\D/g, '');
+    return (conversations || []).filter((c) =>
+      c.name.toLowerCase().includes(q)
+      || (digits.length >= 4 && String(c.phone || '').replace(/\D/g, '').includes(digits))).slice(0, 5);
   }, [conversations, needle]);
 
   return (

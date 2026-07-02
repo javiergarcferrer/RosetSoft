@@ -106,10 +106,10 @@ export default function Drive() {
                     >
                       {p.name}
                     </a>
-                    <a href={p.url || driveFolderUrl(p.id)} target="_blank" rel="noreferrer" className="shrink-0 text-ink-300 hover:text-ink-600" title="Abrir en Drive">
+                    <a href={p.url || driveFolderUrl(p.id)} target="_blank" rel="noreferrer" className="shrink-0 p-1.5 -m-1 rounded text-ink-300 hover:text-ink-600 hover:bg-ink-50" title="Abrir en Drive" aria-label={`Abrir ${p.name} en Drive`}>
                       <ExternalLink size={14} />
                     </a>
-                    <button type="button" onClick={() => togglePin(p)} className="shrink-0 text-ink-300 hover:text-rose-600" title="Quitar de fijados">
+                    <button type="button" onClick={() => togglePin(p)} className="shrink-0 p-1.5 -m-1 rounded text-ink-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40" title="Quitar de fijados" aria-label={`Quitar ${p.name} de fijados`}>
                       <X size={15} />
                     </button>
                   </div>

@@ -13,6 +13,7 @@ import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import { db } from '../db/database.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDateTime, formatMoney } from '../lib/format.js';
+import { displayRatesFor } from '../lib/exchangeRate.js';
 import { ORDER_STAGE_BY_KEY, currentOrderStage } from '../lib/orderStages.js';
 import { resolveCustomerDetail } from '../core/quote/views/detail.js';
 import { viewerCompanySettings } from '../core/quote/index.js';
@@ -292,7 +293,9 @@ export default function CustomerDetail() {
                             </div>
                           </div>
                           <div className="text-sm font-semibold tabular-nums whitespace-nowrap text-ink-900">
-                            {formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', q.rates || { USD: 1 })}
+                            {/* Same rate source as the Quotes list (live until
+                                accepted, then the locked snapshot). */}
+                            {formatMoney(derived.totalByQuote.get(q.id) || 0, q.currencyCode || 'USD', displayRatesFor(q, settings))}
                           </div>
                           <ExternalLink size={12} aria-hidden className="text-ink-300 group-hover:text-brand-500 flex-shrink-0 transition-colors" />
                         </Link>

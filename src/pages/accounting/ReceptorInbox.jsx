@@ -231,11 +231,11 @@ export default function ReceptorInbox() {
           </p>
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={() => setApproving({ ...approving, estado: 1 })}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${approving.estado === 1 ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${approving.estado === 1 ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
               <CheckCircle2 size={14} className="inline -mt-0.5 mr-1" /> Aprobar
             </button>
             <button type="button" onClick={() => setApproving({ ...approving, estado: 2 })}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${approving.estado === 2 ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${approving.estado === 2 ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-300' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
               <XCircle size={14} className="inline -mt-0.5 mr-1" /> Rechazar
             </button>
           </div>

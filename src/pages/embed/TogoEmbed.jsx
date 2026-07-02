@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sofa, RotateCw, Trash2, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, Receipt } from 'lucide-react';
+import { Sofa, RotateCw, Trash2, Loader2, Eraser, ArrowRight, ArrowLeft, Check, AlertCircle, Palette, Layers, X, FileDown, Box, Square, View, Receipt, Undo2, Redo2, CopyPlus, Lightbulb } from 'lucide-react';
 import { formatMoney } from '../../lib/format.js';
 import { swatchUrl } from '../../lib/swatchImage.js';
 import { productForGrade } from '../../lib/catalog.js';
@@ -15,6 +15,8 @@ import { useTogoThumbnails, useTogoFabricThumbs } from '../../components/togo/to
 import {
   resolveConfigurator, resolvePlacement, snapPlacement, footprintOf, clampToPlan, PX_PER_CM,
   resolveTogoDxf, placementsFromPlaced, resolveTogoScene, scenePlacementsFromPlaced,
+  createHistory, historyPush, historyUndo, historyRedo,
+  firstWithoutFabric, duplicatePlacement,
 } from '../../core/quote/index.js';
 import { TOGO_PIECES } from '../../assets/togo/pieces.js';
 import togoHeroSvg from '../../assets/togo/togo_gb.svg?raw';
@@ -102,6 +104,11 @@ function useCountUp(target) {
 // earns colour, because a sent request is the reward moment.
 const CONFETTI_COLORS = ['#e2725b', '#2f6f6b', '#d9a441', '#3b5f8a', '#b8553f', '#6c8c5a'];
 
+// First-run hints seen flag (bump the suffix to re-show after a big UX change).
+const HINTS_KEY = 'togo:hints:v1';
+
+const newUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
 /**
  * PUBLIC, no-login Togo configurator — embedded in the dealer's website via an
  * <iframe>, and shown back IN the app (Togo workspace → Configurador tab) as a
@@ -172,6 +179,18 @@ export default function TogoEmbed() {
   const [quoteOpen, setQuoteOpen] = useState(false); // the quote summary sheet
   const [dlOpen, setDlOpen] = useState(false);   // the download format chooser
   const [objBusy, setObjBusy] = useState(false); // building the 3D OBJ (loads three on demand)
+  // Undo/redo over `placed` — one entry per user gesture (add, drag commit,
+  // rotate, delete, fabric, clear). The stack mechanics are the pure VM helpers.
+  const [hist, setHist] = useState(createHistory);
+  // First-run coach line (how to move/rotate/pick fabric) — shown once a piece is
+  // down, dismissed forever via localStorage (guarded: iframe storage may be off).
+  const [hintsOpen, setHintsOpen] = useState(() => {
+    try { return !localStorage.getItem(HINTS_KEY); } catch { return false; }
+  });
+  const dismissHints = useCallback(() => {
+    setHintsOpen(false);
+    try { localStorage.setItem(HINTS_KEY, '1'); } catch { /* blocked */ }
+  }, []);
   // false → show the launch card; the card opens the configurator in a NEW TAB
   // (?ctx=modal → straight to the build), so it always gets the full screen.
   // The clean /configurator page launches straight in (it's already full-screen).
@@ -271,6 +290,34 @@ export default function TogoEmbed() {
     } catch { /* ignore */ }
   }, [placed, buildKey]);
 
+  // ── History plumbing: every user mutation goes through commitPlaced, which
+  // snapshots the previous state (one undo entry per gesture). The restore-from-
+  // localStorage path above deliberately bypasses it (nothing to undo TO).
+  const placedRef = useRef(placed);
+  useEffect(() => { placedRef.current = placed; }, [placed]);
+  const commitPlaced = useCallback((next) => {
+    const prev = placedRef.current;
+    const value = typeof next === 'function' ? next(prev) : next;
+    if (value === prev) return;
+    setHist((h) => historyPush(h, prev));
+    setPlaced(value);
+    placedRef.current = value;
+  }, []);
+  const undo = useCallback(() => {
+    const u = historyUndo(hist, placedRef.current);
+    if (!u) return;
+    buzz(7);
+    setHist(u.hist); setPlaced(u.present); placedRef.current = u.present;
+  }, [hist]);
+  const redo = useCallback(() => {
+    const r = historyRedo(hist, placedRef.current);
+    if (!r) return;
+    buzz(7);
+    setHist(r.hist); setPlaced(r.present); placedRef.current = r.present;
+  }, [hist]);
+  const canUndo = hist.past.length > 0;
+  const canRedo = hist.future.length > 0;
+
   const resolvedById = useMemo(() => {
     const o = {};
     for (const m of models) {
@@ -324,36 +371,49 @@ export default function TogoEmbed() {
     const start = clampToPlan(x, y, fp.w, fp.h);
     const snapped = snapPlacement({ x: start.x, y: start.y, w: fp.w, h: fp.h }, others);
     const c = clampToPlan(snapped.x, snapped.y, fp.w, fp.h);
-    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setPlaced((prev) => [...prev, { uid, pieceId: modelId, x: c.x, y: c.y, rot: 0 }]);
+    const uid = newUid();
+    commitPlaced([...placed, { uid, pieceId: modelId, x: c.x, y: c.y, rot: 0 }]);
     setSelectedUid(uid);
     buzz(11);
-  }, [resolvedById, placed]);
+  }, [resolvedById, placed, commitPlaced]);
 
   // uid-parameterized so the on-plan hover controls can rotate/delete ANY piece
   // (not just the selected one) without a round-trip to the toolbar.
   const rotatePiece = useCallback((uid) => {
+    if (uid == null) return;
     buzz(7);
-    setPlaced((prev) => prev.map((p) => {
-      if (p.uid !== uid) return p;
-      const rot = (p.rot + 90) % 360; const fp = footprintOf(resolvedById[p.pieceId], rot);
-      return { ...p, rot, ...clampToPlan(p.x, p.y, fp.w, fp.h) };
-    }));
-  }, [resolvedById]);
+    commitPlaced((prev) => (prev.some((p) => p.uid === uid)
+      ? prev.map((p) => {
+        if (p.uid !== uid) return p;
+        const rot = (p.rot + 90) % 360; const fp = footprintOf(resolvedById[p.pieceId], rot);
+        return { ...p, rot, ...clampToPlan(p.x, p.y, fp.w, fp.h) };
+      })
+      : prev));
+  }, [resolvedById, commitPlaced]);
   const deletePiece = useCallback((uid) => {
+    if (uid == null) return;
     buzz([4, 26, 7]);
-    setPlaced((prev) => prev.filter((p) => p.uid !== uid));
+    commitPlaced((prev) => (prev.some((p) => p.uid === uid) ? prev.filter((p) => p.uid !== uid) : prev));
     setSelectedUid((s) => (s === uid ? null : s));
-  }, []);
+  }, [commitPlaced]);
   const rotateSel = useCallback(() => rotatePiece(selectedUid), [rotatePiece, selectedUid]);
   const deleteSel = useCallback(() => deletePiece(selectedUid), [deletePiece, selectedUid]);
+  // Duplicate the selected piece (same rotation + fabric), dropped flush beside it.
+  const duplicateSel = useCallback(() => {
+    if (!selectedUid) return;
+    const r = duplicatePlacement(placedRef.current, selectedUid, resolvedById, newUid());
+    if (!r) return;
+    buzz(11);
+    commitPlaced(r.placed);
+    setSelectedUid(r.uid);
+  }, [selectedUid, resolvedById, commitPlaced]);
 
   // Material pick for the selected piece → reprice by grade + stamp swatch/subtype.
   const onPickMaterial = useCallback((pick) => {
     if (!selected) return;
     buzz(9);
     const p = selectedFamily ? productForGrade(selectedFamily, pick.grade) : null;
-    setPlaced((prev) => prev.map((row) => (row.uid === selected.uid ? {
+    commitPlaced((prev) => prev.map((row) => (row.uid === selected.uid ? {
       ...row,
       material: {
         grade: pick.grade, fabric: pick.fabric, code: pick.code || '', swatchImageId: null,
@@ -362,12 +422,12 @@ export default function TogoEmbed() {
         unitPrice: p && p.priceUsd != null ? Number(p.priceUsd) : (resolvedById[row.pieceId]?.unitPrice ?? null),
       },
     } : row)));
-  }, [selected, selectedFamily, resolvedById]);
+  }, [selected, selectedFamily, resolvedById, commitPlaced]);
 
   // Apply ONE fabric to EVERY piece, repricing each by its OWN bound model.
   const applyFabricToAll = useCallback((pick) => {
     buzz([7, 18, 11]);
-    setPlaced((prev) => prev.map((row) => {
+    commitPlaced((prev) => prev.map((row) => {
       const fam = families.get(resolvedById[row.pieceId]?.root);
       const p = fam ? productForGrade(fam, pick.grade) : null;
       return {

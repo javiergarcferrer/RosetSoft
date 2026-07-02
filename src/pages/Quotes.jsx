@@ -5,7 +5,7 @@ import { useToast } from '../components/ConfirmProvider.jsx';
 import { useLiveQuery, useLiveQueryStatus } from '../db/hooks.js';
 import ListLoading from '../components/ListLoading.jsx';
 import {
-  Plus, FileText, Trash2, Truck, Archive, Check, Minus,
+  Plus, FileText, Trash2, Truck, Archive, Check, Minus, SearchX,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -547,6 +547,18 @@ export default function Quotes() {
               </tr>
             </thead>
             <tbody>
+              {/* Empty-filter state — the mobile cards show "Sin coincidencias";
+                  without this the desktop table rendered headers over nothing. */}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={colSpan}>
+                    <div className="flex items-center gap-2 py-3 text-sm text-ink-400">
+                      <SearchX size={15} className="flex-shrink-0" aria-hidden />
+                      Sin resultados — ajusta la búsqueda o los filtros.
+                    </div>
+                  </td>
+                </tr>
+              )}
               {orderGroups.map((u) => (u.type === 'group' ? (
                 <Fragment key={`order-${u.order.id}`}>
                   <tr className="bg-ink-50/80">

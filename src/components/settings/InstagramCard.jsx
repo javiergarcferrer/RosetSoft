@@ -112,7 +112,7 @@ export default function InstagramCard() {
         </p>
 
         {connected && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
             <Instagram size={15} />
             <span>Conectado{igUsername ? ` como @${igUsername}` : ''}.</span>
           </div>
@@ -170,7 +170,7 @@ export default function InstagramCard() {
           </a>
         </div>
 
-        {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</div>}
+        {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{msg.text}</div>}
       </div>
     </SettingsSection>
   );

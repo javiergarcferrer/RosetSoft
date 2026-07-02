@@ -185,7 +185,13 @@ export default function Orders() {
     const tag = `#${order.number || '—'}`;
     let msg = `¿Eliminar el pedido ${tag}?`;
     if (n || c) {
-      msg += `\n\nLas ${n} cotizaciones y ${c} contenedores vinculados quedarán libres (no se eliminan).`;
+      // Correct number/gender agreement: only name what's actually linked.
+      const parts = [];
+      if (n) parts.push(`${n} ${n === 1 ? 'cotización' : 'cotizaciones'}`);
+      if (c) parts.push(`${c} ${c === 1 ? 'contenedor' : 'contenedores'}`);
+      const many = n + c !== 1;
+      const linked = many ? (n && !c ? 'vinculadas' : 'vinculados') : (n ? 'vinculada' : 'vinculado');
+      msg += `\n\n${parts.join(' y ')} ${linked} quedar${many ? 'án libres' : 'á libre'} (no se elimina${many ? 'n' : ''}).`;
     }
     if (!confirm(msg)) return;
     // Capture the attached quotes BEFORE the delete: quotes.order_id is

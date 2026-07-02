@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState.jsx';
 import ListLoading from '../../components/ListLoading.jsx';
 import AccountingGate from '../../components/accounting/AccountingGate.jsx';
 import { formatDop } from '../../lib/format.js';
+import { userMessageFor } from '../../lib/errorMessages.js';
 import useColumns from '../../components/search/useColumns.js';
 import useColumnWidths from '../../components/search/useColumnWidths.jsx';
 import ColumnsMenu from '../../components/search/ColumnsMenu.jsx';
@@ -53,15 +54,18 @@ export default function Empleados() {
   const [editing, setEditing] = useState(params.get('new') ? 'new' : null);
   const [form, setForm] = useState(blank());
   const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState('');
 
-  function openNew() { setForm(blank()); setEditing('new'); }
+  function openNew() { setForm(blank()); setSaveErr(''); setEditing('new'); }
   function openEdit(e) {
     setForm({ name: e.name || '', cedula: e.cedula || '', position: e.position || '', monthlySalary: String(e.monthlySalary || ''), hireAt: toDateInput(e.hireAt), companySize: e.companySize || '', active: e.active !== false });
+    setSaveErr('');
     setEditing(e.id);
   }
 
   async function save() {
     if (!form.name.trim()) return;
+    setSaveErr('');
     setSaving(true);
     try {
       const patch = {
@@ -76,6 +80,8 @@ export default function Empleados() {
         await db.employees.update(editing, patch);
       }
       setEditing(null);
+    } catch (e) {
+      setSaveErr(userMessageFor(e));
     } finally {
       setSaving(false);
     }
@@ -115,10 +121,14 @@ export default function Empleados() {
               <span className="label">Fecha de ingreso</span>
               <input type="date" value={form.hireAt} onChange={(e) => setForm((f) => ({ ...f, hireAt: e.target.value }))} className={field} />
             </label>
-            <select value={form.companySize} onChange={(e) => setForm((f) => ({ ...f, companySize: e.target.value }))} className={field}>
-              {COMPANY_SIZES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
-            </select>
+            <label className="block">
+              <span className="label">Tamaño de empresa</span>
+              <select value={form.companySize} onChange={(e) => setForm((f) => ({ ...f, companySize: e.target.value }))} className={field}>
+                {COMPANY_SIZES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+              </select>
+            </label>
           </div>
+          {saveErr && <p className="text-sm text-rose-600 mt-2">{saveErr}</p>}
           <div className="flex flex-wrap items-center gap-4 mt-3">
             <label className="inline-flex items-center gap-2 text-sm min-h-9 coarse:min-h-11"><input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} className="w-4 h-4" /> Activo</label>
             <button type="button" onClick={save} disabled={saving || !form.name.trim()} className="btn-primary ml-auto">

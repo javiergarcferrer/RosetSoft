@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Check, AlertTriangle, Shield, Loader2, ChevronDown, Lock, Plus, Trash2 } from 'lucide-react';
+import { RefreshCw, Check, AlertTriangle, Shield, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import PageHeader from '../components/PageHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import ImageDrop from '../components/ImageDrop.jsx';
@@ -86,7 +86,7 @@ export default function Settings() {
         </button>
       } />
       {saveState === 'error' && saveError && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-5 text-sm text-red-700 min-w-0">
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 px-4 py-3 mb-5 text-sm text-red-700 dark:text-red-200 min-w-0">
           <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" aria-hidden />
           <span className="min-w-0 break-words">No se pudo guardar: {saveError}</span>
         </div>
@@ -303,8 +303,8 @@ function StoreCard({ settings, saveSettings, customers }) {
           <div className="label inline-flex items-center gap-2">
             Cuenta de la empresa
             {status === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
-            {status === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
-            {status === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+            {status === 'saved' && <span className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+            {status === 'error' && <span className="text-[11px] font-normal text-red-600 dark:text-red-400">No se pudo guardar</span>}
           </div>
           <select
             className="input"
@@ -324,15 +324,15 @@ function StoreCard({ settings, saveSettings, customers }) {
             (excepto rechazadas y archivadas) surten la tienda.
           </p>
           {status === 'error' && statusErr && (
-            <p role="alert" className="text-[11px] text-red-600 mt-1.5 break-words">{statusErr}</p>
+            <p role="alert" className="text-[11px] text-red-600 dark:text-red-400 mt-1.5 break-words">{statusErr}</p>
           )}
         </div>
         <div>
           <div className="label inline-flex items-center gap-2">
             Descuento de costo (%)
             {discStatus === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
-            {discStatus === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
-            {discStatus === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+            {discStatus === 'saved' && <span className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+            {discStatus === 'error' && <span className="text-[11px] font-normal text-red-600 dark:text-red-400">No se pudo guardar</span>}
           </div>
           <input
             className="input"
@@ -351,7 +351,7 @@ function StoreCard({ settings, saveSettings, customers }) {
             pública ni a otros clientes.
           </p>
           {discStatus === 'error' && discErr && (
-            <p role="alert" className="text-[11px] text-red-600 mt-1.5 break-words">{discErr}</p>
+            <p role="alert" className="text-[11px] text-red-600 dark:text-red-400 mt-1.5 break-words">{discErr}</p>
           )}
         </div>
         <div className="sm:col-span-2">
@@ -367,7 +367,7 @@ function StoreCard({ settings, saveSettings, customers }) {
               <button
                 type="button"
                 onClick={copy}
-                className={`btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 !border-emerald-200' : ''}`}
+                className={`btn-ghost text-xs whitespace-nowrap active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 dark:!text-emerald-400 !border-emerald-200 dark:!border-emerald-900/60' : ''}`}
               >
                 {copied ? <><Check size={12} aria-hidden /> Copiado</> : 'Copiar'}
               </button>
@@ -460,7 +460,7 @@ function QuoteTermsPresets({ local, set }) {
               <button
                 type="button"
                 onClick={() => remove(p.id)}
-                className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                className="p-1.5 rounded text-ink-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0"
                 title="Eliminar plantilla"
                 aria-label="Eliminar plantilla"
               >
@@ -583,7 +583,7 @@ function RateCard({ local, set, saveSettings }) {
           </button>
         </div>
         {fetchErr && (
-          <div className="text-[11px] text-red-600 mb-3 flex items-start gap-1.5 bg-red-50 border border-red-100 rounded-md px-2.5 py-1.5">
+          <div className="text-[11px] text-red-600 dark:text-red-200 mb-3 flex items-start gap-1.5 bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900/40 rounded-md px-2.5 py-1.5">
             <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {fetchErr}
           </div>
         )}
@@ -649,12 +649,12 @@ function RateCard({ local, set, saveSettings }) {
               {savingManual ? 'Guardando…' : 'Guardar tasa manual'}
             </button>
             {manualOk && (
-              <span className="text-[11px] text-emerald-700 inline-flex items-center gap-1">
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
                 <Check size={12} /> Guardada
               </span>
             )}
             {manualErr && (
-              <span className="text-[11px] text-red-600 inline-flex items-center gap-1">
+              <span className="text-[11px] text-red-600 dark:text-red-400 inline-flex items-center gap-1">
                 <AlertTriangle size={12} /> {manualErr}
               </span>
             )}
@@ -666,7 +666,7 @@ function RateCard({ local, set, saveSettings }) {
       <div className="rounded-lg bg-brand-50 border border-brand-200 px-4 py-3.5">
         <div className="eyebrow-xs font-medium tracking-wider text-brand-700">Tasa efectiva</div>
         <div className="font-display text-xl font-semibold text-brand-900 mt-1 tabular-nums">
-          1 USD = {eff.toFixed(2)} DOP
+          1 USD = {hasRate ? eff.toFixed(2) : '—'} DOP
         </div>
         <div className="text-[11px] text-brand-700 mt-1 tabular-nums">
           RD$ 100 ≈ US$ {sample} · US$ 100 ≈ RD$ {sampleInverse}

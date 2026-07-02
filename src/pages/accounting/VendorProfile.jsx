@@ -68,6 +68,9 @@ export default function VendorProfile() {
           </p>
 
           <div className="card p-4 overflow-x-auto min-w-0">
+            {v.recentDocs.length === 0 ? (
+              <p className="text-sm text-ink-400 py-2">Sin documentos registrados para este proveedor.</p>
+            ) : (
             <table className="w-full">
               <thead>
                 <tr className="border-b border-ink-200">
@@ -92,6 +95,7 @@ export default function VendorProfile() {
                 ))}
               </tbody>
             </table>
+            )}
           </div>
         </>
       )}

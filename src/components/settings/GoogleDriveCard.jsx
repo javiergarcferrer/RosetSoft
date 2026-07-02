@@ -48,16 +48,16 @@ export default function GoogleDriveCard() {
         </p>
 
         {!connected ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
             Conecta tu cuenta de Google primero desde la tarjeta de <strong>Gmail</strong> — una sola
             conexión habilita Gmail y Drive.
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
               <HardDrive size={15} />
               <span className="flex-1">Conectado{email ? ` como ${email}` : ''}.</span>
-              <Link to="/drive" className="inline-flex items-center gap-1 text-xs font-medium text-emerald-800 hover:underline">
+              <Link to="/drive" className="inline-flex items-center gap-1 text-xs font-medium text-emerald-800 dark:text-emerald-200 hover:underline">
                 <FolderOpen size={13} /> Abrir Mi Drive
               </Link>
             </div>
@@ -84,7 +84,7 @@ export default function GoogleDriveCard() {
           </>
         )}
 
-        {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{msg.text}</div>}
+        {msg && <div className={`text-sm ${msg.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{msg.text}</div>}
       </div>
     </SettingsSection>
   );

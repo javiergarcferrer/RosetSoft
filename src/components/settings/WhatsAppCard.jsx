@@ -93,7 +93,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
   }
 
   return (
-    <SettingsSection title={<><MessageCircle size={16} className="text-emerald-600" aria-hidden /> WhatsApp Business</>}>
+    <SettingsSection title={<><MessageCircle size={16} className="text-emerald-600 dark:text-emerald-400" aria-hidden /> WhatsApp Business</>}>
       <StatusHeader connectedAt={connectedAt} displayNumber={displayNumber} verifiedName={verifiedName} settings={settings} webhook={webhook} />
 
       {/* ── Conexión — credentials + the number link ──────────────────────── */}
@@ -179,7 +179,7 @@ export default function WhatsAppCard({ settings, saveSettings }) {
           </p>
         )}
         {msg && (
-          <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600' : 'text-ink-500'}`}>{msg}</p>
+          <p className={`text-xs mt-2 ${status === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-ink-500'}`}>{msg}</p>
         )}
       </Section>
 
@@ -231,7 +231,7 @@ function StatusHeader({ connectedAt, displayNumber, verifiedName, settings, webh
     <div className="mb-1 rounded-lg border border-ink-100 bg-ink-50/40 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {connectedAt ? (
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
             <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden /> Conectado
           </span>
         ) : (
@@ -246,9 +246,9 @@ function StatusHeader({ connectedAt, displayNumber, verifiedName, settings, webh
         )}
         {connectedAt && webhook && (
           webhook.subscribed ? (
-            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-emerald-700"><Check size={12} /> Recepción activa</span>
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400"><Check size={12} /> Recepción activa</span>
           ) : (
-            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={12} /> Recepción inactiva</span>
+            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400"><AlertTriangle size={12} /> Recepción inactiva</span>
           )
         )}
       </div>
@@ -413,13 +413,13 @@ function CoexistenceRow({ settings, saveSettings, onConnected }) {
           </button>
         </div>
         {msg && (
-          <p className={`text-xs mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>
+          <p className={`text-xs mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
             {state === 'error' ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <Check size={13} className="mt-0.5 shrink-0" />}
             <span className="min-w-0">{msg}</span>
           </p>
         )}
         {registerError && (
-          <p className="text-xs text-amber-700 mt-1.5 flex items-start gap-1.5">
+          <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5 flex items-start gap-1.5">
             <AlertTriangle size={13} className="mt-0.5 shrink-0" />
             <span className="min-w-0">{registerError}</span>
           </p>
@@ -436,8 +436,8 @@ function LaunchIdField({ id, label, placeholder, value, state, onChange, onBlur 
       <label className="label inline-flex items-center gap-2" htmlFor={id}>
         {label}
         {state === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
-        {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
-        {state === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+        {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+        {state === 'error' && <span className="text-[11px] font-normal text-red-600 dark:text-red-400">No se pudo guardar</span>}
       </label>
       <input id={id} className="input mt-1" value={value} onChange={onChange} onBlur={onBlur}
         placeholder={placeholder} autoComplete="off" inputMode="numeric" />
@@ -476,7 +476,7 @@ function CopyField({ label, value }) {
       <div className="flex items-center gap-2">
         <input className="input flex-1 min-w-0 font-mono text-xs text-ink-600" readOnly value={value} onFocus={(e) => e.target.select()} />
         <button type="button" onClick={copy} title="Copiar" aria-label={`Copiar ${label}`}
-          className={`btn-ghost text-xs shrink-0 active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 !border-emerald-200' : ''}`}>
+          className={`btn-ghost text-xs shrink-0 active:scale-[0.97] transition-all ${copied ? '!text-emerald-700 dark:!text-emerald-400 !border-emerald-200 dark:!border-emerald-900/60' : ''}`}>
           {copied ? <Check size={12} /> : <Copy size={12} />}
         </button>
       </div>
@@ -564,11 +564,11 @@ function TemplateRow({ settings, saveSettings }) {
       <div className="label inline-flex items-center gap-2">
         Plantilla para enviar cotizaciones
         {state === 'saving' && <span className="text-[11px] font-normal text-ink-400">Guardando…</span>}
-        {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
-        {state === 'error' && <span className="text-[11px] font-normal text-red-600">No se pudo guardar</span>}
+        {state === 'saved' && <span className="text-[11px] font-normal text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-0.5"><Check size={11} /> Guardado</span>}
+        {state === 'error' && <span className="text-[11px] font-normal text-red-600 dark:text-red-400">No se pudo guardar</span>}
       </div>
       {alerts.length > 0 && (
-        <div className="mb-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-800">
+        <div className="mb-2 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
           <div className="font-semibold inline-flex items-center gap-1"><AlertTriangle size={12} /> Plantillas con problemas</div>
           <ul className="mt-1 space-y-0.5">
             {alerts.map((a) => (
@@ -579,7 +579,7 @@ function TemplateRow({ settings, saveSettings }) {
               </li>
             ))}
           </ul>
-          <p className="mt-1 text-amber-700">Meta las limita o bloquea. Revísalas en WhatsApp Manager; mientras tanto, los envíos con ellas pueden fallar.</p>
+          <p className="mt-1 text-amber-700 dark:text-amber-400">Meta las limita o bloquea. Revísalas en WhatsApp Manager; mientras tanto, los envíos con ellas pueden fallar.</p>
         </div>
       )}
       {templates === null ? (
@@ -604,7 +604,7 @@ function TemplateRow({ settings, saveSettings }) {
           </button>
         </div>
       )}
-      {loadError && <p className="text-[11px] text-rose-600 mt-1.5">{loadError}</p>}
+      {loadError && <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1.5">{loadError}</p>}
       {selected?.buttonUrlVar ? (
         <p className="text-[11px] text-ink-500 mt-1.5">
           El enlace viaja en el botón «{selected.buttonText || 'Ver cotización'}»; llega aunque el cliente no haya escrito.
@@ -700,13 +700,13 @@ function CatalogRow({ settings, saveSettings }) {
             {state === 'saving' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar
           </button>
         )}
-        {state === 'saved' && <span className="text-[11px] text-emerald-700">Guardado.</span>}
+        {state === 'saved' && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Guardado.</span>}
         <button type="button" onClick={test} disabled={testing} className="btn-ghost text-xs inline-flex items-center gap-1 disabled:opacity-40">
           {testing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Probar catálogo
         </button>
       </div>
       {result && (
-        <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${result.ok ? 'text-emerald-700' : 'text-amber-700'}`}>
+        <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${result.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
           {result.ok
             ? <Check size={12} className="mt-px shrink-0" />
             : <AlertTriangle size={12} className="mt-px shrink-0" />}
@@ -717,13 +717,6 @@ function CatalogRow({ settings, saveSettings }) {
   );
 }
 
-/**
- * The number's PUBLIC business profile (what the client sees when opening the
- * chat). Collapsed by default like SetupGuide; the profile is fetched from
- * Meta on first open only — no Graph round-trip for dealers who never expand
- * it. The profile photo can't be set through this API surface, hence the
- * WhatsApp Manager pointer.
- */
 /**
  * Quick replies (canned responses) — the small team-shared library the chat
  * composer inserts with one tap. Each entry is { id, label, text }; the text
@@ -795,7 +788,7 @@ function QuickRepliesRow({ settings, saveSettings }) {
                   <button type="button" onClick={() => startEdit(qr)} disabled={saving} className="p-1.5 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 disabled:opacity-40 shrink-0" title="Editar" aria-label="Editar respuesta">
                     <Pencil size={13} />
                   </button>
-                  <button type="button" onClick={() => remove(qr.id)} disabled={saving} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0" title="Eliminar" aria-label="Eliminar respuesta">
+                  <button type="button" onClick={() => remove(qr.id)} disabled={saving} className="p-1.5 rounded text-ink-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 shrink-0" title="Eliminar" aria-label="Eliminar respuesta">
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -922,7 +915,7 @@ function ConversationalRow() {
   return (
     <div className="mt-3 rounded-lg border border-ink-100 p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="label inline-flex items-center gap-1.5 mb-0"><MessageCircle size={12} className="text-emerald-600" /> Menú de inicio</div>
+        <div className="label inline-flex items-center gap-1.5 mb-0"><MessageCircle size={12} className="text-emerald-600 dark:text-emerald-400" /> Menú de inicio</div>
         <button type="button" onClick={() => setOpen(false)} className="p-1 -m-1 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 shrink-0" aria-label="Cerrar"><X size={14} /></button>
       </div>
       <p className="text-[11px] text-ink-500 mb-2.5">
@@ -948,7 +941,7 @@ function ConversationalRow() {
                   className="input text-sm"
                   aria-label={`Botón de inicio ${i + 1}`}
                 />
-                <button type="button" onClick={() => setPrompts((arr) => arr.filter((_, j) => j !== i))} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 shrink-0" aria-label="Quitar botón">
+                <button type="button" onClick={() => setPrompts((arr) => arr.filter((_, j) => j !== i))} className="p-1.5 rounded text-ink-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0" aria-label="Quitar botón">
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -984,7 +977,7 @@ function ConversationalRow() {
                   className="input text-sm"
                   aria-label={`Descripción del comando ${i + 1}`}
                 />
-                <button type="button" onClick={() => setCommands((arr) => arr.filter((_, j) => j !== i))} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 shrink-0" aria-label="Quitar comando">
+                <button type="button" onClick={() => setCommands((arr) => arr.filter((_, j) => j !== i))} className="p-1.5 rounded text-ink-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0" aria-label="Quitar comando">
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -1000,12 +993,12 @@ function ConversationalRow() {
             <button type="button" onClick={save} disabled={state === 'saving'} className="btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-40">
               {state === 'saving' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar menú
             </button>
-            {state === 'saved' && <span className="text-[11px] text-emerald-700">Guardado en WhatsApp.</span>}
+            {state === 'saved' && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">Guardado en WhatsApp.</span>}
           </div>
         </>
       )}
       {msg && (
-        <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-amber-700'}`}>
+        <p className={`text-[11px] mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400'}`}>
           <AlertTriangle size={12} className="mt-px shrink-0" /> <span className="min-w-0 break-words">{msg}</span>
         </p>
       )}
@@ -1092,7 +1085,7 @@ function QrCodesRow() {
   return (
     <div className="mt-3 rounded-lg border border-ink-100 p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="label inline-flex items-center gap-1.5 mb-0"><QrCode size={12} className="text-emerald-600" /> Códigos QR / enlaces de chat</div>
+        <div className="label inline-flex items-center gap-1.5 mb-0"><QrCode size={12} className="text-emerald-600 dark:text-emerald-400" /> Códigos QR / enlaces de chat</div>
         <button type="button" onClick={() => setOpen(false)} className="p-1 -m-1 rounded text-ink-400 hover:text-ink-700 hover:bg-ink-50 shrink-0" aria-label="Cerrar"><X size={14} /></button>
       </div>
       <p className="text-[11px] text-ink-500 mb-2.5">
@@ -1123,12 +1116,12 @@ function QrCodesRow() {
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-ink-800 truncate">{c.prefilledMessage || '(sin mensaje)'}</div>
                 {c.deepLink && (
-                  <button type="button" onClick={() => copy(c.deepLink)} className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-700 hover:text-emerald-800" title="Copiar enlace">
+                  <button type="button" onClick={() => copy(c.deepLink)} className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300" title="Copiar enlace">
                     <Copy size={11} /> {copied === c.deepLink ? 'Copiado' : c.deepLink}
                   </button>
                 )}
               </div>
-              <button type="button" onClick={() => remove(c.code)} disabled={busy} className="p-1.5 rounded text-ink-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0" aria-label="Eliminar código">
+              <button type="button" onClick={() => remove(c.code)} disabled={busy} className="p-1.5 rounded text-ink-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 shrink-0" aria-label="Eliminar código">
                 <Trash2 size={13} />
               </button>
             </li>
@@ -1139,7 +1132,7 @@ function QrCodesRow() {
       )}
 
       {msg && (
-        <p className="text-[11px] mt-2 text-rose-600 flex items-start gap-1.5">
+        <p className="text-[11px] mt-2 text-rose-600 dark:text-rose-400 flex items-start gap-1.5">
           <AlertTriangle size={12} className="mt-px shrink-0" /> <span className="min-w-0 break-words">{msg}</span>
         </p>
       )}
@@ -1158,11 +1151,11 @@ function NumberHealth({ settings }) {
   const limit = settings?.whatsappMessagingLimit || '';
   if (!rating && !limit) return null;
   const tone = rating === 'GREEN'
-    ? { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Alta' }
+    ? { dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-400', label: 'Alta' }
     : rating === 'YELLOW'
-      ? { dot: 'bg-amber-500', text: 'text-amber-700', label: 'Media' }
+      ? { dot: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-400', label: 'Media' }
       : rating === 'RED'
-        ? { dot: 'bg-red-500', text: 'text-red-700', label: 'Baja' }
+        ? { dot: 'bg-red-500', text: 'text-red-700 dark:text-red-400', label: 'Baja' }
         : { dot: 'bg-ink-300', text: 'text-ink-500', label: rating || '—' };
   const LIMITS = { TIER_50: '50/día', TIER_250: '250/día', TIER_1K: '1.000/día', TIER_10K: '10.000/día', TIER_100K: '100.000/día', TIER_UNLIMITED: 'Sin límite' };
   const limitLabel = LIMITS[String(limit).toUpperCase()] || '';
@@ -1179,7 +1172,7 @@ function NumberHealth({ settings }) {
         </span>
       )}
       {rating === 'RED' && (
-        <span className="text-red-700">Meta está limitando este número — revisa la calidad en WhatsApp Manager.</span>
+        <span className="text-red-700 dark:text-red-400">Meta está limitando este número — revisa la calidad en WhatsApp Manager.</span>
       )}
     </div>
   );
@@ -1245,11 +1238,11 @@ function ReceptionHealth() {
   return (
     <div className="mt-4 rounded-lg border border-ink-100 px-4 py-3.5">
       <div className="font-medium text-sm text-ink-800 mb-2 inline-flex items-center gap-1.5">
-        <MessageCircle size={14} className="text-emerald-600" aria-hidden /> Recepción de mensajes
+        <MessageCircle size={14} className="text-emerald-600 dark:text-emerald-400" aria-hidden /> Recepción de mensajes
       </div>
 
       {down ? (
-        <div className="rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-[11px] text-rose-800">
+        <div className="rounded-md bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 px-3 py-2 text-[11px] text-rose-800 dark:text-rose-200">
           <div className="font-semibold inline-flex items-center gap-1">
             <AlertTriangle size={12} /> {health.failedCount} entrega(s) no se pudieron guardar
           </div>
@@ -1258,11 +1251,11 @@ function ReceptionHealth() {
             {health.oldestFailedAt ? ` (la más antigua: ${formatDateTime(health.oldestFailedAt)})` : ''}.
             Si persiste, revisa los registros de la función wa-webhook.
           </p>
-          {health.errorSample && <p className="mt-1 font-mono break-words text-rose-700">{health.errorSample}</p>}
+          {health.errorSample && <p className="mt-1 font-mono break-words text-rose-700 dark:text-rose-300">{health.errorSample}</p>}
         </div>
       ) : health ? (
         <p className="text-[11px] text-ink-500 inline-flex items-start gap-1.5">
-          <Check size={12} className="text-emerald-600 shrink-0 mt-px" aria-hidden />
+          <Check size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-px" aria-hidden />
           {health.lastInboundAt
             ? `Sin entregas fallidas. Último mensaje recibido ${health.hoursSinceInbound === 0 ? 'hace menos de 1 h' : `hace ${health.hoursSinceInbound} h`}.`
             : 'Sin entregas fallidas. Aún no se ha recibido ningún mensaje.'}
@@ -1281,12 +1274,12 @@ function ReceptionHealth() {
           </p>
         )}
         {probe === 'ok' && (
-          <p className="text-[11px] text-emerald-700 mt-2 flex items-start gap-1.5">
+          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-2 flex items-start gap-1.5">
             <Check size={13} className="mt-px shrink-0" /> Mensaje recibido — la recepción funciona de extremo a extremo.
           </p>
         )}
         {probe === 'timeout' && (
-          <p className="text-[11px] text-amber-700 mt-2 flex items-start gap-1.5">
+          <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2 flex items-start gap-1.5">
             <AlertTriangle size={13} className="mt-0.5 shrink-0" />
             <span>
               No llegó ningún mensaje en 2 min. Revisa: (1) el campo <strong>messages</strong> está suscrito en
@@ -1296,7 +1289,7 @@ function ReceptionHealth() {
           </p>
         )}
         {probe === 'error' && (
-          <p className="text-[11px] text-rose-600 mt-2">No se pudo iniciar la prueba. Inténtalo de nuevo.</p>
+          <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-2">No se pudo iniciar la prueba. Inténtalo de nuevo.</p>
         )}
         <p className="text-[11px] text-ink-400 mt-2">
           Comprueba de extremo a extremo que los mensajes entrantes llegan a la app. Cualquier mensaje nuevo de un cliente confirma la prueba.
@@ -1346,7 +1339,7 @@ function TestSendRow() {
         </button>
       </div>
       {msg && (
-        <p className={`text-xs mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600' : 'text-emerald-700'}`}>
+        <p className={`text-xs mt-2 flex items-start gap-1.5 ${state === 'error' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
           {state === 'error' ? <AlertTriangle size={13} className="mt-0.5 shrink-0" /> : <Check size={13} className="mt-0.5 shrink-0" />}
           <span className="min-w-0">{msg}</span>
         </p>

@@ -91,6 +91,7 @@ export default function Conciliacion() {
 
   const [stmt, setStmt] = useState('');
   const [busy, setBusy] = useState(null);
+  const [toggleErr, setToggleErr] = useState('');
   const [importing, setImporting] = useState(false);
 
   const recCols = useColumns(RECON_COLUMNS, RECON_DEFAULT, 'rs.conciliacion.cols.v1');
@@ -104,9 +105,14 @@ export default function Conciliacion() {
   );
 
   async function toggle(row) {
+    setToggleErr('');
     setBusy(row.line.id);
     try {
       await db.journalLines.update(row.line.id, { reconciledAt: row.reconciled ? null : Date.now() });
+    } catch (e) {
+      // A denied write (e.g. RLS) must surface — the checkbox silently staying
+      // unchanged reads as "already done" and corrupts the reconciliation.
+      setToggleErr(userMessageFor(e));
     } finally {
       setBusy(null);
     }
@@ -151,6 +157,8 @@ export default function Conciliacion() {
                   </div>
                 </div>
               </div>
+
+              {toggleErr && <p className="text-sm text-rose-600 mb-3">{toggleErr}</p>}
 
               {rec.count === 0 ? (
                 <EmptyState icon={Landmark} title="Sin movimientos" description="Esta cuenta no tiene movimientos en el mayor." />
