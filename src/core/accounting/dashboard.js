@@ -239,6 +239,7 @@ export function resolveAccountingDashboard({
     ecfPending,
     ecfSeqAlerts,
     monthsSeries: series,
+    cashNet6m,
     expenseDonut,
     cxcTop: cxc.rows.slice(0, 5),
     cxpTop: cxp.rows.slice(0, 5),
